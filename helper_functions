@@ -1,0 +1,435 @@
+#!/bin/bash
+
+### General Helpers Function ###
+
+shopt -s nocasematch # Case-insensitive match for string evaluations
+
+function print_cmd_location() {
+  new_location="[$0] [${PWD##*/}]" && \
+  if [[ "$new_location" != "$current_location" ]]; then
+    export current_location="$new_location"
+    echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
+  fi
+  echo -e "${CYAN}${1}${NO_COLOR}"
+}
+
+# ------------------------------------------
+
+# Function to print each bash command before it is executed (use in conjunction with "set -T")
+function trap_commands() {
+  trap '[[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] && \
+  cmd=`eval echo -e "$BASH_COMMAND" 2>/dev/null` && \
+  print_cmd_location "$cmd"' DEBUG
+}
+
+# function trap_commands() {
+#   trap '! [[ "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt) ]] && \
+#   cmd=`eval echo -e "[${PWD##*/}]\$ $BASH_COMMAND" 2>/dev/null` && \
+#   echo -e "${CYAN}$cmd${NO_COLOR}"' DEBUG
+# }
+
+export -f trap_commands
+trap_commands
+
+# ------------------------------------------
+
+# Function to search rexexp in file (or pipe content),
+# to Highlight matches and Return exit code (5 if no match found):
+function highlight()
+{
+  pattern=$1
+  shift
+  sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@"
+}
+
+# ------------------------------------------
+
+# function to watch for expected regexp in a command
+function watch_for() {
+  CMD="$1" # Command to watch. Variables should be escaped \$
+  REGEX="$2" # Pattern to search
+  ATTEMPTS=${3:-10} # Timeout in seconds
+  COUNT=0;
+
+  echo -e "# Watching for /$REGEX/ during $ATTEMPTS seconds, on the output of command:\n$CMD"
+  until eval "$CMD" | grep -m 1 "$REGEX" || [[ $COUNT -eq $ATTEMPTS ]]; do
+    echo -e "$(( COUNT++ ))... \c"
+    sleep 1
+  done
+  if [[ $COUNT -eq $ATTEMPTS ]]; then
+    echo "# Limit of $ATTEMPTS attempts has exceeded."
+    return 1
+  fi
+  return 0
+}
+
+# ------------------------------------------
+
+# Function to print current time and a message
+function prompt() {
+  cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S')]"
+  echo -e "\n${cur_time}\n"\
+  "${YELLOW}### $* ###${NO_COLOR}\n"\
+  "[${PWD}]\n"
+}
+
+# ------------------------------------------
+
+# Function to print message about a potential bug/workaround, and an optional bug link
+function FATAL() {
+  failure_msg="${1}"
+  echo -e "${RED}*** $failure_msg ***${NO_COLOR}"
+  exit 1
+}
+
+# ------------------------------------------
+
+# Function to print message about a potential bug/workaround, and an optional bug link
+function BUG() {
+  failed_action="${1}"
+  workaround="${2}" # optional
+  bug_ref="${3}" # optional
+
+  echo -e "${RED}*** Known BUG ***\n Failure:${NO_COLOR} $failed_action"
+  [[ -z "$workaround" ]] || echo -e "${RED} Workaround:${NO_COLOR} $workaround"
+  [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
+}
+
+# ------------------------------------------
+
+function install_local_golang() {
+  # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
+  trap_commands
+  export PATH=$HOME/miniconda/bin:$PATH
+  if ! conda info ; then
+    echo "# Installing Anaconda"
+    rm -rf $HOME/miniconda
+    # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+    miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
+    download_file https://repo.anaconda.com/miniconda/${miniconda_installer}
+    # bash ~/miniconda.sh -b -u -p $HOME/miniconda
+    chmod +x $miniconda_installer
+    ./$miniconda_installer -b -u -p $HOME/miniconda
+    #conda install anaconda
+  fi
+  echo "# Installing a local Golang on $USER home directory, with Anaconda"
+  # conda config --add channels defaults
+  conda config --add channels conda-forge
+  # conda config --add channels menpo
+  # conda search go-nocgo_linux-64 --channel conda-forge
+  # conda update -y -n base -c defaults conda
+  conda install -y --update-deps -c conda-forge go-nocgo_linux-64
+  conda create -y -n testing-env go-nocgo_linux-64
+  source activate testing-env
+}
+
+# ------------------------------------------
+
+function verify_golang() {
+  # Verify Golang installed
+  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, and GO111MODULE=on"
+  go version
+  go env
+  # export GOROOT=/usr/local/go
+  export GOROOT=$(go env GOROOT)
+  # export GOPATH=~/go
+  export GOPATH=$(go env GOPATH)
+  #export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+  export PATH=$PATH:$GOROOT/bin
+  export GO111MODULE=on
+}
+
+# ------------------------------------------
+
+# Function to download file from URL, if local file doesn't exists, or has a different size on URL
+function download_file() {
+  # $1 => $source_file (download link)
+  source_file="$1"
+
+  # Optional: $2 => $target_file (where to save)
+  target_file=${2:-$(basename "$1")}
+
+  # Optional: $3 = Target FILE_NAME (and source_file is treated as Directory path)
+  # if [[ -z "$3" ]]; then
+  #   source_file="$1"
+  #   FILE_NAME=$(basename "$1")
+  # else
+  #   source_file="$1/$3"
+  #   FILE_NAME=$3
+  # fi
+
+  echo "# Downloading [$source_file] into ${PWD}/$target_file"
+  ls -ld
+  # wget does not always exists on hosts, using curl instead
+  # wget -nc ${source_file} --no-check-certificate -O ${target_file}
+  local_file_size=$([[ -f ${target_file} ]] && wc -c < ${target_file} || echo "0")
+  echo "local_file_size = $local_file_size"
+  remote_file_size=$(curl -sI ${source_file} | awk '/Content-Length/ { print $2 }' | tr -d '\r' )
+  echo "remote_file_size = $remote_file_size"
+  [[ -n "$remote_file_size" ]] || remote_file_size=-1
+  if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
+      curl -L ${source_file} -o ${target_file}
+  else
+    echo "# $target_file already downloaded, and equals to remote file $source_file"
+  fi
+}
+
+# ------------------------------------------
+
+# Function to install aws-cli, and to configure AWS access:
+function configure_aws_access() {
+  trap_commands
+  AWS_PROFILE_NAME="$1"
+  AWS_REGION="$2"
+  AWS_KEY="$3"
+  AWS_SECRET="$4"
+  INSTALLER_DIR="${5:-./}"
+
+  prompt "Installing AWS-CLI, and to setting AWS profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+  # pip install awscli --upgrade --user
+  aws_cli_installer="awscli-exe-linux-x86_64.zip"
+  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${INSTALLER_DIR}${aws_cli_installer}"
+  unzip -n ${aws_cli_installer} -d ${INSTALLER_DIR}
+  ${INSTALLER_DIR}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
+  export PATH=$HOME/.local/bin:$PATH
+
+  aws --version
+
+  aws configure set profile $AWS_PROFILE_NAME
+  aws configure set aws_access_key_id $AWS_KEY
+  aws configure set aws_secret_access_key $AWS_SECRET
+
+  aws configure set default.region $AWS_REGION
+  aws configure set output text
+  aws configure set color on
+
+  # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
+  aws sts get-caller-identity
+}
+
+# ------------------------------------------
+
+# Function to create json file for a DNS record deletion on AWS
+function create_json_for_dns_delete() {
+  # Input $1 : File to write the json output to
+  (
+  cat <<EOF
+  {
+      "Comment": "Delete single record set",
+      "Changes": [
+          {
+              "Action": "DELETE",
+              "ResourceRecordSet": {
+                  "Name": "$(echo ${Name/\\052/*})",
+                  "Type": "$Type",
+                  "AliasTarget": {
+                    "HostedZoneId": "$HostedZoneId",
+                    "DNSName": "$DNSName",
+                    "EvaluateTargetHealth": $EvaluateTargetHealth
+                    }}
+                }]
+    }
+EOF
+  ) > $1
+}
+
+# ------------------------------------------
+
+# Function to export variables from json file as environment variables
+function export_vars_from_json() {
+  # Input $1 : Json file to read variables from
+  for s in $(grep -E '": [^\{]' "$1" | sed -e 's/: /=/' -e 's/^\s*//' -e "s/\(\,\)$//"); do
+    echo "# export $s"
+    eval export $s
+  done
+}
+
+# ------------------------------------------
+
+# Function to delete an DNS record set in AWS Hosted Zone
+function delete_aws_dns_records() {
+  prompt "Deleting DNS record for AWS Cluster A (Public): $2"
+  trap_commands;
+  # Input $1 : Hosted Zone ID
+  # Input $2 : DNS record-set (name) to delete
+  echo -e "\n# Searching in Hosted Zone [$1] - for a DNS record set: [$2]"
+  export PATH=$HOME/.local/bin:$PATH
+  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > $TEMP_FILE
+
+  cat $TEMP_FILE
+
+  if [[ $(< $TEMP_FILE) == '[]' ]]; then
+    echo -e "The DNS record set does not exist in AWS cluster [${CLUSTER_A_NAME}]"
+    return
+  fi
+
+  echo -e "\n# Exporting DNS record set variables:"
+  export_vars_from_json "$TEMP_FILE"
+
+  echo -e "\n# Creating json file for the DNS record set delete command:"
+  create_json_for_dns_delete "$TEMP_FILE"
+  cat "$TEMP_FILE"
+
+  echo -e "\n# Deleting the DNS record set:"
+  aws route53 change-resource-record-sets --hosted-zone-id $1 --change-batch file://$TEMP_FILE
+
+}
+
+# ------------------------------------------
+
+# Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster ###
+function delete_namespace_and_crds() {
+  trap_commands;
+  # Input $1 : Namespace to delete
+  # Input $2 : All CRDs to delete, by searching for *crd_name*
+  ns_name=$1
+  crd_name=$2
+  delete_namespace=FALSE
+  delete_crds=FALSE
+
+  echo "# Search for existing CRDs of previous ${crd_name} installation on the Cluster:"
+  ${OC} get crds |& highlight "${crd_name}" && delete_crds=TRUE || :
+
+  # If there are existing CRDs on the Cluster - remove them all:
+  # if [[ $? = 0 ]]; then
+  if [[ "$delete_crds" = TRUE ]]; then
+    echo "# Deleting ${ns_name} CRDs in the Cluster"
+    crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
+    # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
+    ${OC} delete --timeout=10s crds $crd_list || : # || : to ignore none-zero exit code
+        # customresourcedefinition.apiextensions.k8s.io "clusters.submariner.io" deleted
+        # customresourcedefinition.apiextensions.k8s.io "endpoints.submariner.io" deleted
+        # customresourcedefinition.apiextensions.k8s.io "submariners.submariner.io" deleted
+  fi
+
+  echo "# Search for existing resources (and OLMs) in namespace ${ns_name} :"
+  # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
+  ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || delete_namespace=TRUE || :
+
+  # If there are existing resources on the Cluster - remove them all:
+  if [[ "$delete_namespace" = TRUE ]]; then
+    echo "# Deleting whole namespace ${ns_name} from the Cluster"
+    ${OC} delete --timeout=10s namespace ${ns_name} || : # || : to ignore none-zero exit code
+
+      # ${OC} delete Submariner submariner -n submariner-operator
+        # submariner.submariner.io "submariner" deleted
+
+      # ${OC} delete olm,services,rs,rc,subscriptions,deployments,jobs,pods --all -n openshift-submariner
+
+      # ${OC} delete olm,sa,services,rs,rc,subscriptions,deployments,jobs,pods --all -n submariner-operator
+  fi
+
+}
+
+# ------------------------------------------
+
+function log_to_html() {
+  #trap_commands;
+  log_file="$1"
+  title="${2:-"${log_file%%.*}"}"
+  html_output="${title// /_}.html"
+  echo "# Generating HTML report from: $log_file"
+  [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
+  repo_url=https://github.com/theZiz/aha.git
+  repo_branch=0.5
+  repo_dir=$(basename $repo_url .git)
+
+  # Get AHA binary
+  if [[ ! -f ./$repo_dir/aha ]]; then
+      rm -rf $repo_dir
+      # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
+      git clone $repo_url --single-branch # --depth 1
+      git --work-tree=$repo_dir  --git-dir=$repo_dir/.git checkout tags/$repo_branch
+      make -C $repo_dir &> /dev/null
+  fi
+  ./$repo_dir/aha --version
+
+  # Create HTML Header
+  cat > "$html_output" <<EOF
+  <?xml version="1.0" encoding="UTF-8" ?>
+  <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+  <html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+  <meta http-equiv="Content-Type" content="application/xml+xhtml; charset=UTF-8; width=device-width; initial-scale=1" />
+  <title>${title}</title>
+  <style type="text/css">
+  pre {white-space: pre-wrap; white-space: -moz-pre-wrap !important;
+  white-space: -pre-wrap; white-space: -o-pre-wrap; word-wrap: break-word;}
+  .collapsible {
+    background-color: LightSkyBlue;
+    color: black;
+    cursor: pointer;
+    padding: 10px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 20px;
+    -webkit-touch-callout: text;
+    -webkit-user-select: text;
+    -khtml-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+  .active {
+    background-color: RoyalBlue;
+    color: white;
+  }
+  .collapsible:hover {
+    background-color: RoyalBlue;
+    color: white;
+    text-decoration: underline;
+  }
+  .content {
+    padding: 0 18px;
+    display: none;
+    overflow: hidden;
+    background-color: LightSkyBlue;
+  }
+  </style>
+  </head>
+  <body style="background-color:LightSkyBlue">
+  <h1>${title}</h1>
+  <pre>
+EOF
+
+  # Trim empty lines (just from top) and white spaces from each line in the log file
+  sed '/\S/,$!d; s/^\s*//; s/\s*$//' -i $log_file
+
+  # Create HTML content with AHA
+  ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
+
+  # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "prompt" function)
+  sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output
+  sed -r 's:\s+###</span.+$:<\/span><\/button><div class="content">:g' -i $html_output
+
+  # Close all collapsible spans, when getting to lines of 🎩︎ (excluding first time)
+  sed -r 's:(.+🎩︎):<\/div><br><br>\1:g' -i $html_output
+  sed '0,/<\/div><br><br>/s///' -i $html_output
+
+  # Create HTML collapsible function (must be at the bottom)
+  cat >> $html_output <<EOF
+  </pre>
+  <br><br><br>
+  <script>
+  var coll = document.getElementsByClassName("collapsible");
+  var i;
+  for (i = 0; i < coll.length; i++) {
+    coll[i].addEventListener("click", function() {
+      this.classList.toggle("active");
+      var content = this.nextElementSibling;
+      if (content.style.display === "block") {
+        content.style.display = "none";
+      } else {
+        content.style.display = "block";
+      }
+    });
+  }
+  </script>
+  </body>
+  </html>
+EOF
+
+  echo -e "HTML report created:\n$html_output"
+}
