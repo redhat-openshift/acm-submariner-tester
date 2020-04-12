@@ -444,14 +444,16 @@ function download_ocp_installer() {
   # Create oc (openshift client) link
     # sudo cp oc /usr/local/bin/
     # cp oc ~/.local/bin
-    cp oc ~/go/bin/
+    # cp oc ~/go/bin/
+    mkdir -p $GOPATH/bin
+    cp oc $GOPATH/bin/
 }
 
 # ------------------------------------------
 
 function build_ocpup_tool_latest() {
 ### Download OCPUP tool ###
-  prompt "Downloading latest OCP-UP tool, and installing it to ~/go/bin/ocpup"
+  prompt "Downloading latest OCP-UP tool, and installing it to $GOPATH/bin/ocpup"
   trap_commands;
 
   # TODO: Need to fix ocpup alias
@@ -467,7 +469,7 @@ function build_ocpup_tool_latest() {
 
   git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
 
-  # Build OCPUP and install it locally to ~/go/bin/
+  # Build OCPUP and install it locally to $GOPATH/bin/
   export GO111MODULE=on
   go mod vendor
   go install -mod vendor
@@ -563,7 +565,8 @@ function build_operator_latest() {
   # Create symbolic link /usr/local/bin/subctl :
   # sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
   # cp ./bin/subctl ~/.local/bin
-  cp ./bin/subctl ~/go/bin/
+  mkdir -p $GOPATH/bin
+  cp ./bin/subctl $GOPATH/bin/
 
 }
 
@@ -590,7 +593,8 @@ function download_subctl_latest_release() {
     chmod +x subctl
 
     echo "# Copy subctl to system path:"
-    cp subctl ~/go/bin/
+    mkdir -p $GOPATH/bin
+    cp subctl $GOPATH/bin/
     #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
     #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
     #go get -v -u -t ./...
@@ -689,9 +693,9 @@ function download_kubefedctl_latest() {
     # cp kubefedctl ~/.local/bin
 
   BUG "Install kubefedctl in current dir" \
-  "Install kubefedctl into ~/go/bin/" \
+  "Install kubefedctl into $GOPATH/bin/" \
   "https://github.com/submariner-io/submariner-operator/issues/166"
-  cp kubefedctl ~/go/bin/
+  cp kubefedctl $GOPATH/bin/
   #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
   #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
   #go get -v -u -t ./...
@@ -707,7 +711,7 @@ function create_aws_cluster_a() {
 
   cd ${WORKDIR}
 
-  mkdir ${CLUSTER_A_NAME} || FATAL "Previous Cluster ${CLUSTER_A_NAME} deployment should be removed."
+  mkdir ${CLUSTER_A_DIR} || FATAL "Previous Cluster ${CLUSTER_A_DIR} deployment should be removed."
   cp ${OCP_CLUSTER_A_SETUP} ${CLUSTER_A_DIR}/install-config.yaml
 
   # OR to create new OCP install-config.yaml:

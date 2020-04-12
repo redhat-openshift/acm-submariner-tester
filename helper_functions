@@ -112,7 +112,7 @@ function install_local_golang() {
     ./$miniconda_installer -b -u -p $HOME/miniconda
     #conda install anaconda
   fi
-  echo "# Installing a local Golang on $USER home directory, with Anaconda"
+  echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
   # conda config --add channels defaults
   conda config --add channels conda-forge
   # conda config --add channels menpo
@@ -158,7 +158,7 @@ function download_file() {
   #   FILE_NAME=$3
   # fi
 
-  echo "# Downloading [$source_file] into ${PWD}/$target_file"
+  echo "# Downloading [$source_file] into $target_file"
   ls -ld
   # wget does not always exists on hosts, using curl instead
   # wget -nc ${source_file} --no-check-certificate -O ${target_file}
@@ -178,7 +178,7 @@ function download_file() {
 
 # Function to install aws-cli, and to configure AWS access:
 function configure_aws_access() {
-  trap_commands
+  # trap_commands
   AWS_PROFILE_NAME="$1"
   AWS_REGION="$2"
   AWS_KEY="$3"
@@ -188,7 +188,7 @@ function configure_aws_access() {
   prompt "Installing AWS-CLI, and to setting AWS profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
-  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${INSTALLER_DIR}${aws_cli_installer}"
+  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${INSTALLER_DIR}/${aws_cli_installer}"
   unzip -n ${aws_cli_installer} -d ${INSTALLER_DIR}
   ${INSTALLER_DIR}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
   export PATH=$HOME/.local/bin:$PATH
