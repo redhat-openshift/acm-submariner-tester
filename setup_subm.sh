@@ -70,6 +70,7 @@ Running with pre-defined parameters (optional):
 * Skip all tests execution:                          --skip-tests
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
+* Import additional variables from file:             --import-vars  [Variable file path]
 
 
 Command examples:
@@ -188,11 +189,13 @@ while [ $# -gt 0 ]; do
   --config-aws-cli)
     config_aws_cli=YES
     shift ;;
-  # -?|--optional-key-value)
-  #   check_cli_args $2
-  #   optional_key_value="$2"
-  #   echo "# optional key with value: $optional_key_value"
-  #   shift 2 ;;
+  # -o|--optional-key-value)
+  --import-vars)
+    check_cli_args $2
+    variables_file="$2"
+    echo "# Importing additional variables from file: $variables_file"
+    source "$variables_file"
+    shift 2 ;;
   -*)
     echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
     exit 1 ;;
