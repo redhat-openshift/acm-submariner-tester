@@ -16,11 +16,13 @@ export CLUSTER_A_NAME="user-cluster-a"
 export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
 export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
 export OCP_CLUSTER_A_SETUP="${WORKDIR}/user-cluster-a.yaml"
+export NETSHOOT_CLUSTER_A="netshoot-cl-a"
 
 export CLUSTER_B_NAME="user-cluster-b"
 export CLUSTER_B_DIR=${OCPUP_DIR}/.config/cl1
 export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 export OCPUP_CLUSTER_B_SETUP="${WORKDIR}/user-cluster-b.yaml"
+export NGINX_CLUSTER_B="nginx-cl-b"
 
 export AWS_KEY="user-aws-access-key"
 export AWS_SECRET="user-aws-secret-access-key"
@@ -35,6 +37,8 @@ export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
 export BROKER_NATPORT=4501
 export BROKER_IKEPORT=501
+
+export SUBM_TEST_NS="test-submariner"
 
 export GOROOT="/usr/local/go" # "/usr/local/go1.12.5.linux-amd64"
 export PATH="${GOROOT}/bin:${PATH}"

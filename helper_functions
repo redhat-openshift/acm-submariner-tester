@@ -97,8 +97,8 @@ function BUG() {
 
 # ------------------------------------------
 
-function install_local_golang() {
-  # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
+# Function to installing Anaconda (https://github.com/conda-forge)
+function install_anaconda() {
   trap_commands
   export PATH=$HOME/miniconda/bin:$PATH
   if ! conda info ; then
@@ -112,6 +112,15 @@ function install_local_golang() {
     ./$miniconda_installer -b -u -p $HOME/miniconda
     #conda install anaconda
   fi
+}
+
+# ------------------------------------------
+
+function install_local_golang() {
+  # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
+  trap_commands
+  install_anaconda
+
   echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
   # conda config --add channels defaults
   conda config --add channels conda-forge
@@ -119,24 +128,55 @@ function install_local_golang() {
   # conda search go-nocgo_linux-64 --channel conda-forge
   # conda update -y -n base -c defaults conda
   conda install -y --update-deps -c conda-forge go-nocgo_linux-64
-  conda create -y -n testing-env go-nocgo_linux-64
-  source activate testing-env
+  conda create -y -n conda-env go-nocgo_linux-64
+  source activate conda-env
 }
 
 # ------------------------------------------
 
+function install_local_docker() {
+  # Installing Docker with Anaconda (https://github.com/conda-forge/go-feedstock)
+  trap_commands
+  # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
+  # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
+  # yum install -y shadow-utils46-newxidmap
+  # SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh -s -- --experimental
+  # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
+
+  install_anaconda
+
+  echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
+  conda config --add channels conda-forge
+  conda install -y --update-deps -c conda-forge docker-compose
+  conda create -y -n conda-env docker-compose
+  source activate conda-env
+}
+
+
+# ------------------------------------------
+
 function verify_golang() {
-  # Verify Golang installed
-  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, and GO111MODULE=on"
+  # Verify Golang installed.
+  # Optional: $1 - GOBIN path
+  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
   go version
-  go env
+
   # export GOROOT=/usr/local/go
   export GOROOT=$(go env GOROOT)
+
   # export GOPATH=~/go
   export GOPATH=$(go env GOPATH)
-  #export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
-  export PATH=$PATH:$GOROOT/bin
+
+  # export GOBIN=$GOROOT/bin
+  export GOBIN="${1:-$GOROOT/bin}"
+
+  # export PATH=$PATH:$GOROOT/bin
+  export PATH=$PATH:$GOBIN
+
   export GO111MODULE=on
+
+  # Print all GO env variables
+  go env
 }
 
 # ------------------------------------------
@@ -185,13 +225,15 @@ function configure_aws_access() {
   AWS_SECRET="$4"
   INSTALLER_DIR="${5:-./}"
 
-  prompt "Installing AWS-CLI, and to setting AWS profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+  prompt "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
   download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${INSTALLER_DIR}/${aws_cli_installer}"
   unzip -n ${aws_cli_installer} -d ${INSTALLER_DIR}
-  ${INSTALLER_DIR}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
-  export PATH=$HOME/.local/bin:$PATH
+  # ${INSTALLER_DIR}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
+  # export PATH=$HOME/.local/bin:$PATH
+  ${INSTALLER_DIR}/aws/install --update --install-dir "${INSTALLER_DIR}/aws/" --bin-dir "${INSTALLER_DIR}/aws/bin"
+  export PATH="${PATH}:${INSTALLER_DIR}/aws/bin"
 
   aws --version
 
@@ -252,8 +294,11 @@ function delete_aws_dns_records() {
   trap_commands;
   # Input $1 : Hosted Zone ID
   # Input $2 : DNS record-set (name) to delete
+
+  # export PATH=$HOME/.local/bin:$PATH
+  PATH="${PATH}:${INSTALLER_DIR}/aws/bin"
+
   echo -e "\n# Searching in Hosted Zone [$1] - for a DNS record set: [$2]"
-  export PATH=$HOME/.local/bin:$PATH
   aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > $TEMP_FILE
 
   cat $TEMP_FILE

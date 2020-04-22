@@ -306,7 +306,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $get_subctl - to download_subctl_latest_release
   while [[ ! "$get_subctl" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to use the latest release of SubCtl (instead of Submariner-Operator \"mater\" branch) ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to use the latest release of SubCtl (instead of Submariner-Operator \"master\" branch) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     get_subctl=${input:-no}
@@ -397,12 +397,13 @@ function setup_workspace() {
   # Installing if $config_golang = yes/y
   [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang
 
+  # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
+  mkdir -p ${WORKDIR}/GOBIN
+  verify_golang "${WORKDIR}/GOBIN"
+
   # Installing if $config_aws_cli = yes/y
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
   "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" )
-
-  # verifying GO installed
-  verify_golang
 
 }
 
@@ -445,41 +446,42 @@ function download_ocp_installer() {
     # sudo cp oc /usr/local/bin/
     # cp oc ~/.local/bin
     # cp oc ~/go/bin/
-    mkdir -p $GOPATH/bin
-    cp oc $GOPATH/bin/
+    mkdir -p $GOBIN
+    cp oc $GOBIN/
 }
 
 # ------------------------------------------
 
 function build_ocpup_tool_latest() {
 ### Download OCPUP tool ###
-  prompt "Downloading latest OCP-UP tool, and installing it to $GOPATH/bin/ocpup"
+  prompt "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
   trap_commands;
 
   # TODO: Need to fix ocpup alias
 
   cd ${WORKDIR}
-
-  git clone https://github.com/dimaunx/ocpup || echo "# OCPUP directory exists"
-
+  # rm -rf ocpup # We should not remove directory, as it may included previous install config files
+  git clone https://github.com/dimaunx/ocpup || echo "# OCPUP directory already exists"
   cd ocpup
 
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
+  #git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
+  git fetch && git reset --hard && git checkout --theirs . && git pull
 
-  # Build OCPUP and install it locally to $GOPATH/bin/
+  echo "# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
   go mod vendor
-  go install -mod vendor
+  go install -mod vendor # Compile binary and moves it to $GOBIN
+  # go build -mod vendor # Saves binary in current directory
 
   # Check OCPUP command
     # sudo ln -sf ocpup /usr/local/bin/ocpup
   which ocpup
     # ~/go/bin/ocpup
 
-  ocpup -h
+  ocpup  -h
       # Create multiple OCP4 clusters and resources
       #
       # Usage:
@@ -510,7 +512,7 @@ function build_submariner_e2e_latest() {
 
   # Download Submariner with go
     # export PATH=$PATH:$GOROOT/bin
-  go get -v github.com/submariner-io/submariner/... || echo "# GO get Submariner Engine finished."
+  GO111MODULE="off" go get -v github.com/submariner-io/submariner/... || echo "# GO Get Submariner Engine finished."
 
   # Pull latest changes and build:
   cd $GOPATH/src/github.com/submariner-io/submariner
@@ -520,12 +522,19 @@ function build_submariner_e2e_latest() {
   # git fetch && git git pull --rebase
   git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
 
-  make build # || echo "# Build Submariner Engine finished"
+  # make build # Will fail if Docker is not pre-installed
     # ...
     # Building submariner-engine version dev
     # ...
     # Building submariner-route-agent version dev
     # ...
+
+  GO111MODULE="on" go mod vendor
+  ./scripts/build
+    # ...
+    # Building subctl version dev for linux/amd64
+    # ...
+
   ls -l bin/submariner-engine
 }
 
@@ -535,12 +544,16 @@ function build_operator_latest() {
 ### Building latest Submariner-Operator code and SubCTL tool ###
   prompt "Building latest Submariner-Operator code and SubCTL tool"
   trap_commands;
-  # Delete old Submariner directory
+
+  # Install Docker
+  # install_local_docker
+
+  # Delete old submariner-operator directory
   #rm -rf $GOPATH/src/github.com/submariner-io/submariner-operator
 
   # Download Submariner Operator with go
   # export PATH=$PATH:$GOROOT/bin
-  go get -v github.com/submariner-io/submariner-operator/... || echo "# GO get Submariner Operator finished"
+  GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo "# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
   cd $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -550,23 +563,32 @@ function build_operator_latest() {
   git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
   # git log --pretty=fuller
 
-  # Build SubCtl tool
-  #make build # || echo "# Build Submariner Operator finished"
-  BUG "make build" "make bin/subctl" "https://github.com/submariner-io/submariner-operator/issues/126"
-  GO111MODULE="on" go mod vendor
-  make bin/subctl
+  echo "# Build SubCtl tool and install it in $GOBIN/"
+  # make build-operator # || echo "# Build Submariner Operator finished"
+  # BUG "make build-operator failed" "make bin/subctl" "https://github.com/submariner-io/submariner-operator/issues/126"
 
+  BUG "GO111MODULE=on go install" \
+  "make bin/subctl # BUT Will fail if Docker is not pre-installed" \
+  "https://github.com/submariner-io/submariner-operator/issues/318"
+  # export GO111MODULE=on
+  # GO111MODULE=on go mod vendor
+  # GO111MODULE=on go install # Compile binary and moves it to $GOBIN
+
+  GO111MODULE="on" go mod vendor
+  ./scripts/generate-embeddedyamls
+  ./scripts/build-subctl
     # ...
     # Building subctl version dev for linux/amd64
     # ...
 
-  ls -l ./bin/subctl
+  install ./bin/subctl $GOBIN/subctl
+  # ls -l ./bin/subctl
+  # mkdir -p $GOBIN
+  # cp ./bin/subctl $GOBIN/
 
   # Create symbolic link /usr/local/bin/subctl :
-  # sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
-  # cp ./bin/subctl ~/.local/bin
-  mkdir -p $GOPATH/bin
-  cp ./bin/subctl $GOPATH/bin/
+  #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
+  #cp ./bin/subctl ~/.local/bin
 
 }
 
@@ -593,8 +615,8 @@ function download_subctl_latest_release() {
     chmod +x subctl
 
     echo "# Copy subctl to system path:"
-    mkdir -p $GOPATH/bin
-    cp subctl $GOPATH/bin/
+    mkdir -p $GOBIN
+    cp subctl $GOBIN/
     #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
     #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
     #go get -v -u -t ./...
@@ -693,9 +715,9 @@ function download_kubefedctl_latest() {
     # cp kubefedctl ~/.local/bin
 
   BUG "Install kubefedctl in current dir" \
-  "Install kubefedctl into $GOPATH/bin/" \
+  "Install kubefedctl into $GOBIN/" \
   "https://github.com/submariner-io/submariner-operator/issues/166"
-  cp kubefedctl $GOPATH/bin/
+  cp kubefedctl $GOBIN/
   #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
   #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
   #go get -v -u -t ./...
@@ -793,8 +815,8 @@ function create_osp_cluster_b() {
 
 
   # Run OCPUP to Create OpenStack Cluster B (Private)
-  # ocpup create clusters --debug --config $ocpup_yml
-  ocpup create clusters --config $ocpup_yml &
+  # ocpup  create clusters --debug --config $ocpup_yml
+  ocpup  create clusters --config $ocpup_yml &
   pid=$!
   tail --pid=$pid -f --retry .config/cl1/.openshift_install.log &
   tail --pid=$pid -f /dev/null
@@ -824,7 +846,16 @@ function test_kubeconfig_aws_cluster_a() {
   #alias kubconf_a="KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
   kubconf_a;
-  test_cluster_status || FATAL "Openshift deployment cannot be reached with KUBECONFIG=${KUBECONF_CLUSTER_A}"
+
+  # Set the default namespace to "${SUBM_TEST_NS}"
+  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
+  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+
+  kubconf_a;
+  test_cluster_status
   # cd -
 }
 
@@ -849,7 +880,16 @@ function test_kubeconfig_osp_cluster_b() {
   #alias kubconf_b="KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
   kubconf_b;
-  test_cluster_status || FATAL "Openshift deployment cannot be reached with KUBECONFIG=${KUBECONF_CLUSTER_B}"
+
+  # Set the default namespace to "${SUBM_TEST_NS}"
+  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  cp "${KUBECONF_CLUSTER_B}" "${KUBECONF_CLUSTER_B}.bak"
+  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+
+  kubconf_b;
+  test_cluster_status
   # cd -
 }
 
@@ -865,6 +905,7 @@ function test_cluster_status() {
   # Verify that current kubeconfig Cluster is up and healthy
   trap_commands;
 
+  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
   ${OC} version
   ${OC} config view
   ${OC} status
@@ -935,8 +976,8 @@ function destroy_osp_cluster_b() {
     ocpup_yml=$(basename -- "$OCPUP_CLUSTER_B_SETUP")
     ls -l $ocpup_yml
 
-    # ocpup destroy clusters --debug --config $ocpup_yml
-    ocpup destroy clusters --config $ocpup_yml & # running on the background (with timeout)
+    # ocpup  destroy clusters --debug --config $ocpup_yml
+    ocpup  destroy clusters --config $ocpup_yml & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
     # tail --pid=$pid -f .config/cl1/.openshift_install.log && tail -f /proc/$pid/fd/1
 
@@ -1041,23 +1082,23 @@ function install_netshoot_app_on_cluster_a() {
   prompt "Install Netshoot application on AWS Cluster A (Public)"
   trap_commands;
 
-  # Create netshoot app on AWS Cluster A (Public):
-  cd $GOPATH/src/github.com/submariner-io/submariner-operator
-
-  #KUBECONFIG=$CLUSTER_A  ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
   kubconf_a;
-  ${OC} delete -f ./scripts/kind-e2e/netshoot.yaml --ignore-not-found # || echo "# OK: Netshoot app does not exist on Cluster A. Installing it..."
-  ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
-    # deployment.apps/netshoot created
 
-  # netshoot_app_cluster_a=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
-  netshoot_app_cluster_a="$(< $TEMP_FILE)"
-  echo "# netshoot_app_cluster_a: $netshoot_app_cluster_a"
-    # netshoot-785ffd8c8-zv7td
+  ${OC} delete namespace "${SUBM_TEST_NS}" --ignore-not-found
+  ${OC} create namespace "${SUBM_TEST_NS}"
 
-  ${OC} rollout status deployment netshoot
-  ${OC} describe pod netshoot
+  # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
+
+  # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
+
+  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found
+  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found
+  ${OC} run ${NETSHOOT_CLUSTER_A} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
+
+  echo "# Wait for Netshoot App to be ready:"
+  ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A}
+  ${OC} describe pod  ${NETSHOOT_CLUSTER_A}
 }
 
 # ------------------------------------------
@@ -1066,17 +1107,68 @@ function install_nginx_svc_on_cluster_b() {
   prompt "Install Nginx service on OSP Cluster B (Private)"
   trap_commands;
 
-  # Create nginx service on OSP Cluster B (Private):
   kubconf_b;
-  ${OC} delete -f ./scripts/kind-e2e/nginx-demo.yaml --ignore-not-found # || echo "# OK: Nginx service does not exist on Cluster B. Installing it..."
-  ${OC} apply -f ./scripts/kind-e2e/nginx-demo.yaml
-    # deployment.apps/nginx-demo created
-    # service/nginx-demo created
 
-  #${OC} get svc -l app=nginx-demo
-  ${OC} rollout status deployment nginx-demo
-  ${OC} describe service nginx-demo
+  ${OC} delete namespace "${SUBM_TEST_NS}" --ignore-not-found
+  ${OC} create namespace "${SUBM_TEST_NS}"
+
+  # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
+
+  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
+  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
+
+  echo "# Expose Ngnix service on port 80:"
+  ${OC} delete service ${NGINX_CLUSTER_B}  --ignore-not-found
+  ${OC} expose deployment ${NGINX_CLUSTER_B}  --port=80 --name=${NGINX_CLUSTER_B}
+
+  echo "# Wait for Ngnix service to be ready:"
+  ${OC} rollout status deployment ${NGINX_CLUSTER_B}
+  ${OC} describe pod ${NGINX_CLUSTER_B}
+
 }
+
+# ------------------------------------------
+
+# function _install_netshoot_app_on_cluster_a() {
+#   prompt "Install Netshoot application on AWS Cluster A (Public)"
+#   trap_commands;
+#
+#   # Create netshoot app on AWS Cluster A (Public):
+#   cd $GOPATH/src/github.com/submariner-io/submariner-operator
+#
+#   #KUBECONFIG=$CLUSTER_A  ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
+#   kubconf_a;
+#   ${OC} delete -f ./scripts/kind-e2e/netshoot.yaml  --ignore-not-found # || echo "# OK: Netshoot app does not exist on Cluster A. Installing it..."
+#   ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
+#     # deployment.apps/netshoot created
+#
+#   # NETSHOOT_CLUSTER_A=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+#   ${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+#   NETSHOOT_CLUSTER_A="$(< $TEMP_FILE)"
+#   echo "# NETSHOOT_CLUSTER_A: $NETSHOOT_CLUSTER_A"
+#     # netshoot-785ffd8c8-zv7td
+#
+#   ${OC} rollout status deployment  netshoot
+#   ${OC} describe pod  netshoot
+# }
+
+# ------------------------------------------
+
+# function _install_nginx_svc_on_cluster_b() {
+#   prompt "Install Nginx service on OSP Cluster B (Private)"
+#   trap_commands;
+#
+#   # Create nginx service on OSP Cluster B (Private):
+#   kubconf_b;
+#   ${OC} delete -f ./scripts/kind-e2e/nginx-demo.yaml  --ignore-not-found # || echo "# OK: Nginx service does not exist on Cluster B. Installing it..."
+#   ${OC} apply -f ./scripts/kind-e2e/nginx-demo.yaml
+#     # deployment.apps/nginx-demo created
+#     # service/nginx-demo created
+#
+#   #${OC} get svc -l app=nginx-demo
+#   ${OC} rollout status deployment nginx-demo
+#   ${OC} describe service nginx-demo
+# }
 
 # ------------------------------------------
 
@@ -1090,14 +1182,14 @@ function test_clusters_disconnected_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  #${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}' > $TEMP_FILE
-  #nginx_http_cluster_b="$(< $TEMP_FILE)"
-  nginx_http_cluster_b=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
-    # nginx_http_cluster_b: 100.96.43.129
+  #${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
+  #nginx_cluster_b_ip="$(< $TEMP_FILE)"
+  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+    # nginx_cluster_b_ip: 100.96.43.129
 
   kubconf_a;
-  netshoot_app_cluster_a=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} exec $netshoot_app_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_http_cluster_b \
+  netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_ip_cluster_b \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
     # command terminated with exit code 28
 }
@@ -1421,25 +1513,25 @@ function test_clusters_connected_by_service_ip() {
   trap_commands;
 
   kubconf_a;
-  # netshoot_app_cluster_a=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
-  netshoot_app_cluster_a="$(< $TEMP_FILE)"
-  echo "# netshoot_app_cluster_a: $netshoot_app_cluster_a"
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  netshoot_pod_cluster_a="$(< $TEMP_FILE)"
+  echo "# NETSHOOT_CLUSTER_A: $NETSHOOT_CLUSTER_A"
     # netshoot-785ffd8c8-zv7td
 
   kubconf_b;
-  nginx_http_cluster_b=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
-  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_http_cluster_b"
-    # nginx_http_cluster_b: 100.96.43.129
+  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_ip_cluster_b"
+    # nginx_ip_cluster_b: 100.96.43.129
 
   kubconf_a;
-  CURL_CMD="${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_http_cluster_b}"
+  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_ip_cluster_b}"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     prompt "Testing NO-connectivity if Clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
     && echo -e "# Negative Test OK - Clusters has Overlapping CIDRs. \n" \
-    "Nginx Service IP (${nginx_http_cluster_b}) on Cluster B, is not reachable externally."
+    "Nginx Service IP (${nginx_ip_cluster_b}) on Cluster B, is not reachable externally."
   else
     ${OC} exec ${CURL_CMD} || \
     BUG "TODO: This will fail User created Clusters with Overlapping CIDRs, while Submariner was not deployed with --globalnet"
@@ -1465,68 +1557,43 @@ function test_clusters_connected_by_service_ip() {
       # * Connection #0 to host 100.96.72.226 left intact
   fi
 
-  # if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
-  #   # nginx_http_cluster_b=nginx-demo # this dns name is taken from scripts/kind-e2e/nginx-demo.yaml
-  #   netshoot_app_cluster_a=netshoot-cl-a
-  #   nginx_http_cluster_b=nginx-cl-b
-  #
-  #   prompt "Testing Service-Discovery: Nginx service on Cluster B, will be identified by Domain name: $nginx_http_cluster_b"
-  #   # echo "# Nginx service on Cluster B, will be identified by its Domain Name (with --service-discovery): $nginx_http_cluster_b"
-  #   # ${OC} exec ${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_http_cluster_b}
-  #
-  #   # Install Ngnix service on OSP Cluster B
-  #   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
-  #   ${OC} delete deployment ${nginx_http_cluster_b} --ignore-not-found
-  #   ${OC} create deployment ${nginx_http_cluster_b} --image=nginx
-  #
-  #   # Expose Ngnix service on port 80
-  #   ${OC} delete service ${nginx_http_cluster_b} --ignore-not-found
-  #   ${OC} expose deployment ${nginx_http_cluster_b} --port=80 --name=${nginx_http_cluster_b}
-  #
-  #   # Install Netshoot app on AWS Cluster A, and verify connectivity to Ngnix service on OSP Cluster B
-  #   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
-  #   #${OC} run ${netshoot_app_cluster_a} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
-  #   #${OC} exec ${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_http_cluster_b}
-  #
-  #   ${OC} run --attach=true --restart=Never --timeout=30s --rm -i --tty --generator=run-pod/v1 \
-  #   ${netshoot_app_cluster_a} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${nginx_http_cluster_b}
-  #   #${OC} --context ${CLUSTER_A_NAME} run --generator=run-pod/v1 netshoot-app --image nicolaka/netshoot -- \
-  #   #bash -c "/bin/bash curl --max-time 30 --verbose ${nginx_http_cluster_b}"
-  # fi
-
 }
 
 # ------------------------------------------
 
-function test_clusters_connected_by_service_name() {
+function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on Cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  netshoot_app_cluster_a=netshoot-cl-a
-  nginx_http_cluster_b=nginx-cl-b
+  NETSHOOT_CLUSTER_A_NEW=netshoot-cl-a-new # A new Netshoot App
+  SUBM_TEST_NS_NEW=test-submariner-new # A New Namespace, for the SAME Ngnix service name
 
-  prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $nginx_http_cluster_b"
-  # ${OC} exec ${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_http_cluster_b}
+  prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
+  # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
-  echo "# Install Ngnix service on OSP Cluster B:"
+  echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
-  ${OC} delete deployment ${nginx_http_cluster_b} --ignore-not-found
-  ${OC} create deployment ${nginx_http_cluster_b} --image=nginx
+
+  ${OC} delete namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found
+  ${OC} create namespace "${SUBM_TEST_NS_NEW}"
+
+  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
+  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
 
   echo "# Expose Ngnix service on port 80:"
-  ${OC} delete service ${nginx_http_cluster_b} --ignore-not-found
-  ${OC} expose deployment ${nginx_http_cluster_b} --port=80 --name=${nginx_http_cluster_b}
+  ${OC} delete service ${NGINX_CLUSTER_B}  --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+  ${OC} expose deployment ${NGINX_CLUSTER_B}  --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
 
   echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${nginx_http_cluster_b}
+  ${OC} rollout status deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
 
-  # Install Netshoot app on AWS Cluster A, and verify connectivity to Ngnix service on OSP Cluster B
+  echo "# Install Netshoot app on AWS Cluster A, and verify connectivity to the NEW Ngnix service on OSP Cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
-  #${OC} run ${netshoot_app_cluster_a} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
-  #${OC} exec ${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_http_cluster_b}
+  #${OC} run ${NETSHOOT_CLUSTER_A_NEW} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
+  #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
   ${OC} run --attach=true --restart=Never --timeout=30s --rm -i --tty --generator=run-pod/v1 \
-  ${netshoot_app_cluster_a} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${nginx_http_cluster_b}
+  ${NETSHOOT_CLUSTER_A_NEW} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${NGINX_CLUSTER_B}
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
@@ -1541,16 +1608,16 @@ function test_clusters_connected_overlapping_cidrs() {
 
   kubconf_b;
   #kubconf_b;
-  #nginx_http_cluster_b=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
+  #NGINX_CLUSTER_B=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
   global_ip=$(${OC} get svc nginx-demo -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
 
   kubconf_a;
-  netshoot_app_cluster_a=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
-  echo -e "# Connecting from Netshoot pod [${netshoot_app_cluster_a}] on Cluster A\n" \
+  echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on Cluster A\n" \
   "# To Nginx service on Cluster B, by its Global IP: $global_ip"
 
-  ${OC} exec ${netshoot_app_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}
+  ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}
 
 }
 
@@ -1700,7 +1767,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_submariner_status_cluster_b
     - test_clusters_connected_by_service_ip
     - test_clusters_connected_overlapping_cidrs: $globalnet
-    - test_clusters_connected_by_service_name: $service_discovery
+    - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     - test_run_submariner_unit_tests
     - test_run_submariner_e2e_tests
     "
@@ -1797,7 +1864,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     [[ ! "$globalnet" =~ ^(y|yes)$ ]] || test_clusters_connected_overlapping_cidrs
 
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_clusters_connected_by_service_name
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_clusters_connected_by_same_service_on_new_namespace
 
     run_submariner_unit_tests
 
