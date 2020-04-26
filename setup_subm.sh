@@ -56,7 +56,6 @@ Running with pre-defined parameters (optional):
 * Build latest Submariner E2E (test packages):       --build-e2e
 * Download latest OCP Installer:                     --get-ocp-installer
 * Download latest OCPUP Tool:                        --get-ocpup-tool
-* Download latest KUBEFED Tool:                      --get-kubefed-tool
 * Download latest release of SubCtl:                 --get-subctl
 * Create AWS Cluster A:                              --create-cluster-a
 * Create OSP Cluster B:                              --create-cluster-b
@@ -107,7 +106,10 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 
 export TEMP_FILE=`mktemp`
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
-export PATH=$HOME/.local/bin:$PATH
+[[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH=$HOME/.local/bin:$PATH
+
+# Return this exit code if script has failed before environment setup.
+export TEST_EXIT_STATUS=1
 
 ### Import Submariner setup variables ###
 source "$(dirname $0)/subm_variables"
@@ -141,9 +143,9 @@ while [ $# -gt 0 ]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
-  --get-kubefed-tool)
-    get_kubefed_tool=YES
-    shift ;;
+  # --get-kubefed-tool)
+  #   get_kubefed_tool=YES
+  #   shift ;;
   --get-subctl)
     get_subctl=YES
     shift ;;
@@ -320,13 +322,13 @@ if [[ -z "$got_user_input" ]]; then
     build_submariner_e2e=${input:-YES}
   done
 
-  # User input: $get_kubefed_tool - to download_kubefedctl_latest
-  while [[ ! "$get_kubefed_tool" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to download KUBEFED tool ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    get_kubefed_tool=${input:-no}
-  done
+  # # User input: $get_kubefed_tool - to download_kubefedctl_latest
+  # while [[ ! "$get_kubefed_tool" =~ ^(yes|no)$ ]]; do
+  #   echo -e "\n${YELLOW}Do you want to download KUBEFED tool ? ${NO_COLOR}
+  #   Enter \"yes\", or nothing to skip: "
+  #   read -r input
+  #   get_kubefed_tool=${input:-no}
+  # done
 
   # User input: $skip_deploy - to skip submariner deployment
   while [[ ! "$skip_deploy" =~ ^(yes|no)$ ]]; do
@@ -369,7 +371,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO}
 build_submariner_e2e=${build_submariner_e2e:-NO}
-get_kubefed_tool=${get_kubefed_tool:-NO}
+# get_kubefed_tool=${get_kubefed_tool:-NO}
 get_subctl=${get_subctl:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -395,7 +397,7 @@ function setup_workspace() {
   cd ${WORKDIR}
 
   # Installing if $config_golang = yes/y
-  [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang
+  [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang "${WORKDIR}"
 
   # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
   mkdir -p ${WORKDIR}/GOBIN
@@ -403,7 +405,7 @@ function setup_workspace() {
 
   # Installing if $config_aws_cli = yes/y
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
-  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" )
+  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
 
 }
 
@@ -546,7 +548,7 @@ function build_operator_latest() {
   trap_commands;
 
   # Install Docker
-  # install_local_docker
+  # install_local_docker "${WORKDIR}"
 
   # Delete old submariner-operator directory
   #rm -rf $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -581,7 +583,7 @@ function build_operator_latest() {
     # Building subctl version dev for linux/amd64
     # ...
 
-  install ./bin/subctl $GOBIN/subctl
+  /usr/bin/install bin/subctl $GOBIN/subctl
   # ls -l ./bin/subctl
   # mkdir -p $GOBIN
   # cp ./bin/subctl $GOBIN/
@@ -686,42 +688,42 @@ function test_subctl_command() {
 
 # ------------------------------------------
 
-function download_kubefedctl_latest() {
-### Download OCP installer ###
-  prompt "Downloading latest KubFed Controller"
-  trap_commands;
-  cd ${WORKDIR}
-
-  curl https://github.com/kubernetes-sigs/kubefed/releases/ \
-  | grep -Eoh 'download\/v.*\/kubefedctl-.*-linux-amd64\.tgz' -m 1 > $TEMP_FILE
-
-  kubefedctl_url="$(< $TEMP_FILE)"
-  kubefedctl_gz=$(basename -- "$kubefedctl_url")
-
-  # download_file https://github.com/kubernetes-sigs/kubefed/releases/${kubefedctl_url}
-
-  BUG "Downloading latest kubefedctl will later break Subctl command" \
-  "Download older kubefedctl version v0.1.0-rc3" \
-  "https://github.com/submariner-io/submariner-operator/issues/192"
-  kubefedctl_gz="kubefedctl-0.1.0-rc3-linux-amd64.tgz"
-  download_file "https://github.com/kubernetes-sigs/kubefed/releases/download/v0.1.0-rc3/kubefedctl-0.1.0-rc3-linux-amd64.tgz"
-
-  tar -xvf ${kubefedctl_gz} -C ${WORKDIR}
-
-  ${KUBFED} -h
-
-  # Create kubefedctl link
-    # sudo cp kubefedctl /usr/local/bin/
-    # cp kubefedctl ~/.local/bin
-
-  BUG "Install kubefedctl in current dir" \
-  "Install kubefedctl into $GOBIN/" \
-  "https://github.com/submariner-io/submariner-operator/issues/166"
-  cp kubefedctl $GOBIN/
-  #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
-  #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
-  #go get -v -u -t ./...
-}
+# function download_kubefedctl_latest() {
+# ### Download OCP installer ###
+#   prompt "Downloading latest KubFed Controller"
+#   trap_commands;
+#   cd ${WORKDIR}
+#
+#   curl https://github.com/kubernetes-sigs/kubefed/releases/ \
+#   | grep -Eoh 'download\/v.*\/kubefedctl-.*-linux-amd64\.tgz' -m 1 > $TEMP_FILE
+#
+#   kubefedctl_url="$(< $TEMP_FILE)"
+#   kubefedctl_gz=$(basename -- "$kubefedctl_url")
+#
+#   # download_file https://github.com/kubernetes-sigs/kubefed/releases/${kubefedctl_url}
+#
+#   BUG "Downloading latest kubefedctl will later break Subctl command" \
+#   "Download older kubefedctl version v0.1.0-rc3" \
+#   "https://github.com/submariner-io/submariner-operator/issues/192"
+#   kubefedctl_gz="kubefedctl-0.1.0-rc3-linux-amd64.tgz"
+#   download_file "https://github.com/kubernetes-sigs/kubefed/releases/download/v0.1.0-rc3/kubefedctl-0.1.0-rc3-linux-amd64.tgz"
+#
+#   tar -xvf ${kubefedctl_gz} -C ${WORKDIR}
+#
+#   ${KUBFED} -h
+#
+#   # Create kubefedctl link
+#     # sudo cp kubefedctl /usr/local/bin/
+#     # cp kubefedctl ~/.local/bin
+#
+#   BUG "Install kubefedctl in current dir" \
+#   "Install kubefedctl into $GOBIN/" \
+#   "https://github.com/submariner-io/submariner-operator/issues/166"
+#   cp kubefedctl $GOBIN/
+#   #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
+#   #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
+#   #go get -v -u -t ./...
+# }
 
 # ------------------------------------------
 
@@ -1018,8 +1020,8 @@ function clean_aws_cluster_a() {
   "https://github.com/submariner-io/submariner/issues/432"
 
   #TODO: Call kubeconfig of broker cluster
-  prompt "Cleaning previous Kubefed (Namespace objects, OLM and CRDs) from the Broker on AWS Cluster A (Public)"
-  delete_kubefed_namespace_and_crds
+  # prompt "Cleaning previous Kubefed (Namespace objects, OLM and CRDs) from the Broker on AWS Cluster A (Public)"
+  # delete_kubefed_namespace_and_crds
 }
 
 # ------------------------------------------
@@ -1036,21 +1038,21 @@ function clean_osp_cluster_b() {
 
 # ------------------------------------------
 
-function delete_kubefed_namespace_and_crds() {
-### Run cleanup of previous Kubefed on current KUBECONFIG cluster ###
-  # trap_commands;
-
-  BUG "Deploying broker with service-discovery failed since Kubefed ns and crds already exist" \
-  "Run cleanup (oc delete) of any existing resource of Kubefed-operator" \
-  "https://github.com/submariner-io/submariner-operator/issues/206"
-
-  delete_namespace_and_crds "kubefed-operator" "kubefed"
-
-  BUG "Kubfed cleanup hangs while deleting CRD federatedmulticlusterservices" \
-  "Add timeout to the delete command, and ignore exit code" \
-  "https://github.com/submariner-io/submariner-operator/issues/251"
-
-}
+# function delete_kubefed_namespace_and_crds() {
+# ### Run cleanup of previous Kubefed on current KUBECONFIG cluster ###
+#   # trap_commands;
+#
+#   BUG "Deploying broker with service-discovery failed since Kubefed ns and crds already exist" \
+#   "Run cleanup (oc delete) of any existing resource of Kubefed-operator" \
+#   "https://github.com/submariner-io/submariner-operator/issues/206"
+#
+#   delete_namespace_and_crds "kubefed-operator" "kubefed"
+#
+#   BUG "Kubfed cleanup hangs while deleting CRD federatedmulticlusterservices" \
+#   "Add timeout to the delete command, and ignore exit code" \
+#   "https://github.com/submariner-io/submariner-operator/issues/251"
+#
+# }
 
 # ------------------------------------------
 
@@ -1196,11 +1198,14 @@ function test_clusters_disconnected_before_submariner() {
 
 # ------------------------------------------
 
-function open_firewall_ports_on_the_gateway_node() {
+function open_firewall_ports_on_the_broker_node() {
 ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
-  prompt "Running \"prep_for_subm.sh\" - to open Firewall ports on the Gateway node in AWS Cluster A (Public)"
+  prompt "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS Cluster A (Public)"
   trap_commands;
+
+  # Installing Terraform
+  install_local_terraform "${WORKDIR}"
 
   kubconf_a;
   cd ${CLUSTER_A_DIR}
@@ -1310,16 +1315,16 @@ function install_broker_and_member_aws_cluster_a() {
   if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
     prompt "Adding Service-Discovery to Submariner Deploy command"
 
-    BUG "Deploying --service-discovery does not see kubefedctl in current dir" \
-    "Install kubefedctl on system PATH as sudo" \
-    "https://github.com/submariner-io/submariner-operator/issues/166"
+    # BUG "Deploying --service-discovery does not see kubefedctl in current dir" \
+    # "Install kubefedctl on system PATH as sudo" \
+    # "https://github.com/submariner-io/submariner-operator/issues/166"
 
     BUG "kubecontext must be identical to broker-cluster-context, otherwise kubefedctl will fail" \
     "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and broker-cluster-context" \
     "https://github.com/submariner-io/submariner-operator/issues/193"
     sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
 
-    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --disable-cvo --kubecontext ${CLUSTER_A_NAME} --broker-cluster-context ${BROKER_CLUSTER_NAME}"
+    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --disable-cvo --kubecontext ${CLUSTER_A_NAME}"
     # subctl deploy-broker --kubecontext <BROKER-CONTEXT-NAME>  --kubeconfig <MERGED-KUBECONFIG> \
     # --dataplane --service-discovery --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
   fi
@@ -1334,10 +1339,10 @@ function install_broker_and_member_aws_cluster_a() {
 
   ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
 
-  ${OC} -n kubefed-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
+  # ${OC} -n kubefed-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
 
   # Now looking at cluster A shows that the Submariner broker namespace has been created:
-  ${OC} get crds | grep -E 'submariner|kubefed|lighthouse'
+  ${OC} get crds | grep -E 'submariner|lighthouse'
       # clusters.submariner.io                                      2019-12-03T16:45:57Z
       # endpoints.submariner.io                                     2019-12-03T16:45:57Z
 
@@ -1401,9 +1406,8 @@ function join_submariner_cluster_b() {
   #export KUBECONFIG="${KUBFED_CONFIG}"
   ${OC} config view
 
-  subctl join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} \
-  --broker-cluster-context ${BROKER_CLUSTER_NAME} --clusterid ${CLUSTER_B_NAME}-tunnel \
-  ./broker-info.subm --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT --subm-debug
+  subctl --subm-debug join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} \
+  --clusterid ${CLUSTER_B_NAME}-tunnel ./broker-info.subm --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT
 
   # subctl join --kubecontext <DATA-CLUSTER-CONTEXT-NAME> --kubeconfig <MERGED-KUBECONFIG> broker-info.subm  \
   # --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
@@ -1411,9 +1415,9 @@ function join_submariner_cluster_b() {
   BUG "Lighthouse-controller is not reachable between private and public clusters" \
   "Service Discovery fix for Private Clusters" \
   "https://github.com/submariner-io/lighthouse/issues/74"
-  export k8sip=$(${OC} --context=${CLUSTER_B_NAME} get svc kubernetes | awk 'FNR == 2 {print $3}')
-  ${OC} -n kubefed-operator --context=${BROKER_CLUSTER_NAME} patch kubefedclusters ${CLUSTER_B_NAME}-tunnel \
-  --type='json' -p='[{"op": "replace", "path": "/spec/apiEndpoint", "value":"https://'"$k8sip"':443"}]'
+  # export k8sip=$(${OC} --context=${CLUSTER_B_NAME} get svc kubernetes | awk 'FNR == 2 {print $3}')
+  # ${OC} -n kubefed-operator --context=${BROKER_CLUSTER_NAME} patch kubefedclusters ${CLUSTER_B_NAME}-tunnel \
+  # --type='json' -p='[{"op": "replace", "path": "/spec/apiEndpoint", "value":"https://'"$k8sip"':443"}]'
 
   # Check that Submariners CRD has been created on OSP Cluster B (Private):
   ${OC} get crds | grep submariners
@@ -1425,7 +1429,7 @@ function join_submariner_cluster_b() {
 
   ${OC} get Submariner -n submariner-operator -o yaml
 
-  ${OC} get kubefedclusters -n kubefed-operator --context=${BROKER_CLUSTER_NAME}
+  # ${OC} get kubefedclusters -n kubefed-operator --context=${BROKER_CLUSTER_NAME}
 
 }
 
@@ -1475,11 +1479,10 @@ function test_lighthouse_controller_status() {
   # Check Lighthouse controller status
   prompt "Checking Lighthouse controller status on AWS Cluster A (Public)"
   ${OC} describe multiclusterservices --all-namespaces
-  lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
-  ${OC} logs -f $lighthouse_pod -n kubefed-operator --limit-bytes=100000 \
-  |& highlight "cluster is not reachable" && lighthouse_status=DOWN || :
-  [[ "$lighthouse_status" != DOWN ]] || FATAL "Error: Service-Discovery is not reachable"
-  echo "TEST RETURN CODE = $?"
+  # lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
+  # ${OC} logs -f $lighthouse_pod -n kubefed-operator --limit-bytes=100000 \
+  # |& highlight "cluster is not reachable" && lighthouse_status=DOWN || :
+  # [[ "$lighthouse_status" != DOWN ]] || FATAL "Error: Service-Discovery is not reachable"
 }
 
 # ------------------------------------------
@@ -1732,7 +1735,6 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   - build_operator_latest: $build_operator
   - build_submariner_e2e_latest: $build_submariner_e2e
   - download_subctl_latest_release: $get_subctl
-  - download_kubefedctl_latest: $get_kubefed_tool
   "
 
   echo "# Submariner deployment and environment setup for the tests:"
@@ -1751,18 +1753,20 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_subctl_command
     - install_broker_and_member_aws_cluster_a
     - join_submariner_cluster_b
-    "
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- add service discovery"
-    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- add globalnet"
-    # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
+    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test service discovery")
+    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet")
+    - (sleep 10m between deployment and tests)"
   fi
+
+  # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
+  # $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- add service discovery")
+  # [[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- add globalnet"
 
   echo "# System and functional tests for Submariner:"
   if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping tests: $skip_tests \n"
   else
     echo -e "\n
-    - (sleep 10m after deployment)
     - test_submariner_status_cluster_a
     - test_submariner_status_cluster_b
     - test_clusters_connected_by_service_ip
@@ -1808,6 +1812,9 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
   || clean_osp_cluster_b
 
+  # From this point if script fails, it is counted as UNSTABLE (exit code 2)
+  export TEST_EXIT_STATUS=2
+
   # Running build_operator_latest if requested
   [[ ! "$build_operator" =~ ^(y|yes)$ ]] || build_operator_latest
 
@@ -1818,7 +1825,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || build_submariner_e2e_latest
 
   # Running download_kubefedctl_latest if requested
-  [[ ! "$get_kubefed_tool" =~ ^(y|yes)$ ]] || download_kubefedctl_latest
+  # [[ ! "$get_kubefed_tool" =~ ^(y|yes)$ ]] || download_kubefedctl_latest
 
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
@@ -1829,7 +1836,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     test_clusters_disconnected_before_submariner
 
-    open_firewall_ports_on_the_gateway_node
+    open_firewall_ports_on_the_broker_node
 
     label_all_gateway_external_ip_cluster_a
 
@@ -1871,6 +1878,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     run_submariner_e2e_tests
   fi
 
+  TEST_EXIT_STATUS=0
+
 ) |& tee $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
 # Create HTML Report from log file (with title extracted from log file name)
@@ -1886,6 +1895,7 @@ tar -cvzf "$report_archive" "$report_file"
 echo -e "Report file compressed into ${report_archive}. To view in Firefox, run:\n" \
 "tar -xvf ${report_archive}; firefox ${report_file}"
 
+exit $TEST_EXIT_STATUS
 
 # You can find latest script here:
 # https://code.engineering.redhat.com/gerrit/gitweb?p=...git;a=blob;f=setup_subm.sh
