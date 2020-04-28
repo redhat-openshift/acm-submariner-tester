@@ -106,7 +106,6 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 
 export TEMP_FILE=`mktemp`
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
-[[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH=$HOME/.local/bin:$PATH
 
 # Return this exit code if script has failed before environment setup.
 export TEST_EXIT_STATUS=1
@@ -371,7 +370,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO}
 build_submariner_e2e=${build_submariner_e2e:-NO}
-# get_kubefed_tool=${get_kubefed_tool:-NO}
+## get_kubefed_tool=${get_kubefed_tool:-NO}
 get_subctl=${get_subctl:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -391,6 +390,10 @@ globalnet=${globalnet:-NO}
 function setup_workspace() {
   prompt "Creating workspace and verifing GO installation"
   # DONT trap_commands - Includes credentials, hide from output
+
+  # Add HOME dir to PATH
+  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH=$HOME/.local/bin:$PATH
+  mkdir -p $HOME/.local/bin
 
   # CD to main working directory
   mkdir -p ${WORKDIR}
@@ -583,10 +586,10 @@ function build_operator_latest() {
     # Building subctl version dev for linux/amd64
     # ...
 
-  /usr/bin/install bin/subctl $GOBIN/subctl
-  # ls -l ./bin/subctl
-  # mkdir -p $GOBIN
+  ls -l ./bin/subctl
+  mkdir -p $GOBIN
   # cp ./bin/subctl $GOBIN/
+  /usr/bin/install ./bin/subctl $GOBIN/subctl
 
   # Create symbolic link /usr/local/bin/subctl :
   #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
@@ -618,7 +621,15 @@ function download_subctl_latest_release() {
 
     echo "# Copy subctl to system path:"
     mkdir -p $GOBIN
-    cp subctl $GOBIN/
+
+    BUG "Sunctl command will CRASH if it was downloaded to an NFS mount location" \
+    "Download and run [${file_name}] in a local file system path (e.g. /tmp)" \
+    "https://github.com/submariner-io/submariner-operator/issues/335"
+    # cp ./subctl $GOBIN/
+    # /usr/bin/install ./subctl $GOBIN/subctl
+    # workaround:
+    cp ./subctl ~/.local/bin/
+
     #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
     #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
     #go get -v -u -t ./...
@@ -942,6 +953,8 @@ function destroy_aws_cluster_a() {
 
     # Remove existing OCP install-config directory:
     #rm -r _${CLUSTER_A_DIR}/ || echo "# Old config dir removed."
+    # Remove old config directories starting with _ , which are older than a day:
+    find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
     mv ${CLUSTER_A_NAME} _${CLUSTER_A_NAME}_${DATE_TIME}
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
@@ -1278,7 +1291,7 @@ function gateway_label_all_nodes_external_ip() {
   trap_commands;
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields:
-  watch_for "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" "[0-9]" 200
+  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
@@ -1307,7 +1320,7 @@ function install_broker_and_member_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   rm broker-info.subm || echo "# Old broker-info.subm removed."
-  DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME}-tunnel --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT --subm-debug"
+  DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME}-tunnel --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
   kubconf_a;
@@ -1335,7 +1348,12 @@ function install_broker_and_member_aws_cluster_a() {
   fi
 
   prompt "Deploying Submariner Broker and joining Cluster A"
-  subctl ${DEPLOY_CMD}
+  BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
+  "Use a retry mechanism to run the same subctl command again" \
+  "https://github.com/submariner-io/submariner-operator/issues/336"
+  # subctl ${DEPLOY_CMD} --subm-debug
+  # Workaround:
+  watch_and_retry "subctl \${DEPLOY_CMD} --subm-debug" 3
 
   ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
 
@@ -1406,11 +1424,23 @@ function join_submariner_cluster_b() {
   #export KUBECONFIG="${KUBFED_CONFIG}"
   ${OC} config view
 
-  subctl --subm-debug join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} \
-  --clusterid ${CLUSTER_B_NAME}-tunnel ./broker-info.subm --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT
+  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} --clusterid ${CLUSTER_B_NAME}-tunnel \
+  ./broker-info.subm --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
 
-  # subctl join --kubecontext <DATA-CLUSTER-CONTEXT-NAME> --kubeconfig <MERGED-KUBECONFIG> broker-info.subm  \
-  # --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
+  BUG "--subm-debug cannot be used before join argument in subctl command" \
+  "Add --subm-debug at the end only" \
+  "https://github.com/submariner-io/submariner-operator/issues/340"
+
+  BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
+  "Use a retry mechanism to run the same subctl command again" \
+  "https://github.com/submariner-io/submariner-operator/issues/336"
+  # subctl ${JOIN_CMD} --subm-debug
+  # Workaround:
+  watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
+
+
+  # subctl join --kubecontext <DATA-CLUSTER-CONTEXT-NAME> --kubeconfig <MERGED-KUBECONFIG> \
+  # broker-info.subm --clusterid  <CLUSTER-ID-FOR-TUNNELS>
 
   BUG "Lighthouse-controller is not reachable between private and public clusters" \
   "Service Discovery fix for Private Clusters" \
@@ -1622,6 +1652,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
   ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}
 
+  #TODO: validate annotation of globalIp in the node
 }
 
 # ------------------------------------------
@@ -1744,13 +1775,13 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     echo -e "\n
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
+    - test_subctl_command
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_clusters_disconnected_before_submariner
     - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
     - label_all_gateway_external_ip_cluster_a
     - label_first_gateway_cluster_b
-    - test_subctl_command
     - install_broker_and_member_aws_cluster_a
     - join_submariner_cluster_b
     $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test service discovery")
@@ -1830,6 +1861,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
+    test_subctl_command
+
     install_netshoot_app_on_cluster_a
 
     install_nginx_svc_on_cluster_b
@@ -1841,8 +1874,6 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     label_all_gateway_external_ip_cluster_a
 
     label_first_gateway_cluster_b
-
-    test_subctl_command
 
     install_broker_and_member_aws_cluster_a
 

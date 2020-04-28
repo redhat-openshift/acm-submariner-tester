@@ -44,20 +44,30 @@ function highlight()
 
 # ------------------------------------------
 
-# function to watch for expected regexp in a command
-function watch_for() {
-  CMD="$1" # Command to watch. Variables should be escaped \$
-  REGEX="$2" # Pattern to search
-  ATTEMPTS=${3:-10} # Timeout in seconds
-  COUNT=0;
+# function to watch for expected regex of command output, with retry attempts
+function watch_and_retry() {
+  # Command to watch. Variables should be escaped, e.g. \$var
+  CMD="$1"
+  # Number of retry attempts (default=10)
+  RETRY=${2:-10}
+  # Pattern to search
+  REGEX="${3}"
 
-  echo -e "# Watching for /$REGEX/ during $ATTEMPTS seconds, on the output of command:\n$CMD"
-  until eval "$CMD" | grep -m 1 "$REGEX" || [[ $COUNT -eq $ATTEMPTS ]]; do
+  # Pattern to search, otherwise expect $CMD exit 0
+  [[ -z ${REGEX} ]] || CMD="${CMD} | grep -m 1 \"${REGEX}\""
+
+  echo -e "# Watching output of command: $CMD \n\
+  # Search pattern (or exit code):/$REGEX/ \n\
+  # Retry attempts: $RETRY"
+
+  COUNT=0;
+  until eval "$CMD" || [[ $COUNT -eq $RETRY ]] ; do
     echo -e "$(( COUNT++ ))... \c"
-    sleep 1
+    sleep 1 # A second interval
+    # [[ $COUNT -eq $RETRY ]] && break
   done
-  if [[ $COUNT -eq $ATTEMPTS ]]; then
-    echo "# Limit of $ATTEMPTS attempts has exceeded."
+  if [[ $COUNT -eq $RETRY ]]; then
+    echo "# Limit of $RETRY attempts has exceeded."
     return 1
   fi
   return 0
@@ -105,15 +115,16 @@ function install_anaconda() {
   [[ ":$PATH:" != *":${miniconda_bin_dir}:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
   if ! conda info ; then
     echo "# Installing Anaconda"
-    rm -rf ${install_dir}
+    # rm -rf ${install_dir}
     # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
     miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
     download_file https://repo.anaconda.com/miniconda/${miniconda_installer}
     chmod +x $miniconda_installer
     ./$miniconda_installer -b -u -p ${install_dir}
-    #conda install anaconda
     conda update -y -n base -c defaults conda
+    # conda clean -y --all
   fi
+
 }
 
 # ------------------------------------------
@@ -133,6 +144,32 @@ function install_local_golang() {
   conda install -y --update-deps -c conda-forge go-nocgo_linux-64
   conda create -y -n conda-env go-nocgo_linux-64
   source activate conda-env
+}
+
+# ------------------------------------------
+
+function verify_golang() {
+  # Verify Golang installed.
+  # Optional: $1 - GOBIN path
+  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
+  go version
+
+  # export GOROOT=/usr/local/go
+  export GOROOT=$(go env GOROOT)
+
+  # export GOPATH=~/go
+  export GOPATH=$(go env GOPATH)
+
+  # export GOBIN=$GOROOT/bin
+  export GOBIN="${1:-$GOROOT/bin}"
+
+  # export PATH=$PATH:$GOROOT/bin
+  [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH
+
+  export GO111MODULE=on
+
+  # Print all GO env variables
+  go env
 }
 
 # ------------------------------------------
@@ -174,32 +211,6 @@ function install_local_docker() {
 
 # ------------------------------------------
 
-function verify_golang() {
-  # Verify Golang installed.
-  # Optional: $1 - GOBIN path
-  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
-  go version
-
-  # export GOROOT=/usr/local/go
-  export GOROOT=$(go env GOROOT)
-
-  # export GOPATH=~/go
-  export GOPATH=$(go env GOPATH)
-
-  # export GOBIN=$GOROOT/bin
-  export GOBIN="${1:-$GOROOT/bin}"
-
-  # export PATH=$PATH:$GOROOT/bin
-  [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH
-
-  export GO111MODULE=on
-
-  # Print all GO env variables
-  go env
-}
-
-# ------------------------------------------
-
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
   # $1 => $source_file (download link)
@@ -219,15 +230,20 @@ function download_file() {
 
   echo "# Downloading [$source_file] into $target_file"
   ls -ld
-  # wget does not always exists on hosts, using curl instead
-  # wget -nc ${source_file} --no-check-certificate -O ${target_file}
+
   local_file_size=$([[ -f ${target_file} ]] && wc -c < ${target_file} || echo "0")
   echo "local_file_size = $local_file_size"
   remote_file_size=$(curl -sI ${source_file} | awk '/Content-Length/ { print $2 }' | tr -d '\r' )
   echo "remote_file_size = $remote_file_size"
   [[ -n "$remote_file_size" ]] || remote_file_size=-1
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
-      curl -L ${source_file} -o ${target_file}
+      echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
+      if [[ $(wget --version) ]] ; then
+        wget -nc ${source_file} --no-check-certificate -O ${target_file}
+      else
+        echo "# Wget is not installed, using Curl instead."
+        curl -L "${source_file}" -o "${target_file}" --create-dirs
+      fi
   else
     echo "# $target_file already downloaded, and equals to remote file $source_file"
   fi
