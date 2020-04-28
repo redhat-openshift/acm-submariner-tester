@@ -1642,8 +1642,7 @@ function test_clusters_connected_overlapping_cidrs() {
   kubconf_b;
   #kubconf_b;
   #NGINX_CLUSTER_B=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
-  global_ip=$(${OC} get svc nginx-demo -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
-
+  global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
   kubconf_a;
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
