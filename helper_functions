@@ -10,7 +10,8 @@ function print_cmd_location() {
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  echo -e "${CYAN}${1}${NO_COLOR}"
+  echo -e "${CYAN}${1}${NO_COLOR}" 2>/dev/null
+  #echo -e "${CYAN}${1}${NO_COLOR}"
 }
 
 # ------------------------------------------
@@ -18,9 +19,18 @@ function print_cmd_location() {
 # Function to print each bash command before it is executed (use in conjunction with "set -T")
 function trap_commands() {
   trap '[[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] && \
-  cmd=`eval echo -e "$BASH_COMMAND" 2>/dev/null` && \
-  print_cmd_location "$cmd"' DEBUG
+  print_cmd_location "$BASH_COMMAND"' DEBUG
 }
+
+function debug_cmd_with_pipe() {
+  eval "$1"
+}
+# # Function to print each bash command before it is executed (use in conjunction with "set -T")
+# function trap_commands() {
+#   trap '[[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] && \
+#   cmd=`eval echo -e "$BASH_COMMAND" 2>/dev/null` && \
+#   print_cmd_location "$cmd"' DEBUG
+# }
 
 # function trap_commands() {
 #   trap '! [[ "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt) ]] && \

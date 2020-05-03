@@ -1099,8 +1099,8 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete namespace "${SUBM_TEST_NS}" --ignore-not-found
-  ${OC} create namespace "${SUBM_TEST_NS}"
+  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+  ${OC} create namespace "${SUBM_TEST_NS}" || :
 
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
@@ -1124,8 +1124,8 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  ${OC} delete namespace "${SUBM_TEST_NS}" --ignore-not-found
-  ${OC} create namespace "${SUBM_TEST_NS}"
+  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+  ${OC} create namespace "${SUBM_TEST_NS}" || :
 
   # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
 
@@ -1144,49 +1144,6 @@ function install_nginx_svc_on_cluster_b() {
 
 # ------------------------------------------
 
-# function _install_netshoot_app_on_cluster_a() {
-#   prompt "Install Netshoot application on AWS Cluster A (Public)"
-#   trap_commands;
-#
-#   # Create netshoot app on AWS Cluster A (Public):
-#   cd $GOPATH/src/github.com/submariner-io/submariner-operator
-#
-#   #KUBECONFIG=$CLUSTER_A  ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
-#   kubconf_a;
-#   ${OC} delete -f ./scripts/kind-e2e/netshoot.yaml  --ignore-not-found # || echo "# OK: Netshoot app does not exist on Cluster A. Installing it..."
-#   ${OC} apply -f ./scripts/kind-e2e/netshoot.yaml
-#     # deployment.apps/netshoot created
-#
-#   # NETSHOOT_CLUSTER_A=$(${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-#   ${OC} get pods -l app=netshoot --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
-#   NETSHOOT_CLUSTER_A="$(< $TEMP_FILE)"
-#   echo "# NETSHOOT_CLUSTER_A: $NETSHOOT_CLUSTER_A"
-#     # netshoot-785ffd8c8-zv7td
-#
-#   ${OC} rollout status deployment  netshoot
-#   ${OC} describe pod  netshoot
-# }
-
-# ------------------------------------------
-
-# function _install_nginx_svc_on_cluster_b() {
-#   prompt "Install Nginx service on OSP Cluster B (Private)"
-#   trap_commands;
-#
-#   # Create nginx service on OSP Cluster B (Private):
-#   kubconf_b;
-#   ${OC} delete -f ./scripts/kind-e2e/nginx-demo.yaml  --ignore-not-found # || echo "# OK: Nginx service does not exist on Cluster B. Installing it..."
-#   ${OC} apply -f ./scripts/kind-e2e/nginx-demo.yaml
-#     # deployment.apps/nginx-demo created
-#     # service/nginx-demo created
-#
-#   #${OC} get svc -l app=nginx-demo
-#   ${OC} rollout status deployment nginx-demo
-#   ${OC} describe service nginx-demo
-# }
-
-# ------------------------------------------
-
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   prompt "Before Submariner is installed: \n"\
@@ -1197,13 +1154,15 @@ function test_clusters_disconnected_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  #${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
-  #nginx_cluster_b_ip="$(< $TEMP_FILE)"
-  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
+  nginx_ip_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
   kubconf_a;
-  netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_ip_cluster_b \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
     # command terminated with exit code 28
@@ -1273,7 +1232,9 @@ function gateway_label_first_worker_node() {
 ### Adding submariner gateway label to the first worker node ###
   trap_commands;
 
-  gw_node1=$(${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}')
+  # gw_node1=$(${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}')
+  ${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  gw_node1="$(< $TEMP_FILE)"
   echo "# Adding submariner gateway labels to first worker node: $gw_node1"
     # gw_node1: user-cl1-bbmkg-worker-8mx4k
 
@@ -1281,9 +1242,10 @@ function gateway_label_first_worker_node() {
   ${OC} label node $gw_node1 "submariner.io/gateway=true" --overwrite
     # node/user-cl1-bbmkg-worker-8mx4k labeled
 
-  ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
+  # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
+  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true
 }
 
 function gateway_label_all_nodes_external_ip() {
@@ -1293,7 +1255,9 @@ function gateway_label_all_nodes_external_ip() {
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields:
   watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
-  gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
+  # gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > $TEMP_FILE
+  gw_nodes="$(< $TEMP_FILE)"
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
@@ -1303,9 +1267,11 @@ function gateway_label_all_nodes_external_ip() {
       # node/user-cl1-bbmkg-worker-8mx4k labeled
   done
 
-  ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
-      # NAME                          STATUS   ROLES    AGE     VERSION
-      # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
+  #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
+    # NAME                          STATUS   ROLES    AGE     VERSION
+    # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
+  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true
+
 }
 
 # ------------------------------------------
@@ -1553,7 +1519,10 @@ function test_clusters_connected_by_service_ip() {
     # netshoot-785ffd8c8-zv7td
 
   kubconf_b;
-  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')"
+  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
+  nginx_ip_cluster_b="$(< $TEMP_FILE)"
   echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_ip_cluster_b"
     # nginx_ip_cluster_b: 100.96.43.129
 
@@ -1563,7 +1532,7 @@ function test_clusters_connected_by_service_ip() {
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     prompt "Testing NO-connectivity if Clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
-    && echo -e "# Negative Test OK - Clusters has Overlapping CIDRs. \n" \
+    && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
     "Nginx Service IP (${nginx_ip_cluster_b}) on Cluster B, is not reachable externally."
   else
     ${OC} exec ${CURL_CMD} || \
@@ -1607,8 +1576,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
-  ${OC} delete namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found
-  ${OC} create namespace "${SUBM_TEST_NS_NEW}"
+  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found || : # || : to ignore none-zero exit code
+  ${OC} create namespace "${SUBM_TEST_NS_NEW}" || :
 
   ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
   ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
@@ -1641,10 +1610,14 @@ function test_clusters_connected_overlapping_cidrs() {
 
   kubconf_b;
   #kubconf_b;
-  #NGINX_CLUSTER_B=$(${OC} get svc -l app=nginx-demo | awk 'FNR == 2 {print $3}')
-  global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
+  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
+  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
+  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}' > $TEMP_FILE
+  global_ip="$(< $TEMP_FILE)"
   kubconf_a;
-  netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  netshoot_pod_cluster_a="$(< $TEMP_FILE)"
 
   echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on Cluster A\n" \
   "# To Nginx service on Cluster B, by its Global IP: $global_ip"
