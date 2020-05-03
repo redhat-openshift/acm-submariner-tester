@@ -96,13 +96,7 @@ shopt -s expand_aliases
 
 ####################################################################################
 
-### General CONSTANTS ###
-export RED='\x1b[0;31m'
-export GREEN='\x1b[38;5;22m'
-export CYAN='\x1b[36m'
-export YELLOW='\x1b[33m' #'\x1b[32m'
-export NO_COLOR='\x1b[0m'
-export HAT="${RED}🎩︎${NO_COLOR}"
+### Constants ###
 
 export TEMP_FILE=`mktemp`
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
@@ -1051,24 +1045,6 @@ function clean_osp_cluster_b() {
 
 # ------------------------------------------
 
-# function delete_kubefed_namespace_and_crds() {
-# ### Run cleanup of previous Kubefed on current KUBECONFIG cluster ###
-#   # trap_commands;
-#
-#   BUG "Deploying broker with service-discovery failed since Kubefed ns and crds already exist" \
-#   "Run cleanup (oc delete) of any existing resource of Kubefed-operator" \
-#   "https://github.com/submariner-io/submariner-operator/issues/206"
-#
-#   delete_namespace_and_crds "kubefed-operator" "kubefed"
-#
-#   BUG "Kubfed cleanup hangs while deleting CRD federatedmulticlusterservices" \
-#   "Add timeout to the delete command, and ignore exit code" \
-#   "https://github.com/submariner-io/submariner-operator/issues/251"
-#
-# }
-
-# ------------------------------------------
-
 function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner on current KUBECONFIG cluster ###
   # trap_commands;
@@ -1099,16 +1075,16 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-  ${OC} create namespace "${SUBM_TEST_NS}" || :
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found -n "${SUBM_TEST_NS}"
+  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+  delete_namespace_and_crds "${SUBM_TEST_NS}"
+  ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
 
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
-
   # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found
   # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot
-  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found
   ${OC} run ${NETSHOOT_CLUSTER_A} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
 
   echo "# Wait for Netshoot App to be ready:"
@@ -1124,8 +1100,9 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-  ${OC} create namespace "${SUBM_TEST_NS}" || :
+  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+  delete_namespace_and_crds "${SUBM_TEST_NS}"
+  ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
 
   # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
 
@@ -1576,8 +1553,9 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
-  ${OC} delete --timeout=10s namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found || : # || : to ignore none-zero exit code
-  ${OC} create namespace "${SUBM_TEST_NS_NEW}" || :
+  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found || : # || : to ignore none-zero exit code
+  delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
+  ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
 
   ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
   ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
