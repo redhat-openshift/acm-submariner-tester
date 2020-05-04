@@ -415,26 +415,23 @@ function download_ocp_installer() {
   trap_commands;
   cd ${WORKDIR}
 
-  # ocp_install_gz=$(curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/ \
-  # | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"')
-  curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/ \
-  | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"' > $TEMP_FILE
+  ocp_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/"
+
+  # ocp_install_gz=$(curl $ocp_url | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"')
+  curl $ocp_url | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"' | cut -f 1 > $TEMP_FILE
 
   ocp_install_gz="$(< $TEMP_FILE)"
 
-  #oc_client_gz=$(curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/ \
-  # | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"')
-
-  curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/ \
-  | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"' > $TEMP_FILE
+  #oc_client_gz=$(curl $ocp_url | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"')
+  curl $ocp_url | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"' | cut -f 1 > $TEMP_FILE
 
   oc_client_gz="$(< $TEMP_FILE)"
 
-  #wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/${ocp_install_gz}
-  #wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/${oc_client_gz}
+  #wget ${ocp_url}${ocp_install_gz}
+  #wget ${ocp_url}${oc_client_gz}
 
-  download_file https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/${ocp_install_gz}
-  download_file https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/${oc_client_gz}
+  download_file ${ocp_url}${ocp_install_gz}
+  download_file ${ocp_url}${oc_client_gz}
 
   tar -xvf ${ocp_install_gz} -C ${WORKDIR}
   tar -xvf ${oc_client_gz} -C ${WORKDIR}
@@ -1123,8 +1120,8 @@ function install_nginx_svc_on_cluster_b() {
 
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \n"\
-  "Verifying that Netshoot app on AWS Cluster A (Public), cannot reach Nginx service on OSP Cluster B (Private)"
+  prompt "Before Submariner is installed: \n \
+  Verifying that Netshoot app on AWS Cluster A (Public), cannot reach Nginx service on OSP Cluster B (Private)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1227,14 +1224,14 @@ function gateway_label_first_worker_node() {
 
 function gateway_label_all_nodes_external_ip() {
 ### Adding submariner gateway label to all worker nodes with an external IP ###
-  trap_commands;
+  # trap_commands;
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields:
-  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
+  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
-  # gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
-  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > $TEMP_FILE
-  gw_nodes="$(< $TEMP_FILE)"
+  gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
+  # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > $TEMP_FILE
+  # gw_nodes="$(< $TEMP_FILE)"
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
@@ -1867,7 +1864,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 #report_name=$(basename $LOG_FILE .log)
 #report_name=( ${report_name//_/ } ) # without quotes
 #report_name="${report_name[*]^}"
-log_to_html $LOG_FILE "$REPORT_NAME"
+log_to_html "$LOG_FILE" "$REPORT_NAME" $TEST_EXIT_STATUS
 
 # Compressing report to tar.gz
 report_file=$(ls -1 -t *.html | head -1)

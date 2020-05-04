@@ -22,35 +22,26 @@ function print_cmd_location() {
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  # echo -e "${CYAN}${1}${NO_COLOR}"
-  cmd="$(eval echo -e \"${1}\" 2>/dev/null)"
-  echo -e "${CYAN}${cmd}${NO_COLOR}"
-
+  echo -e "${CYAN}${1}${NO_COLOR}"
 }
 
 # ------------------------------------------
 
-# Function to print each bash command before it is executed (use in conjunction with "set -T")
+# function debug_cmd_with_pipe() {
+#   eval "$1"
+# }
+
+# Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_commands() {
-  trap '[[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] && \
-  print_cmd_location "$BASH_COMMAND"' DEBUG
+  trap '\
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]]; then
+     cmd="$(echo -e $BASH_COMMAND)"
+     cmd_eval="$(eval echo -e \"$BASH_COMMAND\" 2>/dev/null)"
+     [[ ! "$cmd" =~ "\$(" ]] || cmd_eval="${cmd}\n${cmd_eval}"
+     print_cmd_location "$cmd_eval"
+   fi \
+  ' DEBUG
 }
-
-function debug_cmd_with_pipe() {
-  eval "$1"
-}
-# # Function to print each bash command before it is executed (use in conjunction with "set -T")
-# function trap_commands() {
-#   trap '[[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] && \
-#   cmd=`eval echo -e "$BASH_COMMAND" 2>/dev/null` && \
-#   print_cmd_location "$cmd"' DEBUG
-# }
-
-# function trap_commands() {
-#   trap '! [[ "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt) ]] && \
-#   cmd=`eval echo -e "[${PWD##*/}]\$ $BASH_COMMAND" 2>/dev/null` && \
-#   echo -e "${CYAN}$cmd${NO_COLOR}"' DEBUG
-# }
 
 export -f trap_commands
 trap_commands
@@ -70,15 +61,17 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts
 function watch_and_retry() {
+  trap_commands
+
   # Command to watch. Variables should be escaped, e.g. \$var
   CMD="$1"
-  # Number of retry attempts (default=10)
+  # Optional: Number of retry attempts (default=10)
   RETRY=${2:-10}
-  # Pattern to search
-  REGEX="${3}"
+  # Optional: Pattern to search, otherwise expect $CMD exit 0
+  REGEX="$3"
 
-  # Pattern to search, otherwise expect $CMD exit 0
-  [[ -z ${REGEX} ]] || CMD="${CMD} | grep -m 1 \"${REGEX}\""
+  # If regex specified, will wait for regex to be found in CMD output
+  [[ -z ${REGEX} ]] || CMD="$CMD"' | grep -m 1 "'"$REGEX"'"'
 
   echo -e "# Watching output of command: $CMD \n\
   # Search pattern (or exit code):/$REGEX/ \n\
@@ -101,9 +94,11 @@ function watch_and_retry() {
 
 # Function to print current time and a message
 function prompt() {
+  message="$1"
+  color="${2:-${YELLOW}}"
   cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S')]"
   echo -e "\n${cur_time}\n"\
-  "${YELLOW}### $* ###${NO_COLOR}\n"\
+  "${color}### $message ###${NO_COLOR}\n"\
   "[${PWD}]\n"
 }
 
@@ -176,7 +171,7 @@ function verify_golang() {
   # Verify Golang installed.
   # Optional: $1 - GOBIN path
   echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
-  go version
+  go version || FATAL "No Golang installation found"
 
   # export GOROOT=/usr/local/go
   export GOROOT=$(go env GOROOT)
@@ -307,6 +302,7 @@ function configure_aws_access() {
 
   # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
   aws sts get-caller-identity
+  aws directconnect describe-connections
 }
 
 # ------------------------------------------
@@ -415,19 +411,17 @@ function delete_namespace_and_crds() {
   ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
 
   # If there is existing namespace on the cluster - remove it:
-  # if [[ "$delete_namespace" = TRUE ]]; then
-    echo "# Deleting whole namespace ${ns_name} from the cluster"
-    ${OC} delete --timeout=10s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
+  echo "# Deleting whole namespace ${ns_name} from the cluster"
+  ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
 
-    if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
-      echo "# Warning: using force delete of namespace"
-      ${OC} proxy &
-      ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
-      curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
-      kill -9 %% || :
-      ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found
-    fi
-  # fi
+  if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
+    echo "# Warning: Force delete of namespace via API"
+    ${OC} proxy &
+    ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
+    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
+    kill -9 %% || :
+    ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait
+  fi
 
 }
 
@@ -437,6 +431,15 @@ function log_to_html() {
   #trap_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}"
+  test_exit_status=${3:-0}
+
+  message="Creating HTML Report"
+  if (( $test_exit_status != 0 )) ; then
+    message="$message - Test exit status: $test_exit_status"
+    color="$RED"
+  fi
+  prompt "$message" "$color"
+
   html_output="${title// /_}.html"
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
