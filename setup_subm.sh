@@ -85,6 +85,16 @@ $ ./setup_subm.sh --get-ocp-installer --build-e2e --get-subctl --destroy-cluster
 
 ----------------------------------------------------------------------'
 
+####################################################################################
+
+### Constants and external sources ###
+
+### Import Submariner setup variables ###
+source "$(dirname $0)/subm_variables"
+
+### Import General Helpers Function ###
+source "$(dirname $0)/helper_functions"
+
 # To trap inside functions
 # set -T # might have issues with kubectl/oc commands
 
@@ -94,21 +104,11 @@ set -e
 # To expend aliases
 shopt -s expand_aliases
 
-####################################################################################
-
-### Constants ###
-
-export TEMP_FILE=`mktemp`
+# Date-time signature for log and report files
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
 
 # Return this exit code if script has failed before environment setup.
 export TEST_EXIT_STATUS=1
-
-### Import Submariner setup variables ###
-source "$(dirname $0)/subm_variables"
-
-### Import General Helpers Function ###
-source "$(dirname $0)/helper_functions"
 
 ####################################################################################
 
@@ -416,19 +416,8 @@ function download_ocp_installer() {
   cd ${WORKDIR}
 
   ocp_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/"
-
-  # ocp_install_gz=$(curl $ocp_url | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"')
-  curl $ocp_url | grep -Eoh '"openshift-install-linux-.+\.tar\.gz"' | tr -d '"' | cut -f 1 > $TEMP_FILE
-
-  ocp_install_gz="$(< $TEMP_FILE)"
-
-  #oc_client_gz=$(curl $ocp_url | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"')
-  curl $ocp_url | grep -Eoh '"openshift-client-linux-.+\.tar\.gz"' | tr -d '"' | cut -f 1 > $TEMP_FILE
-
-  oc_client_gz="$(< $TEMP_FILE)"
-
-  #wget ${ocp_url}${ocp_install_gz}
-  #wget ${ocp_url}${oc_client_gz}
+  ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+  oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
   download_file ${ocp_url}${ocp_install_gz}
   download_file ${ocp_url}${oc_client_gz}
@@ -697,7 +686,7 @@ function test_subctl_command() {
 #   cd ${WORKDIR}
 #
 #   curl https://github.com/kubernetes-sigs/kubefed/releases/ \
-#   | grep -Eoh 'download\/v.*\/kubefedctl-.*-linux-amd64\.tgz' -m 1 > $TEMP_FILE
+#   | grep -Eoh 'download\/v.*\/kubefedctl-.*-linux-amd64\.tgz' -m 1 > "$TEMP_FILE"
 #
 #   kubefedctl_url="$(< $TEMP_FILE)"
 #   kubefedctl_gz=$(basename -- "$kubefedctl_url")
@@ -1129,13 +1118,13 @@ function test_clusters_disconnected_before_submariner() {
 
   kubconf_b;
   # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_ip_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_ip_cluster_b \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
@@ -1207,7 +1196,7 @@ function gateway_label_first_worker_node() {
   trap_commands;
 
   # gw_node1=$(${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}')
-  ${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  ${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   gw_node1="$(< $TEMP_FILE)"
   echo "# Adding submariner gateway labels to first worker node: $gw_node1"
     # gw_node1: user-cl1-bbmkg-worker-8mx4k
@@ -1230,7 +1219,7 @@ function gateway_label_all_nodes_external_ip() {
   watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
-  # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > $TEMP_FILE
+  # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
@@ -1415,7 +1404,7 @@ function test_submariner_engine_status() {
   ${OC} get pods -n submariner-operator
 
   # submariner_pod=$(${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  ${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > $TEMP_FILE
+  ${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
   BUG "strongswan status exit code 3, even when \"security associations\" is up" \
@@ -1487,7 +1476,7 @@ function test_clusters_connected_by_service_ip() {
 
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   echo "# NETSHOOT_CLUSTER_A: $NETSHOOT_CLUSTER_A"
     # netshoot-785ffd8c8-zv7td
@@ -1495,7 +1484,7 @@ function test_clusters_connected_by_service_ip() {
   kubconf_b;
   echo "${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')"
   # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > $TEMP_FILE
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_ip_cluster_b="$(< $TEMP_FILE)"
   echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_ip_cluster_b"
     # nginx_ip_cluster_b: 100.96.43.129
@@ -1587,11 +1576,11 @@ function test_clusters_connected_overlapping_cidrs() {
   #kubconf_b;
   #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
   # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
-  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}' > $TEMP_FILE
+  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}' > "$TEMP_FILE"
   global_ip="$(< $TEMP_FILE)"
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > $TEMP_FILE
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
 
   echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on Cluster A\n" \

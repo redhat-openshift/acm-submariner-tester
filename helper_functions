@@ -11,8 +11,9 @@ export YELLOW='\x1b[33m' #'\x1b[32m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
-shopt -s nocasematch # Case-insensitive match for string evaluations
+export TEMP_FILE="${mktemp}_temp"
 
+shopt -s nocasematch # Case-insensitive match for string evaluations
 
 # Functions #
 
@@ -52,7 +53,9 @@ trap_commands
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
 {
-  pattern=$1
+  trap_commands
+
+  pattern="$1"
   shift
   sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@"
 }
@@ -302,7 +305,6 @@ function configure_aws_access() {
 
   # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
   aws sts get-caller-identity
-  aws directconnect describe-connections
 }
 
 # ------------------------------------------
@@ -355,7 +357,7 @@ function delete_aws_dns_records() {
   # PATH="${PATH}:${aws_install_dir}/bin"
 
   echo -e "\n# Searching in Hosted Zone [$1] - for a DNS record set: [$2]"
-  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > $TEMP_FILE
+  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > "$TEMP_FILE"
 
   cat $TEMP_FILE
 
