@@ -419,6 +419,10 @@ function download_ocp_installer() {
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
+  echo "# Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
+  # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
+  delete_old_files_or_dirs "openshift-*.tar.gz"
+
   download_file ${ocp_url}${ocp_install_gz}
   download_file ${ocp_url}${oc_client_gz}
 
@@ -933,9 +937,13 @@ function destroy_aws_cluster_a() {
 
     # Remove existing OCP install-config directory:
     #rm -r _${CLUSTER_A_DIR}/ || echo "# Old config dir removed."
-    # Remove old config directories starting with _ , which are older than a day:
-    find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
+    echo "# Deleting older ${CLUSTER_A_NAME} config directories (older than a day)"
+    # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
+    delete_old_files_or_dirs "_${CLUSTER_A_NAME}_*" "d"
+
+    echo "# Backup recent OCP install-config directory"
     mv ${CLUSTER_A_NAME} _${CLUSTER_A_NAME}_${DATE_TIME}
+
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
   fi
@@ -1208,7 +1216,8 @@ function gateway_label_first_worker_node() {
   # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true
+  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} get nodes -l submariner.io/gateway=true
 }
 
 function gateway_label_all_nodes_external_ip() {
@@ -1216,7 +1225,7 @@ function gateway_label_all_nodes_external_ip() {
   # trap_commands;
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields:
-  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
+  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
@@ -1233,8 +1242,8 @@ function gateway_label_all_nodes_external_ip() {
   #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
     # NAME                          STATUS   ROLES    AGE     VERSION
     # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true
-
+  ${OC} wait --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} get nodes -l submariner.io/gateway=true
 }
 
 # ------------------------------------------
@@ -1410,8 +1419,13 @@ function test_submariner_engine_status() {
   BUG "strongswan status exit code 3, even when \"security associations\" is up" \
   "Ignore non-zero exit code, by redirecting stderr" \
   "https://github.com/submariner-io/submariner/issues/360"
-  ${OC} exec $submariner_pod -n submariner-operator strongswan stroke statusall \
-  |& highlight "Security Associations (1 up" || strongswan_status=DOWN
+  # ${OC} exec $submariner_pod -n submariner-operator strongswan stroke statusall > "$TEMP_FILE" || :
+  cmd="${OC} exec ${submariner_pod} -n submariner-operator strongswan stroke statusall"
+  regex='Security Associations (1 up'
+  watch_and_retry "$cmd" 300 "$regex" || :
+
+  ${OC} exec $submariner_pod -n submariner-operator strongswan stroke statusall > "$TEMP_FILE" || :
+  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN
     # Security Associations (1 up, 0 connecting):
     # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
     # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
@@ -1470,8 +1484,8 @@ function test_submariner_status_cluster_b() {
 function test_clusters_connected_by_service_ip() {
 ### Run Connectivity tests between the Private and Public Clusters ###
 # To validate that now Submariner made the connection possible!
-  prompt "Testing connectivity with Submariner, between: \n"\
-  "Netshoot app on AWS Cluster A (Public) <--> Nginx service on OSP Cluster B (Private)"
+  prompt "Testing connectivity with Submariner, between: \n
+  Netshoot app on AWS Cluster A (Public) <--> Nginx service on OSP Cluster B (Private)"
   trap_commands;
 
   kubconf_a;
@@ -1721,8 +1735,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - install_broker_and_member_aws_cluster_a
     - join_submariner_cluster_b
     $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test service discovery")
-    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet")
-    - (sleep 10m between deployment and tests)"
+    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
+    "
   fi
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
@@ -1820,9 +1834,6 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   fi
 
   ### Running Submariner Tests ###
-
-  # After Submariner deployment - Wait 10 minutes for the Operator pods status to be up
-  [[ "$skip_deploy" =~ ^(y|yes)$ ]] || sleep 10m
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
 

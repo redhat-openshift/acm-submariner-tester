@@ -11,7 +11,7 @@ export YELLOW='\x1b[33m' #'\x1b[32m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
-export TEMP_FILE="${mktemp}_temp"
+export TEMP_FILE="`mktemp`_temp"
 
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
@@ -34,13 +34,17 @@ function print_cmd_location() {
 
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_commands() {
-  trap '\
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]]; then
-     cmd="$(echo -e $BASH_COMMAND)"
+  trap '
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] ; then
+     cmd_plain="$(echo -e $BASH_COMMAND)"
      cmd_eval="$(eval echo -e \"$BASH_COMMAND\" 2>/dev/null)"
-     [[ ! "$cmd" =~ "\$(" ]] || cmd_eval="${cmd}\n${cmd_eval}"
-     print_cmd_location "$cmd_eval"
-   fi \
+     if [[ -n "$cmd_eval" ]] && [[ "$cmd_plain" =~ "\$\(.+\)" ]] ; then
+       cmd_to_print="${cmd_plain}\n${cmd_eval}"
+     else
+       cmd_to_print="${cmd_plain}"
+     fi
+     print_cmd_location "$cmd_to_print"
+   fi
   ' DEBUG
 }
 
@@ -64,7 +68,7 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts
 function watch_and_retry() {
-  trap_commands
+  #trap_commands
 
   # Command to watch. Variables should be escaped, e.g. \$var
   CMD="$1"
@@ -269,6 +273,22 @@ function download_file() {
   else
     echo "# $target_file already downloaded, and equals to remote file $source_file"
   fi
+}
+
+# ------------------------------------------
+
+# Function to delete files or directories which are older than 1 day (mtime=1, maxdepth=1)
+function delete_old_files_or_dirs() {
+  # $1 => $wildcard_name
+  wildcard_name="$1"
+
+  # Optional: $2 => $dir_or_file (f - file, d - directory)
+  dir_or_file="${2:-f}"
+
+  # Optional: $3 => $search_path
+  search_path="${3:-./}"
+
+  find "$search_path" -type $dir_or_file -maxdepth 1 -name "$wildcard_name" -mtime +1 -exec rm -rf {} \;
 }
 
 # ------------------------------------------
