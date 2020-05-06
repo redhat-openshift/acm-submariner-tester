@@ -1257,7 +1257,7 @@ function install_broker_and_member_aws_cluster_a() {
   cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  rm broker-info.subm || echo "# Old broker-info.subm removed."
+  rm ${BROKER_INFO} || echo "# Old ${BROKER_INFO} removed."
   DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME}-tunnel --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
@@ -1281,8 +1281,12 @@ function install_broker_and_member_aws_cluster_a() {
   fi
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
+    "Define a new and unique globanet-cidr for this cluster" \
+    "https://github.com/submariner-io/submariner/issues/544"
+
     prompt "Adding globalnet to Submariner Deploy command"
-    DEPLOY_CMD="${DEPLOY_CMD} --globalnet"
+    DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globanet-cidr 169.254.0.0/19"
   fi
 
   prompt "Deploying Submariner Broker and joining Cluster A"
@@ -1363,7 +1367,7 @@ function join_submariner_cluster_b() {
   ${OC} config view
 
   JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} --clusterid ${CLUSTER_B_NAME}-tunnel \
-  ./broker-info.subm --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
+  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
 
   BUG "--subm-debug cannot be used before join argument in subctl command" \
   "Add --subm-debug at the end only" \
@@ -1374,11 +1378,20 @@ function join_submariner_cluster_b() {
   "https://github.com/submariner-io/submariner-operator/issues/336"
   # subctl ${JOIN_CMD} --subm-debug
   # Workaround:
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
+    "Define a new and unique globanet-cidr for this cluster" \
+    "https://github.com/submariner-io/submariner/issues/544"
+
+    prompt "Adding globalnet to Submariner Join command"
+    JOIN_CMD="${JOIN_CMD} --globalnet --globanet-cidr 169.254.32.0/19"
+  fi
+
   watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
 
-
   # subctl join --kubecontext <DATA-CLUSTER-CONTEXT-NAME> --kubeconfig <MERGED-KUBECONFIG> \
-  # broker-info.subm --clusterid  <CLUSTER-ID-FOR-TUNNELS>
+  # ${BROKER_INFO} --clusterid  <CLUSTER-ID-FOR-TUNNELS>
 
   BUG "Lighthouse-controller is not reachable between private and public clusters" \
   "Service Discovery fix for Private Clusters" \
@@ -1869,9 +1882,12 @@ log_to_html "$LOG_FILE" "$REPORT_NAME" $TEST_EXIT_STATUS
 # Compressing report to tar.gz
 report_file=$(ls -1 -t *.html | head -1)
 report_archive="${report_file%.*}_${DATE_TIME}.tar.gz"
-tar -cvzf "$report_archive" "$report_file"
-echo -e "Report file compressed into ${report_archive}. To view in Firefox, run:\n" \
-"tar -xvf ${report_archive}; firefox ${report_file}"
+
+echo -e "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
+tar -cvzf $report_archive $(ls {"$report_file","$KUBECONF_CLUSTER_A","$KUBECONF_CLUSTER_B","$BROKER_INFO"} 2>/dev/null)
+# tar tvf $report_archive
+
+echo -e "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${report_file}"
 
 exit $TEST_EXIT_STATUS
 

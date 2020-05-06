@@ -265,7 +265,7 @@ function download_file() {
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       if [[ $(wget --version) ]] ; then
-        wget -nc ${source_file} --no-check-certificate -O ${target_file}
+        wget -N ${source_file} --no-check-certificate -O ${target_file}
       else
         echo "# Wget is not installed, using Curl instead."
         curl -L "${source_file}" -o "${target_file}" --create-dirs
