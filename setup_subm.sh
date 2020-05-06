@@ -1258,17 +1258,13 @@ function install_broker_and_member_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   rm ${BROKER_INFO} || echo "# Old ${BROKER_INFO} removed."
-  DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME}-tunnel --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
+  DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME} --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
   kubconf_a;
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
     prompt "Adding Service-Discovery to Submariner Deploy command"
-
-    # BUG "Deploying --service-discovery does not see kubefedctl in current dir" \
-    # "Install kubefedctl on system PATH as sudo" \
-    # "https://github.com/submariner-io/submariner-operator/issues/166"
 
     BUG "kubecontext must be identical to broker-cluster-context, otherwise kubefedctl will fail" \
     "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and broker-cluster-context" \
@@ -1282,24 +1278,23 @@ function install_broker_and_member_aws_cluster_a() {
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
-    "Define a new and unique globanet-cidr for this cluster" \
+    "Define a new and unique globalnet-cidr for this cluster" \
     "https://github.com/submariner-io/submariner/issues/544"
 
     prompt "Adding globalnet to Submariner Deploy command"
-    DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globanet-cidr 169.254.0.0/19"
+    DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
   fi
 
   prompt "Deploying Submariner Broker and joining Cluster A"
   BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
   "Use a retry mechanism to run the same subctl command again" \
   "https://github.com/submariner-io/submariner-operator/issues/336"
-  # subctl ${DEPLOY_CMD} --subm-debug
+
+  # subctl ${DEPLOY_CMD}
   # Workaround:
   watch_and_retry "subctl \${DEPLOY_CMD} --subm-debug" 3
 
   ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
-
-  # ${OC} -n kubefed-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
 
   # Now looking at cluster A shows that the Submariner broker namespace has been created:
   ${OC} get crds | grep -E 'submariner|lighthouse'
@@ -1359,46 +1354,34 @@ function join_submariner_cluster_b() {
   sed -i 's/admin/kubefed_b/' ${KUBFED_CONFIG}_b
   export KUBECONFIG="${KUBECONF_BROKER}:${KUBFED_CONFIG}_b"
   ${OC} config view --flatten > ${KUBFED_CONFIG}
-  # sed -i.bak 's/admin/east/' ${KUBECONF_CLUSTER_A}
-  # sed -i.bak 's/admin/west/' ${KUBECONF_CLUSTER_B}
-  # sed -i.bak 's/admin/kubefed/' ${KUBFED_CONFIG}
 
-  #export KUBECONFIG="${KUBFED_CONFIG}"
   ${OC} config view
 
-  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} --clusterid ${CLUSTER_B_NAME}-tunnel \
+  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} --clusterid ${CLUSTER_B_NAME} \
   ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
+    "Define a new and unique globalnet-cidr for this cluster" \
+    "https://github.com/submariner-io/submariner/issues/544"
+
+    prompt "Adding globalnet to Submariner Join command"
+    JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19"
+  fi
 
   BUG "--subm-debug cannot be used before join argument in subctl command" \
   "Add --subm-debug at the end only" \
   "https://github.com/submariner-io/submariner-operator/issues/340"
+  # subctl ${JOIN_CMD} --subm-debug
 
   BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
   "Use a retry mechanism to run the same subctl command again" \
   "https://github.com/submariner-io/submariner-operator/issues/336"
-  # subctl ${JOIN_CMD} --subm-debug
+
+  # subctl ${JOIN_CMD}
+
   # Workaround:
-
-  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
-    "Define a new and unique globanet-cidr for this cluster" \
-    "https://github.com/submariner-io/submariner/issues/544"
-
-    prompt "Adding globalnet to Submariner Join command"
-    JOIN_CMD="${JOIN_CMD} --globalnet --globanet-cidr 169.254.32.0/19"
-  fi
-
   watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
-
-  # subctl join --kubecontext <DATA-CLUSTER-CONTEXT-NAME> --kubeconfig <MERGED-KUBECONFIG> \
-  # ${BROKER_INFO} --clusterid  <CLUSTER-ID-FOR-TUNNELS>
-
-  BUG "Lighthouse-controller is not reachable between private and public clusters" \
-  "Service Discovery fix for Private Clusters" \
-  "https://github.com/submariner-io/lighthouse/issues/74"
-  # export k8sip=$(${OC} --context=${CLUSTER_B_NAME} get svc kubernetes | awk 'FNR == 2 {print $3}')
-  # ${OC} -n kubefed-operator --context=${BROKER_CLUSTER_NAME} patch kubefedclusters ${CLUSTER_B_NAME}-tunnel \
-  # --type='json' -p='[{"op": "replace", "path": "/spec/apiEndpoint", "value":"https://'"$k8sip"':443"}]'
 
   # Check that Submariners CRD has been created on OSP Cluster B (Private):
   ${OC} get crds | grep submariners
@@ -1410,8 +1393,6 @@ function join_submariner_cluster_b() {
 
   ${OC} get Submariner -n submariner-operator -o yaml
 
-  # ${OC} get kubefedclusters -n kubefed-operator --context=${BROKER_CLUSTER_NAME}
-
 }
 
 # ------------------------------------------
@@ -1419,11 +1400,15 @@ function join_submariner_cluster_b() {
 function test_submariner_engine_status() {
 # Check submariner-engine (strongswan status) on Operator pod
   trap_commands;
+  cluster_name="$1"
 
   # Get some info on installed CRDs
   subctl info
   ${OC} describe cm -n openshift-dns
-  ${OC} get pods -n submariner-operator
+  ${OC} get pods -n submariner-operator --show-labels
+  ${OC} get clusters -n submariner-operator -o wide
+  ${OC} describe cluster "${cluster_name}" -n submariner-operator
+
 
   # submariner_pod=$(${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   ${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
@@ -1477,7 +1462,7 @@ function test_submariner_status_cluster_a() {
 # Operator pod status on AWS Cluster A (Public)
   prompt "Checking Submariner engine (strongswan) on AWS Cluster A (Public)"
   kubconf_a;
-  test_submariner_engine_status
+  test_submariner_engine_status "${CLUSTER_A_NAME}"
 
   # TODO: Should run with broker kubeconfig KUBECONF_BROKER
   [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_lighthouse_controller_status
@@ -1489,7 +1474,7 @@ function test_submariner_status_cluster_b() {
 # Operator pod status on OSP Cluster B (Private)
   prompt "Checking Submariner engine (strongswan) on OSP Cluster B (Private)"
   kubconf_b;
-  test_submariner_engine_status
+  test_submariner_engine_status  "${CLUSTER_B_NAME}"
 }
 
 # ------------------------------------------
@@ -1884,7 +1869,9 @@ report_file=$(ls -1 -t *.html | head -1)
 report_archive="${report_file%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
-tar -cvzf $report_archive $(ls {"$report_file","$KUBECONF_CLUSTER_A","$KUBECONF_CLUSTER_B","$BROKER_INFO"} 2>/dev/null)
+cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
+cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+tar -cvzf $report_archive $(ls "$report_file" "$LOG_FILE" kubconf_* "$BROKER_INFO" 2>/dev/null)
 # tar tvf $report_archive
 
 echo -e "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${report_file}"

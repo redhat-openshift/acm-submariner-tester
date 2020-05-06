@@ -7,7 +7,7 @@
 export RED='\x1b[0;31m'
 export GREEN='\x1b[38;5;22m'
 export CYAN='\x1b[36m'
-export YELLOW='\x1b[33m' #'\x1b[32m'
+export YELLOW='\x1b[33m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
@@ -36,9 +36,9 @@ function print_cmd_location() {
 function trap_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] ; then
-     cmd_plain="$(echo -e $BASH_COMMAND)"
-     cmd_eval="$(eval echo -e \"$BASH_COMMAND\" 2>/dev/null)"
-     if [[ -n "$cmd_eval" ]] && [[ "$cmd_plain" =~ "\$\(.+\)" ]] ; then
+     cmd_plain="$(echo -e $BASH_COMMAND 2>/dev/null)"
+     cmd_eval=$(eval "echo -e \"$BASH_COMMAND\"" 2>/dev/null)
+     if [[ -n $cmd_eval ]] && [[ ! "$cmd_eval" =~ "$cmd_plain" ]] ; then
        cmd_to_print="${cmd_plain}\n${cmd_eval}"
      else
        cmd_to_print="${cmd_plain}"
