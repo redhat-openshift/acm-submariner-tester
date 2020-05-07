@@ -120,7 +120,7 @@ check_cli_args() {
 
 shopt -s nocasematch # Case-insensitive match for string evaluations
 POSITIONAL=()
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   export got_user_input=TRUE
   # Consume next (1st) argument
   case $1 in
@@ -831,16 +831,8 @@ function create_osp_cluster_b() {
 
 function test_kubeconfig_aws_cluster_a() {
 # Check that AWS Cluster A (Public) is up and running
-  prompt "Checking that AWS Cluster A (Public) is up and running"
+  prompt "Testing that AWS Cluster A (Public) is up and running"
   trap_commands;
-
-  #cd ${WORKDIR}/${CLUSTER_A_NAME}
-  # cd ${CLUSTER_A_DIR}
-
-  # export CLUSTER_A=~/automation/ocp-install/user-cluster-a/auth/kubeconfig
-  #export CLUSTER_A=${PWD}/auth/kubeconfig
-  # export KUBECONF_CLUSTER_A=${PWD}/auth/kubeconfig
-  #alias kubconf_a="KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
   kubconf_a;
 
@@ -866,15 +858,8 @@ function kubconf_a() {
 
 function test_kubeconfig_osp_cluster_b() {
 # Check that OSP Cluster B (Private) is up and running
-  prompt "Checking that OSP Cluster B (Private) is up and running"
+  prompt "Testing that OSP Cluster B (Private) is up and running"
   trap_commands;
-
-  # cd ${WORKDIR}/${OCPUP_DIR}
-
-  # TODO: Need to replace "cl1" with a dynamic value according to OCPUP yaml config
-  # export CLUSTER_B="~/automation/ocp-install/ocpup/.config/cl1/auth/kubeconfig"
-  # export CLUSTER_B=${PWD}/.config/cl1/auth/kubeconfig
-  #alias kubconf_b="KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
   kubconf_b;
 
@@ -1402,14 +1387,6 @@ function test_submariner_engine_status() {
   trap_commands;
   cluster_name="$1"
 
-  # Get some info on installed CRDs
-  subctl info
-  ${OC} describe cm -n openshift-dns
-  ${OC} get pods -n submariner-operator --show-labels
-  ${OC} get clusters -n submariner-operator -o wide
-  ${OC} describe cluster "${cluster_name}" -n submariner-operator
-
-
   # submariner_pod=$(${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   ${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
@@ -1428,6 +1405,14 @@ function test_submariner_engine_status() {
     # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
     # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
     # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
+
+  # Get some info on installed CRDs
+  prompt "Testing Submariner Operator status on ${cluster_name}"
+  subctl info
+  ${OC} describe cm -n openshift-dns
+  ${OC} get pods -n submariner-operator --show-labels
+  ${OC} get clusters -n submariner-operator -o wide
+  ${OC} describe cluster "${cluster_name}" -n submariner-operator || strongswan_status=DOWN
 
   BUG "StrongSwan connecting to 'default' URI fails" \
   "Verify StrongSwan with different URI path" \
@@ -1448,7 +1433,7 @@ function test_submariner_engine_status() {
 
 function test_lighthouse_controller_status() {
   # Check Lighthouse controller status
-  prompt "Checking Lighthouse controller status on AWS Cluster A (Public)"
+  prompt "Testing Lighthouse controller status on AWS Cluster A (Public)"
   ${OC} describe multiclusterservices --all-namespaces
   # lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
   # ${OC} logs -f $lighthouse_pod -n kubefed-operator --limit-bytes=100000 \
@@ -1460,7 +1445,7 @@ function test_lighthouse_controller_status() {
 
 function test_submariner_status_cluster_a() {
 # Operator pod status on AWS Cluster A (Public)
-  prompt "Checking Submariner engine (strongswan) on AWS Cluster A (Public)"
+  prompt "Testing Submariner engine (strongswan) on AWS Cluster A (Public)"
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 
@@ -1472,7 +1457,7 @@ function test_submariner_status_cluster_a() {
 
 function test_submariner_status_cluster_b() {
 # Operator pod status on OSP Cluster B (Private)
-  prompt "Checking Submariner engine (strongswan) on OSP Cluster B (Private)"
+  prompt "Testing Submariner engine (strongswan) on OSP Cluster B (Private)"
   kubconf_b;
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
 }
@@ -1587,8 +1572,8 @@ function test_clusters_connected_overlapping_cidrs() {
   kubconf_b;
   #kubconf_b;
   #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}')
-  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io/globalIp}' > "$TEMP_FILE"
+  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
+  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
   global_ip="$(< $TEMP_FILE)"
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')

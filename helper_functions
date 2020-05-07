@@ -13,6 +13,8 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 
 export TEMP_FILE="`mktemp`_temp"
 
+export CONDA_ENV_NAME="conda-env"
+
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
 # Functions #
@@ -151,6 +153,13 @@ function install_anaconda() {
     # conda clean -y --all
   fi
 
+  env_dir=$(conda-env list | awk -v name="$CONDA_ENV_NAME" '$0 ~ name { print $2 }')
+  if [[ -z "$env_dir" ]] ; then
+    echo "# Removing old Conda environment \"$CONDA_ENV_NAME\" directory:"
+    conda-env remove -n -y $CONDA_ENV_NAME || :
+    env_base=$(conda-env list | awk '/base/ { print $NF }')
+    rm -rf "$env_base/envs/$CONDA_ENV_NAME"
+  fi
 }
 
 # ------------------------------------------
@@ -168,8 +177,8 @@ function install_local_golang() {
   # conda search go-nocgo_linux-64 --channel conda-forge
   # conda update -y -n base -c defaults conda
   conda install -y --update-deps -c conda-forge go-nocgo_linux-64
-  conda create -y -n conda-env go-nocgo_linux-64
-  source activate conda-env
+  conda create -y -n $CONDA_ENV_NAME go-nocgo_linux-64 --force
+  source activate $CONDA_ENV_NAME
 }
 
 # ------------------------------------------
@@ -209,8 +218,8 @@ function install_local_terraform() {
   echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   conda install -y --update-deps -c conda-forge terraform
-  conda create -y -n conda-env terraform
-  source activate conda-env
+  conda create -y -n $CONDA_ENV_NAME terraform --force
+  source activate $CONDA_ENV_NAME
 }
 
 # ------------------------------------------
@@ -231,8 +240,8 @@ function install_local_docker() {
   echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   conda install -y --update-deps -c conda-forge docker
-  conda create -y -n conda-env docker
-  source activate conda-env
+  conda create -y -n $CONDA_ENV_NAME docker --force
+  source activate $CONDA_ENV_NAME
 }
 
 # ------------------------------------------
