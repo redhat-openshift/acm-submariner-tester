@@ -427,7 +427,7 @@ function delete_namespace_and_crds() {
     # If there are existing CRDs on the cluster - remove them all:
     # if [[ $? = 0 ]]; then
     if [[ "$delete_crds" = TRUE ]]; then
-      echo "# Deleting ${ns_name} CRDs in the cluster"
+      echo "# Deleting ${crd_name} CRDs in the cluster"
       crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
       # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
       ${OC} delete --timeout=10s crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
@@ -437,23 +437,27 @@ function delete_namespace_and_crds() {
     fi
   fi
 
-  echo "# Searching for existing resources (and OLMs) in namespace ${ns_name} :"
-  # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
-  ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
+    echo "# Searching for existing resources (and OLMs) in namespace ${ns_name} :"
+    # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
+    ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
 
-  # If there is existing namespace on the cluster - remove it:
-  echo "# Deleting whole namespace ${ns_name} from the cluster"
-  ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
+  # Removing whole namespace (and it's resources):
+  if [[ ${ns_name} = "default" ]] ; then
+    echo "# Skipping namespace deletion, since it's the \"default\" namespace."
+    return
+  else
+    echo "# Deleting whole namespace ${ns_name} from the cluster"
+    ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
 
-  if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
-    echo "# Warning: Force delete of namespace via API"
-    ${OC} proxy &
-    ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
-    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
-    kill -9 %% || :
-    ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait
+    if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
+      echo "# Warning: Force delete of namespace via API"
+      ${OC} proxy &
+      ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
+      curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
+      kill -9 %% || :
+      ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait
+    fi
   fi
-
 }
 
 # ------------------------------------------

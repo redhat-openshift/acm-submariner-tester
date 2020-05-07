@@ -600,7 +600,7 @@ function download_subctl_latest_release() {
     BUG "${file_name} is not a TGZ archive, but a binary" \
     "Do not extract the downloaded file [${file_name}], but rename instead to \"subctl\"" \
     "https://github.com/submariner-io/submariner-operator/issues/257"
-    mv ${file_name} subctl
+    [[ ! -e "$file_name" ]] || mv "$file_name" subctl
     chmod +x subctl
 
     echo "# Copy subctl to system path:"
@@ -927,7 +927,7 @@ function destroy_aws_cluster_a() {
     delete_old_files_or_dirs "_${CLUSTER_A_NAME}_*" "d"
 
     echo "# Backup recent OCP install-config directory"
-    mv ${CLUSTER_A_NAME} _${CLUSTER_A_NAME}_${DATE_TIME}
+    [[ ! -e "$CLUSTER_A_NAME" ]] || mv "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
 
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
@@ -978,8 +978,8 @@ function destroy_osp_cluster_b() {
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
 
-    # Remove config directory
-    mv .config _config
+    echo "# Backup old config directory"
+    [[ ! -e .config ]] || mv .config _config
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping Cluster Destroy."
   fi
@@ -1434,6 +1434,7 @@ function test_submariner_engine_status() {
 function test_lighthouse_controller_status() {
   # Check Lighthouse controller status
   prompt "Testing Lighthouse controller status on AWS Cluster A (Public)"
+  trap_commands;
   ${OC} describe multiclusterservices --all-namespaces
   # lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
   # ${OC} logs -f $lighthouse_pod -n kubefed-operator --limit-bytes=100000 \
@@ -1489,14 +1490,9 @@ function test_clusters_connected_by_service_ip() {
   kubconf_a;
   CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_ip_cluster_b}"
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing NO-connectivity if Clusters A and B have Overlapping CIDRs"
-    ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
-    && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
-    "Nginx Service IP (${nginx_ip_cluster_b}) on Cluster B, is not reachable externally."
-  else
+  if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     ${OC} exec ${CURL_CMD} || \
-    BUG "TODO: This will fail User created Clusters with Overlapping CIDRs, while Submariner was not deployed with --globalnet"
+    BUG "TODO: This will if fail the Clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
       # *   Trying 100.96.72.226:80...
       # * TCP_NODELAY set
       # * Connected to 100.96.72.226 (100.96.72.226) port 80 (#0)
@@ -1517,8 +1513,12 @@ function test_clusters_connected_by_service_ip() {
       # < Accept-Ranges: bytes
       # <
       # * Connection #0 to host 100.96.72.226 left intact
+  else
+    prompt "Testing Globalnet - There should be NO-connectivity if Clusters A and B have Overlapping CIDRs"
+    ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
+    && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
+    "Nginx Service IP (${nginx_ip_cluster_b}) on Cluster B, is not reachable externally."
   fi
-
 }
 
 # ------------------------------------------
@@ -1850,16 +1850,16 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 log_to_html "$LOG_FILE" "$REPORT_NAME" $TEST_EXIT_STATUS
 
 # Compressing report to tar.gz
-report_file=$(ls -1 -t *.html | head -1)
-report_archive="${report_file%.*}_${DATE_TIME}.tar.gz"
+export REPORT_FILE=$(ls -1 -t *.html | head -1)
+report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
 cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
 cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
-tar -cvzf $report_archive $(ls "$report_file" "$LOG_FILE" kubconf_* "$BROKER_INFO" 2>/dev/null)
+tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$BROKER_INFO" 2>/dev/null)
 # tar tvf $report_archive
 
-echo -e "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${report_file}"
+echo -e "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
 exit $TEST_EXIT_STATUS
 
