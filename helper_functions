@@ -40,8 +40,12 @@ function trap_commands() {
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] ; then
      cmd_plain="$(echo -e $BASH_COMMAND 2>/dev/null)"
      cmd_eval=$(eval "echo -e \"$BASH_COMMAND\"" 2>/dev/null)
-     if [[ -n $cmd_eval ]] && [[ ! "$cmd_eval" =~ "$cmd_plain" ]] ; then
-       cmd_to_print="${cmd_plain}\n${cmd_eval}"
+     if [[ -n $cmd_eval ]] ; then
+       if [[ "$cmd_plain" =~ \$\(.+\) ]] ; then
+         cmd_to_print="${cmd_plain}\n${cmd_eval}"
+       else
+         cmd_to_print="${cmd_eval}"
+       fi
      else
        cmd_to_print="${cmd_plain}"
      fi
@@ -303,7 +307,7 @@ function delete_old_files_or_dirs() {
 # ------------------------------------------
 
 # Function to move non-empty directory to an existing directory
-function backup_dir() {
+function backup_and_remove_dir() {
   # $1 => $src_dir
   src_dir="$1"
 

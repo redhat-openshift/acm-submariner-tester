@@ -863,16 +863,8 @@ function test_kubeconfig_osp_cluster_b() {
 
   kubconf_b;
 
-  # Set the default namespace to "${SUBM_TEST_NS}"
-  BUG "If running inside different Cluster, OC can use wrong project name by default" \
-  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-  cp "${KUBECONF_CLUSTER_B}" "${KUBECONF_CLUSTER_B}.bak"
-  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
-
   kubconf_b;
   test_cluster_status
-  # cd -
 }
 
 function kubconf_b() {
@@ -888,6 +880,14 @@ function test_cluster_status() {
   trap_commands;
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
+
+  # Set the default namespace to "${SUBM_TEST_NS}"
+  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+
   ${OC} version
   ${OC} config view
   ${OC} status
