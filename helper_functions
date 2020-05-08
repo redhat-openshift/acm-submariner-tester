@@ -310,7 +310,7 @@ function backup_dir() {
   # Optional: $2 => $dest_dir
   dest_dir="${2:-_$1}"
 
-  if [[ ! -d .config ]] ; then
+  if [ ! -d ${src_dir} ] ; then
     echo "# Source directory [${src_dir}] doesn't exists, skipping backup"
   else
     echo "# Backup directory [${src_dir}] into [${dest_dir}]"

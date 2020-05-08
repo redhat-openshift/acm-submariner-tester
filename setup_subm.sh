@@ -928,7 +928,7 @@ function destroy_aws_cluster_a() {
 
     echo "# Backup recent OCP install-config directory"
     # [[ ! -e "$CLUSTER_A_NAME" ]] || mv "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
-    backup_dir "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
+    backup_and_remove_dir "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
 
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
@@ -980,7 +980,7 @@ function destroy_osp_cluster_b() {
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
 
     echo "# Backup old config directory"
-    backup_dir ".config"
+    backup_and_remove_dir ".config"
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping Cluster Destroy."
   fi
@@ -1063,13 +1063,13 @@ function install_netshoot_app_on_cluster_a() {
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
-  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found
-  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot
-  ${OC} run ${NETSHOOT_CLUSTER_A} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
+  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found -n ${SUBM_TEST_NS}
+  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot -n ${SUBM_TEST_NS}
+  ${OC} run ${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
 
   echo "# Wait for Netshoot App to be ready:"
-  ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A}
-  ${OC} describe pod  ${NETSHOOT_CLUSTER_A}
+  ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS}
+  ${OC} describe pod  ${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS}
 }
 
 # ------------------------------------------
@@ -1086,16 +1086,16 @@ function install_nginx_svc_on_cluster_b() {
 
   # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
 
-  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
-  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
+  ${OC} delete deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --ignore-not-found
+  ${OC} create deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --image=bitnami/nginx
 
   echo "# Expose Ngnix service on port 80:"
-  ${OC} delete service ${NGINX_CLUSTER_B}  --ignore-not-found
-  ${OC} expose deployment ${NGINX_CLUSTER_B}  --port=80 --name=${NGINX_CLUSTER_B}
+  ${OC} delete service ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --ignore-not-found
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
 
   echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${NGINX_CLUSTER_B}
-  ${OC} describe pod ${NGINX_CLUSTER_B}
+  ${OC} rollout status deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
+  ${OC} describe pod ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
 
 }
 
@@ -1541,8 +1541,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
   ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
 
-  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found
-  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx
+  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx -n ${SUBM_TEST_NS_NEW}
 
   echo "# Expose Ngnix service on port 80:"
   ${OC} delete service ${NGINX_CLUSTER_B}  --ignore-not-found -n ${SUBM_TEST_NS_NEW}
@@ -1556,7 +1556,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   #${OC} run ${NETSHOOT_CLUSTER_A_NEW} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
-  ${OC} run --attach=true --restart=Never --timeout=30s --rm -i --tty --generator=run-pod/v1 \
+  ${OC} run --attach=true --restart=Never --timeout=30s --rm -i --tty --generator=run-pod/v1 -n ${SUBM_TEST_NS_NEW} \
   ${NETSHOOT_CLUSTER_A_NEW} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${NGINX_CLUSTER_B}
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
@@ -1851,16 +1851,17 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 log_to_html "$LOG_FILE" "$REPORT_NAME" $TEST_EXIT_STATUS
 
 # Compressing report to tar.gz
+echo "# REPORT_FILE = $REPORT_FILE"
 export REPORT_FILE=$(ls -1 -t *.html | head -1)
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
-echo -e "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
-cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
-cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
+[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
+[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
 tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$BROKER_INFO" 2>/dev/null)
 # tar tvf $report_archive
 
-echo -e "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
+echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
 exit $TEST_EXIT_STATUS
 
