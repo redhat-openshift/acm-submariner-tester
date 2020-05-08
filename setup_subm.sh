@@ -927,7 +927,8 @@ function destroy_aws_cluster_a() {
     delete_old_files_or_dirs "_${CLUSTER_A_NAME}_*" "d"
 
     echo "# Backup recent OCP install-config directory"
-    [[ ! -e "$CLUSTER_A_NAME" ]] || mv "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
+    # [[ ! -e "$CLUSTER_A_NAME" ]] || mv "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
+    backup_dir "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
 
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
@@ -979,7 +980,7 @@ function destroy_osp_cluster_b() {
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
 
     echo "# Backup old config directory"
-    [[ ! -e .config ]] || mv .config _config
+    backup_dir ".config"
   else
     echo "# Cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping Cluster Destroy."
   fi
