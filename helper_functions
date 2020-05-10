@@ -314,8 +314,8 @@ function backup_and_remove_dir() {
   # Optional: $2 => $dest_dir
   dest_dir="${2:-_$1}"
 
-  if [ ! -d ${src_dir} ] ; then
-    echo "# Source directory [${src_dir}] doesn't exists, skipping backup"
+  if [[ ! -d ${src_dir} ]] || [[ -z `ls -A "$src_dir"` ]] ; then
+    echo "# Source directory [${src_dir}] doesn't exist (or empty). Skipping backup"
   else
     echo "# Backup directory [${src_dir}] into [${dest_dir}]"
 
@@ -323,7 +323,7 @@ function backup_and_remove_dir() {
     mkdir -p "$dest_dir"
 
     # Copy * from src_dir to dest_dir (-afr : Keep attributes, Force overwrite, Recursive copy)
-    cp -afr "${src_dir}/*" "${dest_dir}/"
+    cp -afr "${src_dir}"/* "${dest_dir}"/
 
     # Force remove old directory
     rm -rf "$src_dir"
