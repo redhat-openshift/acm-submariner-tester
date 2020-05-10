@@ -496,7 +496,8 @@ function log_to_html() {
   #trap_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}"
-  test_exit_status=${3:-0}
+  html_output="${3:-${title// /_}.html}"
+  test_exit_status=${4:-0}
 
   message="Creating HTML Report"
   if (( $test_exit_status != 0 )) ; then
@@ -505,7 +506,6 @@ function log_to_html() {
   fi
   prompt "$message" "$color"
 
-  html_output="${title// /_}.html"
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
   repo_url=https://github.com/theZiz/aha.git

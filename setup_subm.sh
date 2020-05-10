@@ -1101,9 +1101,30 @@ function install_nginx_svc_on_cluster_b() {
 
 # ------------------------------------------
 
+function test_basic_cluster_connectivity_before_submariner() {
+### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
+  prompt "Before Submariner is installed: \
+  Verifying connectivity on the same cluster, from Netshoot to Nginx service"
+  trap_commands;
+
+  # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
+  # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
+
+  kubconf_b;
+  NETSHOOT_CLUSTER_B_NEW=netshoot-cl-b-new # A new Netshoot App
+  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+    # nginx_cluster_b_ip: 100.96.43.129
+
+  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_ip_cluster_b on the SAME cluster"
+  ${OC} run ${NETSHOOT_CLUSTER_B_NEW} --attach=true --pod-running-timeout=30s --rm -i --tty --generator=run-pod/v1 \
+  -n ${SUBM_TEST_NS} --image nicolaka/netshoot -- curl --max-time 20 --verbose $nginx_ip_cluster_b
+}
+
+# ------------------------------------------
+
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \n \
+  prompt "Before Submariner is installed: \
   Verifying that Netshoot app on AWS Cluster A (Public), cannot reach Nginx service on OSP Cluster B (Private)"
   trap_commands;
 
@@ -1111,8 +1132,8 @@ function test_clusters_disconnected_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_ip_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
@@ -1240,10 +1261,10 @@ function install_broker_and_member_aws_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
 
   trap_commands;
-  cd ${WORKDIR}
+  # cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  rm ${BROKER_INFO} || echo "# Old ${BROKER_INFO} removed."
+  rm ${BROKER_INFO} || echo "# Previous ${BROKER_INFO} already removed"
   DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME} --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
@@ -1481,9 +1502,9 @@ function test_clusters_connected_by_service_ip() {
     # netshoot-785ffd8c8-zv7td
 
   kubconf_b;
-  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')"
-  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')"
+  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_ip_cluster_b="$(< $TEMP_FILE)"
   echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_ip_cluster_b"
     # nginx_ip_cluster_b: 100.96.43.129
@@ -1529,7 +1550,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   trap_commands;
 
   NETSHOOT_CLUSTER_A_NEW=netshoot-cl-a-new # A new Netshoot App
-  SUBM_TEST_NS_NEW=test-submariner-new # A New Namespace, for the SAME Ngnix service name
+  SUBM_TEST_NS_NEW=${SUBM_TEST_NS}-new # A New Namespace, for the SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
   # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
@@ -1541,12 +1562,12 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
   ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
 
-  ${OC} delete deployment ${NGINX_CLUSTER_B}  --ignore-not-found -n ${SUBM_TEST_NS_NEW}
-  ${OC} create deployment ${NGINX_CLUSTER_B}  --image=bitnami/nginx -n ${SUBM_TEST_NS_NEW}
+  ${OC} delete deployment ${NGINX_CLUSTER_B} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+  ${OC} create deployment ${NGINX_CLUSTER_B} --image=bitnami/nginx -n ${SUBM_TEST_NS_NEW}
 
   echo "# Expose Ngnix service on port 80:"
-  ${OC} delete service ${NGINX_CLUSTER_B}  --ignore-not-found -n ${SUBM_TEST_NS_NEW}
-  ${OC} expose deployment ${NGINX_CLUSTER_B}  --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
+  ${OC} delete service ${NGINX_CLUSTER_B} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
 
   echo "# Wait for Ngnix service to be ready:"
   ${OC} rollout status deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
@@ -1556,8 +1577,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   #${OC} run ${NETSHOOT_CLUSTER_A_NEW} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
-  ${OC} run --attach=true --restart=Never --timeout=30s --rm -i --tty --generator=run-pod/v1 -n ${SUBM_TEST_NS_NEW} \
-  ${NETSHOOT_CLUSTER_A_NEW} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${NGINX_CLUSTER_B}
+  ${OC} run ${NETSHOOT_CLUSTER_A_NEW} --attach=true --restart=Never --pod-running-timeout=30s --rm -i --tty \
+  --generator=run-pod/v1 -n ${SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${NGINX_CLUSTER_B}
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
@@ -1572,9 +1593,9 @@ function test_clusters_connected_overlapping_cidrs() {
 
   kubconf_b;
   #kubconf_b;
-  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} | awk 'FNR == 2 {print $3}')
-  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
-  ${OC} get svc ${NGINX_CLUSTER_B} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
+  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
+  ${OC} get svc ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
   global_ip="$(< $TEMP_FILE)"
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
@@ -1712,6 +1733,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_subctl_command
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
+    - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
     - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
     - label_all_gateway_external_ip_cluster_a
@@ -1801,6 +1823,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     install_nginx_svc_on_cluster_b
 
+    test_basic_cluster_connectivity_before_submariner
+
     test_clusters_disconnected_before_submariner
 
     open_firewall_ports_on_the_broker_node
@@ -1848,11 +1872,16 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 #report_name=$(basename $LOG_FILE .log)
 #report_name=( ${report_name//_/ } ) # without quotes
 #report_name="${report_name[*]^}"
-log_to_html "$LOG_FILE" "$REPORT_NAME" $TEST_EXIT_STATUS
+
+echo "# REPORT_NAME = $REPORT_NAME" # May have been set externally
+echo "# REPORT_FILE = $REPORT_FILE" # May have been set externally
+
+log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" $TEST_EXIT_STATUS
+
+# If REPORT_FILE was not previously set, consider the latest html file created
+REPORT_FILE="${REPORT_FILE:-$(ls -1 -t *.html | head -1)}"
 
 # Compressing report to tar.gz
-echo "# REPORT_FILE = $REPORT_FILE"
-export REPORT_FILE=$(ls -1 -t *.html | head -1)
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
