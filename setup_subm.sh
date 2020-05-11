@@ -1562,8 +1562,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on Cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  netshoot_pod=netshoot-cl-a-new # A new Netshoot App
-  SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A New Namespace, for the SAME Ngnix service name
+  netshoot_pod=netshoot-cl-a-new # A NEW Netshoot App on cluster A
+  SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B, for SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
   # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
@@ -1592,10 +1592,10 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
 
-  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
+  ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
