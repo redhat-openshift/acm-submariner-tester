@@ -86,12 +86,13 @@ function watch_and_retry() {
   # If regex specified, will wait for regex to be found in CMD output
   [[ -z ${REGEX} ]] || CMD="$CMD"' | grep -m 1 "'"$REGEX"'"'
 
+  CMD="$(eval echo \"$CMD\")"
   echo -e "# Watching output of command: $CMD \n\
   # Search pattern (or exit code):/$REGEX/ \n\
   # Retry attempts: $RETRY"
 
   COUNT=0;
-  until eval "$CMD" || [[ $COUNT -eq $RETRY ]] ; do
+  until `$CMD` || [[ $COUNT -eq $RETRY ]] ; do
     echo -e "$(( COUNT++ ))... \c"
     sleep 1 # A second interval
     # [[ $COUNT -eq $RETRY ]] && break
@@ -290,18 +291,21 @@ function download_file() {
 
 # ------------------------------------------
 
-# Function to delete files or directories which are older than 1 day (mtime=1, maxdepth=1)
+# Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
   # $1 => $wildcard_name
   wildcard_name="$1"
 
-  # Optional: $2 => $dir_or_file (f - file, d - directory)
+  # Optional: $2 => $dir_or_file. f=file, d=directory (default)
   dir_or_file="${2:-f}"
 
-  # Optional: $3 => $search_path
-  search_path="${3:-./}"
+  # Optional: $3 => $access_days (5 default)
+  access_days="${3:-5}"
 
-  find "$search_path" -type $dir_or_file -maxdepth 1 -name "$wildcard_name" -mtime +1 -exec rm -rf {} \;
+  # Optional: $4 => $search_path (current path by default)
+  search_path="${4:-./}"
+
+  find "$search_path" -maxdepth 1 -type $dir_or_file -name "$wildcard_name" -atime +${access_days} -exec rm -rf {} \;
 }
 
 # ------------------------------------------

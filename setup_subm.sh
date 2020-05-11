@@ -1111,13 +1111,16 @@ function test_basic_cluster_connectivity_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  NETSHOOT_CLUSTER_B_NEW=netshoot-cl-b-new # A new Netshoot App
-  nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  netshoot_pod=netshoot-cl-b-new # A new Netshoot App
+  nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_ip_cluster_b on the SAME cluster"
-  ${OC} run ${NETSHOOT_CLUSTER_B_NEW} --attach=true --pod-running-timeout=30s --rm -i --tty --generator=run-pod/v1 \
-  -n ${SUBM_TEST_NS} --image nicolaka/netshoot -- curl --max-time 20 --verbose $nginx_ip_cluster_b
+  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_IP_cluster_b on the SAME cluster"
+
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found -n ${SUBM_TEST_NS}
+
+  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
+  -n ${SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}"
 }
 
 # ------------------------------------------
@@ -1132,16 +1135,16 @@ function test_clusters_disconnected_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
-  nginx_ip_cluster_b="$(< $TEMP_FILE)"
+  nginx_IP_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
   ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_ip_cluster_b \
+  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
     # command terminated with exit code 28
 }
@@ -1261,7 +1264,7 @@ function install_broker_and_member_aws_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
 
   trap_commands;
-  # cd ${WORKDIR}
+  cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   rm ${BROKER_INFO} || echo "# Previous ${BROKER_INFO} already removed"
@@ -1503,14 +1506,14 @@ function test_clusters_connected_by_service_ip() {
 
   kubconf_b;
   echo "${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')"
-  # nginx_ip_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
-  nginx_ip_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_ip_cluster_b"
-    # nginx_ip_cluster_b: 100.96.43.129
+  nginx_IP_cluster_b="$(< $TEMP_FILE)"
+  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b"
+    # nginx_IP_cluster_b: 100.96.43.129
 
   kubconf_a;
-  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_ip_cluster_b}"
+  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     ${OC} exec ${CURL_CMD} || \
@@ -1539,7 +1542,7 @@ function test_clusters_connected_by_service_ip() {
     prompt "Testing Globalnet - There should be NO-connectivity if Clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
     && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
-    "Nginx Service IP (${nginx_ip_cluster_b}) on Cluster B, is not reachable externally."
+    "Nginx Service IP (${nginx_IP_cluster_b}) on Cluster B, is not reachable externally."
   fi
 }
 
@@ -1549,7 +1552,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on Cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  NETSHOOT_CLUSTER_A_NEW=netshoot-cl-a-new # A new Netshoot App
+  netshoot_pod=netshoot-cl-a-new # A new Netshoot App
   SUBM_TEST_NS_NEW=${SUBM_TEST_NS}-new # A New Namespace, for the SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
@@ -1574,11 +1577,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   echo "# Install Netshoot app on AWS Cluster A, and verify connectivity to the NEW Ngnix service on OSP Cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
-  #${OC} run ${NETSHOOT_CLUSTER_A_NEW} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
+  #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
-  ${OC} run ${NETSHOOT_CLUSTER_A_NEW} --attach=true --restart=Never --pod-running-timeout=30s --rm -i --tty \
-  --generator=run-pod/v1 -n ${SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- curl --max-time 20 --verbose ${NGINX_CLUSTER_B}
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+
+  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
+  -n ${SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
@@ -1802,22 +1807,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   # From this point if script fails, it is counted as UNSTABLE (exit code 2)
   export TEST_EXIT_STATUS=2
 
-  # Running build_operator_latest if requested
-  [[ ! "$build_operator" =~ ^(y|yes)$ ]] || build_operator_latest
-
-  # Running download_subctl_latest_release if requested
-  [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || download_subctl_latest_release
-
-  # Running build_submariner_e2e_latest if requested
-  [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || build_submariner_e2e_latest
-
-  # Running download_kubefedctl_latest if requested
-  # [[ ! "$get_kubefed_tool" =~ ^(y|yes)$ ]] || download_kubefedctl_latest
-
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
-
-    test_subctl_command
 
     install_netshoot_app_on_cluster_a
 
@@ -1826,6 +1817,17 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     test_basic_cluster_connectivity_before_submariner
 
     test_clusters_disconnected_before_submariner
+
+    # Running build_operator_latest if requested
+    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || build_operator_latest
+
+    # Running build_submariner_e2e_latest if requested
+    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || build_submariner_e2e_latest
+
+    # Running download_subctl_latest_release if requested
+    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || download_subctl_latest_release
+
+    test_subctl_command
 
     open_firewall_ports_on_the_broker_node
 
@@ -1887,7 +1889,7 @@ report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
 [[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
 [[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
-tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$BROKER_INFO" 2>/dev/null)
+tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$WORKDIR/$BROKER_INFO" 2>/dev/null)
 # tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
