@@ -40,7 +40,7 @@ export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export BROKER_NATPORT=4501
 export BROKER_IKEPORT=501
 
-export SUBM_TEST_NS="${SUBM_TEST_NS:- }"
+export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 
 export GOROOT="/usr/local/go" # "/usr/local/go1.12.5.linux-amd64"
 export PATH="${GOROOT}/bin:${PATH}"

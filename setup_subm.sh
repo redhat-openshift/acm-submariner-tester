@@ -838,14 +838,13 @@ function test_kubeconfig_aws_cluster_a() {
 
   kubconf_a;
 
-  if [[ -n $SUBM_TEST_NS ]] ; then
-    # Set the default namespace to "${SUBM_TEST_NS}"
-    BUG "If running inside different Cluster, OC can use wrong project name by default" \
-    "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-    cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
-    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
-  fi
+  # Set the default namespace to "${SUBM_TEST_NS}"
+  [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
+  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
+  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
 
   kubconf_a;
   test_cluster_status
@@ -885,14 +884,14 @@ function test_cluster_status() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
-  if [[ -n $SUBM_TEST_NS ]] ; then
-    # Set the default namespace to "${SUBM_TEST_NS}"
-    BUG "If running inside different Cluster, OC can use wrong project name by default" \
-    "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-    cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
-    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
-  fi
+  # Set the default namespace to "${SUBM_TEST_NS}"
+  [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
+  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+
 
   ${OC} version
   ${OC} config view
@@ -1100,9 +1099,9 @@ function install_nginx_svc_on_cluster_b() {
   ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
   ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=bitnami/nginx
 
-  echo "# Expose Ngnix service on port 80:"
+  echo "# Expose Ngnix service on port 8080:"
   ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=8080 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   echo "# Wait for Ngnix service to be ready:"
   ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
@@ -1126,12 +1125,12 @@ function test_basic_cluster_connectivity_before_submariner() {
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_IP_cluster_b on the SAME cluster"
+  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}"
+  ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 }
 
 # ------------------------------------------
@@ -1155,7 +1154,7 @@ function test_clusters_disconnected_before_submariner() {
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
   ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b \
+  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
     # command terminated with exit code 28
 }
@@ -1520,18 +1519,18 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b"
+  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b:8080"
     # nginx_IP_cluster_b: 100.96.43.129
 
   kubconf_a;
-  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}"
+  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     ${OC} exec ${CURL_CMD} || \
     BUG "TODO: This will if fail the Clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
-      # *   Trying 100.96.72.226:80...
+      # *   Trying 100.96.72.226:8080...
       # * TCP_NODELAY set
-      # * Connected to 100.96.72.226 (100.96.72.226) port 80 (#0)
+      # * Connected to 100.96.72.226 (100.96.72.226) port 8080 (#0)
       # > HEAD / HTTP/1.1
       # > Host: 100.96.72.226
       # > User-Agent: curl/7.65.1
@@ -1551,9 +1550,9 @@ function test_clusters_connected_by_service_ip() {
       # * Connection #0 to host 100.96.72.226 left intact
   else
     prompt "Testing Globalnet - There should be NO-connectivity if Clusters A and B have Overlapping CIDRs"
-    ${OC} exec ${CURL_CMD} |& highlight "port 80: Host is unreachable" \
+    ${OC} exec ${CURL_CMD} |& highlight "port 8080: Host is unreachable" \
     && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
-    "Nginx Service IP (${nginx_IP_cluster_b}) on Cluster B, is not reachable externally."
+    "Nginx Service IP (${nginx_IP_cluster_b}:8080) on Cluster B, is not reachable externally."
   fi
 }
 
@@ -1567,7 +1566,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A New Namespace, for the SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
-  # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
+  # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
 
   echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
@@ -1577,13 +1576,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
     ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
   fi
-  
+
   ${OC} delete deployment ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
   ${OC} create deployment ${NGINX_CLUSTER_B} --image=bitnami/nginx ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
-  echo "# Expose Ngnix service on port 80:"
+  echo "# Expose Ngnix service on port 8080:"
   ${OC} delete service ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
-  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=8080 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   echo "# Wait for Ngnix service to be ready:"
   ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
@@ -1591,12 +1590,12 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Install Netshoot app on AWS Cluster A, and verify connectivity to the NEW Ngnix service on OSP Cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
   #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
-  #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
+  #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}"
+  ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
@@ -1623,7 +1622,7 @@ function test_clusters_connected_overlapping_cidrs() {
   echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on Cluster A\n" \
   "# To Nginx service on Cluster B, by its Global IP: $global_ip"
 
-  ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}
+  ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}:8080
 
   #TODO: validate annotation of globalIp in the node
 }

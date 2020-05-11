@@ -86,13 +86,12 @@ function watch_and_retry() {
   # If regex specified, will wait for regex to be found in CMD output
   [[ -z ${REGEX} ]] || CMD="$CMD"' | grep -m 1 "'"$REGEX"'"'
 
-  CMD="$(eval echo \"$CMD\")"
-  echo -e "# Watching output of command: $CMD \n\
+  echo -e "# Watching output of command: $(eval echo "$CMD") \n\
   # Search pattern (or exit code):/$REGEX/ \n\
   # Retry attempts: $RETRY"
 
   COUNT=0;
-  until `$CMD` || [[ $COUNT -eq $RETRY ]] ; do
+  until eval "$CMD" || [[ $COUNT -eq $RETRY ]] ; do
     echo -e "$(( COUNT++ ))... \c"
     sleep 1 # A second interval
     # [[ $COUNT -eq $RETRY ]] && break
