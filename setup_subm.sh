@@ -404,6 +404,8 @@ function setup_workspace() {
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
   "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
 
+  # Trim trailing and leading spaces from $SUBM_TEST_NS
+  SUBM_TEST_NS="$(echo "$SUBM_TEST_NS" | xargs)"
 }
 
 # ------------------------------------------
@@ -836,12 +838,14 @@ function test_kubeconfig_aws_cluster_a() {
 
   kubconf_a;
 
-  # Set the default namespace to "${SUBM_TEST_NS}"
-  BUG "If running inside different Cluster, OC can use wrong project name by default" \
-  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-  cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
-  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  if [[ -n $SUBM_TEST_NS ]] ; then
+    # Set the default namespace to "${SUBM_TEST_NS}"
+    BUG "If running inside different Cluster, OC can use wrong project name by default" \
+    "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+    cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
+    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  fi
 
   kubconf_a;
   test_cluster_status
@@ -881,12 +885,14 @@ function test_cluster_status() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
-  # Set the default namespace to "${SUBM_TEST_NS}"
-  BUG "If running inside different Cluster, OC can use wrong project name by default" \
-  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-  cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
-  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  if [[ -n $SUBM_TEST_NS ]] ; then
+    # Set the default namespace to "${SUBM_TEST_NS}"
+    BUG "If running inside different Cluster, OC can use wrong project name by default" \
+    "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+    cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  fi
 
   ${OC} version
   ${OC} config view
@@ -1055,21 +1061,24 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found -n "${SUBM_TEST_NS}"
-  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-  delete_namespace_and_crds "${SUBM_TEST_NS}"
-  ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+
+  if [[ -n $SUBM_TEST_NS ]] ; then
+    # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+    delete_namespace_and_crds "${SUBM_TEST_NS}"
+    ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+  fi
 
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
-  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found -n ${SUBM_TEST_NS}
-  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot -n ${SUBM_TEST_NS}
-  ${OC} run ${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
+  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} run ${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
 
   echo "# Wait for Netshoot App to be ready:"
-  ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS}
-  ${OC} describe pod  ${NETSHOOT_CLUSTER_A} -n ${SUBM_TEST_NS}
+  ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} describe pod  ${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 }
 
 # ------------------------------------------
@@ -1080,22 +1089,24 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-  delete_namespace_and_crds "${SUBM_TEST_NS}"
-  ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+  if [[ -n $SUBM_TEST_NS ]] ; then
+    # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+    delete_namespace_and_crds "${SUBM_TEST_NS}"
+    ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+  fi
 
   # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
 
-  ${OC} delete deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --ignore-not-found
-  ${OC} create deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --image=bitnami/nginx
+  ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
+  ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=bitnami/nginx
 
   echo "# Expose Ngnix service on port 80:"
-  ${OC} delete service ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} --ignore-not-found
-  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
+  ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
-  ${OC} describe pod ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS}
+  ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} describe pod ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
 }
 
@@ -1112,15 +1123,15 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   kubconf_b;
   netshoot_pod=netshoot-cl-b-new # A new Netshoot App
-  nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
   echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_IP_cluster_b on the SAME cluster"
 
-  ${OC} delete pod ${netshoot_pod} --ignore-not-found -n ${SUBM_TEST_NS}
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  -n ${SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}"
+  ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}"
 }
 
 # ------------------------------------------
@@ -1135,8 +1146,8 @@ function test_clusters_disconnected_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
@@ -1505,9 +1516,9 @@ function test_clusters_connected_by_service_ip() {
     # netshoot-785ffd8c8-zv7td
 
   kubconf_b;
-  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')"
-  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')"
+  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
   echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b"
     # nginx_IP_cluster_b: 100.96.43.129
@@ -1553,7 +1564,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   trap_commands;
 
   netshoot_pod=netshoot-cl-a-new # A new Netshoot App
-  SUBM_TEST_NS_NEW=${SUBM_TEST_NS}-new # A New Namespace, for the SAME Ngnix service name
+  SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A New Namespace, for the SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
   # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
@@ -1561,29 +1572,31 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
-  # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found || : # || : to ignore none-zero exit code
-  delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
-  ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
-
-  ${OC} delete deployment ${NGINX_CLUSTER_B} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
-  ${OC} create deployment ${NGINX_CLUSTER_B} --image=bitnami/nginx -n ${SUBM_TEST_NS_NEW}
+  if [[ -n $SUBM_TEST_NS_NEW ]] ; then
+    # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS_NEW}" --ignore-not-found || : # || : to ignore none-zero exit code
+    delete_namespace_and_crds "${SUBM_TEST_NS_NEW}"
+    ${OC} create namespace "${SUBM_TEST_NS_NEW}" || : # || : to ignore none-zero exit code
+  fi
+  
+  ${OC} delete deployment ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
+  ${OC} create deployment ${NGINX_CLUSTER_B} --image=bitnami/nginx ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   echo "# Expose Ngnix service on port 80:"
-  ${OC} delete service ${NGINX_CLUSTER_B} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
-  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
+  ${OC} delete service ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
+  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=80 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS_NEW}
+  ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   echo "# Install Netshoot app on AWS Cluster A, and verify connectivity to the NEW Ngnix service on OSP Cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
   #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}
 
-  ${OC} delete pod ${netshoot_pod} --ignore-not-found -n ${SUBM_TEST_NS_NEW}
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  -n ${SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}"
+  ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 }
@@ -1598,9 +1611,9 @@ function test_clusters_connected_overlapping_cidrs() {
 
   kubconf_b;
   #kubconf_b;
-  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
-  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
-  ${OC} get svc ${NGINX_CLUSTER_B} -n ${SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
+  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
+  ${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
   global_ip="$(< $TEMP_FILE)"
   kubconf_a;
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
