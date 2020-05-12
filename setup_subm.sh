@@ -6,10 +6,10 @@
 # The script is based on the Submariner MVP Doc:                                                      #
 # https://docs.google.com/document/d/1HCbyuNX8AELNyB6TE4H05Kj3gujwS4-Im3-BG796zIw                     #
 #                                                                                                     #
-# It is assumed that you have existing OCP "install-config.yaml" for both Cluster A (OSP) and B (OSP),#
-# in the current directory. For Cluster B, use the existing config of OCPUP multi-cluster-networking. #                                                                         #
+# It is assumed that you have existing OCP "install-config.yaml" for both cluster A (OSP) and B (OSP),#
+# in the current directory. For cluster B, use the existing config of OCPUP multi-cluster-networking. #                                                                         #
 #                                                                                                     #
-# For Cluster A, you can create config with AWS pull secret and SSH public key. To do so:             #
+# For cluster A, you can create config with AWS pull secret and SSH public key. To do so:             #
 #                                                                                                     #
 # (1) Get access to Upshift account.                                                                  #
 # - Follow PnT Resource Workflow:                                                                     #
@@ -41,7 +41,7 @@
 # Script description
 disclosure='----------------------------------------------------------------------
 
-This is an interactive script to create Openshift Clusters on OSP and AWS,
+This is an interactive script to create Openshift clusters on OSP and AWS,
 and test multi-cluster network connectivity with Submariner:
 
 * ...
@@ -57,12 +57,12 @@ Running with pre-defined parameters (optional):
 * Download latest OCP Installer:                     --get-ocp-installer
 * Download latest OCPUP Tool:                        --get-ocpup-tool
 * Download latest release of SubCtl:                 --get-subctl
-* Create AWS Cluster A:                              --create-cluster-a
-* Create OSP Cluster B:                              --create-cluster-b
-* Destroy existing AWS Cluster A:                    --destroy-cluster-a
-* Destroy existing OSP Cluster B:                    --destroy-cluster-b
-* Clean existing AWS Cluster A:                      --clean-cluster-a
-* Clean existing OSP Cluster B:                      --clean-cluster-b
+* Create AWS cluster A:                              --create-cluster-a
+* Create OSP cluster B:                              --create-cluster-b
+* Destroy existing AWS cluster A:                    --destroy-cluster-a
+* Destroy existing OSP cluster B:                    --destroy-cluster-b
+* Clean existing AWS cluster A:                      --clean-cluster-a
+* Clean existing OSP cluster B:                      --clean-cluster-b
 * Install Service Discovery (lighthouse):            --service-discovery
 * Install Global Net:                                --globalnet
 * Skip Submariner deployment:                        --skip-deploy
@@ -80,7 +80,7 @@ $ ./setup_subm.sh
 
 $ ./setup_subm.sh --get-ocp-installer --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 
-  Will create new AWS Cluster (A), Clean existing OSP Cluster (B), build, install and test latest Submariner, with service discovery.
+  Will create new AWS cluster (A), Clean existing OSP cluster (B), build, install and test latest Submariner, with service discovery.
 
 
 ----------------------------------------------------------------------'
@@ -225,7 +225,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $create_cluster_a - to create_aws_cluster_a
   while [[ ! "$create_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to create AWS Cluster A ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to create AWS cluster A ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     create_cluster_a=${input:-no}
@@ -233,7 +233,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $destroy_cluster_a - to destroy_aws_cluster_a
   while [[ ! "$destroy_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to DESTROY AWS Cluster A ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to DESTROY AWS cluster A ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     destroy_cluster_a=${input:-no}
@@ -242,7 +242,7 @@ if [[ -z "$got_user_input" ]]; then
   # User input: $clean_cluster_a - to clean_aws_cluster_a
   if [[ "$destroy_cluster_a" =~ ^(no|n)$ ]]; then
     while [[ ! "$clean_cluster_a" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to clean AWS Cluster A ? ${NO_COLOR}
+      echo -e "\n${YELLOW}Do you want to clean AWS cluster A ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
       clean_cluster_a=${input:-no}
@@ -251,7 +251,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $destroy_cluster_b - to destroy_osp_cluster_b
   while [[ ! "$destroy_cluster_b" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to DESTROY OSP Cluster B ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to DESTROY OSP cluster B ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     destroy_cluster_b=${input:-no}
@@ -259,7 +259,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $create_cluster_b - to create_osp_cluster_b
   while [[ ! "$create_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to create OSP Cluster B ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to create OSP cluster B ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     create_cluster_b=${input:-no}
@@ -268,7 +268,7 @@ if [[ -z "$got_user_input" ]]; then
   # User input: $clean_cluster_b - to clean_osp_cluster_b
   if [[ "$destroy_cluster_b" =~ ^(no|n)$ ]]; then
     while [[ ! "$clean_cluster_b" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to clean OSP Cluster B ? ${NO_COLOR}
+      echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
       clean_cluster_b=${input:-no}
@@ -725,14 +725,14 @@ function test_subctl_command() {
 # ------------------------------------------
 
 function create_aws_cluster_a() {
-### Create AWS Cluster A (Public) with OCP installer ###
-  prompt "Creating AWS Cluster A (Public) with OCP installer"
+### Create AWS cluster A (Public) with OCP installer ###
+  prompt "Creating AWS cluster A (Public) with OCP installer"
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
   cd ${WORKDIR}
 
-  mkdir ${CLUSTER_A_DIR} || FATAL "Previous Cluster ${CLUSTER_A_DIR} deployment should be removed."
+  mkdir ${CLUSTER_A_DIR} || FATAL "Previous cluster ${CLUSTER_A_DIR} deployment should be removed."
   cp ${OCP_CLUSTER_A_SETUP} ${CLUSTER_A_DIR}/install-config.yaml
 
   # OR to create new OCP install-config.yaml:
@@ -747,7 +747,7 @@ function create_aws_cluster_a() {
         # ? Platform aws
         # ? Region us-east-1
         # ? Base Domain devcluster.openshift.com
-        # ? Cluster Name user-cluster-a
+        # ? cluster Name user-cluster-a
         # ? Pull Secret
 
   # Run OCP installer with the user-cluster-a.yaml:
@@ -762,7 +762,7 @@ function create_aws_cluster_a() {
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*.log" | xargs tail -f
 
-  # Login to the new created Cluster:
+  # Login to the new created cluster:
     # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
       # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
       # "Login to the console with user: kubeadmin, password: ..."
@@ -771,8 +771,8 @@ function create_aws_cluster_a() {
 # ------------------------------------------
 
 function create_osp_cluster_b() {
-### Create Openstack Cluster B (Private) with OCPUP tool ###
-  prompt "Creating Openstack Cluster B (Private) with OCP-UP tool"
+### Create Openstack cluster B (Private) with OCPUP tool ###
+  prompt "Creating Openstack cluster B (Private) with OCP-UP tool"
   trap_commands;
 
   cd ${OCPUP_DIR}
@@ -813,7 +813,7 @@ function create_osp_cluster_b() {
     #       userDomainName: redhat.com
 
 
-  # Run OCPUP to Create OpenStack Cluster B (Private)
+  # Run OCPUP to Create OpenStack cluster B (Private)
   # ocpup  create clusters --debug --config $ocpup_yml
   ocpup  create clusters --config $ocpup_yml &
   pid=$!
@@ -823,7 +823,7 @@ function create_osp_cluster_b() {
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
 
-  # Login to the new created Cluster:
+  # Login to the new created cluster:
   # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
     # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
     # "Login to the console with user: kubeadmin, password: ..."
@@ -832,15 +832,15 @@ function create_osp_cluster_b() {
 # ------------------------------------------
 
 function test_kubeconfig_aws_cluster_a() {
-# Check that AWS Cluster A (Public) is up and running
-  prompt "Testing that AWS Cluster A (Public) is up and running"
+# Check that AWS cluster A (Public) is up and running
+  prompt "Testing that AWS cluster A (Public) is up and running"
   trap_commands;
 
   kubconf_a;
 
   # Set the default namespace to "${SUBM_TEST_NS}"
   [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
-  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  BUG "If running inside different cluster, OC can use wrong project name by default" \
   "Set the default namespace to \"${SUBM_TEST_NS}\"" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
   cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
@@ -852,7 +852,7 @@ function test_kubeconfig_aws_cluster_a() {
 }
 
 function kubconf_a() {
-# Alias of KubeConfig for AWS Cluster A (Public) (AWS):
+# Alias of KubeConfig for AWS cluster A (Public) (AWS):
   trap_commands;
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}";
 }
@@ -860,8 +860,8 @@ function kubconf_a() {
 # ------------------------------------------
 
 function test_kubeconfig_osp_cluster_b() {
-# Check that OSP Cluster B (Private) is up and running
-  prompt "Testing that OSP Cluster B (Private) is up and running"
+# Check that OSP cluster B (Private) is up and running
+  prompt "Testing that OSP cluster B (Private) is up and running"
   trap_commands;
 
   kubconf_b;
@@ -871,7 +871,7 @@ function test_kubeconfig_osp_cluster_b() {
 }
 
 function kubconf_b() {
-# Alias of KubeConfig for OSP Cluster B (Private) (OpenStack):
+# Alias of KubeConfig for OSP cluster B (Private) (OpenStack):
   trap_commands;
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}";
 }
@@ -879,14 +879,14 @@ function kubconf_b() {
 # ------------------------------------------
 
 function test_cluster_status() {
-  # Verify that current kubeconfig Cluster is up and healthy
+  # Verify that current kubeconfig cluster is up and healthy
   trap_commands;
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
   # Set the default namespace to "${SUBM_TEST_NS}"
   [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
-  BUG "If running inside different Cluster, OC can use wrong project name by default" \
+  BUG "If running inside different cluster, OC can use wrong project name by default" \
   "Set the default namespace to \"${SUBM_TEST_NS}\"" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
   cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
@@ -898,15 +898,15 @@ function test_cluster_status() {
   ${OC} status
   ${OC} get all
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
-    # service/kubernetes   ClusterIP      172.30.0.1   <none>                                 443/TCP   39m
+    # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
 }
 
 # ------------------------------------------
 
 function destroy_aws_cluster_a() {
-### Destroy your previous AWS Cluster A (Public) ###
-  prompt "Destroying previous AWS Cluster A (Public)"
+### Destroy your previous AWS cluster A (Public) ###
+  prompt "Destroying previous AWS cluster A (Public)"
   trap_commands;
   # Temp - CD to main working directory
   cd ${WORKDIR}
@@ -936,7 +936,7 @@ function destroy_aws_cluster_a() {
     backup_and_remove_dir "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
 
   else
-    echo "# Cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping Cluster Destroy."
+    echo "# cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
 
   # To remove YOUR DNS record sets from Route53:
@@ -958,8 +958,8 @@ function destroy_aws_cluster_a() {
 # ------------------------------------------
 
 function destroy_osp_cluster_b() {
-### If Required - Destroy your previous Openstack Cluster B (Private) ###
-  prompt "Destroying previous Openstack Cluster B (Private)"
+### If Required - Destroy your previous Openstack cluster B (Private) ###
+  prompt "Destroying previous Openstack cluster B (Private)"
   trap_commands;
 
   cd ${OCPUP_DIR}
@@ -987,7 +987,7 @@ function destroy_osp_cluster_b() {
     echo "# Backup old config directory"
     backup_and_remove_dir ".config"
   else
-    echo "# Cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping Cluster Destroy."
+    echo "# cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping cluster Destroy."
   fi
 }
 
@@ -995,12 +995,12 @@ function destroy_osp_cluster_b() {
 # ------------------------------------------
 
 function clean_aws_cluster_a() {
-### Run cleanup of previous Submariner on AWS Cluster A (Public) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on AWS Cluster A (Public)"
+### Run cleanup of previous Submariner on AWS cluster A (Public) ###
+  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on AWS cluster A (Public)"
   kubconf_a;
   delete_submariner_namespace_and_crds;
 
-  prompt "Remove previous Submariner Gateway labels (if exists) on AWS Cluster A (Public)"
+  prompt "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (Public)"
 
   BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
   "Make sure only 1 node has a gateway label" \
@@ -1012,19 +1012,19 @@ function clean_aws_cluster_a() {
   "https://github.com/submariner-io/submariner/issues/432"
 
   #TODO: Call kubeconfig of broker cluster
-  # prompt "Cleaning previous Kubefed (Namespace objects, OLM and CRDs) from the Broker on AWS Cluster A (Public)"
+  # prompt "Cleaning previous Kubefed (Namespace objects, OLM and CRDs) from the Broker on AWS cluster A (Public)"
   # delete_kubefed_namespace_and_crds
 }
 
 # ------------------------------------------
 
 function clean_osp_cluster_b() {
-### Run cleanup of previous Submariner on OSP Cluster B (Private) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on OSP Cluster B (Private)"
+### Run cleanup of previous Submariner on OSP cluster B (Private) ###
+  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on OSP cluster B (Private)"
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
-  prompt "Remove previous Submariner Gateway labels (if exists) on OSP Cluster B (Private)"
+  prompt "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (Private)"
   remove_submariner_gateway_labels
 }
 
@@ -1047,7 +1047,7 @@ function delete_submariner_namespace_and_crds() {
 function remove_submariner_gateway_labels() {
   trap_commands;
 
-  # Remove previous submariner gateway labels from all node in the Cluster:
+  # Remove previous submariner gateway labels from all node in the cluster:
   ${OC} label --all node submariner.io/gateway-
 
 }
@@ -1055,7 +1055,7 @@ function remove_submariner_gateway_labels() {
 # ------------------------------------------
 
 function install_netshoot_app_on_cluster_a() {
-  prompt "Install Netshoot application on AWS Cluster A (Public)"
+  prompt "Install Netshoot application on AWS cluster A (Public)"
   trap_commands;
 
   kubconf_a;
@@ -1083,7 +1083,7 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_cluster_b() {
-  prompt "Install Nginx service on OSP Cluster B (Private)"
+  prompt "Install Nginx service on OSP cluster B (Private)"
   trap_commands;
 
   kubconf_b;
@@ -1125,7 +1125,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot app on OSP Cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
+  echo "# Install Netshoot app on OSP cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
@@ -1138,7 +1138,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   prompt "Before Submariner is installed: \
-  Verifying that Netshoot app on AWS Cluster A (Public), cannot reach Nginx service on OSP Cluster B (Private)"
+  Verifying that Netshoot app on AWS cluster A (Public), cannot reach Nginx service on OSP cluster B (Private)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1155,7 +1155,7 @@ function test_clusters_disconnected_before_submariner() {
   ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
-  |& highlight "command terminated with exit code" && echo "# Negative Test OK - Clusters should not be connected without Submariner"
+  |& highlight "command terminated with exit code" && echo "# Negative Test OK - clusters should not be connected without Submariner"
     # command terminated with exit code 28
 }
 
@@ -1164,7 +1164,7 @@ function test_clusters_disconnected_before_submariner() {
 function open_firewall_ports_on_the_broker_node() {
 ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
-  prompt "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS Cluster A (Public)"
+  prompt "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (Public)"
   trap_commands;
 
   # Installing Terraform
@@ -1205,16 +1205,16 @@ function open_firewall_ports_on_the_broker_node() {
 # ------------------------------------------
 
 function label_all_gateway_external_ip_cluster_a() {
-### Label a Gateway node on AWS Cluster A (Public) ###
-  prompt "Adding Gateway label to all worker nodes with an external ip on AWS Cluster A (Public)"
+### Label a Gateway node on AWS cluster A (Public) ###
+  prompt "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (Public)"
   kubconf_a;
-  # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS Cluster A (Public) ?
+  # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (Public) ?
   gateway_label_all_nodes_external_ip
 }
 
 function label_first_gateway_cluster_b() {
-### Label a Gateway node on OSP Cluster B (Private) ###
-  prompt "Adding Gateway label to the first worker node on OSP Cluster B (Private)"
+### Label a Gateway node on OSP cluster B (Private) ###
+  prompt "Adding Gateway label to the first worker node on OSP cluster B (Private)"
   kubconf_b;
   gateway_label_first_worker_node
 }
@@ -1269,8 +1269,8 @@ function gateway_label_all_nodes_external_ip() {
 # ------------------------------------------
 
 function install_broker_and_member_aws_cluster_a() {
-### Installing Submariner Broker on AWS Cluster A (Public) ###
-  # TODO - Should test broker deployment also on different Public Cluster (C), rather than on Public Cluster A.
+### Installing Submariner Broker on AWS cluster A (Public) ###
+  # TODO - Should test broker deployment also on different Public cluster (C), rather than on Public cluster A.
   # TODO: Call kubeconfig of broker cluster
 
   trap_commands;
@@ -1305,7 +1305,7 @@ function install_broker_and_member_aws_cluster_a() {
     DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
   fi
 
-  prompt "Deploying Submariner Broker and joining Cluster A"
+  prompt "Deploying Submariner Broker and joining cluster A"
   BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
   "Use a retry mechanism to run the same subctl command again" \
   "https://github.com/submariner-io/submariner-operator/issues/336"
@@ -1327,9 +1327,9 @@ function install_broker_and_member_aws_cluster_a() {
 # ------------------------------------------
 
 function join_submariner_cluster_b() {
-# Install Submariner on OSP Cluster B (Private)
+# Install Submariner on OSP cluster B (Private)
   cd ${WORKDIR}
-  prompt "Joining Cluster B to Submariner Broker (on Cluster A), and verifying CRDs"
+  prompt "Joining cluster B to Submariner Broker (on cluster A), and verifying CRDs"
 
   # Process:
   #
@@ -1357,7 +1357,7 @@ function join_submariner_cluster_b() {
   "Subctl join must be specified with broker-cluster-context" \
   "https://github.com/submariner-io/submariner-operator/issues/194"
 
-  BUG "ClusterID must be identical to KUBECONFIG context name, otherwise kubefedctl will fail" \
+  BUG "clusterID must be identical to KUBECONFIG context name, otherwise kubefedctl will fail" \
   "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and clusterid" \
   "https://github.com/submariner-io/submariner-operator/issues/193"
   sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
@@ -1403,12 +1403,12 @@ function join_submariner_cluster_b() {
   # Workaround:
   watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
 
-  # Check that Submariners CRD has been created on OSP Cluster B (Private):
+  # Check that Submariners CRD has been created on OSP cluster B (Private):
   ${OC} get crds | grep submariners
       # ...
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
 
-  # Print details of the Operator in OSP Cluster B (Private), and in the Broker Cluster:
+  # Print details of the Operator in OSP cluster B (Private), and in the Broker cluster:
   ${OC} get namespace submariner-operator -o json
 
   ${OC} get Submariner -n submariner-operator -o yaml
@@ -1421,20 +1421,24 @@ function test_submariner_engine_status() {
 # Check submariner-engine (strongswan status) on Operator pod
   trap_commands;
   cluster_name="$1"
+  ns_name="submariner-operator"
 
-  # submariner_pod=$(${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  ${OC} get pod -n submariner-operator -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
+  ${OC} get all -n ${ns_name} |& highlight "No resources found" \
+  && FATAL "Error: Submariner is not installed on $cluster_name"
+
+  # submariner_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+  ${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
   BUG "strongswan status exit code 3, even when \"security associations\" is up" \
   "Ignore non-zero exit code, by redirecting stderr" \
   "https://github.com/submariner-io/submariner/issues/360"
-  # ${OC} exec $submariner_pod -n submariner-operator strongswan stroke statusall > "$TEMP_FILE" || :
-  cmd="${OC} exec ${submariner_pod} -n submariner-operator strongswan stroke statusall"
+  # ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
+  cmd="${OC} exec ${submariner_pod} -n ${ns_name} strongswan stroke statusall"
   regex='Security Associations (1 up'
   watch_and_retry "$cmd" 300 "$regex" || :
 
-  ${OC} exec $submariner_pod -n submariner-operator strongswan stroke statusall > "$TEMP_FILE" || :
+  ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
   highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN
     # Security Associations (1 up, 0 connecting):
     # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
@@ -1445,30 +1449,30 @@ function test_submariner_engine_status() {
   prompt "Testing Submariner Operator status on ${cluster_name}"
   subctl info
   ${OC} describe cm -n openshift-dns
-  ${OC} get pods -n submariner-operator --show-labels
-  ${OC} get clusters -n submariner-operator -o wide
-  ${OC} describe cluster "${cluster_name}" -n submariner-operator || strongswan_status=DOWN
+  ${OC} get pods -n ${ns_name} --show-labels
+  ${OC} get clusters -n ${ns_name} -o wide
+  ${OC} describe cluster "${cluster_name}" -n ${ns_name} || strongswan_status=DOWN
 
   BUG "StrongSwan connecting to 'default' URI fails" \
   "Verify StrongSwan with different URI path" \
   "https://github.com/submariner-io/submariner/issues/426"
-  ${OC} exec $submariner_pod -n submariner-operator -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || strongswan_status=DOWN
+  ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || strongswan_status=DOWN
 
   if [[ "$strongswan_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
   # || : to ignore none-zero exit code
-    ${OC} logs $submariner_pod -n submariner-operator |& highlight "received packet" || :
-    ${OC} describe pod $submariner_pod -n submariner-operator || :
+    ${OC} logs $submariner_pod -n ${ns_name} |& highlight "received packet" || :
+    ${OC} describe pod $submariner_pod -n ${ns_name} || :
     ${OC} get Submariner -o yaml || :
-    ${OC} get deployments -o yaml -n submariner-operator || :
-    ${OC} get pods -o yaml -n submariner-operator || :
-    FATAL "Error: Submariner Clusters are not connected."
+    ${OC} get deployments -o yaml -n ${ns_name} || :
+    ${OC} get pods -o yaml -n ${ns_name} || :
+    FATAL "Error: Submariner clusters are not connected."
   fi
 }
 
 function test_lighthouse_controller_status() {
   # Check Lighthouse controller status
-  prompt "Testing Lighthouse controller status on AWS Cluster A (Public)"
+  prompt "Testing Lighthouse controller status on AWS cluster A (Public)"
   trap_commands;
   ${OC} describe multiclusterservices --all-namespaces
   # lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
@@ -1480,8 +1484,8 @@ function test_lighthouse_controller_status() {
 # ------------------------------------------
 
 function test_submariner_status_cluster_a() {
-# Operator pod status on AWS Cluster A (Public)
-  prompt "Testing Submariner engine (strongswan) on AWS Cluster A (Public)"
+# Operator pod status on AWS cluster A (Public)
+  prompt "Testing Submariner engine (strongswan) on AWS cluster A (Public)"
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 
@@ -1492,8 +1496,8 @@ function test_submariner_status_cluster_a() {
 # ------------------------------------------
 
 function test_submariner_status_cluster_b() {
-# Operator pod status on OSP Cluster B (Private)
-  prompt "Testing Submariner engine (strongswan) on OSP Cluster B (Private)"
+# Operator pod status on OSP cluster B (Private)
+  prompt "Testing Submariner engine (strongswan) on OSP cluster B (Private)"
   kubconf_b;
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
 }
@@ -1501,10 +1505,10 @@ function test_submariner_status_cluster_b() {
 # ------------------------------------------
 
 function test_clusters_connected_by_service_ip() {
-### Run Connectivity tests between the Private and Public Clusters ###
+### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
   prompt "Testing connectivity with Submariner, between: \n
-  Netshoot app on AWS Cluster A (Public) <--> Nginx service on OSP Cluster B (Private)"
+  Netshoot app on AWS cluster A (Public) <--> Nginx service on OSP cluster B (Private)"
   trap_commands;
 
   kubconf_a;
@@ -1519,7 +1523,7 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on Cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b:8080"
+  echo "# Nginx service on cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b:8080"
     # nginx_IP_cluster_b: 100.96.43.129
 
   kubconf_a;
@@ -1527,7 +1531,7 @@ function test_clusters_connected_by_service_ip() {
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     ${OC} exec ${CURL_CMD} || \
-    BUG "TODO: This will if fail the Clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
+    BUG "TODO: This will if fail the clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
       # *   Trying 100.96.72.226:8080...
       # * TCP_NODELAY set
       # * Connected to 100.96.72.226 (100.96.72.226) port 8080 (#0)
@@ -1549,17 +1553,17 @@ function test_clusters_connected_by_service_ip() {
       # <
       # * Connection #0 to host 100.96.72.226 left intact
   else
-    prompt "Testing Globalnet - There should be NO-connectivity if Clusters A and B have Overlapping CIDRs"
+    prompt "Testing Globalnet - There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "port 8080: Host is unreachable" \
-    && echo -e "# Negative Test OK - Clusters have Overlapping CIDRs. \n" \
-    "Nginx Service IP (${nginx_IP_cluster_b}:8080) on Cluster B, is not reachable externally."
+    && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \n" \
+    "Nginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
   fi
 }
 
 # ------------------------------------------
 
 function test_clusters_connected_by_same_service_on_new_namespace() {
-### Nginx service on Cluster B, will be identified by its Domain Name, with --service-discovery ###
+### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
   netshoot_pod=netshoot-cl-a-new # A NEW Netshoot App on cluster A
@@ -1568,7 +1572,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
   # ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
 
-  echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP Cluster B:"
+  echo "# Install a Ngnix service on a NEW Namespace \"${SUBM_TEST_NS_NEW}\" in OSP cluster B:"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
   if [[ -n $SUBM_TEST_NS_NEW ]] ; then
@@ -1587,7 +1591,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Wait for Ngnix service to be ready:"
   ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
-  echo "# Install Netshoot app on AWS Cluster A, and verify connectivity to the NEW Ngnix service on OSP Cluster B"
+  echo "# Install Netshoot app on AWS cluster A, and verify connectivity to the NEW Ngnix service on OSP cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
   #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
@@ -1603,7 +1607,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 # ------------------------------------------
 
 function test_clusters_connected_overlapping_cidrs() {
-### Run Connectivity tests between the Private and Public Clusters ###
+### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
   prompt "Testing GlobalNet: Nginx service will be identified its Global IP"
   trap_commands;
@@ -1619,8 +1623,8 @@ function test_clusters_connected_overlapping_cidrs() {
   ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
 
-  echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on Cluster A\n" \
-  "# To Nginx service on Cluster B, by its Global IP: $global_ip"
+  echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on cluster A\n" \
+  "# To Nginx service on cluster B, by its Global IP: $global_ip"
 
   ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}:8080
 
@@ -1634,7 +1638,9 @@ function run_submariner_unit_tests() {
   prompt "Running Submariner Unit-Tests"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
-  GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml \
+  export GO111MODULE="on"
+  go env
+  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml \
   || echo "# Warning: Test execution failure occurred"
 
     # OR with local go modules:
@@ -1662,7 +1668,7 @@ function run_submariner_e2e_tests() {
   cd $GOPATH/src/github.com/submariner-io/submariner
 
   BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
-  "Modify KUBECONFIG context name on Cluster A and B, to be unique (to prevent E2E failure)" \
+  "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
   "https://github.com/submariner-io/submariner/issues/245"
   sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
   sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
@@ -1675,7 +1681,9 @@ function run_submariner_e2e_tests() {
     # *         admin             user-cluster-a   admin
     #           admin_cluster_b   user-cl1         admin
 
-  GO111MODULE="on" go test -v ./test/e2e -args -dp-context ${CLUSTER_A_NAME} -dp-context ${CLUSTER_B_NAME} \
+  export GO111MODULE="on"
+  go env
+  go test -v ./test/e2e -args -dp-context ${CLUSTER_A_NAME} -dp-context ${CLUSTER_B_NAME} \
   -connection-timeout 30 -connection-attempts 3 \
   -ginkgo.v -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
@@ -1718,33 +1726,33 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   # Print planned steps according to CLI/User inputs
   prompt "Input parameters and Test Plan steps"
 
-  echo "# Openshift Clusters creation/cleanup before Submariner deployment:
-
-  AWS Cluster A (Public):
-  - destroy_aws_cluster_a: $destroy_cluster_a
-  - create_aws_cluster_a: $create_cluster_a
-  - clean_aws_cluster_a: $clean_cluster_a
-
-  OSP Cluster B (Private):
-  - destroy_osp_cluster_b: $destroy_cluster_b
-  - create_osp_cluster_b: $create_cluster_b
-  - clean_osp_cluster_b: $clean_cluster_b
-
-  OCP and Submariner setup and test tools:
-  - config_golang: $config_golang
-  - config_aws_cli: $config_aws_cli
-  - download_ocp_installer: $get_ocp_installer
-  - build_ocpup_tool_latest: $get_ocpup_tool
-  - build_operator_latest: $build_operator
-  - build_submariner_e2e_latest: $build_submariner_e2e
-  - download_subctl_latest_release: $get_subctl
-  "
-
-  echo "# Submariner deployment and environment setup for the tests:"
   if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
   else
-    echo -e "\n
+    echo "# Openshift clusters creation/cleanup before Submariner deployment:
+
+    AWS cluster A (Public):
+    - destroy_aws_cluster_a: $destroy_cluster_a
+    - create_aws_cluster_a: $create_cluster_a
+    - clean_aws_cluster_a: $clean_cluster_a
+
+    OSP cluster B (Private):
+    - destroy_osp_cluster_b: $destroy_cluster_b
+    - create_osp_cluster_b: $create_cluster_b
+    - clean_osp_cluster_b: $clean_cluster_b
+
+    OCP and Submariner setup and test tools:
+    - config_golang: $config_golang
+    - config_aws_cli: $config_aws_cli
+    - download_ocp_installer: $get_ocp_installer
+    - build_ocpup_tool_latest: $get_ocpup_tool
+    - build_operator_latest: $build_operator
+    - build_submariner_e2e_latest: $build_submariner_e2e
+    - download_subctl_latest_release: $get_subctl
+    "
+
+    echo -e "# Submariner deployment and environment setup for the tests:
+
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
     - test_subctl_command
@@ -1776,6 +1784,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_clusters_connected_by_service_ip
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
+    - verify_golang
     - test_run_submariner_unit_tests
     - test_run_submariner_e2e_tests
     "
@@ -1784,43 +1793,43 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
   # Setup and verify environment
   setup_workspace
 
-  # Running download_ocp_installer if requested
-  [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer
-
-  # Running destroy_aws_cluster_a if requested
-  [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || destroy_aws_cluster_a
-
-  # Running create_aws_cluster_a if requested
-  [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || create_aws_cluster_a
-
-  [[ "$skip_deploy" =~ ^(y|yes)$ ]] || test_kubeconfig_aws_cluster_a
-
-  # Running build_ocpup_tool_latest if requested
-  [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || build_ocpup_tool_latest
-
-  # Running destroy_osp_cluster_b if requested
-  [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || destroy_osp_cluster_b
-
-  # Running create_osp_cluster_b if requested
-  [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || create_osp_cluster_b
-
-  [[ "$skip_deploy" =~ ^(y|yes)$ ]] || test_kubeconfig_osp_cluster_b
-
-  ### Cleanup Submariner from all Clusters ###
-
-  # Running clean_aws_cluster_a if requested
-  [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-  || clean_aws_cluster_a
-
-  # Running clean_osp_cluster_b if requested
-  [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-  || clean_osp_cluster_b
-
-  # From this point if script fails, it is counted as UNSTABLE (exit code 2)
-  export TEST_EXIT_STATUS=2
-
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
+
+    # Running download_ocp_installer if requested
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer
+
+    # Running destroy_aws_cluster_a if requested
+    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || destroy_aws_cluster_a
+
+    # Running create_aws_cluster_a if requested
+    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || create_aws_cluster_a
+
+    test_kubeconfig_aws_cluster_a
+
+    # Running build_ocpup_tool_latest if requested
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || build_ocpup_tool_latest
+
+    # Running destroy_osp_cluster_b if requested
+    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || destroy_osp_cluster_b
+
+    # Running create_osp_cluster_b if requested
+    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || create_osp_cluster_b
+
+    test_kubeconfig_osp_cluster_b
+
+    ### Cleanup Submariner from all clusters ###
+
+    # Running clean_aws_cluster_a if requested
+    [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
+    || clean_aws_cluster_a
+
+    # Running clean_osp_cluster_b if requested
+    [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
+    || clean_osp_cluster_b
+
+    # From this point if script fails, it is counted as UNSTABLE (exit code 2)
+    export TEST_EXIT_STATUS=2
 
     install_netshoot_app_on_cluster_a
 
@@ -1873,6 +1882,8 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_clusters_connected_by_same_service_on_new_namespace
 
+    verify_golang
+
     run_submariner_unit_tests
 
     run_submariner_e2e_tests
@@ -1915,12 +1926,12 @@ exit $TEST_EXIT_STATUS
 #        > setup_subm.sh; chmod +x setup_subm.sh; vi setup_subm.sh
 #
 # Execution example:
-# Re-creating a new AWS Cluster:
+# Re-creating a new AWS cluster:
 # ./setup_subm.sh --build-e2e --build-operator --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
-# Using Submariner upstream release (master), and installing on existing AWS Cluster:
+# Using Submariner upstream release (master), and installing on existing AWS cluster:
 # ./setup_subm.sh --build-operator --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
-# Using the latest formal release of Submariner, and Re-creating a new AWS Cluster:
+# Using the latest formal release of Submariner, and Re-creating a new AWS cluster:
 # ./setup_subm.sh --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
