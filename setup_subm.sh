@@ -733,7 +733,7 @@ function create_aws_cluster_a() {
   cd ${WORKDIR}
 
   mkdir ${CLUSTER_A_DIR} || FATAL "Previous cluster ${CLUSTER_A_DIR} deployment should be removed."
-  cp ${OCP_CLUSTER_A_SETUP} ${CLUSTER_A_DIR}/install-config.yaml
+  cp ${CLUSTER_A_YAML} ${CLUSTER_A_DIR}/install-config.yaml
 
   # OR to create new OCP install-config.yaml:
       # ./openshift-install create install-config --dir user-cluster-a
@@ -776,10 +776,10 @@ function create_osp_cluster_b() {
   trap_commands;
 
   cd ${OCPUP_DIR}
-  echo -e "# Using an existing OCPUP yaml configuration file: \n${OCPUP_CLUSTER_B_SETUP}"
+  echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
   # TODO: This YAML file should be copied from a secure path
-  cp ${OCPUP_CLUSTER_B_SETUP} ./
-  ocpup_yml=$(basename -- "$OCPUP_CLUSTER_B_SETUP")
+  cp ${CLUSTER_B_YAML} ./
+  ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l $ocpup_yml
 
   # vi $ocpup_yml
@@ -964,10 +964,10 @@ function destroy_osp_cluster_b() {
 
   cd ${OCPUP_DIR}
   if [[ -f ${CLUSTER_B_DIR}/metadata.json ]] ; then
-    echo -e "# Using an existing OCPUP yaml configuration file: \n${OCPUP_CLUSTER_B_SETUP}"
+    echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
     # TODO: This YAML file should be copied from a secure path
-    cp ${OCPUP_CLUSTER_B_SETUP} ./
-    ocpup_yml=$(basename -- "$OCPUP_CLUSTER_B_SETUP")
+    cp ${CLUSTER_B_YAML} ./
+    ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l $ocpup_yml
 
     # ocpup  destroy clusters --debug --config $ocpup_yml
