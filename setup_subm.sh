@@ -1246,7 +1246,8 @@ function gateway_label_all_nodes_external_ip() {
 ### Adding submariner gateway label to all worker nodes with an external IP ###
   # trap_commands;
 
-  # Filter all node names that have external IP (column 7 is not none), and ignore header fields:
+  # Filter all node names that have external IP (column 7 is not none), and ignore header fields
+  # Run 200 attempts, and wait for output to include regex [0-9]
   watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
@@ -1314,6 +1315,7 @@ function install_broker_and_member_aws_cluster_a() {
 
   # subctl ${DEPLOY_CMD}
   # Workaround:
+  # Run 3 attempts, and wait for command exit OK
   watch_and_retry "subctl \${DEPLOY_CMD} --subm-debug" 3
 
   ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
@@ -1403,6 +1405,7 @@ function join_submariner_cluster_b() {
   # subctl ${JOIN_CMD}
 
   # Workaround:
+  # Run 3 attempts, and wait for command exit OK
   watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
 
   # Check that Submariners CRD has been created on OSP cluster B (Private):
@@ -1438,6 +1441,7 @@ function test_submariner_engine_status() {
   # ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
   cmd="${OC} exec ${submariner_pod} -n ${ns_name} strongswan stroke statusall"
   regex='Security Associations (1 up'
+  # Run 300 attempts, and wait for output to include regex
   watch_and_retry "$cmd" 300 "$regex" || :
 
   ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
@@ -1569,11 +1573,44 @@ function test_clusters_connected_by_service_ip() {
 
 # ------------------------------------------
 
+function test_clusters_connected_overlapping_cidrs() {
+### Run Connectivity tests between the Private and Public clusters ###
+# To validate that now Submariner made the connection possible!
+  prompt "Testing GlobalNet: Nginx service will be identified by its Global IP"
+  trap_commands;
+
+  BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
+   and then it annotates and programs - this could add delay to the globalnet use-cases." \
+   "Wait 3 minutes before checking connectivity with Globalnet on overlapping clusters CIDRs" \
+  "No bug reported yet"
+  sleep 3m
+
+  kubconf_b;
+
+  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
+  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
+  ${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
+  global_ip="$(< $TEMP_FILE)"
+  kubconf_a;
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
+  netshoot_pod_cluster_a="$(< $TEMP_FILE)"
+
+  echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on cluster A\n" \
+  "# To Nginx service on cluster B, by its Global IP: $global_ip"
+
+  ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}:8080
+
+  #TODO: validate annotation of globalIp in the node
+}
+
+# ------------------------------------------
+
 function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  netshoot_pod=netshoot-cl-a-new # A NEW Netshoot App on cluster A
+  new_netshoot=netshoot-cl-a-new # A NEW Netshoot App on cluster A
   SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B, for SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
@@ -1600,48 +1637,33 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   echo "# Install Netshoot app on AWS cluster A, and verify connectivity to the NEW Ngnix service on OSP cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
-  #${OC} run ${netshoot_pod} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
+  #${OC} run ${new_netshoot} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
 
-  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} delete pod ${new_netshoot} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
-  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
+  #oc run netshoot-cl-a -n test-submariner --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
+  #oc exec netshoot-cl-a -- ping nginx-cl-b.test-submariner-cl-b-new.svc.cluster.local
+  ${OC} run ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot \
+  --pod-running-timeout=5m --rm --restart=Never -- sleep 5m
+
+  echo "# Try to ping ${NGINX_CLUSTER_B}
+  Until geting PING for excpected Domain ${SUBM_TEST_NS_NEW}.svc.cluster.local and IP"
+  #TODO: Validate both GLobalIP and svc.cluster.local"
+
+  cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping ${NGINX_CLUSTER_B}"
+  regex="PING ${NGINX_CLUSTER_B}.${SUBM_TEST_NS_NEW}.svc.cluster.local"
+  watch_and_retry "$cmd" 30 "$regex"
+    # PING netshoot-cl-a-new.test-submariner-new.svc.cluster.local (169.254.59.89)
+
+  # ${OC} run ${new_netshoot} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
+  # ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
+
+  echo "# Try to CURL from ${new_netshoot} to ${NGINX_CLUSTER_B} :"
+  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
-}
 
-# ------------------------------------------
-
-function test_clusters_connected_overlapping_cidrs() {
-### Run Connectivity tests between the Private and Public clusters ###
-# To validate that now Submariner made the connection possible!
-  prompt "Testing GlobalNet: Nginx service will be identified by its Global IP"
-  trap_commands;
-
-  BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
-   and then it annotates and programs - this could add delay to the globalnet use-cases." \
-   "Wait 3 minutes before checking connectivity with Globalnet on overlapping clusters CIDRs" \
-  "No bug reported yet"
-  sleep 3m
-
-  kubconf_b;
-  
-  #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
-  # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
-  ${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
-  global_ip="$(< $TEMP_FILE)"
-  kubconf_a;
-  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
-  netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-
-  echo -e "# Connecting from Netshoot pod [${netshoot_pod_cluster_a}] on cluster A\n" \
-  "# To Nginx service on cluster B, by its Global IP: $global_ip"
-
-  ${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${global_ip}:8080
-
-  #TODO: validate annotation of globalIp in the node
 }
 
 # ------------------------------------------
