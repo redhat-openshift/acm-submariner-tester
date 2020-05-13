@@ -64,8 +64,6 @@ trap_commands
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
 {
-  trap_commands
-
   pattern="$1"
   shift
   sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@"

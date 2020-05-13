@@ -555,12 +555,10 @@ function build_operator_latest() {
   # git log --pretty=fuller
 
   echo "# Build SubCtl tool and install it in $GOBIN/"
-  # make build-operator # || echo "# Build Submariner Operator finished"
-  # BUG "make build-operator failed" "make bin/subctl" "https://github.com/submariner-io/submariner-operator/issues/126"
 
   BUG "GO111MODULE=on go install" \
   "make bin/subctl # BUT Will fail if Docker is not pre-installed" \
-  "https://github.com/submariner-io/submariner-operator/issues/318"
+  "https://github.com/submariner-io/submariner-operator/issues/319"
   # export GO111MODULE=on
   # GO111MODULE=on go mod vendor
   # GO111MODULE=on go install # Compile binary and moves it to $GOBIN
@@ -732,7 +730,11 @@ function create_aws_cluster_a() {
 
   cd ${WORKDIR}
 
-  mkdir ${CLUSTER_A_DIR} || FATAL "Previous cluster ${CLUSTER_A_DIR} deployment should be removed."
+  if [[ -d "$CLUSTER_A_DIR" ]] && [[ -n `ls -A "$CLUSTER_A_DIR"` ]] ; then
+    FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
+  fi
+
+  mkdir -p ${CLUSTER_A_DIR}
   cp ${CLUSTER_A_YAML} ${CLUSTER_A_DIR}/install-config.yaml
 
   # OR to create new OCP install-config.yaml:
@@ -913,11 +915,11 @@ function destroy_aws_cluster_a() {
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
   # TODO: should first check if it was not already purged, because it can save a lot of time.
-  if [[ -d ${CLUSTER_A_NAME} ]]; then
+  if [[ -d ${CLUSTER_A_DIR} ]]; then
     echo "# Previous Openshift config dir exists - removing it"
-    # cd ${CLUSTER_A_NAME}
+    # cd ${CLUSTER_A_DIR}
     if [[ -f ${CLUSTER_A_DIR}/metadata.json ]] ; then
-      timeout 20m ./openshift-install destroy cluster --log-level debug --dir ${CLUSTER_A_NAME} || \
+      timeout 20m ./openshift-install destroy cluster --log-level debug --dir ${CLUSTER_A_DIR} || \
       ( [[ $? -eq 124 ]] && \
       BUG "WARNING: OCP Destroy did not complete, but timeout exceeded." \
       "Skipping Destroy proccess" \
@@ -927,13 +929,13 @@ function destroy_aws_cluster_a() {
 
     # Remove existing OCP install-config directory:
     #rm -r _${CLUSTER_A_DIR}/ || echo "# Old config dir removed."
-    echo "# Deleting older ${CLUSTER_A_NAME} config directories (older than a day)"
+    echo "# Deleting older ${CLUSTER_A_DIR} config directories (older than a day)"
     # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
-    delete_old_files_or_dirs "_${CLUSTER_A_NAME}_*" "d"
+    delete_old_files_or_dirs "_${CLUSTER_A_DIR}_*" "d"
 
     echo "# Backup recent OCP install-config directory"
-    # [[ ! -e "$CLUSTER_A_NAME" ]] || mv "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
-    backup_and_remove_dir "$CLUSTER_A_NAME" "_${CLUSTER_A_NAME}_${DATE_TIME}"
+    # [[ ! -e "$CLUSTER_A_DIR" ]] || mv "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
+    backup_and_remove_dir "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
 
   else
     echo "# cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
@@ -1452,11 +1454,14 @@ function test_submariner_engine_status() {
   ${OC} get pods -n ${ns_name} --show-labels
   ${OC} get clusters -n ${ns_name} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${ns_name} || strongswan_status=DOWN
+  ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || strongswan_status=DOWN
 
   BUG "StrongSwan connecting to 'default' URI fails" \
-  "Verify StrongSwan with different URI path" \
+  "Verify StrongSwan with different URI path and ignore failure" \
   "https://github.com/submariner-io/submariner/issues/426"
-  ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || strongswan_status=DOWN
+  # ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas"
+  # workaround:
+  ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || :
 
   if [[ "$strongswan_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
@@ -1609,7 +1614,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  prompt "Testing GlobalNet: Nginx service will be identified its Global IP"
+  prompt "Testing GlobalNet: Nginx service will be identified by its Global IP"
   trap_commands;
 
   kubconf_b;
@@ -1680,6 +1685,10 @@ function run_submariner_e2e_tests() {
     # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
     # *         admin             user-cluster-a   admin
     #           admin_cluster_b   user-cl1         admin
+
+  BUG "E2E fails on first test - cannot find cluster resource" \
+  "No workaround" \
+  "https://github.com/submariner-io/shipyard/issues/158"
 
   export GO111MODULE="on"
   go env
