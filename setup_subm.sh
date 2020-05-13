@@ -1099,7 +1099,7 @@ function install_nginx_svc_on_cluster_b() {
   # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
 
   ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=bitnami/nginx
+  ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=nginxinc/nginx-unprivileged:stable-alpine
 
   echo "# Expose Ngnix service on port 8080:"
   ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
@@ -1454,6 +1454,8 @@ function test_submariner_engine_status() {
   ${OC} get pods -n ${ns_name} --show-labels
   ${OC} get clusters -n ${ns_name} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${ns_name} || strongswan_status=DOWN
+
+  echo "Check IPSEC tunnel status on Submariner Gateways:"
   ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || strongswan_status=DOWN
 
   BUG "StrongSwan connecting to 'default' URI fails" \
@@ -1587,7 +1589,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   ${OC} delete deployment ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
-  ${OC} create deployment ${NGINX_CLUSTER_B} --image=bitnami/nginx ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
+  ${OC} create deployment ${NGINX_CLUSTER_B} --image=nginxinc/nginx-unprivileged:stable-alpine ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
   echo "# Expose Ngnix service on port 8080:"
   ${OC} delete service ${NGINX_CLUSTER_B} --ignore-not-found ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
@@ -1617,8 +1619,14 @@ function test_clusters_connected_overlapping_cidrs() {
   prompt "Testing GlobalNet: Nginx service will be identified by its Global IP"
   trap_commands;
 
+  BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
+   and then it annotates and programs - this could add delay to the globalnet use-cases." \
+   "Wait 3 minutes before checking connectivity with Globalnet on overlapping clusters CIDRs" \
+  "No bug reported yet"
+  sleep 3m
+
   kubconf_b;
-  #kubconf_b;
+  
   #NGINX_CLUSTER_B=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
   # global_ip=$(${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}')
   ${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}' > "$TEMP_FILE"
