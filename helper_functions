@@ -496,6 +496,31 @@ function delete_namespace_and_crds() {
 
 # ------------------------------------------
 
+#TODO: Use this function to upload E2E tests results to Polarion
+function upload_test_results_polarion() {
+  # Polarion Jump - update test results
+    prompt "Polarion Jump - update test results"
+
+  # git clone ssh://user@code.engineering.redhat.com/jump
+  # cd jump
+  # virtualenv venv
+  # source venv/bin/activate
+  # python -V
+  # ./prepare_pylarion.sh
+  # pip install colorlog
+  #
+  # To upload to this test:
+  # https://polarion.engineering.redhat.com/polarion/#/project/RHELOpenStackPlatform/testrun?id=20190815-0853
+  #
+  # python jump.py --testrun-id="20190815-0853" --xml-file="junit__01.xml" --update_testcases=True --debug=True # --jenkins_build_url=\$BUILD_URL
+  #
+  # python jump.py --testrun-id="20181118-1147" --xml-file="junit__01.xml" --debug=True # --jenkins_build_url=\$BUILD_URL
+  #
+  # ./rhos-qe-jenkins/jobs/defaults/include/jump.groovy.inc
+}
+
+# ------------------------------------------
+
 function log_to_html() {
   #trap_commands;
   log_file="$1"

@@ -1668,15 +1668,14 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
 # ------------------------------------------
 
-function run_submariner_unit_tests() {
+function test_submariner_units_latest() {
 ### Run Submariner Unit tests (mock) ###
   prompt "Running Submariner Unit-Tests"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
   export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml \
-  || echo "# Warning: Test execution failure occurred"
+  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -1696,7 +1695,7 @@ function run_submariner_unit_tests() {
 
 # ------------------------------------------
 
-function run_submariner_e2e_tests() {
+function test_submariner_e2e_latest() {
 # Run E2E Tests of Submariner:
   prompt "Running Submariner E2E (End-to-End tests)"
   trap_commands;
@@ -1717,7 +1716,7 @@ function run_submariner_e2e_tests() {
     #           admin_cluster_b   user-cl1         admin
 
   BUG "E2E fails on first test - cannot find cluster resource" \
-  "No workaround" \
+  "No workaround yet..." \
   "https://github.com/submariner-io/shipyard/issues/158"
 
   export GO111MODULE="on"
@@ -1729,27 +1728,34 @@ function run_submariner_e2e_tests() {
   || echo "# Warning: Test execution failure occurred"
 }
 
-function upload_test_results_polarion() {
-  # Polarion Jump - update test results
-    prompt "Polarion Jump - update test results"
+# ------------------------------------------
 
-  # git clone ssh://user@code.engineering.redhat.com/jump
-  # cd jump
-  # virtualenv venv
-  # source venv/bin/activate
-  # python -V
-  # ./prepare_pylarion.sh
-  # pip install colorlog
-  #
-  # To upload to this test:
-  # https://polarion.engineering.redhat.com/polarion/#/project/RHELOpenStackPlatform/testrun?id=20190815-0853
-  #
-  # python jump.py --testrun-id="20190815-0853" --xml-file="junit__01.xml" --update_testcases=True --debug=True # --jenkins_build_url=\$BUILD_URL
-  #
-  # python jump.py --testrun-id="20181118-1147" --xml-file="junit__01.xml" --debug=True # --jenkins_build_url=\$BUILD_URL
-  #
-  # ./rhos-qe-jenkins/jobs/defaults/include/jump.groovy.inc
+function test_submariner_e2e_release() {
+# Run E2E Tests of Submariner:
+  prompt "Running Submariner E2E (End-to-End tests)"
+  trap_commands;
+
+  BUG "E2E fails timeouts" \
+  "No workaround yet..." \
+  "https://github.com/submariner-io/shipyard/issues/158"
+
+  which subctl
+  subctl version
+
+  BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
+  "Call Kubeconfig of a single Cluster" \
+  "No Bug yet..."
+  # workaround:
+  kubconf_a;
+
+  subctl info
+
+  subctl verify-connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+
 }
+
+# ------------------------------------------
+
 
 ####################################################################################
 
@@ -1824,8 +1830,9 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     - verify_golang
-    - test_run_submariner_unit_tests
-    - test_run_submariner_e2e_tests
+    - test_submariner_units_latest
+    - test_submariner_e2e_latest
+    - test_submariner_e2e_release
     "
   fi
 
@@ -1923,9 +1930,11 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     verify_golang
 
-    run_submariner_unit_tests
+    test_submariner_units_latest || BUG "Submariner Unit-Tests FAILED."
 
-    run_submariner_e2e_tests
+    test_submariner_e2e_latest || BUG "Submariner E2E Tests FAILED."
+
+    test_submariner_e2e_release
   fi
 
   TEST_EXIT_STATUS=0
