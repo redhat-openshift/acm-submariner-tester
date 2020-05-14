@@ -1645,14 +1645,14 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   #oc run netshoot-cl-a -n test-submariner --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
   #oc exec netshoot-cl-a -- ping nginx-cl-b.test-submariner-cl-b-new.svc.cluster.local
   ${OC} run ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot \
-  --pod-running-timeout=5m --rm --restart=Never -- sleep 5m
+  --pod-running-timeout=5m --restart=Never -- sleep 5m
 
   echo "# Try to ping ${NGINX_CLUSTER_B}
   Until geting PING for excpected Domain ${SUBM_TEST_NS_NEW}.svc.cluster.local and IP"
   #TODO: Validate both GLobalIP and svc.cluster.local"
 
-  cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping ${NGINX_CLUSTER_B}"
-  regex="PING ${NGINX_CLUSTER_B}.${SUBM_TEST_NS_NEW}.svc.cluster.local"
+  cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 ${NGINX_CLUSTER_B}.${SUBM_TEST_NS_NEW}"
+  regex="PING ${NGINX_CLUSTER_B}.${SUBM_TEST_NS_NEW}."
   watch_and_retry "$cmd" 30 "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.cluster.local (169.254.59.89)
 
@@ -1660,7 +1660,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
 
   echo "# Try to CURL from ${new_netshoot} to ${NGINX_CLUSTER_B} :"
-  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080"
+  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${NGINX_CLUSTER_B}.${SUBM_TEST_NS_NEW}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
