@@ -734,7 +734,7 @@ function create_aws_cluster_a() {
     FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
   fi
 
-  mkdir -p ${CLUSTER_A_DIR}
+  mkdir -p "${CLUSTER_A_DIR}"
   cp "${CLUSTER_A_YAML}" "${CLUSTER_A_DIR}/install-config.yaml"
 
   # OR to create new OCP install-config.yaml:
@@ -777,7 +777,7 @@ function create_osp_cluster_b() {
   prompt "Creating Openstack cluster B (Private) with OCP-UP tool"
   trap_commands;
 
-  cd ${OCPUP_DIR}
+  cd "${OCPUP_DIR}"
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
   # TODO: This YAML file should be copied from a secure path
   cp "${CLUSTER_B_YAML}" ./
@@ -884,11 +884,12 @@ function destroy_aws_cluster_a() {
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
   # TODO: should first check if it was not already purged, because it can save a lot of time.
-  if [[ -d ${CLUSTER_A_DIR} ]]; then
-    echo "# Previous Openshift config dir exists - removing it"
-    # cd ${CLUSTER_A_DIR}
-    if [[ -f ${CLUSTER_A_DIR}/metadata.json ]] ; then
-      timeout 20m ./openshift-install destroy cluster --log-level debug --dir ${CLUSTER_A_DIR} || \
+  if [[ -d "${CLUSTER_A_DIR}" ]]; then
+    echo "# Previous OCP Installation found: ${CLUSTER_A_DIR}"
+    # cd "${CLUSTER_A_DIR}"
+    if [[ -f "${CLUSTER_A_DIR}/metadata.json" ]] ; then
+      echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
+      timeout 20m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
       BUG "WARNING: OCP Destroy did not complete, but timeout exceeded." \
       "Skipping Destroy proccess" \
@@ -896,18 +897,20 @@ function destroy_aws_cluster_a() {
     fi
     # cd ..
 
-    # Remove existing OCP install-config directory:
-    #rm -r _${CLUSTER_A_DIR}/ || echo "# Old config dir removed."
-    echo "# Deleting older ${CLUSTER_A_DIR} config directories (older than a day)"
-    # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
-    delete_old_files_or_dirs "_${CLUSTER_A_DIR}_*" "d"
-
-    echo "# Backup recent OCP install-config directory"
+    echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_A_NAME}"
     # [[ ! -e "$CLUSTER_A_DIR" ]] || mv "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
     backup_and_remove_dir "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
 
+    # Remove existing OCP install-config directory:
+    #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
+    echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than a day):"
+    # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
+    delete_old_files_or_dirs "_${CLUSTER_A_DIR}_*" "d"
+
+
+
   else
-    echo "# cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
+    echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
 
   # To remove YOUR DNS record sets from Route53:
@@ -933,8 +936,8 @@ function destroy_osp_cluster_b() {
   prompt "Destroying previous Openstack cluster B (Private)"
   trap_commands;
 
-  cd ${OCPUP_DIR}
-  if [[ -f ${CLUSTER_B_DIR}/metadata.json ]] ; then
+  cd "${OCPUP_DIR}"
+  if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
     # TODO: This YAML file should be copied from a secure path
     cp "${CLUSTER_B_YAML}" ./
@@ -950,15 +953,15 @@ function destroy_osp_cluster_b() {
     #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/cl1/.openshift_install.log &
     #tail --pid=$pid -f /dev/null # wait until the background process finish
 
-    timeout --foreground 20m tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/cl1/.openshift_install.log
+    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/cl1/.openshift_install.log"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
 
-    echo "# Backup old config directory"
+    echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_B_NAME} "
     backup_and_remove_dir ".config"
   else
-    echo "# cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping cluster Destroy."
+    echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping cluster Destroy."
   fi
 }
 
@@ -1142,7 +1145,7 @@ function open_firewall_ports_on_the_broker_node() {
   install_local_terraform "${WORKDIR}"
 
   kubconf_a;
-  cd ${CLUSTER_A_DIR}
+  cd "${CLUSTER_A_DIR}"
 
   curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
   chmod a+x ./prep_for_subm.sh
