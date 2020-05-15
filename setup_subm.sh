@@ -735,7 +735,7 @@ function create_aws_cluster_a() {
   fi
 
   mkdir -p ${CLUSTER_A_DIR}
-  cp ${CLUSTER_A_YAML} ${CLUSTER_A_DIR}/install-config.yaml
+  cp "${CLUSTER_A_YAML}" "${CLUSTER_A_DIR}/install-config.yaml"
 
   # OR to create new OCP install-config.yaml:
       # ./openshift-install create install-config --dir user-cluster-a
@@ -780,44 +780,13 @@ function create_osp_cluster_b() {
   cd ${OCPUP_DIR}
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
   # TODO: This YAML file should be copied from a secure path
-  cp ${CLUSTER_B_YAML} ./
+  cp "${CLUSTER_B_YAML}" ./
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
-  ls -l $ocpup_yml
-
-  # vi $ocpup_yml
-
-    # openshift:
-    #   version: 4.2.0
-    # clusters:
-    # - clusterName: cl1
-    #   clusterType: private
-    #   vpcCidr: 10.166.0.0/16
-    #   podCidr: 10.252.0.0/14
-    #   svcCidr: 100.96.0.0/16
-    #   numMasters: 3
-    #   numWorkers: 2
-    #   numGateways: 1
-    #   dnsDomain: devcluster.openshift.com
-    #   platform:
-    #     name: openstack
-    #     region: regionOne
-    #     externalNetwork: provider_net_cci_6
-    #     computeFlavor: ci.m1.xlarge
-    # authentication:
-    #   pullSecret: [ YOUR AWS PULL SECRET inside '' ]
-    #   sshKey: [ YOUR ~/.ssh/id_rsa.pub ]
-    #   openstack:
-    #       authUrl: https://rhos-d.infra.prod.upshift.rdu2.redhat.com:13000/v3
-    #       userName: [ YOUR Red Hat Username ]
-    #       password: [ YOUR Red Hat Password inside "" ]
-    #       projectId: 8ce209f63ab24601b57bf3cfd5b7cc25
-    #       projectName: multi-cluster-networking
-    #       userDomainName: redhat.com
-
+  ls -l "$ocpup_yml"
 
   # Run OCPUP to Create OpenStack cluster B (Private)
-  # ocpup  create clusters --debug --config $ocpup_yml
-  ocpup  create clusters --config $ocpup_yml &
+  # ocpup  create clusters --debug --config "$ocpup_yml"
+  ocpup  create clusters --config "$ocpup_yml" &
   pid=$!
   tail --pid=$pid -f --retry .config/cl1/.openshift_install.log &
   tail --pid=$pid -f /dev/null
@@ -968,12 +937,12 @@ function destroy_osp_cluster_b() {
   if [[ -f ${CLUSTER_B_DIR}/metadata.json ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
     # TODO: This YAML file should be copied from a secure path
-    cp ${CLUSTER_B_YAML} ./
+    cp "${CLUSTER_B_YAML}" ./
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
-    ls -l $ocpup_yml
+    ls -l "$ocpup_yml"
 
-    # ocpup  destroy clusters --debug --config $ocpup_yml
-    ocpup  destroy clusters --config $ocpup_yml & # running on the background (with timeout)
+    # ocpup  destroy clusters --debug --config "$ocpup_yml"
+    ocpup  destroy clusters --config "$ocpup_yml" & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
     # tail --pid=$pid -f .config/cl1/.openshift_install.log && tail -f /proc/$pid/fd/1
 
