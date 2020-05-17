@@ -38,7 +38,7 @@ function print_cmd_location() {
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_commands() {
   trap '
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|\[\[|while|for|prompt|BUG) ]] ; then
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|while|for|prompt|BUG) ]] ; then
      cmd_plain="$(echo -e $BASH_COMMAND 2>/dev/null)"
      cmd_eval=$(eval "echo -e \"$BASH_COMMAND\"" 2>/dev/null)
      if [[ -n $cmd_eval ]] ; then
@@ -65,8 +65,13 @@ trap_commands
 function highlight()
 {
   pattern="$1"
+  result=0
   shift
-  sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@"
+  sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || result=$?
+  if [[ $result = 1 ]] ; then
+    sed -E '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || result=$?
+  fi
+  return $result
 }
 
 # ------------------------------------------

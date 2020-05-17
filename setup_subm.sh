@@ -1049,7 +1049,7 @@ function install_netshoot_app_on_cluster_a() {
   # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
   ${OC} run ${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
 
-  echo "# Wait for Netshoot App to be ready:"
+  echo "# Wait for Netshoot pod to be ready:"
   ${OC} wait --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
   ${OC} describe pod  ${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 }
@@ -1095,11 +1095,11 @@ function test_basic_cluster_connectivity_before_submariner() {
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  netshoot_pod=netshoot-cl-b-new # A new Netshoot App
+  netshoot_pod=netshoot-cl-b-new # A new Netshoot pod
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot app on OSP cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
+  echo "# Install Netshoot on OSP cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
@@ -1112,7 +1112,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   prompt "Before Submariner is installed: \
-  Verifying that Netshoot app on AWS cluster A (Public), cannot reach Nginx service on OSP cluster B (Private)"
+  Verifying that Netshoot pod on AWS cluster A (Public), cannot reach Nginx service on OSP cluster B (Private)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1412,12 +1412,12 @@ function test_submariner_engine_status() {
   "https://github.com/submariner-io/submariner/issues/360"
   # ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
   cmd="${OC} exec ${submariner_pod} -n ${ns_name} strongswan stroke statusall"
-  regex='Security Associations (1 up'
+  regex='Security Associations \(1 up'
   # Run 300 attempts, and wait for output to include regex
   watch_and_retry "$cmd" 300 "$regex" || :
 
   ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
-  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN
+  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN 
     # Security Associations (1 up, 0 connecting):
     # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
     # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
@@ -1491,7 +1491,7 @@ function test_clusters_connected_by_service_ip() {
 ### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
   prompt "Testing connectivity with Submariner, between: \n
-  Netshoot app on AWS cluster A (Public) <--> Nginx service on OSP cluster B (Private)"
+  Netshoot pod on AWS cluster A (Public) <--> Nginx service IP on OSP cluster B (Private)"
   trap_commands;
 
   kubconf_a;
@@ -1537,7 +1537,7 @@ function test_clusters_connected_by_service_ip() {
       # * Connection #0 to host 100.96.72.226 left intact
   else
     prompt "Testing Globalnet - There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
-    ${OC} exec ${CURL_CMD} |& highlight "port 8080: Host is unreachable" \
+    ${OC} exec ${CURL_CMD} |& highlight "Connection timed out" \
     && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \n" \
     "Nginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
   fi
@@ -1582,7 +1582,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  new_netshoot=netshoot-cl-a-new # A NEW Netshoot App on cluster A
+  new_netshoot=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
   SUBM_TEST_NS_NEW=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B, for SAME Ngnix service name
 
   prompt "Testing Service-Discovery: Nginx service will be identified by Domain name: $NGINX_CLUSTER_B"
@@ -1607,7 +1607,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Wait for Ngnix service to be ready:"
   ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS_NEW:+-n $SUBM_TEST_NS_NEW}
 
-  echo "# Install Netshoot app on AWS cluster A, and verify connectivity to the NEW Ngnix service on OSP cluster B"
+  echo "# Install Netshoot pod on AWS cluster A, and verify connectivity to the NEW Ngnix service on OSP cluster B"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
   #${OC} run ${new_netshoot} --generator=run-pod/v1 --image nicolaka/netshoot -- sleep infinity
   #${OC} exec ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${NGINX_CLUSTER_B}:8080
@@ -1640,9 +1640,9 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
 # ------------------------------------------
 
-function test_submariner_units_latest() {
+function test_submariner_packages() {
 ### Run Submariner Unit tests (mock) ###
-  prompt "Running Submariner Unit-Tests"
+  prompt "Testing Submariner Packages (Unit-Tests)"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
   export GO111MODULE="on"
@@ -1669,7 +1669,7 @@ function test_submariner_units_latest() {
 
 function test_submariner_e2e_latest() {
 # Run E2E Tests of Submariner:
-  prompt "Running Submariner E2E (End-to-End tests)"
+  prompt "Testing Submariner End-to-End tests with GO"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
 
@@ -1702,9 +1702,9 @@ function test_submariner_e2e_latest() {
 
 # ------------------------------------------
 
-function test_submariner_e2e_release() {
+function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
-  prompt "Running Submariner E2E (End-to-End tests)"
+  prompt "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
 
   BUG "E2E fails timeouts" \
@@ -1716,7 +1716,7 @@ function test_submariner_e2e_release() {
 
   BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
   "Call Kubeconfig of a single Cluster" \
-  "No Bug yet..."
+  "https://github.com/submariner-io/submariner-operator/issues/384"
   # workaround:
   kubconf_a;
 
@@ -1802,9 +1802,9 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     - verify_golang
-    - test_submariner_units_latest
+    - test_submariner_packages
     - test_submariner_e2e_latest
-    - test_submariner_e2e_release
+    - test_submariner_e2e_with_subctl
     "
   fi
 
@@ -1902,11 +1902,11 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     verify_golang
 
-    test_submariner_units_latest || BUG "Submariner Unit-Tests FAILED."
+    test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
 
     test_submariner_e2e_latest || BUG "Submariner E2E Tests FAILED."
 
-    test_submariner_e2e_release
+    test_submariner_e2e_with_subctl
   fi
 
   TEST_EXIT_STATUS=0
