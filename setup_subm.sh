@@ -431,14 +431,15 @@ function download_ocp_installer() {
   tar -xvf ${ocp_install_gz} -C ${WORKDIR}
   tar -xvf ${oc_client_gz} -C ${WORKDIR}
 
-  ${OC} -h
+  echo "# Install OC - Openshift Client:"
+  # sudo cp oc /usr/local/bin/
+  # cp oc ~/.local/bin
+  # cp oc ~/go/bin/
 
-  # Create oc (openshift client) link
-    # sudo cp oc /usr/local/bin/
-    # cp oc ~/.local/bin
-    # cp oc ~/go/bin/
-    mkdir -p $GOBIN
-    cp oc $GOBIN/
+  mkdir -p $GOBIN
+  # cp oc $GOBIN/
+  /usr/bin/install ./oc $GOBIN/oc
+  ${OC} -h
 }
 
 # ------------------------------------------
@@ -635,90 +636,10 @@ function test_subctl_command() {
   # alias subctl="${PWD}/bin/subctl"
 
   subctl deploy-broker --help
-    # set the broker up
-    #
-    # Usage:
-    #   subctl deploy-broker [flags]
-    #
-    # Flags:
-    #       --clustercidr string      cluster CIDR
-    #       --clusterid string        cluster ID used to identify the tunnels
-    #       --colorcodes string       color codes (default "blue")
-    #       --disable-nat             Disable NAT for IPSEC
-    #   -h, --help                    help for deploy-broker
-    #       --ikeport int             IPsec IKE port (default 500)
-    #       --nattport int            IPsec NATT port (default 4500)
-    #   -n, --no-dataplane            Don't install the submariner dataplane on the broker
-    #   -o, --operator-image string   the operator image you wish to use (default "quay.io/submariner/submariner-operator:0.0.1")
-    #       --repository string       image repository
-    #       --servicecidr string      service CIDR
-    #       --version string          image version
-    #
-    # Global Flags:
-    #       --kubeconfig string   absolute path(s) to the kubeconfig file(s) (default "~/.kube/config")
 
   subctl join --help
-    # connect a cluster to an existing broker
-    #
-    # Usage:
-    #   subctl join [flags]
-    #
-    # Flags:
-    #       --clustercidr string      cluster CIDR
-    #       --clusterid string        cluster ID used to identify the tunnels
-    #       --colorcodes string       color codes (default "blue")
-    #       --disable-nat             Disable NAT for IPSEC
-    #   -h, --help                    help for join
-    #       --ikeport int             IPsec IKE port (default 500)
-    #       --nattport int            IPsec NATT port (default 4500)
-    #   -o, --operator-image string   the operator image you wish to use (default "quay.io/submariner/submariner-operator:0.0.1")
-    #       --repository string       image repository
-    #       --servicecidr string      service CIDR
-    #       --version string          image version
-    #
-    # Global Flags:
-    #       --kubeconfig string   absolute path(s) to the kubeconfig file(s) (default "~/.kube/config")
-    #
+
 }
-
-# ------------------------------------------
-
-# function download_kubefedctl_latest() {
-# ### Download OCP installer ###
-#   prompt "Downloading latest KubFed Controller"
-#   trap_commands;
-#   cd ${WORKDIR}
-#
-#   curl https://github.com/kubernetes-sigs/kubefed/releases/ \
-#   | grep -Eoh 'download\/v.*\/kubefedctl-.*-linux-amd64\.tgz' -m 1 > "$TEMP_FILE"
-#
-#   kubefedctl_url="$(< $TEMP_FILE)"
-#   kubefedctl_gz=$(basename -- "$kubefedctl_url")
-#
-#   # download_file https://github.com/kubernetes-sigs/kubefed/releases/${kubefedctl_url}
-#
-#   BUG "Downloading latest kubefedctl will later break Subctl command" \
-#   "Download older kubefedctl version v0.1.0-rc3" \
-#   "https://github.com/submariner-io/submariner-operator/issues/192"
-#   kubefedctl_gz="kubefedctl-0.1.0-rc3-linux-amd64.tgz"
-#   download_file "https://github.com/kubernetes-sigs/kubefed/releases/download/v0.1.0-rc3/kubefedctl-0.1.0-rc3-linux-amd64.tgz"
-#
-#   tar -xvf ${kubefedctl_gz} -C ${WORKDIR}
-#
-#   ${KUBFED} -h
-#
-#   # Create kubefedctl link
-#     # sudo cp kubefedctl /usr/local/bin/
-#     # cp kubefedctl ~/.local/bin
-#
-#   BUG "Install kubefedctl in current dir" \
-#   "Install kubefedctl into $GOBIN/" \
-#   "https://github.com/submariner-io/submariner-operator/issues/166"
-#   cp kubefedctl $GOBIN/
-#   #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
-#   #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
-#   #go get -v -u -t ./...
-# }
 
 # ------------------------------------------
 
@@ -804,21 +725,13 @@ function create_osp_cluster_b() {
 
 function test_kubeconfig_aws_cluster_a() {
 # Check that AWS cluster A (Public) is up and running
-  prompt "Testing that AWS cluster A (Public) is up and running"
+  CLUSTER_A_VERSION=${CLUSTER_A_VERSION:+" (OCP Version $CLUSTER_A_VERSION)"}
+  prompt "Testing that AWS cluster A${CLUSTER_A_VERSION} is up and running"
   trap_commands;
 
   kubconf_a;
-
-  # Set the default namespace to "${SUBM_TEST_NS}"
-  [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
-  BUG "If running inside different cluster, OC can use wrong project name by default" \
-  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-  cp "${KUBECONF_CLUSTER_A}" "${KUBECONF_CLUSTER_A}.bak"
-  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
-
-  kubconf_a;
   test_cluster_status
+  export CLUSTER_A_VERSION=$(${OC} version | awk '/Server Version/ { print $3 }')
   # cd -
 }
 
@@ -832,13 +745,13 @@ function kubconf_a() {
 
 function test_kubeconfig_osp_cluster_b() {
 # Check that OSP cluster B (Private) is up and running
-  prompt "Testing that OSP cluster B (Private) is up and running"
+  CLUSTER_B_VERSION=${CLUSTER_B_VERSION:+" (OCP Version $CLUSTER_B_VERSION)"}
+  prompt "Testing that OSP cluster B${CLUSTER_B_VERSION} is up and running"
   trap_commands;
 
   kubconf_b;
-
-  kubconf_b;
   test_cluster_status
+  export CLUSTER_B_VERSION=$(${OC} version | awk '/Server Version/ { print $3 }')
 }
 
 function kubconf_b() {
@@ -862,7 +775,6 @@ function test_cluster_status() {
   "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
   cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
   ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
-
 
   ${OC} version
   ${OC} config view
@@ -1411,13 +1323,13 @@ function test_submariner_engine_status() {
   "Ignore non-zero exit code, by redirecting stderr" \
   "https://github.com/submariner-io/submariner/issues/360"
   # ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
-  cmd="${OC} exec ${submariner_pod} -n ${ns_name} strongswan stroke statusall"
+  cmd="${OC} exec ${submariner_pod} -n ${ns_name} -- bash -c 'sleep 10s; strongswan stroke statusall'"
   regex='Security Associations \(1 up'
-  # Run 300 attempts, and wait for output to include regex
-  watch_and_retry "$cmd" 300 "$regex" || :
+  # Run 5 attempts (+ 10 interval), and watch for output to include regex
+  watch_and_retry "$cmd" 5 "$regex" || :
 
   ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
-  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN 
+  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN
     # Security Associations (1 up, 0 connecting):
     # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
     # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
@@ -1618,6 +1530,9 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   #oc exec netshoot-cl-a -- ping nginx-cl-b.test-submariner-cl-b-new.svc.cluster.local
   ${OC} run ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot \
   --pod-running-timeout=5m --restart=Never -- sleep 5m
+
+  # TODO:
+  # @Noam Manos Hi, Reg - is there a way to check if curl to globalIP ... - you can do the following. After creating the Service/Pod, wait for the globalIp annotation (i.e., submariner.io/globalIp) on the netshoot Pod as well as the nginx service that you have created. Once the annotations exists, you can trigger the "curl to globalIP" test-case. (CC: @Vishal Thapar)
 
   echo "# Try to ping ${NGINX_CLUSTER_B}
   Until geting PING for excpected Domain ${SUBM_TEST_NS_NEW}.svc.cluster.local and IP"

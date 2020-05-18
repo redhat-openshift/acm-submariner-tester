@@ -25,8 +25,9 @@ function print_cmd_location() {
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g')
-  echo -e "${CYAN}${prompt} ${1}${NO_COLOR}"
+  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' &> /dev/null) || :
+  prompt="${prompt:+"$prompt "}${1}"
+  echo -e "${CYAN}${prompt}${NO_COLOR}"
 }
 
 # ------------------------------------------
@@ -65,13 +66,14 @@ trap_commands
 function highlight()
 {
   pattern="$1"
-  result=0
+  exit_code=0
   shift
-  sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || result=$?
-  if [[ $result = 1 ]] ; then
-    sed -E '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || result=$?
+  sed '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" &> /dev/null || exit_code=$?
+  if [[ $exit_code = 1 ]] ; then
+    exit_code=0
+    sed -E '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
   fi
-  return $result
+  return $exit_code
 }
 
 # ------------------------------------------
