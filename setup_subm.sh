@@ -522,7 +522,17 @@ function build_submariner_e2e_latest() {
     # ...
 
   GO111MODULE="on" go mod vendor
-  ./scripts/build
+
+  # ./scripts/build
+  BUG "./scripts/build fails for missing library file" \
+  "Precede with SCRIPTS_DIR location" \
+  "https://github.com/submariner-io/submariner/issues/576"
+  # workaround:
+  download_file "https://github.com/submariner-io/shipyard/blob/master/scripts/shared/compile.sh" "./scripts/compile.sh"
+  chmod +x ./scripts/compile.sh
+  export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
+  SCRIPTS_DIR=./scripts ./scripts/build
+
     # ...
     # Building subctl version dev for linux/amd64
     # ...
@@ -566,7 +576,17 @@ function build_operator_latest() {
 
   GO111MODULE="on" go mod vendor
   ./scripts/generate-embeddedyamls
-  ./scripts/build-subctl
+
+  # ./scripts/build-subctl
+  BUG "./scripts/build-subctl failed since it runs git outside repo directory" \
+  "Precede with DAPPER_SOURCE = submariner-operator path" \
+  "https://github.com/submariner-io/submariner-operator/issues/390"
+  # workaround:
+  download_file "https://github.com/submariner-io/shipyard/blob/master/scripts/shared/compile.sh" "./scripts/compile.sh"
+  chmod +x ./scripts/compile.sh
+  export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
+  SCRIPTS_DIR=./scripts ./scripts/build-subctl
+
     # ...
     # Building subctl version dev for linux/amd64
     # ...
@@ -922,7 +942,7 @@ function delete_submariner_namespace_and_crds() {
 
   BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
   "Run cleanup (oc delete) of any existing resource of submariner-operator" \
-  "https://github.com/submariner-io/submariner/issues/88"
+  "https://github.com/submariner-io/submariner-operator/issues/88"
 
   delete_namespace_and_crds "submariner-operator" "submariner"
 
@@ -1132,7 +1152,8 @@ function gateway_label_all_nodes_external_ip() {
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex [0-9]
-  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
+  #watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
+  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 3m '[0-9\.]+'
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
@@ -1184,11 +1205,11 @@ function install_broker_and_member_aws_cluster_a() {
   fi
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
+    BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
     "Define a new and unique globalnet-cidr for this cluster" \
     "https://github.com/submariner-io/submariner/issues/544"
 
-    prompt "Adding globalnet to Submariner Deploy command"
+    prompt "Adding GlobalNet to Submariner Deploy command"
     DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
   fi
 
@@ -1269,11 +1290,11 @@ function join_submariner_cluster_b() {
   ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    BUG "Running subctl with globalnet can fail if glabalnet_cidr address is already assigned" \
+    BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
     "Define a new and unique globalnet-cidr for this cluster" \
     "https://github.com/submariner-io/submariner/issues/544"
 
-    prompt "Adding globalnet to Submariner Join command"
+    prompt "Adding GlobalNet to Submariner Join command"
     JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19"
   fi
 
@@ -1448,7 +1469,7 @@ function test_clusters_connected_by_service_ip() {
       # <
       # * Connection #0 to host 100.96.72.226 left intact
   else
-    prompt "Testing Globalnet - There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
+    prompt "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "Connection timed out" \
     && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \n" \
     "Nginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
@@ -1464,8 +1485,8 @@ function test_clusters_connected_overlapping_cidrs() {
   trap_commands;
 
   BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
-   and then it annotates and programs - this could add delay to the globalnet use-cases." \
-   "Wait 3 minutes before checking connectivity with Globalnet on overlapping clusters CIDRs" \
+   and then it annotates and programs - this could add delay to the GlobalNet use-cases." \
+   "Wait 3 minutes before checking connectivity with GlobalNet on overlapping clusters CIDRs" \
   "No bug reported yet"
   sleep 3m
 
