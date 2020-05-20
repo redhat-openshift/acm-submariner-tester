@@ -1146,7 +1146,7 @@ function gateway_label_all_nodes_external_ip() {
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex [0-9]
   #watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
-  watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 3m '[0-9\.]+'
+  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 '[0-9\.]+'
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
@@ -1214,7 +1214,7 @@ function install_broker_and_member_aws_cluster_a() {
   # subctl ${DEPLOY_CMD}
   # Workaround:
   # Run 3 attempts, and wait for command exit OK
-  watch_and_retry "subctl \${DEPLOY_CMD} --subm-debug" 3
+  watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
 
   ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
 
@@ -1304,7 +1304,7 @@ function join_submariner_cluster_b() {
 
   # Workaround:
   # Run 3 attempts, and wait for command exit OK
-  watch_and_retry "subctl \${JOIN_CMD} --subm-debug" 3
+  watch_and_retry "subctl $JOIN_CMD --subm-debug" 3
 
   # Check that Submariners CRD has been created on OSP cluster B (Private):
   ${OC} get crds | grep submariners

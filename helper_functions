@@ -82,12 +82,10 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts
 function watch_and_retry() {
-  # trap_commands
-
-  # Command to watch. Variables should be escaped, e.g. \$var
+  # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
-  RETRY=${2:-10}
+  RETRY="${2:-10}"
   # Optional: Pattern to search, otherwise expect $CMD exit 0
   REGEX="$3"
   # Max timeout for the whole watch process (default is 10 minutes)
@@ -96,23 +94,27 @@ function watch_and_retry() {
   # If REGEX was specified - will wait for REGEX to be found in CMD output
   [[ -z "$REGEX" ]] || CMD="$CMD |& highlight '$REGEX'"
 
-  echo -e "# Watching output of command: $(eval echo \"$CMD\")
+  #echo -e "# Watching output of command: $(eval echo \"$CMD\") \
+  echo -e "# Watching output of command: $CMD \
   # Search pattern (or exit code):/$REGEX/"
 
   # Set timeout for the whole process, if RETRY is number of seconds/minutes (e.g. 20s or 3m)
-  [[ ! "$RETRY" =~ [0-9]+[sm] ]] || TIMEOUT=$RETRY && RETRY=-1
+  if [[ "$RETRY" =~ [0-9]+[sm] ]] ; then
+    TIMEOUT=$RETRY
+    RETRY=-1
+  fi
 
-  echo -e "# Retry attempts: $RETRY
+  echo -e "# Retry attempts: $RETRY \
   # Timeout limit: $TIMEOUT"
 
-  COUNT=0;
   timeout $TIMEOUT bash <<EOF \
-  || [[ $? -eq 124 ]] && echo "# Timeout of $RETRY has exceeded." exit 1
-    until eval "$CMD" || [[ $COUNT -eq $RETRY ]] ; do
-      echo -e "$(( COUNT++ ))... \c"
+  || ( [[ $? -eq 124 ]] && echo "# Timeout of $TIMEOUT has exceeded." && return 1 )
+    COUNT=0;
+    until $CMD || [[ \$COUNT -eq $RETRY ]] ; do
+      echo -e "\$(( COUNT++ ))... \c"
       sleep 1 # A second interval
     done
-    if [[ $COUNT -eq $RETRY ]]; then
+    if [[ \$COUNT -eq $RETRY ]]; then
       echo "# Limit of $RETRY attempts has exceeded."
       exit 1
     fi
