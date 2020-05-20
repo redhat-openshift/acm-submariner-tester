@@ -830,14 +830,15 @@ function destroy_aws_cluster_a() {
     # cd ..
 
     echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_A_NAME}"
-    # [[ ! -e "$CLUSTER_A_DIR" ]] || mv "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
-    backup_and_remove_dir "$CLUSTER_A_DIR" "_${CLUSTER_A_DIR}_${DATE_TIME}"
+    parent_dir=$(dirname -- "$CLUSTER_A_DIR")
+    base_dir=$(basename -- "$CLUSTER_A_DIR")
+    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}"
 
     # Remove existing OCP install-config directory:
     #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
     echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than a day):"
     # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
-    delete_old_files_or_dirs "_${CLUSTER_A_DIR}_*" "d"
+    delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d"
 
 
 

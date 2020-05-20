@@ -96,20 +96,24 @@ function watch_and_retry() {
   # If REGEX was specified - will wait for REGEX to be found in CMD output
   [[ -z "$REGEX" ]] || CMD="$CMD |& highlight '$REGEX'"
 
-  echo -e "# Watching output of command: $(eval echo \"$CMD\") \n\
-  # Search pattern (or exit code):/$REGEX/ \n\
-  # Retry attempts / timeout: $RETRY"
+  echo -e "# Watching output of command: $(eval echo \"$CMD\")
+  # Search pattern (or exit code):/$REGEX/"
 
   # Set timeout for the whole process, if RETRY is number of seconds/minutes (e.g. 20s or 3m)
   [[ ! "$RETRY" =~ [0-9]+[sm] ]] || TIMEOUT=$RETRY && RETRY=-1
+
+  echo -e "# Retry attempts: $RETRY
+  # Timeout limit: $TIMEOUT"
+
   COUNT=0;
-  timeout $TIMEOUT bash <<EOF
+  timeout $TIMEOUT bash <<EOF \
+  || [[ $? -eq 124 ]] && echo "# Timeout of $RETRY has exceeded." exit 1
     until eval "$CMD" || [[ $COUNT -eq $RETRY ]] ; do
       echo -e "$(( COUNT++ ))... \c"
       sleep 1 # A second interval
     done
     if [[ $COUNT -eq $RETRY ]]; then
-      echo "# Limit of $RETRY attempts/timeout has exceeded."
+      echo "# Limit of $RETRY attempts has exceeded."
       exit 1
     fi
     exit 0
@@ -306,6 +310,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
+  trap_commands
   # $1 => $wildcard_name
   wildcard_name="$1"
 
@@ -315,10 +320,14 @@ function delete_old_files_or_dirs() {
   # Optional: $3 => $access_days (5 default)
   access_days="${3:-5}"
 
-  # Optional: $4 => $search_path (current path by default)
-  search_path="${4:-./}"
+  # Set $search_path as parent directory of $wildcard_name, if it includes slashes (current path by default)
+  search_path=$(dirname -- "$wildcard_name")
 
-  find "$search_path" -maxdepth 1 -type $dir_or_file -name "$wildcard_name" -atime +${access_days} -exec rm -rf {} \;
+  # Set $search_name as base directory of $wildcard_name, if it includes slashes
+  search_name=$(basename -- "$wildcard_name")
+
+  # find "$search_path" -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} -print -exec rm -rf {} \;
+  find "$search_path" -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} | xargs -n1 --verbose rm -rf
 }
 
 # ------------------------------------------
