@@ -296,10 +296,13 @@ function download_file() {
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       if [[ $(wget --version) ]] ; then
-        wget -N ${source_file} --no-check-certificate -O ${target_file}
+        target_dir=$(dirname -- "$target_file")
+        wget -N "$source_file" --no-check-certificate --directory-prefix="$target_dir"
+        source_file=$(basename -- "$source_file")
+        mv "$target_dir/$source_file" "$target_file" || :
       else
         echo "# Wget is not installed, using Curl instead."
-        curl -L "${source_file}" -o "${target_file}" --create-dirs
+        curl -L "$source_file" -o "$target_file" --create-dirs
       fi
   else
     echo "# $target_file already downloaded, and equals to remote file $source_file"
@@ -310,7 +313,6 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
-  trap_commands
   # $1 => $wildcard_name
   wildcard_name="$1"
 

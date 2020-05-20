@@ -315,14 +315,6 @@ if [[ -z "$got_user_input" ]]; then
     build_submariner_e2e=${input:-YES}
   done
 
-  # # User input: $get_kubefed_tool - to download_kubefedctl_latest
-  # while [[ ! "$get_kubefed_tool" =~ ^(yes|no)$ ]]; do
-  #   echo -e "\n${YELLOW}Do you want to download KUBEFED tool ? ${NO_COLOR}
-  #   Enter \"yes\", or nothing to skip: "
-  #   read -r input
-  #   get_kubefed_tool=${input:-no}
-  # done
-
   # User input: $skip_deploy - to skip submariner deployment
   while [[ ! "$skip_deploy" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run without deploying Submariner ? ${NO_COLOR}
@@ -528,7 +520,7 @@ function build_submariner_e2e_latest() {
   "Precede with SCRIPTS_DIR location" \
   "https://github.com/submariner-io/submariner/issues/576"
   # workaround:
-  download_file "https://github.com/submariner-io/shipyard/blob/master/scripts/shared/compile.sh" "./scripts/compile.sh"
+  download_file "https://github.com/submariner-io/shipyard/raw/master/scripts/shared/compile.sh" "./scripts/compile.sh"
   chmod +x ./scripts/compile.sh
   export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
   SCRIPTS_DIR=./scripts ./scripts/build
@@ -582,7 +574,7 @@ function build_operator_latest() {
   "Precede with DAPPER_SOURCE = submariner-operator path" \
   "https://github.com/submariner-io/submariner-operator/issues/390"
   # workaround:
-  download_file "https://github.com/submariner-io/shipyard/blob/master/scripts/shared/compile.sh" "./scripts/compile.sh"
+  download_file "https://github.com/submariner-io/shipyard/raw/master/scripts/shared/compile.sh" "./scripts/compile.sh"
   chmod +x ./scripts/compile.sh
   export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
   SCRIPTS_DIR=./scripts ./scripts/build-subctl
@@ -1036,7 +1028,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
-  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
+  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
   ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 }
 
