@@ -513,20 +513,16 @@ function build_submariner_e2e_latest() {
     # Building submariner-route-agent version dev
     # ...
 
-  GO111MODULE="on" go mod vendor
-
-  # ./scripts/build
-  BUG "./scripts/build fails for missing library file" \
-  "Precede with SCRIPTS_DIR location" \
-  "https://github.com/submariner-io/submariner/issues/576"
-  # workaround:
-  export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
-  wget -O - https://github.com/submariner-io/shipyard/archive/master.tar.gz | tar xz --strip=2 "shipyard-master/scripts/shared"
-  SCRIPTS_DIR=./shared ./scripts/build
-
+  # ./scripts/build was removed in https://github.com/submariner-io/submariner/commit/0616258f163adfc368c0abfc3c405b5effb18390
+    # ./scripts/build
     # ...
     # Building subctl version dev for linux/amd64
     # ...
+
+  # Just build repo with go build
+  GO111MODULE="on" go mod vendor
+  # go install -mod vendor # Compile binary and moves it to $GOBIN
+  go build -mod vendor # Saves binary in current directory
 
   ls -l bin/submariner-engine
 }
@@ -574,9 +570,19 @@ function build_operator_latest() {
   "https://github.com/submariner-io/submariner-operator/issues/390"
   # workaround:
   export DAPPER_SOURCE="$(git rev-parse --show-toplevel)"
-  wget -O - https://github.com/submariner-io/shipyard/archive/master.tar.gz | tar xz --strip=2 "shipyard-master/scripts/shared"
-  SCRIPTS_DIR=./shared ./scripts/build-subctl
 
+  BUG "./scripts/build fails for missing library file" \
+  "Use SCRIPTS_DIR from Shipyard" \
+  "https://github.com/submariner-io/submariner/issues/576"
+  # workaround:
+  wget -O - https://github.com/submariner-io/shipyard/archive/master.tar.gz | tar xz --strip=2 "shipyard-master/scripts/shared"
+  export SCRIPTS_DIR=${PWD}/shared
+
+  BUG "Building subctl: compile.sh fails on bad substitution of flags" \
+  "NO Workaround yet" \
+  "https://github.com/submariner-io/submariner-operator/issues/403"
+
+  ./scripts/build-subctl
     # ...
     # Building subctl version dev for linux/amd64
     # ...
@@ -689,7 +695,7 @@ function create_aws_cluster_a() {
     # $ cd ..
     # $ ./openshift-install create install-config --dir user-cluster-a
 
-  cd ${CLUSTER_A_NAME}
+  cd ${CLUSTER_A_DIR}
   ../openshift-install create cluster --log-level debug
 
   # To tail all OpenShift Installer logs (in a new session):
@@ -1010,8 +1016,8 @@ function install_nginx_svc_on_cluster_b() {
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \n\
-  Verifying connectivity on the same cluster, from Netshoot to Nginx service"
+  prompt "Before Submariner is installed: \
+  \nVerifying connectivity on the same cluster, from Netshoot to Nginx service"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1034,8 +1040,8 @@ function test_basic_cluster_connectivity_before_submariner() {
 
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \n\
-  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
+  prompt "Before Submariner is installed: \
+  \nVerifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1048,10 +1054,10 @@ function test_clusters_disconnected_before_submariner() {
     # nginx_cluster_b_ip: 100.96.43.129
 
   kubconf_a;
-  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  ${OC} exec $netshoot_pod_cluster_a -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
+  ${OC} exec $netshoot_pod_cluster_a ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
   |& highlight "command terminated with exit code" && echo "# Negative Test OK - clusters should not be connected without Submariner"
     # command terminated with exit code 28
 }
@@ -1176,7 +1182,7 @@ function install_broker_and_member_aws_cluster_a() {
   cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  rm ${BROKER_INFO} || echo "# Previous ${BROKER_INFO} already removed"
+  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
   DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME} --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
@@ -1419,8 +1425,8 @@ function test_clusters_connected_by_service_ip() {
   trap_commands;
 
   kubconf_a;
-  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
+  # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+  ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   echo "# NETSHOOT_CLUSTER_A: $NETSHOOT_CLUSTER_A"
     # netshoot-785ffd8c8-zv7td
@@ -1434,7 +1440,7 @@ function test_clusters_connected_by_service_ip() {
     # nginx_IP_cluster_b: 100.96.43.129
 
   kubconf_a;
-  CURL_CMD="${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
+  CURL_CMD="${SUBM_TEST_NS:+-n $SUBM_TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     ${OC} exec ${CURL_CMD} || \
@@ -1462,8 +1468,8 @@ function test_clusters_connected_by_service_ip() {
   else
     prompt "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "Connection timed out" \
-    && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \n\
-    Nginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
+    && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \
+    \nNginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
   fi
 }
 
@@ -1497,14 +1503,19 @@ function test_clusters_connected_overlapping_cidrs() {
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
+  ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+
   cmd="${OC} get pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
   regex='[0-9\.]+'
   watch_and_retry "$cmd" 3m "$regex"
   netshoot_global_ip="$($cmd | tr -d \')"
 
-  prompt "Testing GlobalNet connectivity - From Netshoot pod [${netshoot_pod_cluster_a} ${netshoot_global_ip}] on cluster A \n\
-  To Nginx service on cluster B, by its Global IP: $nginx_global_ip"
+  [[ -n "$netshoot_global_ip" ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
 
+  prompt "Testing GlobalNet connectivity - From Netshoot pod [${netshoot_pod_cluster_a} ${netshoot_global_ip}] on cluster A \
+  \nTo Nginx service on cluster B, by its Global IP: $nginx_global_ip"
+
+  kubconf_a;
   ${OC} exec ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:8080
 
@@ -1521,8 +1532,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)} \n\
-  and NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
+  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)} \
+  \nand NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
   if [[ -n $new_subm_test_ns ]] ; then
@@ -1565,8 +1576,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
-  prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)} \n\
-  To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
+  prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)} \
+  \nTo NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
   echo "# Try to ping ${new_nginx_cluster_b}
@@ -1863,17 +1874,24 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
 ) |& tee $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
-# Create HTML Report from log file (with title extracted from log file name)
-#report_name=$(basename $LOG_FILE .log)
-#report_name=( ${report_name//_/ } ) # without quotes
-#report_name="${report_name[*]^}"
 
+# Create HTML Report from log file (with title extracted from log file name)
+message="Creating HTML Report"
+if (( $TEST_EXIT_STATUS != 0 )) ; then
+  message="$message - Test exit status: $TEST_EXIT_STATUS"
+  color="$RED"
+fi
+prompt "$message" "$color"
+
+#REPORT_NAME=$(basename $LOG_FILE .log)
+#REPORT_NAME=( ${REPORT_NAME//_/ } ) # without quotes
+#REPORT_NAME="${REPORT_NAME[*]^}"
 echo "# REPORT_NAME = $REPORT_NAME" # May have been set externally
 echo "# REPORT_FILE = $REPORT_FILE" # May have been set externally
 
-log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" $TEST_EXIT_STATUS
+log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE"
 
-# If REPORT_FILE was not previously set, consider the latest html file created
+# If REPORT_FILE was not passed externally, set it as the latest html file that was created
 REPORT_FILE="${REPORT_FILE:-$(ls -1 -t *.html | head -1)}"
 
 # Compressing report to tar.gz

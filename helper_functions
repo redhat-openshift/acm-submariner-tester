@@ -75,6 +75,7 @@ function highlight()
     exit_code=0
     sed -e '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
   fi
+  echo
   return $exit_code
 }
 
@@ -96,7 +97,7 @@ function watch_and_retry() {
 
   #echo -e "# Watching output of command: $(eval echo \"$CMD\") \
   echo -e "# Watching output of command: $CMD \
-  # Search pattern (or exit code):/$REGEX/"
+  \n# Search pattern (or exit code): /$REGEX/"
 
   # Set timeout for the whole process, if RETRY is number of seconds/minutes (e.g. 20s or 3m)
   if [[ "$RETRY" =~ [0-9]+[sm] ]] ; then
@@ -105,7 +106,7 @@ function watch_and_retry() {
   fi
 
   echo -e "# Retry attempts: $RETRY \
-  # Timeout limit: $TIMEOUT"
+  \n# Timeout limit: $TIMEOUT"
 
   timeout $TIMEOUT bash <<EOF \
   || ( [[ $? -eq 124 ]] && echo "# Timeout of $TIMEOUT has exceeded." && return 1 )
@@ -272,6 +273,7 @@ function install_local_docker() {
 
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
+  trap_commands
   # $1 => $source_file (download link)
   source_file="$1"
 
@@ -315,6 +317,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
+  trap_commands
   # $1 => $wildcard_name
   wildcard_name="$1"
 
@@ -331,7 +334,7 @@ function delete_old_files_or_dirs() {
   search_name=$(basename -- "$wildcard_name")
 
   # find "$search_path" -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} -print -exec rm -rf {} \;
-  find "$search_path" -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} | xargs -n1 --verbose rm -rf
+  find "$search_path"/* -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} | xargs -n1 --verbose rm -rf
 }
 
 # ------------------------------------------
@@ -552,14 +555,6 @@ function log_to_html() {
   log_file="$1"
   title="${2:-"${log_file%%.*}"}"
   html_output="${3:-${title// /_}.html}"
-  test_exit_status=${4:-0}
-
-  message="Creating HTML Report"
-  if (( $test_exit_status != 0 )) ; then
-    message="$message - Test exit status: $test_exit_status"
-    color="$RED"
-  fi
-  prompt "$message" "$color"
 
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
