@@ -63,7 +63,7 @@ Running with pre-defined parameters (optional):
 * Destroy existing OSP cluster B:                    --destroy-cluster-b
 * Clean existing AWS cluster A:                      --clean-cluster-a
 * Clean existing OSP cluster B:                      --clean-cluster-b
-* Install Service Discovery (lighthouse):            --service-discovery
+* Install Service-Discovery (lighthouse):            --service-discovery
 * Install Global Net:                                --globalnet
 * Skip Submariner deployment:                        --skip-deploy
 * Skip all tests execution:                          --skip-tests
@@ -80,7 +80,7 @@ $ ./setup_subm.sh
 
 $ ./setup_subm.sh --get-ocp-installer --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 
-  Will create new AWS cluster (A), Clean existing OSP cluster (B), build, install and test latest Submariner, with service discovery.
+  Will create new AWS cluster (A), Clean existing OSP cluster (B), build, install and test latest Submariner, with Service-Discovery.
 
 
 ----------------------------------------------------------------------'
@@ -277,7 +277,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $service_discovery - to deploy with --service-discovery
   while [[ ! "$service_discovery" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install Service Discovery (lighthouse) ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to install Service-Discovery (lighthouse) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     service_discovery=${input:-no}
@@ -1260,7 +1260,7 @@ function join_submariner_cluster_b() {
   trap_commands;
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  BUG "After deploying broker with Service discovery, Subctl join can fail on \"context does not exist\"" \
+  BUG "After deploying broker with Service-Discovery, Subctl join can fail on \"context does not exist\"" \
   "Subctl join must be specified with broker-cluster-context" \
   "https://github.com/submariner-io/submariner-operator/issues/194"
 
@@ -1576,14 +1576,21 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     watch_and_retry "$cmd" 3m "$regex"
   fi
 
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+  # Test Service-Discovery to FQDN
+  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.cluster.local"
+
   prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)} \
   \nTo NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  echo "# Try to ping ${new_nginx_cluster_b}
-  Until geting PING for excpected Domain ${new_subm_test_ns}.svc.cluster.local and IP"
-  #TODO: Validate both GLobalIP and svc.cluster.local"
+  BUG "Service-Discovery adds old namespace as suffix to the service FQDN" \
+  "Ping/Curl service FQDN with the old namespace as suffix" \
+  "https://github.com/submariner-io/submariner/issues/602"
+  #workaround:
+  # nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}${SUBM_TEST_NS:+.$SUBM_TEST_NS}.svc.cluster.local"
+
+  echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
+  #TODO: Validate both GlobalIP and svc.cluster.local"
 
   cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
   regex="PING ${nginx_cl_b_dns}."
@@ -1744,13 +1751,13 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - label_first_gateway_cluster_b
     - install_broker_and_member_aws_cluster_a
     - join_submariner_cluster_b
-    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test service discovery")
+    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
   fi
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
-  # $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- add service discovery")
+  # $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- add Service-Discovery")
   # [[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- add globalnet"
 
   echo "# System and functional tests for Submariner:"
