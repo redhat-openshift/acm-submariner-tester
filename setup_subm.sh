@@ -630,6 +630,7 @@ function download_subctl_latest_release() {
     # /usr/bin/install ./subctl $GOBIN/subctl
     # workaround:
     cp ./subctl ~/.local/bin/
+    export PATH=$HOME/.local/bin:$PATH
 
     #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
     #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed

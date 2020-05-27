@@ -162,9 +162,9 @@ function BUG() {
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
   trap_commands
-  install_dir="${1:-.}/miniconda"
+  install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
   miniconda_bin_dir="${install_dir}/bin"
-  [[ ":$PATH:" != *":${miniconda_bin_dir}:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
+  [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
   if ! conda info ; then
     echo "# Installing Anaconda"
     # rm -rf ${install_dir}
