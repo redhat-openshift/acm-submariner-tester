@@ -1421,8 +1421,8 @@ function test_submariner_status_cluster_b() {
 function test_clusters_connected_by_service_ip() {
 ### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  prompt "Testing connectivity with Submariner, between: \n
-  Netshoot pod on AWS cluster A (public) <--> Nginx service IP on OSP cluster B (private)"
+  prompt "After Submariner is installed: \
+  \nIdentify Netshoot pod on cluster A, and Nginx service on cluster B"
   trap_commands;
 
   kubconf_a;
@@ -1444,6 +1444,7 @@ function test_clusters_connected_by_service_ip() {
   CURL_CMD="${SUBM_TEST_NS:+-n $SUBM_TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
+    prompt "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (private)"
     ${OC} exec ${CURL_CMD} || \
     BUG "TODO: This will if fail the clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
       # *   Trying 100.96.72.226:8080...
@@ -1467,7 +1468,7 @@ function test_clusters_connected_by_service_ip() {
       # <
       # * Connection #0 to host 100.96.72.226 left intact
   else
-    prompt "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
+    prompt "Testing connection with GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
     ${OC} exec ${CURL_CMD} |& highlight "Connection timed out" \
     && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \
     \nNginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
