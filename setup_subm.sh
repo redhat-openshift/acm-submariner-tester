@@ -607,7 +607,7 @@ function download_subctl_latest_release() {
     cd ${WORKDIR}
 
     release_url="https://github.com/submariner-io/submariner-operator/releases/"
-    file_path="$(curl $release_url | grep -Eoh 'download\/v.*\/subctl-.*-linux-amd64' -m 1)"
+    file_path="$(curl "$release_url/tag/latest/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64' -m 1)"
     file_name=$(basename -- "$file_path")
 
     download_file ${release_url}${file_path}

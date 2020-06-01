@@ -299,7 +299,7 @@ function download_file() {
   [[ -n "$remote_file_size" ]] || remote_file_size=-1
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
-      if [[ $(wget --version) ]] ; then
+      if [[ $(which wget) ]] ; then
         target_dir=$(dirname -- "$target_file")
         wget -N "$source_file" --no-check-certificate --directory-prefix="$target_dir"
         source_file=$(basename -- "$source_file")
