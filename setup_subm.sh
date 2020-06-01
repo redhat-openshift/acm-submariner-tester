@@ -107,8 +107,9 @@ shopt -s expand_aliases
 # Date-time signature for log and report files
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
 
-# Return this exit code if script has failed before environment setup.
-export TEST_EXIT_STATUS=1
+# Set script exit code in advance (saved in file)
+export TEST_STATUS_RC="$(dirname $(realpath -s $0))/test_status.out"
+echo 1 > $TEST_STATUS_RC
 
 ####################################################################################
 
@@ -1677,10 +1678,6 @@ function test_submariner_e2e_with_subctl() {
   prompt "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
 
-  BUG "E2E fails timeouts" \
-  "No workaround yet..." \
-  "https://github.com/submariner-io/shipyard/issues/158"
-
   which subctl
   subctl version
 
@@ -1816,9 +1813,6 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
     || clean_osp_cluster_b
 
-    # From this point if script fails, it is counted as UNSTABLE (exit code 2)
-    export TEST_EXIT_STATUS=2
-
     install_netshoot_app_on_cluster_a
 
     install_nginx_svc_on_cluster_b
@@ -1860,6 +1854,11 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     test_kubeconfig_osp_cluster_b
 
+    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+    \n# ($TEST_STATUS_RC with exit code 2)"
+
+    echo 2 > $TEST_STATUS_RC
+
     test_submariner_status_cluster_a
 
     test_submariner_status_cluster_b
@@ -1879,15 +1878,23 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     test_submariner_e2e_with_subctl
   fi
 
-  TEST_EXIT_STATUS=0
+  # If got to here - all tests of Submariner has passed ;-)
+  echo 0 > $TEST_STATUS_RC
 
 ) |& tee $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
 
+####################################################################################
+
+### END (Creating test report) ###
+
+# Get test exit status (from file $TEST_STATUS_RC)
+test_status="$([[ ! -f "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
+
 # Create HTML Report from log file (with title extracted from log file name)
 message="Creating HTML Report"
-if (( $TEST_EXIT_STATUS != 0 )) ; then
-  message="$message - Test exit status: $TEST_EXIT_STATUS"
+if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
+  message="$message - Test exit status: $test_status"
   color="$RED"
 fi
 prompt "$message" "$color"
@@ -1914,7 +1921,7 @@ tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$WORKDIR/$B
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
-exit $TEST_EXIT_STATUS
+exit $test_status
 
 # You can find latest script here:
 # https://code.engineering.redhat.com/gerrit/gitweb?p=...git;a=blob;f=setup_subm.sh
