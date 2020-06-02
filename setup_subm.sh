@@ -608,7 +608,7 @@ function download_subctl_latest_release() {
     cd ${WORKDIR}
 
     release_url="https://github.com/submariner-io/submariner-operator/releases/"
-    file_path="$(curl "$release_url/tag/latest/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64' -m 1)"
+    file_path="$(curl "$release_url/tag/devel/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
     file_name=$(basename -- "$file_path")
 
     download_file ${release_url}${file_path}
@@ -1665,6 +1665,7 @@ function test_submariner_e2e_latest() {
   export GO111MODULE="on"
   go env
   go test -v ./test/e2e -args -dp-context ${CLUSTER_A_NAME} -dp-context ${CLUSTER_B_NAME} \
+  -submariner-namespace submariner-operator \
   -connection-timeout 30 -connection-attempts 3 \
   -ginkgo.v -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
