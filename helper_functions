@@ -27,7 +27,8 @@ function print_cmd_location() {
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' &> /dev/null) || :
+  # prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' &> /dev/null) || :
+  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g') || :
   prompt="${prompt:+"$prompt "}${1}"
   echo -e "${CYAN}${prompt}${NO_COLOR}"
 }

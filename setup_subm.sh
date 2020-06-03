@@ -188,9 +188,9 @@ while [[ $# -gt 0 ]]; do
   # -o|--optional-key-value)
   --import-vars)
     check_cli_args $2
-    variables_file="$2"
-    echo "# Importing additional variables from file: $variables_file"
-    source "$variables_file"
+    export GLOBAL_VARS="$2"
+    echo "# Importing additional variables from file: $GLOBAL_VARS"
+    source "$GLOBAL_VARS"
     shift 2 ;;
   -*)
     echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
@@ -390,8 +390,14 @@ function setup_workspace() {
   [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang "${WORKDIR}"
 
   # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
-  mkdir -p ${WORKDIR}/GOBIN
-  verify_golang "${WORKDIR}/GOBIN"
+  export GOBIN="${WORKDIR}/GOBIN"
+  mkdir -p "$GOBIN"
+  verify_golang "$GOBIN"
+
+  if [[ -e ${GOBIN} ]] ; then
+    echo "# Re-exporting global variables"
+    export OC="${GOBIN}/oc"
+  fi
 
   # Installing if $config_aws_cli = yes/y
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
