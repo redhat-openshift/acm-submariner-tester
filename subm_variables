@@ -1,5 +1,5 @@
 #!/bin/bash
-### Submariner setup constants ###
+### Global variables for Submariner setup and tests ###
 
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
@@ -10,12 +10,10 @@ export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
 export MERGED_KUBCONF="${WORKDIR}/merged_kubeconfig"
 
-# TODO: Change the Cluster Broker to be different than the Cluster A
-export BROKER_CLUSTER_NAME="user-cluster-a"
+# TODO: Change the cluster of Broker to be different than cluster A
+export BROKER_CLUSTER_NAME="cluster-a"
 export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
 export BROKER_INFO="broker-info.subm"
-
-# TODO: export BROKER_SETUP="${WORKDIR}/user-cluster-a.yaml"
 
 export CLUSTER_A_NAME="cluster-a"
 export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
@@ -40,8 +38,8 @@ export AWS_ZONE_ID="aws-zone-id"
 export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
-export BROKER_NATPORT=4501
-export BROKER_IKEPORT=501
+export BROKER_NATPORT=4500
+export BROKER_IKEPORT=500
 
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 
