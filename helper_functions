@@ -301,7 +301,7 @@ function download_file() {
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       if [[ $(which wget) ]] ; then
         target_dir=$(dirname -- "$target_file")
-        wget -N "$source_file" --no-check-certificate --directory-prefix="$target_dir"
+        wget "$source_file" --no-check-certificate --directory-prefix="$target_dir"
         source_file=$(basename -- "$source_file")
         mv "$target_dir/$source_file" "$target_file" || :
       else

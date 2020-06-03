@@ -1,11 +1,14 @@
 #!/bin/bash
 ### Submariner setup constants ###
 
+export GOROOT="/usr/local/go"
+export PATH="${GOROOT}/bin:${PATH}"
+export GOBIN="${GOROOT}/bin"
+
 export WORKDIR=~/submariner-install
-export OC="${WORKDIR}/oc"
+export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
-export KUBFED="${WORKDIR}/kubefedctl"
-export KUBFED_CONFIG="${WORKDIR}/merged_kubeconfig"
+export MERGED_KUBCONF="${WORKDIR}/merged_kubeconfig"
 
 # TODO: Change the Cluster Broker to be different than the Cluster A
 export BROKER_CLUSTER_NAME="user-cluster-a"
@@ -41,8 +44,5 @@ export BROKER_NATPORT=4501
 export BROKER_IKEPORT=501
 
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
-
-export GOROOT="/usr/local/go" # "/usr/local/go1.12.5.linux-amd64"
-export PATH="${GOROOT}/bin:${PATH}"
 
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"

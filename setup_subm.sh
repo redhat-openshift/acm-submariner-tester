@@ -609,22 +609,26 @@ function download_subctl_latest_release() {
 
     release_url="https://github.com/submariner-io/submariner-operator/releases/"
     file_path="$(curl "$release_url/tag/devel/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
-    file_name=$(basename -- "$file_path")
 
     download_file ${release_url}${file_path}
 
-    # tar -xvf ${file_name} -C ${WORKDIR}
+    file_name=$(basename -- "$file_path")
+    tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-    BUG "${file_name} is not a TGZ archive, but a binary" \
-    "Do not extract the downloaded file [${file_name}], but rename instead to \"subctl\"" \
-    "https://github.com/submariner-io/submariner-operator/issues/257"
-    [[ ! -e "$file_name" ]] || mv "$file_name" subctl
+    # Rename last extracted file to subctl
+    extracted_file="$(ls -1 -tu subctl* | head -1)"
+
+    # BUG "${file_name} is not a TGZ archive, but a binary" \
+    # "Do not extract the downloaded file [${file_name}], but rename instead to \"subctl\"" \
+    # "https://github.com/submariner-io/submariner-operator/issues/257"
+
+    [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
     chmod +x subctl
 
     echo "# Copy subctl to system path:"
     mkdir -p $GOBIN
 
-    BUG "Sunctl command will CRASH if it was downloaded to an NFS mount location" \
+    BUG "Subctl command will CRASH if it was downloaded to an NFS mount location" \
     "Download and run [${file_name}] in a local file system path (e.g. /tmp)" \
     "https://github.com/submariner-io/submariner-operator/issues/335"
     # cp ./subctl $GOBIN/
@@ -786,13 +790,23 @@ function test_cluster_status() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
-  # Set the default namespace to "${SUBM_TEST_NS}"
-  [[ -n $SUBM_TEST_NS ]] || SUBM_TEST_NS=default
-  BUG "If running inside different cluster, OC can use wrong project name by default" \
-  "Set the default namespace to \"${SUBM_TEST_NS}\"" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-  cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
-  ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  # Set the default namespace to "${SUBM_TEST_NS}" (if SUBM_TEST_NS parameter was previously set)
+  if [[ $SUBM_TEST_NS ]] ; then
+    echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak"
+    cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+
+    BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
+    "Set the default namespace to \"${SUBM_TEST_NS}\"" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+
+    echo "# Create namespace for Submariner tests: ${SUBM_TEST_NS}"
+    ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+
+    echo "# Change the default namespace in [${KUBECONFIG}] to: ${SUBM_TEST_NS}"
+    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+  else
+    export SUBM_TEST_NS=default
+  fi
 
   ${OC} version
   ${OC} config view
@@ -801,6 +815,8 @@ function test_cluster_status() {
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
+
+
 }
 
 # ------------------------------------------
@@ -837,9 +853,6 @@ function destroy_aws_cluster_a() {
     echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than a day):"
     # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d"
-
-
-
   else
     echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
@@ -1198,7 +1211,7 @@ function install_broker_and_member_aws_cluster_a() {
     "https://github.com/submariner-io/submariner-operator/issues/193"
     sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
 
-    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --disable-cvo --kubecontext ${CLUSTER_A_NAME}"
+    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --kubecontext ${CLUSTER_A_NAME}"
     # subctl deploy-broker --kubecontext <BROKER-CONTEXT-NAME>  --kubeconfig <MERGED-KUBECONFIG> \
     # --dataplane --service-discovery --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
   fi
@@ -1271,22 +1284,22 @@ function join_submariner_cluster_b() {
   sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}:${KUBECONF_BROKER}"
-  ${OC} config view --flatten > ${KUBFED_CONFIG}
+  ${OC} config view --flatten > ${MERGED_KUBCONF}
 
   BUG "Multiple Kubconfig cannot have same users (e.g. \"admin\"), otherwise join will fail to get kubefed clientset (Unauthorized)" \
   "Rename username in KUBECONFIG, before joining a new cluster" \
   "https://github.com/submariner-io/submariner-operator/issues/225"
 
   kubconf_b;
-  ${OC} config view --flatten > ${KUBFED_CONFIG}_b
-  sed -i 's/admin/kubefed_b/' ${KUBFED_CONFIG}_b
-  export KUBECONFIG="${KUBECONF_BROKER}:${KUBFED_CONFIG}_b"
-  ${OC} config view --flatten > ${KUBFED_CONFIG}
+  ${OC} config view --flatten > ${MERGED_KUBCONF}_b
+  sed -i 's/admin/kubefed_b/' ${MERGED_KUBCONF}_b
+  export KUBECONFIG="${KUBECONF_BROKER}:${MERGED_KUBCONF}_b"
+  ${OC} config view --flatten > ${MERGED_KUBCONF}
 
   ${OC} config view
 
-  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${KUBFED_CONFIG} --clusterid ${CLUSTER_B_NAME} \
-  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --disable-cvo"
+  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
+  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --cable-driver libreswan"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -1664,9 +1677,11 @@ function test_submariner_e2e_latest() {
 
   export GO111MODULE="on"
   go env
-  go test -v ./test/e2e -args -dp-context ${CLUSTER_A_NAME} -dp-context ${CLUSTER_B_NAME} \
-  -submariner-namespace submariner-operator \
-  -connection-timeout 30 -connection-attempts 3 \
+  go test -v ./test/e2e -args \
+  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
+  --submariner-namespace submariner-operator \
+  --connection-timeout 30 -connection-attempts 3 \
+  --enable-disruptive \
   -ginkgo.v -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
   || echo "# Warning: Test execution failure occurred"
@@ -1690,7 +1705,7 @@ function test_submariner_e2e_with_subctl() {
 
   subctl info
 
-  subctl verify-connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  subctl verify-connectivity --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
 
 }
 
@@ -1909,7 +1924,7 @@ echo "# REPORT_FILE = $REPORT_FILE" # May have been set externally
 log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE"
 
 # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-REPORT_FILE="${REPORT_FILE:-$(ls -1 -t *.html | head -1)}"
+REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
 
 # Compressing report to tar.gz
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
