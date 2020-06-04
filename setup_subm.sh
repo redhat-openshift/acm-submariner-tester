@@ -834,8 +834,8 @@ function destroy_aws_cluster_a() {
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 20m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
-      BUG "WARNING: OCP Destroy did not complete, but timeout exceeded." \
-      "Skipping Destroy proccess" \
+      BUG "WARNING: OCP Destroy timeout exceeded - Process did not complete after 20 minutes." \
+      "Skipping Destroy completion" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=1817201" )
     fi
     # cd ..
@@ -843,7 +843,7 @@ function destroy_aws_cluster_a() {
     echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_A_NAME}"
     parent_dir=$(dirname -- "$CLUSTER_A_DIR")
     base_dir=$(basename -- "$CLUSTER_A_DIR")
-    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}"
+    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}" 2
 
     # Remove existing OCP install-config directory:
     #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
