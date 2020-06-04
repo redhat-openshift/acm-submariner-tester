@@ -137,9 +137,6 @@ while [[ $# -gt 0 ]]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
-  # --get-kubefed-tool)
-  #   get_kubefed_tool=YES
-  #   shift ;;
   --get-subctl)
     get_subctl=YES
     shift ;;
@@ -357,7 +354,6 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO}
 build_submariner_e2e=${build_submariner_e2e:-NO}
-## get_kubefed_tool=${get_kubefed_tool:-NO}
 get_subctl=${get_subctl:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -642,11 +638,6 @@ function download_subctl_latest_release() {
     # workaround:
     cp ./subctl ~/.local/bin/
     export PATH=$HOME/.local/bin:$PATH
-
-    #go get -v github.com/kubernetes-sigs/kubefed/... || echo "# Installed kubefed"
-    #cd $GOPATH/src/github.com/kubernetes-sigs/kubefed
-    #go get -v -u -t ./...
-
 }
 
 # ------------------------------------------
@@ -934,10 +925,6 @@ function clean_aws_cluster_a() {
   BUG "Submariner gateway label cannot be removed once created" \
   "No Resolution yet" \
   "https://github.com/submariner-io/submariner/issues/432"
-
-  #TODO: Call kubeconfig of broker cluster
-  # prompt "Cleaning previous Kubefed (Namespace objects, OLM and CRDs) from the Broker on AWS cluster A (public)"
-  # delete_kubefed_namespace_and_crds
 }
 
 # ------------------------------------------
@@ -1078,8 +1065,12 @@ function test_clusters_disconnected_before_submariner() {
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
   ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  ${OC} exec $netshoot_pod_cluster_a ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
-  |& highlight "command terminated with exit code" && echo "# Negative Test OK - clusters should not be connected without Submariner"
+
+  msg="# Negative Test - Clusters should NOT be able to connect without Submariner"
+
+  ${OC} exec $netshoot_pod_cluster_a ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- \
+  curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
+  |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 }
 
@@ -1241,7 +1232,7 @@ function install_broker_and_member_aws_cluster_a() {
   # Run 3 attempts, and wait for command exit OK
   watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
 
-  ${OC} -n submariner-operator get pods |& highlight "CrashLoopBackOff" && submariner_status=DOWN
+  ${OC} -n submariner-operator get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
 
   # Now looking at cluster A shows that the Submariner broker namespace has been created:
   ${OC} get crds | grep -E 'submariner|lighthouse'
@@ -1298,14 +1289,14 @@ function join_submariner_cluster_b() {
 
   kubconf_b;
   ${OC} config view --flatten > ${MERGED_KUBCONF}_b
-  sed -i 's/admin/kubefed_b/' ${MERGED_KUBCONF}_b
+  sed -i 's/admin/cl_b_user/' ${MERGED_KUBCONF}_b
   export KUBECONFIG="${KUBECONF_BROKER}:${MERGED_KUBCONF}_b"
   ${OC} config view --flatten > ${MERGED_KUBCONF}
 
   ${OC} config view
 
   JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
-  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} --cable-driver libreswan"
+  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}" # --cable-driver libreswan"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -1351,28 +1342,18 @@ function test_submariner_engine_status() {
   cluster_name="$1"
   ns_name="submariner-operator"
 
-  ${OC} get all -n ${ns_name} |& highlight "No resources found" \
-  && FATAL "Error: Submariner is not installed on $cluster_name"
+  ${OC} get all -n ${ns_name} |& (! highlight "No resources found") \
+  || FATAL "Error: Submariner is not installed on $cluster_name"
 
   # submariner_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   ${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
-  BUG "strongswan status exit code 3, even when \"security associations\" is up" \
-  "Ignore non-zero exit code, by redirecting stderr" \
-  "https://github.com/submariner-io/submariner/issues/360"
-  # ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
-  cmd="${OC} exec ${submariner_pod} -n ${ns_name} -- bash -c 'sleep 10s; strongswan stroke statusall'"
-  regex='Security Associations \(1 up'
-  # Run 5 attempts (+ 10 interval), and watch for output to include regex
-  watch_and_retry "$cmd" 5 "$regex" || :
-
-  ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall > "$TEMP_FILE" || :
-  highlight "$regex" "$TEMP_FILE" || strongswan_status=DOWN
-    # Security Associations (1 up, 0 connecting):
-    # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
-    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
-    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
+  echo "Check IPSEC tunnel status on Submariner Gateways:"
+  cmd="${OC} describe Gateway -n ${ns_name}"
+  regex="Ha Status:\s*active"
+  # Run 5m attempts (+ 10 seconds interval), and watch for output to include regex
+  watch_and_retry "$cmd" 5m "$regex" || submariner_status=DOWN
 
   # Get some info on installed CRDs
   prompt "Testing Submariner Operator status on ${cluster_name}"
@@ -1380,10 +1361,19 @@ function test_submariner_engine_status() {
   ${OC} describe cm -n openshift-dns
   ${OC} get pods -n ${ns_name} --show-labels
   ${OC} get clusters -n ${ns_name} -o wide
-  ${OC} describe cluster "${cluster_name}" -n ${ns_name} || strongswan_status=DOWN
+  ${OC} describe cluster "${cluster_name}" -n ${ns_name} || submariner_status=DOWN
 
-  echo "Check IPSEC tunnel status on Submariner Gateways:"
-  ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || strongswan_status=DOWN
+  BUG "strongswan status exit code 3, even when \"security associations\" is up" \
+  "Ignore non-zero exit code, by redirecting stderr" \
+  "https://github.com/submariner-io/submariner/issues/360"
+
+  ${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall \
+  |& highlight 'Security Associations \(1 up' || submariner_status=DOWN
+
+    # Security Associations (1 up, 0 connecting):
+    # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
+    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
+    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
 
   BUG "StrongSwan connecting to 'default' URI fails" \
   "Verify StrongSwan with different URI path and ignore failure" \
@@ -1392,7 +1382,7 @@ function test_submariner_engine_status() {
   # workaround:
   ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || :
 
-  if [[ "$strongswan_status" = DOWN ]]; then
+  if [[ "$submariner_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
   # || : to ignore none-zero exit code
     ${OC} logs $submariner_pod -n ${ns_name} |& highlight "received packet" || :
@@ -1404,15 +1394,18 @@ function test_submariner_engine_status() {
   fi
 }
 
-function test_lighthouse_controller_status() {
-  # Check Lighthouse controller status
-  prompt "Testing Lighthouse controller status on AWS cluster A (public)"
+function test_lighthouse_status() {
+  # Check Lighthouse (the pod for service-discovery) status
   trap_commands;
+
   ${OC} describe multiclusterservices --all-namespaces
-  # lighthouse_pod=$(${OC} get pod -n kubefed-operator -l app=lighthouse-controller -o jsonpath="{.items[0].metadata.name}")
-  # ${OC} logs -f $lighthouse_pod -n kubefed-operator --limit-bytes=100000 \
-  # |& highlight "cluster is not reachable" && lighthouse_status=DOWN || :
-  # [[ "$lighthouse_status" != DOWN ]] || FATAL "Error: Service-Discovery is not reachable"
+
+  lighthouse_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
+
+  ${OC} logs -f $lighthouse_pod -n ${ns_name} --limit-bytes=100000 \
+  |& highlight "successfully synced" || FATAL "Error: Service-Discovery failed to sync with Broker"
+
+  # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
 
 # ------------------------------------------
@@ -1423,8 +1416,12 @@ function test_submariner_status_cluster_a() {
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 
-  # TODO: Should run with broker kubeconfig KUBECONF_BROKER
-  [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_lighthouse_controller_status
+  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    prompt "Testing Lighthouse agent status on the Broker cluster"
+    # kubconf_a;
+    # TODO: Should run with broker kubeconfig KUBECONF_BROKER
+    test_lighthouse_status
+  fi
 }
 
 # ------------------------------------------
@@ -1489,9 +1486,11 @@ function test_clusters_connected_by_service_ip() {
       # * Connection #0 to host 100.96.72.226 left intact
   else
     prompt "Testing connection with GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
-    ${OC} exec ${CURL_CMD} |& highlight "Connection timed out" \
-    && echo -e "# Negative Test OK - clusters have Overlapping CIDRs. \
-    \nNginx Service IP (${nginx_IP_cluster_b}:8080) on cluster B, is not reachable externally."
+
+    msg="# Negative Test - Clusters have Overlapping CIDRs:
+    \n# Nginx internal IP (${nginx_IP_cluster_b}:8080) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
+
+    ${OC} exec ${CURL_CMD} |& (! highlight "Connection timed out" && FATAL "$msg") || echo -e "$msg"
   fi
 }
 

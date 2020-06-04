@@ -27,8 +27,8 @@ function print_cmd_location() {
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  # prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' &> /dev/null) || :
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g') || :
+  # Add PS1 prompt (and trim trailing and leading spaces)
+  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' | xargs)
   prompt="${prompt:+"$prompt "}${1}"
   echo -e "${CYAN}${prompt}${NO_COLOR}"
 }
@@ -43,18 +43,18 @@ function print_cmd_location() {
 function trap_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|while|for|prompt|BUG) ]] ; then
-     cmd_plain="$(echo -e $BASH_COMMAND 2>/dev/null)"
-     cmd_eval=$(eval "echo -e \"$BASH_COMMAND\"" 2>/dev/null)
+     cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" 2>/dev/null)"
+     cmd_eval=$(eval "echo -e \"$cmd_escaped\"" 2>/dev/null)
      if [[ -n $cmd_eval ]] ; then
-       if [[ "$cmd_plain" =~ \$\(.+\) ]] ; then
-         cmd_to_print="${cmd_plain}\n${cmd_eval}"
+       if [[ "$cmd_escaped" =~ \$\(.+\) ]] ; then
+         cmd_to_print="${cmd_escaped}\n${cmd_eval}"
        else
          cmd_to_print="${cmd_eval}"
        fi
      else
-       cmd_to_print="${cmd_plain}"
+       cmd_to_print="${cmd_escaped}"
      fi
-     print_cmd_location "$cmd_to_print"
+     print_cmd_location "$cmd_to_print" || :
    fi
   ' DEBUG
 }
@@ -82,11 +82,12 @@ function highlight()
 
 # ------------------------------------------
 
-# function to watch for expected regex of command output, with retry attempts
+# function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
   # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
+  # If adding s/m to the number, it will be timeout in seconds/minutes
   RETRY="${2:-10}"
   # Optional: Pattern to search, otherwise expect $CMD exit 0
   REGEX="$3"
@@ -162,7 +163,7 @@ function BUG() {
 
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
-  trap_commands
+  # trap_commands
   install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
@@ -195,7 +196,7 @@ function install_anaconda() {
 
 function install_local_golang() {
   # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
-  trap_commands
+  # trap_commands
   install_dir="${1:-.}/"
   install_anaconda "${install_dir}"
 
@@ -237,7 +238,7 @@ function verify_golang() {
 
 function install_local_terraform() {
   # Installing Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
-  trap_commands
+  # trap_commands
   install_dir="${1:-.}/"
   install_anaconda "${install_dir}"
 
@@ -253,7 +254,7 @@ function install_local_terraform() {
 # Docker with Anaconda is not supported in Linux yet
 function install_local_docker() {
   # Installing Docker with Anaconda (https://anaconda.org/conda-forge/docker)
-  trap_commands
+  # trap_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
   # yum install -y shadow-utils46-newxidmap
@@ -274,7 +275,7 @@ function install_local_docker() {
 
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
-  trap_commands
+  # trap_commands
   # $1 => $source_file (download link)
   source_file="$1"
 
@@ -318,7 +319,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
-  trap_commands
+  # trap_commands
   # $1 => $wildcard_name
   wildcard_name="$1"
 
@@ -442,7 +443,7 @@ function export_vars_from_json() {
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
   prompt "Deleting DNS record for AWS Cluster A (Public): $2"
-  trap_commands;
+  # trap_commands;
   # Input $1 : Hosted Zone ID
   # Input $2 : DNS record-set (name) to delete
 
@@ -475,7 +476,7 @@ function delete_aws_dns_records() {
 
 # Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster ###
 function delete_namespace_and_crds() {
-  trap_commands;
+  # trap_commands;
   # Input $1 : Namespace to delete
   # Input $2 - Optional : All CRDs to delete, by searching for *crd_name*
   ns_name=$1
@@ -552,7 +553,7 @@ function upload_test_results_polarion() {
 # ------------------------------------------
 
 function log_to_html() {
-  #trap_commands;
+  # trap_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}"
   html_output="${3:-${title// /_}.html}"
