@@ -625,8 +625,9 @@ function log_to_html() {
   <pre>
 EOF
 
-  # Trim empty lines (just from top) and white spaces from each line in the log file
-  sed '/\S/,$!d; s/^\s*//; s/\s*$//' -i $log_file
+  # Trim empty lines (from top) and spaces (not tabs) from each line in the log file
+  #sed '/\S/,$!d; s/^ \+//; s/ \+$//' -i $log_file
+  sed '/\S/,$!d' -i $log_file
 
   # Create HTML content with AHA
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
