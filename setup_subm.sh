@@ -1027,7 +1027,7 @@ function install_nginx_svc_on_cluster_b() {
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \
+  prompt "Before Submariner is installed:
   \nVerifying connectivity on the same cluster, from Netshoot to Nginx service"
   trap_commands;
 
@@ -1051,7 +1051,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed: \
+  prompt "Before Submariner is installed:
   \nVerifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
   trap_commands;
 
@@ -1163,9 +1163,8 @@ function gateway_label_all_nodes_external_ip() {
   # trap_commands;
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
-  # Run 200 attempts, and wait for output to include regex [0-9]
-  #watch_and_retry "\${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 "[0-9]"
-  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 '[0-9\.]+'
+  # Run 200 attempts, and wait for output to include regex of IPv4
+  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
@@ -1439,7 +1438,7 @@ function test_submariner_status_cluster_b() {
 function test_clusters_connected_by_service_ip() {
 ### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  prompt "After Submariner is installed: \
+  prompt "After Submariner is installed:
   \nIdentify Netshoot pod on cluster A, and Nginx service on cluster B"
   trap_commands;
 
@@ -1511,7 +1510,7 @@ function test_clusters_connected_overlapping_cidrs() {
   "https://github.com/submariner-io/submariner/issues/588"
   # Workaround:
   cmd="${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  regex='[0-9\.]+'
+  regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
   watch_and_retry "$cmd" 3m "$regex" || :
 
   # Should fail if nginx_global_ip was not set
@@ -1528,7 +1527,7 @@ function test_clusters_connected_overlapping_cidrs() {
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
   cmd="${OC} get pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  regex='[0-9\.]+'
+  regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
   watch_and_retry "$cmd" 3m "$regex" || :
 
   # Should fail if netshoot_global_ip was not set
@@ -1542,7 +1541,7 @@ function test_clusters_connected_overlapping_cidrs() {
   # Workaround - SKIP this:
   # [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
 
-  prompt "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A \
+  prompt "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   \nTo Nginx service on cluster B, by its Global IP: $nginx_global_ip"
 
   kubconf_a;
@@ -1562,8 +1561,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)} \
-  \nand NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
+  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}
+  \n and NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
   if [[ -n $new_subm_test_ns ]] ; then
@@ -1601,7 +1600,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     "https://github.com/submariner-io/submariner/issues/588"
     # Workaround:
     cmd="${OC} get svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-    regex='[0-9\.]+'
+    regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
     watch_and_retry "$cmd" 3m "$regex" || :
 
     # TODO: Ping to the new_nginx_global_ip
@@ -1626,8 +1625,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # Workaround:
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.cluster.local"
 
-  prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)} \
-  \nTo NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
+  prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
+  \n To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
   BUG "Service-Discovery adds old namespace as suffix to the service FQDN" \
@@ -1644,7 +1643,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
   regex="PING ${nginx_cl_b_dns}."
-  watch_and_retry "$cmd" 30 "$regex"
+  watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.supercluster.local (169.254.59.89)
 
   # ${OC} run ${new_netshoot} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \

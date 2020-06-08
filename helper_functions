@@ -68,7 +68,7 @@ trap_commands
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
 {
-  # trap_commands
+  trap_commands
   pattern="$1"
   shift
   sed -r '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
@@ -84,6 +84,7 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
+  trap_commands
   # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
