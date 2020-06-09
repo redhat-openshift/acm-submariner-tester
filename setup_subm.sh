@@ -815,8 +815,6 @@ function test_cluster_status() {
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
-
-
 }
 
 # ------------------------------------------
@@ -846,7 +844,7 @@ function destroy_aws_cluster_a() {
     echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_A_NAME}"
     parent_dir=$(dirname -- "$CLUSTER_A_DIR")
     base_dir=$(basename -- "$CLUSTER_A_DIR")
-    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}" 2
+    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}"
 
     # Remove existing OCP install-config directory:
     #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
@@ -1028,7 +1026,7 @@ function install_nginx_svc_on_cluster_b() {
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   prompt "Before Submariner is installed:
-  \nVerifying connectivity on the same cluster, from Netshoot to Nginx service"
+  Verifying connectivity on the same cluster, from Netshoot to Nginx service"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1052,7 +1050,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   prompt "Before Submariner is installed:
-  \nVerifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
+  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1516,8 +1514,12 @@ function test_clusters_connected_overlapping_cidrs() {
   # Should fail if nginx_global_ip was not set
   nginx_global_ip="$($cmd | tr -d \')" || :
   [[ -n "$nginx_global_ip" ]] || globalip_status=DOWN
-  ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
-  [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Service ${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
+
+  ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
+  |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
+
+  [[ "$globalip_status" != DOWN ]] || \
+  FATAL "Error: GlobalNet annotation and IP was not set on Ngnix service ${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
 
   prompt "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
   kubconf_a;
@@ -1526,12 +1528,17 @@ function test_clusters_connected_overlapping_cidrs() {
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
-  cmd="${OC} get pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  watch_and_retry "$cmd" 3m "$regex" || :
+  # cmd="${OC} get pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
+  # regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+
+  #cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk -F 'globalIp:' '{print \$2}' | xargs"
+  cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
+  regex='submariner\.io\/globalIp'
+  watch_and_retry "$cmd" 3m "$regex"
 
   # Should fail if netshoot_global_ip was not set
-  netshoot_global_ip="$($cmd | tr -d \')"
+  #netshoot_global_ip="$($cmd | tr -d \')"
+  netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $3}')"
   [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
   ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
 
@@ -1542,7 +1549,7 @@ function test_clusters_connected_overlapping_cidrs() {
   # [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
 
   prompt "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
-  \nTo Nginx service on cluster B, by its Global IP: $nginx_global_ip"
+  To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
 
   kubconf_a;
   ${OC} exec ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
@@ -1562,7 +1569,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
   prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}
-  \n and NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
+  \n and create ServiceExport (Lighthouse Custom Resource) for the SuperCluster domain"
+
   kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
 
   if [[ -n $new_subm_test_ns ]] ; then
@@ -1581,7 +1589,22 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   echo "# Wait for the NEW Ngnix service to be ready:"
   ${OC} rollout status deployment ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
 
-  echo "# Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
+  echo "# Create ServiceExport (Lighthouse Custom Resource):"
+  ${OC} ${new_subm_test_ns:+-n $new_subm_test_ns} apply -f - <<EOF
+    apiVersion: lighthouse.submariner.io/v2alpha1
+    kind: ServiceExport
+    metadata:
+      name: ${new_nginx_cluster_b}
+EOF
+
+  echo "# Wait for the ServiceExport CR to be ready:"
+  BUG "ServiceExport is not a registered version" \
+   "Skip checking for ServiceExport creation status" \
+  "https://github.com/submariner-io/submariner/issues/627"
+  # Workaround: Do not run this -
+  # ${OC} rollout status "serviceexport.lighthouse.submariner.io/${new_nginx_cluster_b}" ${new_subm_test_ns:+-n $new_subm_test_ns}
+
+  prompt "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
   \n# and verify connectivity to the NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
@@ -1607,8 +1630,9 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     # [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
 
     # Should fail if new_nginx_cluster_b gets no global IP
-    ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
-    [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+    ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} \
+    |& highlight "submariner\.io\/globalIp" || \
+    FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
   fi
 
 
@@ -1619,21 +1643,21 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
 
-  BUG "Service domain (FQDN) on supercluster cannot be resolved" \
-  "Ping/Curl svc.cluster.local (instead of svc.supercluster.local)" \
-  "https://github.com/submariner-io/submariner/issues/627"
-  # Workaround:
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.cluster.local"
+  # BUG "Service domain (FQDN) on supercluster cannot be resolved" \
+  # "Ping/Curl svc.cluster.local (instead of svc.supercluster.local)" \
+  # "https://github.com/submariner-io/submariner/issues/627"
+  # # Workaround:
+  # nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.cluster.local"
 
-  prompt "Testing Service-Discovery: From Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
+  prompt "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   \n To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  BUG "Service-Discovery adds old namespace as suffix to the service FQDN" \
-  "Ping/Curl service FQDN with the old namespace as suffix" \
-  "https://github.com/submariner-io/submariner/issues/602"
-  #workaround:
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}" # ${SUBM_TEST_NS:+.$SUBM_TEST_NS}.svc.supercluster.local"
+  # BUG "Service-Discovery adds old namespace as suffix to the service FQDN" \
+  # "Ping/Curl service FQDN with the old namespace as suffix" \
+  # "https://github.com/submariner-io/submariner/issues/602"
+  # #workaround:
+  # nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}" # ${SUBM_TEST_NS:+.$SUBM_TEST_NS}.svc.supercluster.local"
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.supercluster.local with   ${OC} get all
@@ -1653,6 +1677,20 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+
+  # Negative test for nginx_cl_b_short_dns FQDN
+  nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+
+  prompt "Testing Service-Discovery: The NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)},
+  should NOT be reachable locally at $nginx_cl_b_short_dns (FQDN without \"supercluster\")"
+  kubconf_a
+
+  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"supercluster\")"
+
+  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
+  -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
+  |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
+    # command terminated with exit code 28
 
 }
 
@@ -1739,7 +1777,8 @@ function test_submariner_e2e_with_subctl() {
 
   subctl info
 
-  subctl verify-connectivity --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  subctl verify --only connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
 
 }
 

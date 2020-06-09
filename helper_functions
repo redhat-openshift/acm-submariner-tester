@@ -42,7 +42,7 @@ function print_cmd_location() {
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_commands() {
   trap '
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|while|for|prompt|BUG) ]] ; then
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|while|for|prompt|BUG|FATAL) ]] ; then
      cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" 2>/dev/null)"
      cmd_eval=$(eval "echo -e \"$cmd_escaped\"" 2>/dev/null)
      if [[ -n $cmd_eval ]] ; then
@@ -68,11 +68,13 @@ trap_commands
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
 {
-  trap_commands
+  # trap_commands
   pattern="$1"
   shift
+
+  exit_code=0
   sed -r '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
-  if [[ $exit_code = 1 ]] ; then
+  if [[ "$exit_code" -eq 1 ]] ; then
     exit_code=0
     sed -e '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
   fi
@@ -84,7 +86,7 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  trap_commands
+  # trap_commands
   # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
@@ -113,16 +115,16 @@ function watch_and_retry() {
 
   timeout $TIMEOUT bash <<EOF \
   || ( [[ $? -eq 124 ]] && echo "# Timeout of $TIMEOUT has exceeded." && return 1 )
-    COUNT=0;
+    COUNT=0 ;
     until $CMD || [[ \$COUNT -eq $RETRY ]] ; do
-      echo -e "\$(( COUNT++ ))... \c"
-      sleep 1 # A second interval
+      printf "\$(( COUNT++ ))... " ;
+      sleep 1 # A second interval ;
     done
     if [[ \$COUNT -eq $RETRY ]]; then
-      echo "# Limit of $RETRY attempts has exceeded."
-      exit 1
-    fi
-    exit 0
+      echo "# Limit of $RETRY attempts has exceeded." ;
+      exit 1 ;
+    fi ;
+    exit 0 ;
 EOF
 }
 
@@ -363,6 +365,7 @@ function backup_and_remove_dir() {
     cp -afr "${src_dir}"/* "${dest_dir}"/
 
     # Force remove old directory
+    lsof +D "$src_dir" | awk '{print $2}' | tail -n +2 | xargs kill -9
     rm -rf "$src_dir"
   fi
 }
