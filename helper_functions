@@ -365,7 +365,7 @@ function backup_and_remove_dir() {
     cp -afr "${src_dir}"/* "${dest_dir}"/
 
     # Force remove old directory
-    lsof +D "$src_dir" | awk '{print $2}' | tail -n +2 | xargs kill -9
+    lsof +D "$src_dir" | awk '{print $2}' | tail -n +2 | xargs --no-run-if-empty kill -9
     rm -rf "$src_dir"
   fi
 }
