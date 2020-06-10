@@ -912,7 +912,7 @@ function destroy_osp_cluster_b() {
 
 function clean_aws_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on AWS cluster A (public)"
+  prompt "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
   kubconf_a;
   delete_submariner_namespace_and_crds;
 
@@ -932,7 +932,7 @@ function clean_aws_cluster_a() {
 
 function clean_osp_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (private) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM and CRDs) on OSP cluster B (private)"
+  prompt "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (private)"
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
@@ -951,6 +951,19 @@ function delete_submariner_namespace_and_crds() {
   "https://github.com/submariner-io/submariner-operator/issues/88"
 
   delete_namespace_and_crds "submariner-operator" "submariner"
+
+  echo "# Clean Lighthouse ServiceExport DNS list:"
+
+  ${OC} apply -f - <<EOF
+  apiVersion: operator.openshift.io/v1
+  kind: DNS
+  metadata:
+    finalizers:
+    - dns.operator.openshift.io/dns-controller
+    name: default
+  spec:
+    servers: []
+EOF
 
 }
 
@@ -1590,12 +1603,6 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} rollout status deployment ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
 
   echo "# Create ServiceExport (Lighthouse Custom Resource):"
-
-  echo "# Create ServiceExport CR to be ready:"
-
-  BUG "Create ServiceExport should be done with subctl command" \
-  "Create ServiceExport manually with oc apply" \
-  "https://github.com/submariner-io/submariner/issues/639"
 
   ${OC} ${new_subm_test_ns:+-n $new_subm_test_ns} apply -f - <<EOF
     apiVersion: lighthouse.submariner.io/v2alpha1
