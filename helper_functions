@@ -339,7 +339,7 @@ function delete_old_files_or_dirs() {
   # Set $search_name as base directory of $wildcard_name, if it includes slashes
   search_name=$(basename -- "$wildcard_name")
 
-  # find "$search_path" -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} -print -exec rm -rf {} \;
+  # find "$search_path"/* -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} -print -delete
   find "$search_path"/* -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} | xargs -n1 --verbose rm -rf
 }
 
@@ -479,7 +479,7 @@ function delete_aws_dns_records() {
 
 # ------------------------------------------
 
-# Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster ###
+# Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster
 function delete_namespace_and_crds() {
   # trap_commands;
   # Input $1 : Namespace to delete
@@ -530,7 +530,39 @@ function delete_namespace_and_crds() {
   fi
 }
 
+
 # ------------------------------------------
+
+# Function to install and expose Nginx service on the current KUBECONFIG cluster
+function install_nginx_service() {
+  trap_commands;
+
+  ngnix_name="${1:-NginX}"
+  new_namespace="${2}" # The Namespace on where Ngnix should be installed in
+  nginx_image="nginxinc/nginx-unprivileged:stable-alpine"
+
+  if [[ -n "$target_namespace" ]] ; then
+    echo "# Delete and create Nginx Namespace: $new_namespace"
+    delete_namespace_and_crds "${target_namespace}"
+    ${OC} create namespace "${target_namespace}" || : # || : to ignore if namespace already exists
+  fi
+
+  echo "# Delete and create Nginx Deployment: $new_namespace (using Nginx image \"$nginx_image\")"
+  ${OC} delete deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
+  ${OC} create deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --image=$nginx_image
+
+  echo "# Delete and expose Ngnix service on port 8080:"
+  ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
+  ${OC} expose deployment ${ngnix_name} --port=8080 --name=${ngnix_name} ${target_namespace:+-n $target_namespace}
+
+  echo "# Wait for Ngnix service to be ready:"
+  ${OC} rollout status deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
+
+}
+
+# ------------------------------------------
+
 
 #TODO: Use this function to upload E2E tests results to Polarion
 function upload_test_results_polarion() {

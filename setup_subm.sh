@@ -52,11 +52,12 @@ Running with pre-defined parameters (optional):
 
 * Show this help menu:                               -h / --help
 * Show debug info (verbose) for commands:            -d / --debug
-* Build latest Submariner-Operator (SubCtl):         --build-operator
+# Build latest Submariner-Operator (SubCtl):         --build-operator  [DEPRECATED]
 * Build latest Submariner E2E (test packages):       --build-e2e
 * Download latest OCP Installer:                     --get-ocp-installer
 * Download latest OCPUP Tool:                        --get-ocpup-tool
 * Download latest release of SubCtl:                 --get-subctl
+* Download development release of SubCtl:            --get-subctl-devel
 * Create AWS cluster A:                              --create-cluster-a
 * Create OSP cluster B:                              --create-cluster-b
 * Destroy existing AWS cluster A:                    --destroy-cluster-a
@@ -139,6 +140,9 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --get-subctl)
     get_subctl=YES
+    shift ;;
+  --get-subctl-devel)
+    get_subctl_devel=YES
     shift ;;
   --build-operator)
     build_operator=YES
@@ -291,7 +295,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $build_operator - to build_operator_latest
   while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull and build latest Submariner-Operator repository (SubCtl) ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     build_operator=${input:-no}
@@ -299,10 +303,18 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $get_subctl - to download_subctl_latest_release
   while [[ ! "$get_subctl" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to use the latest release of SubCtl (instead of Submariner-Operator \"master\" branch) ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to get the latest release of SubCtl ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     get_subctl=${input:-no}
+  done
+
+  # User input: $get_subctl_devel - to download_subctl_latest_devel
+  while [[ ! "$get_subctl_devel" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to get the latest development of SubCtl (Submariner-Operator \"master\" branch) ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    get_subctl_devel=${input:-no}
   done
 
   # User input: $build_submariner_e2e - to build_submariner_e2e_latest
@@ -355,6 +367,7 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO}
 build_submariner_e2e=${build_submariner_e2e:-NO}
 get_subctl=${get_subctl:-NO}
+get_subctl_devel=${get_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
 clean_cluster_a=${clean_cluster_a:-NO}
@@ -613,7 +626,13 @@ function download_subctl_latest_release() {
     cd ${WORKDIR}
 
     release_url="https://github.com/submariner-io/submariner-operator/releases/"
-    file_path="$(curl "$release_url/tag/devel/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+    # file_path="$(curl "$release_url/tag/latest/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+
+    BUG "Submariner \"Latest release\" label points to an old release" \
+    "Specify subctl version to download manually (e.g. \"v0.4.0-rc2\")" \
+    "https://github.com/submariner-io/submariner/issues/468"
+    # Workaround:
+    file_path="$(curl "$release_url/tag/v0.4.0-rc2/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
     download_file ${release_url}${file_path}
 
@@ -640,6 +659,18 @@ function download_subctl_latest_release() {
     # /usr/bin/install ./subctl $GOBIN/subctl
     # workaround:
     cp ./subctl ~/.local/bin/
+    export PATH=$HOME/.local/bin:$PATH
+}
+
+# ------------------------------------------
+
+function download_subctl_latest_devel() {
+  ### Download OCP installer ###
+    prompt "Downloading latest development of SubCtl that was built from Submariner-Operator \"master\" branch"
+    trap_commands;
+
+    cd ${WORKDIR}
+    curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash
     export PATH=$HOME/.local/bin:$PATH
 }
 
@@ -848,9 +879,9 @@ function destroy_aws_cluster_a() {
 
     # Remove existing OCP install-config directory:
     #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
-    echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than a day):"
+    echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than 1 day):"
     # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
-    delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d"
+    delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
   else
     echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
@@ -1008,29 +1039,31 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_cluster_b() {
-  prompt "Install Nginx service on OSP cluster B (private)"
+  prompt "Install Ngnix service on OSP cluster B${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   trap_commands;
 
   kubconf_b;
 
-  if [[ -n $SUBM_TEST_NS ]] ; then
-    # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-    delete_namespace_and_crds "${SUBM_TEST_NS}"
-    ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
-  fi
+  install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}"
 
-  # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
-
-  ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=nginxinc/nginx-unprivileged:stable-alpine
-
-  echo "# Expose Ngnix service on port 8080:"
-  ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  ${OC} expose deployment ${NGINX_CLUSTER_B} --port=8080 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-
-  echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-  ${OC} describe pod ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  # if [[ -n $SUBM_TEST_NS ]] ; then
+  #   # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
+  #   delete_namespace_and_crds "${SUBM_TEST_NS}"
+  #   ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
+  # fi
+  #
+  # # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
+  #
+  # ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
+  # ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=nginxinc/nginx-unprivileged:stable-alpine
+  #
+  # echo "# Expose Ngnix service on port 8080:"
+  # ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
+  # ${OC} expose deployment ${NGINX_CLUSTER_B} --port=8080 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  #
+  # echo "# Wait for Ngnix service to be ready:"
+  # ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  # ${OC} describe pod ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
 }
 
@@ -1581,43 +1614,29 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}
-  and create ServiceExport (Lighthouse Custom Resource) for the SuperCluster domain"
+  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
 
-  kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
+  kubconf_b;
 
-  if [[ -n $new_subm_test_ns ]] ; then
-    # ${OC} delete --timeout=30s namespace "${new_subm_test_ns}" --ignore-not-found || : # || : to ignore none-zero exit code
-    delete_namespace_and_crds "${new_subm_test_ns}"
-    ${OC} create namespace "${new_subm_test_ns}" || : # || : to ignore none-zero exit code
-  fi
+  install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
 
-  ${OC} delete deployment ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
-  ${OC} create deployment ${new_nginx_cluster_b} --image=nginxinc/nginx-unprivileged:stable-alpine ${new_subm_test_ns:+-n $new_subm_test_ns}
-
-  echo "# Expose the NEW Ngnix service on port 8080:"
-  ${OC} delete service ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
-  ${OC} expose deployment ${new_nginx_cluster_b} --port=8080 --name=${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
-
-  echo "# Wait for the NEW Ngnix service to be ready:"
-  ${OC} rollout status deployment ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
-
-  echo "# Create ServiceExport (Lighthouse Custom Resource):"
-
-  ${OC} ${new_subm_test_ns:+-n $new_subm_test_ns} apply -f - <<EOF
-    apiVersion: lighthouse.submariner.io/v2alpha1
-    kind: ServiceExport
-    metadata:
-      name: ${new_nginx_cluster_b}
-EOF
-
-  echo "# Wait for the ServiceExport CR to be ready:"
-
-  BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status" \
-  "https://github.com/submariner-io/submariner/issues/640"
-  # Workaround: Do not run this -
-  # ${OC} rollout status "serviceexport.lighthouse.submariner.io/${new_nginx_cluster_b}" ${new_subm_test_ns:+-n $new_subm_test_ns}
+  # kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
+  #
+  # if [[ -n $new_subm_test_ns ]] ; then
+  #   # ${OC} delete --timeout=30s namespace "${new_subm_test_ns}" --ignore-not-found || : # || : to ignore none-zero exit code
+  #   delete_namespace_and_crds "${new_subm_test_ns}"
+  #   ${OC} create namespace "${new_subm_test_ns}" || : # || : to ignore none-zero exit code
+  # fi
+  #
+  # ${OC} delete deployment ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
+  # ${OC} create deployment ${new_nginx_cluster_b} --image=nginxinc/nginx-unprivileged:stable-alpine ${new_subm_test_ns:+-n $new_subm_test_ns}
+  #
+  # echo "# Expose the NEW Ngnix service on port 8080:"
+  # ${OC} delete service ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
+  # ${OC} expose deployment ${new_nginx_cluster_b} --port=8080 --name=${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
+  #
+  # echo "# Wait for the NEW Ngnix service to be ready:"
+  # ${OC} rollout status deployment ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
 
   prompt "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
   and verify connectivity to the NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
@@ -1654,6 +1673,28 @@ EOF
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
   fi
 
+  prompt "Create ServiceExport (Lighthouse Custom Resource) for the SuperCluster domain"
+
+  BUG "Service domain (FQDN) on supercluster will not be resolved, if GlobalNet annotation was not set yet" \
+  "Verify Nginx GlobalIP Annotation, prior to creating ServiceExport" \
+  "https://github.com/submariner-io/submariner/issues/627"
+  # Workaround:
+  # Temporarily export ServiceExport after watch_and_retry for globalip annotation, but not before
+
+  ${OC} ${new_subm_test_ns:+-n $new_subm_test_ns} apply -f - <<EOF
+    apiVersion: lighthouse.submariner.io/v2alpha1
+    kind: ServiceExport
+    metadata:
+      name: ${new_nginx_cluster_b}
+EOF
+
+  echo "# Wait for the ServiceExport CR to be ready:"
+
+  BUG "Rollout status failed: ServiceExport is not a registered version" \
+  "Skip checking for ServiceExport creation status" \
+  "https://github.com/submariner-io/submariner/issues/640"
+  # Workaround: Do not run this -
+    # ${OC} rollout status "serviceexport.lighthouse.submariner.io/${new_nginx_cluster_b}" ${new_subm_test_ns:+-n $new_subm_test_ns}
 
   BUG "Missing documentation about svc.supercluster.local" \
   "Doc Needed: Ping/Curl svc.supercluster.local" \
@@ -1662,11 +1703,6 @@ EOF
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
 
-  # BUG "Service domain (FQDN) on supercluster cannot be resolved" \
-  # "Ping/Curl svc.cluster.local (instead of svc.supercluster.local)" \
-  # "https://github.com/submariner-io/submariner/issues/627"
-  # # Workaround:
-  # nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.cluster.local"
 
   prompt "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
@@ -1841,6 +1877,7 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     - build_operator_latest: $build_operator
     - build_submariner_e2e_latest: $build_submariner_e2e
     - download_subctl_latest_release: $get_subctl
+    - download_subctl_latest_devel: $get_subctl_devel
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -1937,6 +1974,9 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
 
     # Running download_subctl_latest_release if requested
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || download_subctl_latest_release
+
+    # Running download_subctl_latest_release if requested
+    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || download_subctl_latest_devel
 
     test_subctl_command
 
@@ -2039,10 +2079,10 @@ exit $test_status
 #
 # Execution example:
 # Re-creating a new AWS cluster:
-# ./setup_subm.sh --build-e2e --build-operator --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
+# ./setup_subm.sh --build-e2e --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using Submariner upstream release (master), and installing on existing AWS cluster:
-# ./setup_subm.sh --build-operator --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
+# ./setup_subm.sh --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using the latest formal release of Submariner, and Re-creating a new AWS cluster:
 # ./setup_subm.sh --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
