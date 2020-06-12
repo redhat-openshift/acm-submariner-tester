@@ -362,7 +362,7 @@ function backup_and_remove_dir() {
     mkdir -p "$dest_dir"
 
     # Copy * from src_dir to dest_dir (-afr : Keep attributes, Force overwrite, Recursive copy)
-    cp -afr "${src_dir}"/* "${dest_dir}"/
+    cp -afr "${src_dir}"/. "${dest_dir}"/
 
     # Force remove old directory
     lsof +D "$src_dir" | awk '{print $2}' | tail -n +2 | xargs --no-run-if-empty kill -9

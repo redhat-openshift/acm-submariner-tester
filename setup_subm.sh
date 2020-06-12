@@ -702,6 +702,10 @@ function create_aws_cluster_a() {
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
+  BUG "OCP Install failure creating IAM Role worker-role" \
+  "No workaround yet" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1846630"
+
   cd ${WORKDIR}
 
   if [[ -d "$CLUSTER_A_DIR" ]] && [[ -n `ls -A "$CLUSTER_A_DIR"` ]] ; then
