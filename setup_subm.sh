@@ -66,6 +66,7 @@ Running with pre-defined parameters (optional):
 * Clean existing OSP cluster B:                      --clean-cluster-b
 * Install Service-Discovery (lighthouse):            --service-discovery
 * Install Global Net:                                --globalnet
+* Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip Submariner deployment:                        --skip-deploy
 * Skip all tests execution:                          --skip-tests
 * Install Golang if missing:                         --config-golang
@@ -109,7 +110,7 @@ shopt -s expand_aliases
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
 
 # Set script exit code in advance (saved in file)
-export TEST_STATUS_RC="$(dirname $(realpath -s $0))/test_status.out"
+export TEST_STATUS_RC="$(dirname "$(realpath -s $0)")/test_status.out"
 echo 1 > $TEST_STATUS_RC
 
 ####################################################################################
@@ -186,9 +187,18 @@ while [[ $# -gt 0 ]]; do
   --config-aws-cli)
     config_aws_cli=YES
     shift ;;
+  --cable-driver)
+    check_cli_args "$2"
+    export CABLE_DRIVER="--cable-driver $2" # libreswan OR strongswan
+    shift 2 ;;
   # -o|--optional-key-value)
+  #   check_cli_args "$2"
+  #   key="$2"
+  #   [[ $key = x ]] && echo "Run x"
+  #   [[ $key = y ]] && echo "Run y"
+  #   shift 2 ;;
   --import-vars)
-    check_cli_args $2
+    check_cli_args "$2"
     export GLOBAL_VARS="$2"
     echo "# Importing additional variables from file: $GLOBAL_VARS"
     source "$GLOBAL_VARS"
@@ -838,7 +848,8 @@ function test_cluster_status() {
     ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
 
     echo "# Change the default namespace in [${KUBECONFIG}] to: ${SUBM_TEST_NS}"
-    ${OC} config set "contexts."`${OC} config current-context`".namespace" "${SUBM_TEST_NS}"
+    cur_context="$(${OC} config current-context)"
+    ${OC} config set "contexts.${cur_context}.namespace" "${SUBM_TEST_NS}"
   else
     export SUBM_TEST_NS=default
   fi
@@ -1245,7 +1256,8 @@ function install_broker_and_member_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
-  DEPLOY_CMD="deploy-broker --dataplane --clusterid ${CLUSTER_A_NAME} --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
+  DEPLOY_CMD="deploy-broker --dataplane ${CABLE_DRIVER} --clusterid ${CLUSTER_A_NAME} \
+  --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
   kubconf_a;
@@ -1345,8 +1357,17 @@ function join_submariner_cluster_b() {
 
   ${OC} config view
 
+  # JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
+  # ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${CABLE_DRIVER}"
+
+  BUG "Libreswan cable-driver cannot be used on NAT-T with no public IP (OSP cluster B)" \
+   "Make sure subctl join used \"--cable-driver strongswan\"" \
+  "https://github.com/submariner-io/submariner/issues/642"
+  #Workaround:
+  # Use strongswan as in u/s, instead of libreswan
   JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
-  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}" # --cable-driver libreswan"
+  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${CABLE_DRIVER}"
+
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -1387,12 +1408,12 @@ function join_submariner_cluster_b() {
 # ------------------------------------------
 
 function test_submariner_engine_status() {
-# Check submariner-engine (strongswan status) on Operator pod
+# Check submariner-engine on the Operator pod
   trap_commands;
   cluster_name="$1"
   ns_name="submariner-operator"
 
-  prompt "Testing Submariner Operator status on ${cluster_name}"
+  prompt "Testing Submariner Operator resources on ${cluster_name}"
 
   ${OC} get all -n ${ns_name} |& (! highlight "No resources found") \
   || FATAL "Error: Submariner is not installed on $cluster_name"
@@ -1401,28 +1422,44 @@ function test_submariner_engine_status() {
   ${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
-  BUG "strongswan status exit code 3, even when \"security associations\" is up" \
-  "Ignore non-zero exit code, by redirecting stderr" \
-  "https://github.com/submariner-io/submariner/issues/360"
+  if [[ -z "${CABLE_DRIVER}" || "${CABLE_DRIVER}" =~ strongswan ]] ; then
+    prompt "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
+    BUG "strongswan status exit code 3, even when \"security associations\" is up" \
+    "Ignore non-zero exit code, by redirecting stderr" \
+    "https://github.com/submariner-io/submariner/issues/360"
 
-  cmd="${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall"
-  regex='Security Associations \(1 up'
-  # Run for 5m (+ 10 seconds interval between retries), and watch for output to include regex
-  watch_and_retry "$cmd" 5m "$regex" || submariner_status=DOWN
-    # Security Associations (1 up, 0 connecting):
-    # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
-    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
-    # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
+    cmd="${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall"
+    regex='Security Associations \(1 up'
+    # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
+    watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
+      # Security Associations (1 up, 0 connecting):
+      # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
+      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
+      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
 
-  BUG "StrongSwan connecting to 'default' URI fails" \
-  "Verify StrongSwan with different URI path and ignore failure" \
-  "https://github.com/submariner-io/submariner/issues/426"
-  # ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas"
-  # workaround:
-  ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" || :
+    BUG "StrongSwan connecting to 'default' URI fails" \
+    "Verify StrongSwan with different URI path and ignore failure" \
+    "https://github.com/submariner-io/submariner/issues/426"
+    # ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas"
+    # workaround:
+    ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
+
+  elif [[ "${CABLE_DRIVER}" =~ libreswan ]] ; then
+    prompt "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
+    # TODO: Check LibreSwan pod status with watch_and_retry
+    sleep 2m
+  fi
 
   prompt "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}:"
-  ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+  # ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+
+  ${OC} describe Gateway -n ${ns_name} > "$TEMP_FILE"
+
+  if highlight "Ha Status:\s*passive|Status Failure\s*\w+" "$TEMP_FILE" ; then
+     submariner_status=DOWN
+  else
+    submariner_status=UP
+  fi
 
   # Get some info on installed CRDs
   subctl info
@@ -1430,6 +1467,16 @@ function test_submariner_engine_status() {
   ${OC} get pods -n ${ns_name} --show-labels
   ${OC} get clusters -n ${ns_name} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${ns_name} || submariner_status=DOWN
+
+  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    prompt "Testing Lighthouse agent status on ${cluster_name}:"
+    test_lighthouse_status || submariner_status=DOWN
+  fi
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    prompt "Testing GlobalNet controller status on ${cluster_name}:"
+    test_globalnet_status || submariner_status=DOWN
+  fi
 
   if [[ "$submariner_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
@@ -1441,12 +1488,9 @@ function test_submariner_engine_status() {
     ${OC} get pods -o yaml -n ${ns_name} || :
     FATAL "Error: Submariner clusters are not connected."
   fi
-
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing Lighthouse agent status on ${cluster_name}:"
-    test_lighthouse_status
-  fi
 }
+
+# ------------------------------------------
 
 function test_lighthouse_status() {
   # Check Lighthouse (the pod for service-discovery) status
@@ -1456,8 +1500,8 @@ function test_lighthouse_status() {
 
   lighthouse_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
 
-  ${OC} logs $lighthouse_pod -n ${ns_name} |& highlight "Lighthouse agent syncer started" \
-  || FATAL "Error: Service-Discovery failed to sync with Broker"
+  ${OC} logs $lighthouse_pod -n ${ns_name} |& highlight "Lighthouse agent syncer started" #\
+  # || FATAL "Error: Service-Discovery failed to sync with Broker"
   #|& highlight "successfully synced" || FATAL "Error: Service-Discovery failed to sync with Broker"
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
@@ -1465,9 +1509,22 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
+function test_globalnet_status() {
+  # Check Globalnet controller pod status
+  trap_commands;
+
+  globalnet_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
+
+  ${OC} logs $globalnet_pod -n ${ns_name} |& highlight "Allocating globalIp" #\
+  # || FATAL "Error: GlobalNet failed to allocate Global IPs to the cluster services"
+
+}
+
+# ------------------------------------------
+
 function test_submariner_status_cluster_a() {
 # Operator pod status on AWS cluster A (public)
-  prompt "Testing Submariner engine (strongswan) on AWS cluster A (public)"
+  prompt "Testing Submariner engine on AWS cluster A (public)"
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 }
@@ -1476,7 +1533,8 @@ function test_submariner_status_cluster_a() {
 
 function test_submariner_status_cluster_b() {
 # Operator pod status on OSP cluster B (private)
-  prompt "Testing Submariner engine (strongswan) on OSP cluster B (private)"
+  prompt "Testing Submariner engine on OSP cluster B (private)"
+
   kubconf_b;
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
 }
@@ -1484,8 +1542,6 @@ function test_submariner_status_cluster_b() {
 # ------------------------------------------
 
 function test_clusters_connected_by_service_ip() {
-### Run Connectivity tests between the Private and Public clusters ###
-# To validate that now Submariner made the connection possible!
   prompt "After Submariner is installed:
   Identify Netshoot pod on cluster A, and Nginx service on cluster B"
   trap_commands;
@@ -1614,7 +1670,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
-  new_netshoot=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
+  new_netshoot_cluster_a=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
@@ -1624,36 +1680,18 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
 
-  # kubconf_b; # Can also use --context ${CLUSTER_B_NAME} on all further oc commands
-  #
-  # if [[ -n $new_subm_test_ns ]] ; then
-  #   # ${OC} delete --timeout=30s namespace "${new_subm_test_ns}" --ignore-not-found || : # || : to ignore none-zero exit code
-  #   delete_namespace_and_crds "${new_subm_test_ns}"
-  #   ${OC} create namespace "${new_subm_test_ns}" || : # || : to ignore none-zero exit code
-  # fi
-  #
-  # ${OC} delete deployment ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
-  # ${OC} create deployment ${new_nginx_cluster_b} --image=nginxinc/nginx-unprivileged:stable-alpine ${new_subm_test_ns:+-n $new_subm_test_ns}
-  #
-  # echo "# Expose the NEW Ngnix service on port 8080:"
-  # ${OC} delete service ${new_nginx_cluster_b} --ignore-not-found ${new_subm_test_ns:+-n $new_subm_test_ns}
-  # ${OC} expose deployment ${new_nginx_cluster_b} --port=8080 --name=${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
-  #
-  # echo "# Wait for the NEW Ngnix service to be ready:"
-  # ${OC} rollout status deployment ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}
-
   prompt "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
   and verify connectivity to the NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
-  ${OC} delete pod ${new_netshoot} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} delete pod ${new_netshoot_cluster_a} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
-  ${OC} run ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot \
+  ${OC} run ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot \
   --pod-running-timeout=5m --restart=Never -- sleep 5m
 
-  echo "# Wait up to 3 minutes for NEW Netshoot pod [${new_netshoot}] to be ready:"
-  ${OC} wait --timeout=3m --for=condition=ready pod -l run=${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-  ${OC} describe pod ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  echo "# Wait up to 3 minutes for NEW Netshoot pod [${new_netshoot_cluster_a}] to be ready:"
+  ${OC} wait --timeout=3m --for=condition=ready pod -l run=${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
+  ${OC} describe pod ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     prompt "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a NEW GlobalNet IP"
@@ -1671,10 +1709,25 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     # TODO: Ping to the new_nginx_global_ip
     # [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
 
-    # Should fail if new_nginx_cluster_b gets no global IP
+    # Should fail if new_nginx_cluster_b did not get Global-IP after 3 minutes
     ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} \
     |& highlight "submariner\.io\/globalIp" || \
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+
+    prompt "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
+
+    kubconf_a;
+
+    netshoot_pod=$(${OC} get pods -l run=${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
+    --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
+
+    cmd="${OC} describe pod ${netshoot_pod} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
+    regex='submariner\.io\/globalIp'
+    watch_and_retry "$cmd" 3m "$regex"
+
+    # Should fail if netshoot_pod_cluster_a did not get Global-IP after 3 minutes
+    $cmd |& highlight "submariner\.io\/globalIp" || \
+    FATAL "Error: GlobalNet annotation and IP was not set on the NEW Netshoot pod ${new_netshoot_cluster_a}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
   fi
 
   prompt "Create ServiceExport (Lighthouse Custom Resource) for the SuperCluster domain"
@@ -1712,11 +1765,10 @@ EOF
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  # BUG "Service-Discovery adds old namespace as suffix to the service FQDN" \
-  # "Ping/Curl service FQDN with the old namespace as suffix" \
-  # "https://github.com/submariner-io/submariner/issues/602"
-  # #workaround:
-  # nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}" # ${SUBM_TEST_NS:+.$SUBM_TEST_NS}.svc.supercluster.local"
+  BUG "curl to Ngnix with Global-IP on supercluster, sometimes fails" \
+  "Randomly fails, not always" \
+  "https://github.com/submariner-io/submariner/issues/644"
+  # No workaround
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.supercluster.local with   ${OC} get all
@@ -1724,16 +1776,16 @@ EOF
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
       # service/openshift    ExternalName   <none>       kubernetes.default.svc.supercluster.local   <none>    32m
 
-  cmd="${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
+  cmd="${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
   regex="PING ${nginx_cl_b_dns}"
   watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.supercluster.local (169.254.59.89)
 
-  # ${OC} run ${new_netshoot} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
+  # ${OC} run ${new_netshoot_cluster_a} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
   # ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${new_nginx_cluster_b}:8080"
 
-  echo "# Try to CURL from ${new_netshoot} to ${nginx_cl_b_dns}:8080 :"
-  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
+  echo "# Try to CURL from ${new_netshoot_cluster_a} to ${nginx_cl_b_dns}:8080 :"
+  ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
@@ -1747,7 +1799,7 @@ EOF
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"supercluster\")"
 
-  ${OC} exec ${new_netshoot} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
+  ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
@@ -1850,8 +1902,8 @@ function test_submariner_e2e_with_subctl() {
 
 # Logging main output (enclosed with parenthesis) with tee
 
-LOG_FILE=( ${REPORT_NAME// /_} ) # replace all spaces with _
-LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
+LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
 (
 
@@ -2014,6 +2066,9 @@ LOG_FILE=${LOG_FILE}_${DATE_TIME}.log # can also consider adding timestemps with
     test_submariner_status_cluster_a
 
     test_submariner_status_cluster_b
+
+    # Run Connectivity tests between the Private and Public clusters,
+    # To validate that now Submariner made the connection possible.
 
     test_clusters_connected_by_service_ip
 
