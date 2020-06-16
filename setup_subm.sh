@@ -662,9 +662,9 @@ function download_subctl_latest_release() {
     echo "# Copy subctl to system path:"
     mkdir -p $GOBIN
 
-    BUG "Subctl command will CRASH if it was downloaded to an NFS mount location" \
-    "Download and run [${file_name}] in a local file system path (e.g. /tmp)" \
-    "https://github.com/submariner-io/submariner-operator/issues/335"
+    # BUG "Subctl command will CRASH if it was downloaded to an NFS mount location" \
+    # "Download and run [${file_name}] in a local file system path (e.g. /tmp)" \
+    # "https://github.com/submariner-io/submariner-operator/issues/335"
     # cp ./subctl $GOBIN/
     # /usr/bin/install ./subctl $GOBIN/subctl
     # workaround:
@@ -990,13 +990,13 @@ function clean_osp_cluster_b() {
 
 function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner on current KUBECONFIG cluster ###
-  # trap_commands;
+  trap_commands;
 
   BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
   "Run cleanup (oc delete) of any existing resource of submariner-operator" \
   "https://github.com/submariner-io/submariner-operator/issues/88"
 
-  delete_namespace_and_crds "submariner-operator" "submariner"
+  delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
 
   echo "# Clean Lighthouse ServiceExport DNS list:"
 
@@ -1285,16 +1285,17 @@ function install_broker_and_member_aws_cluster_a() {
   fi
 
   prompt "Deploying Submariner Broker and joining cluster A"
-  BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
-  "Use a retry mechanism to run the same subctl command again" \
-  "https://github.com/submariner-io/submariner-operator/issues/336"
 
-  # subctl ${DEPLOY_CMD}
+  # BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
+  # "Use a retry mechanism to run the same subctl command again" \
+  # "https://github.com/submariner-io/submariner-operator/issues/336"
   # Workaround:
   # Run 3 attempts, and wait for command exit OK
-  watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
+  # watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
 
-  ${OC} -n submariner-operator get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
+  subctl $DEPLOY_CMD --subm-debug
+
+  ${OC} -n ${SUBM_NAMESPACE} get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
 
   # Now looking at cluster A shows that the Submariner broker namespace has been created:
   ${OC} get crds | grep -E 'submariner|lighthouse'
@@ -1399,9 +1400,9 @@ function join_submariner_cluster_b() {
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
 
   # Print details of the Operator in OSP cluster B (private), and in the Broker cluster:
-  ${OC} get namespace submariner-operator -o json
+  ${OC} get namespace ${SUBM_NAMESPACE} -o json
 
-  ${OC} get Submariner -n submariner-operator -o yaml
+  ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml
 
 }
 
@@ -1411,15 +1412,15 @@ function test_submariner_engine_status() {
 # Check submariner-engine on the Operator pod
   trap_commands;
   cluster_name="$1"
-  ns_name="submariner-operator"
+  # ns_name="submariner-operator"
 
   prompt "Testing Submariner Operator resources on ${cluster_name}"
 
-  ${OC} get all -n ${ns_name} |& (! highlight "No resources found") \
+  ${OC} get all -n ${SUBM_NAMESPACE} |& (! highlight "No resources found") \
   || FATAL "Error: Submariner is not installed on $cluster_name"
 
-  # submariner_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  ${OC} get pod -n ${ns_name} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
+  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+  ${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
   if [[ -z "${CABLE_DRIVER}" || "${CABLE_DRIVER}" =~ strongswan ]] ; then
@@ -1428,7 +1429,7 @@ function test_submariner_engine_status() {
     "Ignore non-zero exit code, by redirecting stderr" \
     "https://github.com/submariner-io/submariner/issues/360"
 
-    cmd="${OC} exec $submariner_pod -n ${ns_name} strongswan stroke statusall"
+    cmd="${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
     regex='Security Associations \(1 up'
     # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
     watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
@@ -1440,9 +1441,9 @@ function test_submariner_engine_status() {
     BUG "StrongSwan connecting to 'default' URI fails" \
     "Verify StrongSwan with different URI path and ignore failure" \
     "https://github.com/submariner-io/submariner/issues/426"
-    # ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas"
+    # ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
     # workaround:
-    ${OC} exec $submariner_pod -n ${ns_name} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
+    ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
 
   elif [[ "${CABLE_DRIVER}" =~ libreswan ]] ; then
     prompt "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
@@ -1451,9 +1452,9 @@ function test_submariner_engine_status() {
   fi
 
   prompt "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}:"
-  # ${OC} describe Gateway -n ${ns_name} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+  # ${OC} describe Gateway -n ${SUBM_NAMESPACE} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
 
-  ${OC} describe Gateway -n ${ns_name} > "$TEMP_FILE"
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} > "$TEMP_FILE"
 
   if highlight "Ha Status:\s*passive|Status Failure\s*\w+" "$TEMP_FILE" ; then
      submariner_status=DOWN
@@ -1464,28 +1465,28 @@ function test_submariner_engine_status() {
   # Get some info on installed CRDs
   subctl info
   ${OC} describe cm -n openshift-dns
-  ${OC} get pods -n ${ns_name} --show-labels
-  ${OC} get clusters -n ${ns_name} -o wide
-  ${OC} describe cluster "${cluster_name}" -n ${ns_name} || submariner_status=DOWN
-
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing Lighthouse agent status on ${cluster_name}:"
-    test_lighthouse_status || submariner_status=DOWN
-  fi
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels
+  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
+  ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     prompt "Testing GlobalNet controller status on ${cluster_name}:"
     test_globalnet_status || submariner_status=DOWN
   fi
 
+  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    prompt "Testing Lighthouse agent status on ${cluster_name}:"
+    test_lighthouse_status || submariner_status=DOWN
+  fi
+
   if [[ "$submariner_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
   # || : to ignore none-zero exit code
-    ${OC} logs $submariner_pod -n ${ns_name} |& highlight "received packet" || :
-    ${OC} describe pod $submariner_pod -n ${ns_name} || :
+    ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
+    ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
     ${OC} get Submariner -o yaml || :
-    ${OC} get deployments -o yaml -n ${ns_name} || :
-    ${OC} get pods -o yaml -n ${ns_name} || :
+    ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+    ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
     FATAL "Error: Submariner clusters are not connected."
   fi
 }
@@ -1498,11 +1499,15 @@ function test_lighthouse_status() {
 
   ${OC} describe multiclusterservices --all-namespaces
 
-  lighthouse_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
+  lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
 
-  ${OC} logs $lighthouse_pod -n ${ns_name} |& highlight "Lighthouse agent syncer started" #\
-  # || FATAL "Error: Service-Discovery failed to sync with Broker"
-  #|& highlight "successfully synced" || FATAL "Error: Service-Discovery failed to sync with Broker"
+  echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
+  # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
+
+  cmd="${OC} logs --tail 100 $lighthouse_pod -n ${SUBM_NAMESPACE}"
+  regex="Lighthouse agent syncer started"
+  # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
+  watch_and_retry "$cmd" 5m "$regex"
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
@@ -1513,10 +1518,15 @@ function test_globalnet_status() {
   # Check Globalnet controller pod status
   trap_commands;
 
-  globalnet_pod=$(${OC} get pod -n ${ns_name} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
+  globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
 
-  ${OC} logs $globalnet_pod -n ${ns_name} |& highlight "Allocating globalIp" #\
-  # || FATAL "Error: GlobalNet failed to allocate Global IPs to the cluster services"
+  echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
+  # ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& highlight "Allocating globalIp"
+
+  cmd="${OC} logs --tail 100 $globalnet_pod -n ${SUBM_NAMESPACE}"
+  regex="Allocating globalIp"
+  # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
+  watch_and_retry "$cmd" 3m "$regex"
 
 }
 
@@ -1671,7 +1681,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   trap_commands;
 
   new_netshoot_cluster_a=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
-  new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-cl-b-new} # A NEW Namespace on cluster B
+  new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
   prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
@@ -1863,7 +1873,7 @@ function test_submariner_e2e_latest() {
   go env
   go test -v ./test/e2e -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
-  --submariner-namespace submariner-operator \
+  --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 -connection-attempts 3 \
   -ginkgo.v -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \

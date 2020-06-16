@@ -14,6 +14,7 @@ export MERGED_KUBCONF="${WORKDIR}/merged_kubeconfig"
 export BROKER_CLUSTER_NAME="cluster-a"
 export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
 export BROKER_INFO="broker-info.subm"
+export SUBM_NAMESPACE="submariner-operator"
 
 export CLUSTER_A_NAME="cluster-a"
 export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}

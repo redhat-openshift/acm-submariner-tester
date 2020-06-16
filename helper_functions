@@ -538,16 +538,16 @@ function install_nginx_service() {
   trap_commands;
 
   ngnix_name="${1:-NginX}"
-  new_namespace="${2}" # The Namespace on where Ngnix should be installed in
+  target_namespace="${2}" # The Namespace on where Ngnix should be installed in
   nginx_image="nginxinc/nginx-unprivileged:stable-alpine"
 
   if [[ -n "$target_namespace" ]] ; then
-    echo "# Delete and create Nginx Namespace: $new_namespace"
-    delete_namespace_and_crds "${target_namespace}"
+    echo "# Create Namespace for Nginx: $target_namespace"
+    # delete_namespace_and_crds "${target_namespace}"
     ${OC} create namespace "${target_namespace}" || : # || : to ignore if namespace already exists
   fi
 
-  echo "# Delete and create Nginx Deployment: $new_namespace (using Nginx image \"$nginx_image\")"
+  echo "# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
   ${OC} delete deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} create deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --image=$nginx_image
 
