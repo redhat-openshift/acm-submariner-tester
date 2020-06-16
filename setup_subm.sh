@@ -1740,7 +1740,9 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Netshoot pod ${new_netshoot_cluster_a}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
   fi
 
-  prompt "Create ServiceExport (Lighthouse Custom Resource) for the SuperCluster domain"
+  prompt "Create ServiceExport on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, for Nginx on SuperCluster domain"
+
+  kubconf_b;
 
   BUG "Service domain (FQDN) on supercluster will not be resolved, if GlobalNet annotation was not set yet" \
   "Verify Nginx GlobalIP Annotation, prior to creating ServiceExport" \
