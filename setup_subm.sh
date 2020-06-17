@@ -630,21 +630,24 @@ function download_subctl_latest_release() {
   ### Download OCP installer ###
     prompt "Downloading latest release of Submariner-Operator tool - SubCtl"
     trap_commands;
-    # TODO: curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash
-    # We can also do VERSION=rc
+    # TODO: curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=rc bash
 
     cd ${WORKDIR}
 
-    release_url="https://github.com/submariner-io/submariner-operator/releases/"
-    # file_path="$(curl "$release_url/tag/latest/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+    repo_url="https://github.com/submariner-io/submariner-operator"
+    repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/v[^"]+' -m 1)"
+    releases_url="${repo_url}/releases"
 
-    BUG "Submariner \"Latest release\" label points to an old release" \
-    "Specify subctl version to download manually (e.g. \"v0.4.0-rc2\")" \
-    "https://github.com/submariner-io/submariner/issues/468"
+    # BUG "Submariner \"Latest release\" label points to an old release" \
+    # "Specify subctl version to download manually (e.g. \"v0.4.0-rc2\")" \
+    # "https://github.com/submariner-io/submariner/issues/468"
     # Workaround:
-    file_path="$(curl "$release_url/tag/v0.4.0-rc2/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+    #release_url="https://github.com/submariner-io/submariner-operator/releases/"
+    #file_path="$(curl "$release_url/tag/v0.4.0-rc2/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
-    download_file ${release_url}${file_path}
+    file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+
+    download_file "${releases_url}/${file_path}"
 
     file_name=$(basename -- "$file_path")
     tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
