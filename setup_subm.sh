@@ -683,8 +683,37 @@ function download_subctl_latest_devel() {
     trap_commands;
 
     cd ${WORKDIR}
-    curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash
+
+    # curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash
+    # export PATH=$HOME/.local/bin:$PATH
+    BUG "getsubctl.sh fails on an unexpected argument" \
+    "Run as in download_subctl_latest_release (just with \"devel\" tag)" \
+    "https://github.com/submariner-io/submariner-operator/issues/473"
+
+    # Workaround:
+
+    repo_url="https://github.com/submariner-io/submariner-operator"
+    repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
+    releases_url="${repo_url}/releases"
+
+    file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+    download_file "${releases_url}/${file_path}"
+
+    file_name=$(basename -- "$file_path")
+    tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
+
+    # Rename last extracted file to subctl
+    extracted_file="$(ls -1 -tu subctl* | head -1)"
+
+    [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+    chmod +x subctl
+
+    echo "# Copy subctl to system path:"
+    mkdir -p $GOBIN
+
+    cp ./subctl ~/.local/bin/
     export PATH=$HOME/.local/bin:$PATH
+
 }
 
 # ------------------------------------------
@@ -1249,7 +1278,7 @@ function gateway_label_all_nodes_external_ip() {
 
 # ------------------------------------------
 
-function install_broker_and_member_aws_cluster_a() {
+function install_broker_aws_cluster_a() {
 ### Installing Submariner Broker on AWS cluster A (public) ###
   # TODO - Should test broker deployment also on different Public cluster (C), rather than on Public cluster A.
   # TODO: Call kubeconfig of broker cluster
@@ -1259,8 +1288,12 @@ function install_broker_and_member_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
-  DEPLOY_CMD="deploy-broker --dataplane ${CABLE_DRIVER} --clusterid ${CLUSTER_A_NAME} \
-  --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
+
+  # After 0.4.0 RC2, need to remove: --cable-driver, --clusterid, --ikeport, --nattport, --globalnet, --globalnet-cidr
+  # DEPLOY_CMD="deploy-broker ${CABLE_DRIVER} --clusterid ${CLUSTER_A_NAME} \
+  # --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
+
+  DEPLOY_CMD="deploy-broker "
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
   kubconf_a;
@@ -1284,7 +1317,8 @@ function install_broker_and_member_aws_cluster_a() {
     "https://github.com/submariner-io/submariner/issues/544"
 
     prompt "Adding GlobalNet to Submariner Deploy command"
-    DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
+    # DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
+    DEPLOY_CMD="${DEPLOY_CMD} --globalnet"
   fi
 
   prompt "Deploying Submariner Broker and joining cluster A"
@@ -1296,7 +1330,7 @@ function install_broker_and_member_aws_cluster_a() {
   # Run 3 attempts, and wait for command exit OK
   # watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
 
-  subctl $DEPLOY_CMD --subm-debug
+  subctl $DEPLOY_CMD
 
   ${OC} -n ${SUBM_NAMESPACE} get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
 
@@ -1310,10 +1344,37 @@ function install_broker_and_member_aws_cluster_a() {
 
 # ------------------------------------------
 
+function join_submariner_cluster_a() {
+# Join Submariner member - AWS cluster A (public)
+  prompt "Joining cluster A to Submariner Broker (also on cluster A), and verifying CRDs"
+  kubconf_a;
+  join_submariner_current_cluster "${CLUSTER_A_NAME}"
+
+  BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
+  "Define a new and unique globalnet-cidr for each cluster, or add a wait (1 minute)" \
+  "https://github.com/submariner-io/submariner-operator/issues/299"
+
+  sleep 30s
+}
+
+# ------------------------------------------
+
 function join_submariner_cluster_b() {
-# Install Submariner on OSP cluster B (private)
-  cd ${WORKDIR}
+# Join Submariner member - OSP cluster B (private)
   prompt "Joining cluster B to Submariner Broker (on cluster A), and verifying CRDs"
+  kubconf_b;
+  join_submariner_current_cluster "${CLUSTER_B_NAME}"
+
+}
+
+# ------------------------------------------
+
+function join_submariner_current_cluster() {
+# Join Submariner member - of current cluster kubeconfig
+  trap_commands;
+  current_cluster_context_name="$1"
+
+  cd ${WORKDIR}
 
   # Process:
   #
@@ -1334,30 +1395,27 @@ function join_submariner_cluster_b() {
   # --repository local --version local broker-info.subm
   #
 
-  trap_commands;
-  #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  BUG "After deploying broker with Service-Discovery, Subctl join can fail on \"context does not exist\"" \
-  "Subctl join must be specified with broker-cluster-context" \
-  "https://github.com/submariner-io/submariner-operator/issues/194"
+  # BUG "clusterID must be identical to KUBECONFIG context name, otherwise kubefedctl will fail" \
+  # "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and clusterid" \
+  # "https://github.com/submariner-io/submariner-operator/issues/193"
+  # # Workaround:
+  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
 
-  BUG "clusterID must be identical to KUBECONFIG context name, otherwise kubefedctl will fail" \
-  "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and clusterid" \
-  "https://github.com/submariner-io/submariner-operator/issues/193"
-  sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}:${KUBECONF_BROKER}"
+  # export KUBECONFIG="${KUBECONF_CLUSTER_B}:${KUBECONF_BROKER}"
+  export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view --flatten > ${MERGED_KUBCONF}
 
-  BUG "Multiple Kubconfig cannot have same users (e.g. \"admin\"), otherwise join will fail to get kubefed clientset (Unauthorized)" \
-  "Rename username in KUBECONFIG, before joining a new cluster" \
-  "https://github.com/submariner-io/submariner-operator/issues/225"
-
-  kubconf_b;
-  ${OC} config view --flatten > ${MERGED_KUBCONF}_b
-  sed -i 's/admin/cl_b_user/' ${MERGED_KUBCONF}_b
-  export KUBECONFIG="${KUBECONF_BROKER}:${MERGED_KUBCONF}_b"
-  ${OC} config view --flatten > ${MERGED_KUBCONF}
+  # BUG "Multiple Kubconfig cannot have same users (e.g. \"admin\"), otherwise join will fail to get kubefed clientset (Unauthorized)" \
+  # "Rename username in KUBECONFIG, before joining a new cluster" \
+  # "https://github.com/submariner-io/submariner-operator/issues/225"
+  # # Workaround:
+  #
+  # kubconf_b;
+  # ${OC} config view --flatten > ${MERGED_KUBCONF}_b
+  # sed -i 's/admin/cl_b_user/' ${MERGED_KUBCONF}_b
+  # export KUBECONFIG="${KUBECONF_BROKER}:${MERGED_KUBCONF}_b"
+  # ${OC} config view --flatten > ${MERGED_KUBCONF}
 
   ${OC} config view
 
@@ -1369,35 +1427,39 @@ function join_submariner_cluster_b() {
   "https://github.com/submariner-io/submariner/issues/642"
   #Workaround:
   # Use strongswan as in u/s, instead of libreswan
-  JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
-  ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${CABLE_DRIVER}"
+
+  JOIN_CMD="join --kubecontext ${current_cluster_context_name} --kubeconfig ${MERGED_KUBCONF} \
+  --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${CABLE_DRIVER} \
+  --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
-    "Define a new and unique globalnet-cidr for this cluster" \
-    "https://github.com/submariner-io/submariner/issues/544"
+    prompt "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
 
-    prompt "Adding GlobalNet to Submariner Join command"
-    JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19"
+    BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
+    "Define a new and unique globalnet-cidr for each cluster, or add a wait (1 minute)" \
+    "https://github.com/submariner-io/submariner-operator/issues/299"
+
+    # JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19" # or 169.254.0.0/19
+    # Workaround
+    JOIN_CMD="${JOIN_CMD}"
   fi
 
+  # BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
+  # "Use a retry mechanism to run the same subctl command again" \
+  # "https://github.com/submariner-io/submariner-operator/issues/336"
+  # # Workaround:
+  # # Run 3 attempts, and wait for command exit OK
+  # watch_and_retry "subctl $JOIN_CMD --subm-debug" 3
+
+  # subctl --subm-debug ${JOIN_CMD}
   BUG "--subm-debug cannot be used before join argument in subctl command" \
   "Add --subm-debug at the end only" \
   "https://github.com/submariner-io/submariner-operator/issues/340"
-  # subctl ${JOIN_CMD} --subm-debug
-
-  BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
-  "Use a retry mechanism to run the same subctl command again" \
-  "https://github.com/submariner-io/submariner-operator/issues/336"
-
-  # subctl ${JOIN_CMD}
-
   # Workaround:
-  # Run 3 attempts, and wait for command exit OK
-  watch_and_retry "subctl $JOIN_CMD --subm-debug" 3
+  subctl ${JOIN_CMD} --subm-debug
 
-  # Check that Submariners CRD has been created on OSP cluster B (private):
+  prompt "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
   ${OC} get crds | grep submariners
       # ...
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
@@ -1657,7 +1719,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if netshoot_global_ip was not set
   #netshoot_global_ip="$($cmd | tr -d \')"
-  netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $3}')"
+  netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $2}')"
   [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
   ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
 
@@ -1665,7 +1727,7 @@ function test_clusters_connected_overlapping_cidrs() {
   "Skip Globalnet verification for the Netshoot pod." \
   "https://github.com/submariner-io/submariner/issues/625"
   # Workaround - SKIP this:
-  # [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
+  [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
 
   prompt "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
@@ -1963,7 +2025,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
     - label_all_gateway_external_ip_cluster_a
     - label_first_gateway_cluster_b
-    - install_broker_and_member_aws_cluster_a
+    - install_broker_aws_cluster_a
+    - join_submariner_cluster_a
     - join_submariner_cluster_b
     $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
@@ -2057,9 +2120,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     label_first_gateway_cluster_b
 
-    install_broker_and_member_aws_cluster_a
+    install_broker_aws_cluster_a
 
-    # join_submariner_cluster_a
+    join_submariner_cluster_a
 
     join_submariner_cluster_b
 
