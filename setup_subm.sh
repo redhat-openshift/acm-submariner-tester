@@ -394,7 +394,7 @@ globalnet=${globalnet:-NO}
 ### Main CI Function ###
 
 function setup_workspace() {
-  prompt "Creating workspace and verifing GO installation"
+  prompt "Creating workspace and verifying GO installation"
   # DONT trap_commands - Includes credentials, hide from output
 
   # Add HOME dir to PATH
@@ -1516,7 +1516,7 @@ function test_submariner_engine_status() {
     sleep 2m
   fi
 
-  prompt "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}:"
+  prompt "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
   # ${OC} describe Gateway -n ${SUBM_NAMESPACE} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} > "$TEMP_FILE"
@@ -1535,12 +1535,12 @@ function test_submariner_engine_status() {
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    prompt "Testing GlobalNet controller status on ${cluster_name}:"
+    prompt "Testing GlobalNet controller status on ${cluster_name}"
     test_globalnet_status || submariner_status=DOWN
   fi
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing Lighthouse agent status on ${cluster_name}:"
+    prompt "Testing Lighthouse agent status on ${cluster_name}"
     test_lighthouse_status || submariner_status=DOWN
   fi
 
@@ -1966,7 +1966,7 @@ function test_submariner_e2e_with_subctl() {
   subctl info
 
   subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
-  # subctl verify --only connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
 
 }
 

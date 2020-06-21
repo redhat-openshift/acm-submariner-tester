@@ -199,11 +199,12 @@ function install_anaconda() {
 
 function install_local_golang() {
   # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
-  # trap_commands
+  trap_commands
+  echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
+
   install_dir="${1:-.}/"
   install_anaconda "${install_dir}"
 
-  echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
