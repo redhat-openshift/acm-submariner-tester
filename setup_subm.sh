@@ -44,17 +44,14 @@ disclosure='--------------------------------------------------------------------
 This is an interactive script to create Openshift clusters on OSP and AWS,
 and test multi-cluster network connectivity with Submariner:
 
-* ...
-* ...
-* ...
-
 Running with pre-defined parameters (optional):
 
 * Show this help menu:                               -h / --help
 * Show debug info (verbose) for commands:            -d / --debug
 # Build latest Submariner-Operator (SubCtl):         --build-operator  [DEPRECATED]
 * Build latest Submariner E2E (test packages):       --build-e2e
-* Download latest OCP Installer:                     --get-ocp-installer
+* Download OCP Installer:                            --get-ocp-installer
+* Specify OCP version:                               --ocp-version [x.x.x]
 * Download latest OCPUP Tool:                        --get-ocpup-tool
 * Download latest release of SubCtl:                 --get-subctl
 * Download development release of SubCtl:            --get-subctl-devel
@@ -80,9 +77,14 @@ $ ./setup_subm.sh
 
   Will run interactively (enter choices during execution).
 
-$ ./setup_subm.sh --get-ocp-installer --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
+$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 
-  Will create new AWS cluster (A), Clean existing OSP cluster (B), build, install and test latest Submariner, with Service-Discovery.
+  Will run:
+  - New cluster on AWS (cluster A), with OCP 4.4.6
+  - Clean existing cluster on OSP (cluster B)
+  - Install latest Submariner release
+  - Configure Service-Discovery and GlobalNet
+  - Build and run latest E2E tests
 
 
 ----------------------------------------------------------------------'
@@ -136,6 +138,10 @@ while [[ $# -gt 0 ]]; do
   --get-ocp-installer)
     get_ocp_installer=YES
     shift ;;
+  --ocp-version)
+    check_cli_args "$2"
+    ocp_version="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    shift 2 ;;
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
@@ -189,7 +195,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    export CABLE_DRIVER="--cable-driver $2" # libreswan OR strongswan
+    subm_cable_driver="--cable-driver $2" # libreswan OR strongswan
     shift 2 ;;
   # -o|--optional-key-value)
   #   check_cli_args "$2"
@@ -221,11 +227,21 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $get_ocp_installer - to download_ocp_installer
   while [[ ! "$get_ocp_installer" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to download latest OCP Installer ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     get_ocp_installer=${input:-no}
   done
+
+  # User input: $ocp_version - to download_ocp_installer with specific version
+  if [[ "$get_ocp_installer" =~ ^(yes|y)$ ]]; then
+    while [[ ! "$ocp_version" =~ ^[0-9a-Z]+$ ]]; do
+      echo -e "\n${YELLOW}Which OCP version do you want to install ? ${NO_COLOR}
+      Enter version number, or nothing to install latest version: "
+      read -r input
+      ocp_version=${input:-latest}
+    done
+  fi
 
   # User input: $get_ocpup_tool - to build_ocpup_tool_latest
   while [[ ! "$get_ocpup_tool" =~ ^(yes|no)$ ]]; do
@@ -433,9 +449,15 @@ function download_ocp_installer() {
   prompt "Downloading latest OCP Installer"
   # The nightly builds available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   trap_commands;
+
+  # Optional param: $1 => $ocp_version (default = latest)
+  ocp_major_version="${1:+${1%%.*}}"
+  ocp_major_version="${ocp_major_version:-4}"
+  ocp_version="${1:-latest}"
+
   cd ${WORKDIR}
 
-  ocp_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/"
+  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${ocp_version}/"
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
@@ -684,8 +706,9 @@ function download_subctl_latest_devel() {
 
     cd ${WORKDIR}
 
-    # curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash
+    # curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash -x
     # export PATH=$HOME/.local/bin:$PATH
+
     BUG "getsubctl.sh fails on an unexpected argument" \
     "Run as in download_subctl_latest_release (just with \"devel\" tag)" \
     "https://github.com/submariner-io/submariner-operator/issues/473"
@@ -711,7 +734,7 @@ function download_subctl_latest_devel() {
     echo "# Copy subctl to system path:"
     mkdir -p $GOBIN
 
-    cp ./subctl ~/.local/bin/
+    cp ./subctl ~/.local/bin/+
     export PATH=$HOME/.local/bin:$PATH
 
 }
@@ -1290,7 +1313,7 @@ function install_broker_aws_cluster_a() {
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
   # After 0.4.0 RC2, need to remove: --cable-driver, --clusterid, --ikeport, --nattport, --globalnet, --globalnet-cidr
-  # DEPLOY_CMD="deploy-broker ${CABLE_DRIVER} --clusterid ${CLUSTER_A_NAME} \
+  # DEPLOY_CMD="deploy-broker ${subm_cable_driver} --clusterid ${CLUSTER_A_NAME} \
   # --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
 
   DEPLOY_CMD="deploy-broker "
@@ -1420,7 +1443,7 @@ function join_submariner_current_cluster() {
   ${OC} config view
 
   # JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
-  # ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${CABLE_DRIVER}"
+  # ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${subm_cable_driver}"
 
   BUG "Libreswan cable-driver cannot be used on NAT-T with no public IP (OSP cluster B)" \
    "Make sure subctl join used \"--cable-driver strongswan\"" \
@@ -1429,7 +1452,7 @@ function join_submariner_current_cluster() {
   # Use strongswan as in u/s, instead of libreswan
 
   JOIN_CMD="join --kubecontext ${current_cluster_context_name} --kubeconfig ${MERGED_KUBCONF} \
-  --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${CABLE_DRIVER} \
+  --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
 
@@ -1488,7 +1511,7 @@ function test_submariner_engine_status() {
   ${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
   submariner_pod="$(< $TEMP_FILE)"
 
-  if [[ -z "${CABLE_DRIVER}" || "${CABLE_DRIVER}" =~ strongswan ]] ; then
+  if [[ -z "${subm_cable_driver}" || "${subm_cable_driver}" =~ strongswan ]] ; then
     prompt "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
     BUG "strongswan status exit code 3, even when \"security associations\" is up" \
     "Ignore non-zero exit code, by redirecting stderr" \
@@ -1510,7 +1533,7 @@ function test_submariner_engine_status() {
     # workaround:
     ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
 
-  elif [[ "${CABLE_DRIVER}" =~ libreswan ]] ; then
+  elif [[ "${subm_cable_driver}" =~ libreswan ]] ; then
     prompt "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
     # TODO: Check LibreSwan pod status with watch_and_retry
     sleep 2m
@@ -2005,7 +2028,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     OCP and Submariner setup and test tools:
     - config_golang: $config_golang
     - config_aws_cli: $config_aws_cli
-    - download_ocp_installer: $get_ocp_installer
+    - download_ocp_installer: $get_ocp_installer $ocp_version
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator
     - build_submariner_e2e_latest: $build_submariner_e2e
@@ -2061,7 +2084,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer ${ocp_version}
 
     # Running destroy_aws_cluster_a if requested
     [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || destroy_aws_cluster_a

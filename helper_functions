@@ -545,7 +545,7 @@ function install_nginx_service() {
   if [[ -n "$target_namespace" ]] ; then
     echo "# Create Namespace for Nginx: $target_namespace"
     # delete_namespace_and_crds "${target_namespace}"
-    ${OC} create namespace "${target_namespace}" || : # || : to ignore if namespace already exists
+    ${OC} create namespace "${target_namespace}" || echo "# Existing namespace \"${target_namespace}\" (ignore error)"
   fi
 
   echo "# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
