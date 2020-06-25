@@ -140,7 +140,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --ocp-version)
     check_cli_args "$2"
-    ocp_version="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    export GET_OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
     shift 2 ;;
   --get-ocpup-tool)
     get_ocpup_tool=YES
@@ -227,19 +227,19 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $get_ocp_installer - to download_ocp_installer
   while [[ ! "$get_ocp_installer" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to download latest OCP Installer ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     get_ocp_installer=${input:-no}
   done
 
-  # User input: $ocp_version - to download_ocp_installer with specific version
+  # User input: $GET_OCP_VERSION - to download_ocp_installer with specific version
   if [[ "$get_ocp_installer" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$ocp_version" =~ ^[0-9a-Z]+$ ]]; do
-      echo -e "\n${YELLOW}Which OCP version do you want to install ? ${NO_COLOR}
+    while [[ ! "$GET_OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+      echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
       Enter version number, or nothing to install latest version: "
       read -r input
-      ocp_version=${input:-latest}
+      GET_OCP_VERSION=${input:-latest}
     done
   fi
 
@@ -446,18 +446,22 @@ function setup_workspace() {
 
 function download_ocp_installer() {
 ### Download OCP installer ###
-  prompt "Downloading latest OCP Installer"
+  prompt "Downloading OCP Installer $GET_OCP_VERSION"
   # The nightly builds available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   trap_commands;
 
-  # Optional param: $1 => $ocp_version (default = latest)
-  ocp_major_version="${1:+${1%%.*}}"
-  ocp_major_version="${ocp_major_version:-4}"
-  ocp_version="${1:-latest}"
+  # Optional param: $1 => $GET_OCP_VERSION (default = latest)
+  ocp_major_version="$(echo "$1" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
+  ocp_major_version="${ocp_major_version:-4}" # if no major version was found (e.g. "latest"), the default OCP is 4
+  GET_OCP_VERSION="${1:-latest}"
 
   cd ${WORKDIR}
 
-  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${ocp_version}/"
+  BUG "OCP 4.4.8 failure on generate asset \"Platform Permissions Check\"" \
+  "Run OCP Installer 4.4.6 instead" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1850099"
+
+  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${GET_OCP_VERSION}/"
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
@@ -934,10 +938,10 @@ function destroy_aws_cluster_a() {
     # cd "${CLUSTER_A_DIR}"
     if [[ -f "${CLUSTER_A_DIR}/metadata.json" ]] ; then
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
-      timeout 20m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
+      timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
-      BUG "WARNING: OCP Destroy timeout exceeded - Process did not complete after 20 minutes." \
-      "Skipping Destroy completion" \
+      BUG "WARNING: OCP destroy timeout exceeded - loop state while searching for hosted zone." \
+      "Force exist OCP destroy process, or use OCP version 4.5" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=1817201" )
     fi
     # cd ..
@@ -1052,6 +1056,9 @@ function delete_submariner_namespace_and_crds() {
   "https://github.com/submariner-io/submariner-operator/issues/88"
 
   delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
+
+  # Required if Broker cluster is not a Dataplane cluster as well:
+  # delete_namespace_and_crds "submariner-k8s-broker"
 
   echo "# Clean Lighthouse ServiceExport DNS list:"
 
@@ -1445,9 +1452,9 @@ function join_submariner_current_cluster() {
   # JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
   # ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${subm_cable_driver}"
 
-  BUG "Libreswan cable-driver cannot be used on NAT-T with no public IP (OSP cluster B)" \
-   "Make sure subctl join used \"--cable-driver strongswan\"" \
-  "https://github.com/submariner-io/submariner/issues/642"
+  BUG "Libreswan cable-driver cannot be used with IPSec ports 501 and 4501" \
+   "Make sure subctl join used \"--cable-driver strongswan\" (it should be the default for Subctl 0.4)" \
+  "https://github.com/submariner-io/submariner/issues/683"
   #Workaround:
   # Use strongswan as in u/s, instead of libreswan
 
@@ -2028,7 +2035,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     OCP and Submariner setup and test tools:
     - config_golang: $config_golang
     - config_aws_cli: $config_aws_cli
-    - download_ocp_installer: $get_ocp_installer $ocp_version
+    - download_ocp_installer: $get_ocp_installer $GET_OCP_VERSION
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator
     - build_submariner_e2e_latest: $build_submariner_e2e
@@ -2084,7 +2091,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer ${ocp_version}
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer ${GET_OCP_VERSION}
 
     # Running destroy_aws_cluster_a if requested
     [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || destroy_aws_cluster_a
