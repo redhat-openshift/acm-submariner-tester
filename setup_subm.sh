@@ -738,7 +738,7 @@ function download_subctl_latest_devel() {
     echo "# Copy subctl to system path:"
     mkdir -p $GOBIN
 
-    cp ./subctl ~/.local/bin/+
+    cp ./subctl ~/.local/bin/
     export PATH=$HOME/.local/bin:$PATH
 
 }
