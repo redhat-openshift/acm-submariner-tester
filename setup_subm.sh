@@ -1616,12 +1616,15 @@ function test_globalnet_status() {
   globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
-  # ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& highlight "Allocating globalIp"
 
   cmd="${OC} logs --tail 100 $globalnet_pod -n ${SUBM_NAMESPACE}"
   regex="Allocating globalIp"
   # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
   watch_and_retry "$cmd" 3m "$regex"
+
+  prompt "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
+  echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
+  ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& (! highlight "remove endpoint")
 
 }
 
