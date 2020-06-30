@@ -710,14 +710,27 @@ function download_subctl_latest_devel() {
 
     cd ${WORKDIR}
 
+    # # DEBUG
+    # which install
+    # install --version
+    # install --help
+    # # DEBUG
+    #
     # curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash -x
+    #
     # export PATH=$HOME/.local/bin:$PATH
+    #
+    # return
 
-    BUG "getsubctl.sh fails on an unexpected argument" \
+    BUG "Subctl devel binaries leftovers" \
     "Run as in download_subctl_latest_release (just with \"devel\" tag)" \
     "https://github.com/submariner-io/submariner-operator/issues/473"
 
     # Workaround:
+
+    BUG "getsubctl.sh fails on an unexpected argument" \
+    "No workaround..." \
+    "https://github.com/submariner-io/submariner-operator/issues/513"
 
     repo_url="https://github.com/submariner-io/submariner-operator"
     repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
@@ -1558,7 +1571,8 @@ function test_submariner_engine_status() {
   fi
 
   # Get some info on installed CRDs
-  subctl info
+  # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
+subctl show networks
   ${OC} describe cm -n openshift-dns
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
@@ -1945,7 +1959,7 @@ function test_submariner_packages() {
 
 # ------------------------------------------
 
-function test_submariner_e2e_latest() {
+function test_submariner_e2e_with_go() {
 # Run E2E Tests of Submariner:
   prompt "Testing Submariner End-to-End tests with GO"
   trap_commands;
@@ -1965,18 +1979,15 @@ function test_submariner_e2e_latest() {
     # *         admin             user-cluster-a   admin
     #           admin_cluster_b   user-cl1         admin
 
-  BUG "E2E fails on first test - cannot find cluster resource" \
-  "No workaround yet..." \
-  "https://github.com/submariner-io/shipyard/issues/158"
-
   export GO111MODULE="on"
   go env
   go test -v ./test/e2e -args \
+  -ginkgo.v -ginkgo.trace \
+  -ginkgo.randomizeAllSpecs \
+  -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 -connection-attempts 3 \
-  -ginkgo.v -ginkgo.randomizeAllSpecs \
-  -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
   || echo "# Warning: Test execution failure occurred"
 }
 
@@ -1990,13 +2001,18 @@ function test_submariner_e2e_with_subctl() {
   which subctl
   subctl version
 
-  BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
-  "Call Kubeconfig of a single Cluster" \
-  "https://github.com/submariner-io/submariner-operator/issues/384"
-  # workaround:
-  kubconf_a;
+  # BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
+  # "Call Kubeconfig of a single Cluster" \
+  # "https://github.com/submariner-io/submariner-operator/issues/384"
+  # # workaround:
+  # kubconf_a;
 
-  subctl info
+  # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
+  subctl show networks
+
+  BUG "No Subctl option to set -ginkgo.reportFile" \
+  "No workaround yet..." \
+  "https://github.com/submariner-io/submariner-operator/issues/509"
 
   subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
   # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
@@ -2082,7 +2098,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     - verify_golang
     - test_submariner_packages
-    - test_submariner_e2e_latest
+    - test_submariner_e2e_with_go
     - test_submariner_e2e_with_subctl
     "
   fi
@@ -2191,7 +2207,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
 
-    test_submariner_e2e_latest || BUG "Submariner E2E Tests FAILED."
+    test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
     test_submariner_e2e_with_subctl
   fi
