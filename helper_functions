@@ -42,7 +42,7 @@ function print_cmd_location() {
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_commands() {
   trap '
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|while|for|prompt|BUG|FATAL) ]] ; then
+   if [[ ! "$BASH_COMMAND" =~ (echo|read|while|for|PROMPT|BUG|FATAL) ]] ; then
      cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" 2>/dev/null)"
      cmd_eval=$(eval "echo -e \"$cmd_escaped\"" 2>/dev/null)
      if [[ -n $cmd_eval ]] ; then
@@ -68,7 +68,7 @@ trap_commands
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
 {
-  # trap_commands
+  trap_commands
   pattern="$1"
   shift
 
@@ -86,7 +86,7 @@ function highlight()
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  # trap_commands
+  trap_commands
   # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
@@ -115,6 +115,7 @@ function watch_and_retry() {
 
   timeout $TIMEOUT bash <<EOF \
   || ( [[ $? -eq 124 ]] && echo "# Timeout of $TIMEOUT has exceeded." && return 1 )
+    trap_commands ;
     COUNT=0 ;
     until $CMD || [[ \$COUNT -eq $RETRY ]] ; do
       printf "\$(( COUNT++ ))... " ;
@@ -131,7 +132,7 @@ EOF
 # ------------------------------------------
 
 # Function to print current time and a message
-function prompt() {
+function PROMPT() {
   message="$1"
   color="${2:-${YELLOW}}"
   cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -382,7 +383,7 @@ function configure_aws_access() {
   install_dir="${5:-./}"
   aws_bin_dir="${6:-$HOME/.local/bin}"
 
-  prompt "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+  PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
   download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
@@ -448,7 +449,7 @@ function export_vars_from_json() {
 
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
-  prompt "Deleting DNS record for AWS Cluster A (Public): $2"
+  PROMPT "Deleting DNS record for AWS Cluster A (Public): $2"
   # trap_commands;
   # Input $1 : Hosted Zone ID
   # Input $2 : DNS record-set (name) to delete
@@ -568,7 +569,7 @@ function install_nginx_service() {
 #TODO: Use this function to upload E2E tests results to Polarion
 function upload_test_results_polarion() {
   # Polarion Jump - update test results
-    prompt "Polarion Jump - update test results"
+    PROMPT "Polarion Jump - update test results"
 
   # git clone ssh://user@code.engineering.redhat.com/jump
   # cd jump
@@ -669,7 +670,7 @@ EOF
   # Create HTML content with AHA
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
 
-  # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "prompt" function)
+  # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output
   sed -r 's:\s+###</span.+$:<\/span><\/button><div class="content">:g' -i $html_output
 

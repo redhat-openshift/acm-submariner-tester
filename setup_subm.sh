@@ -1,4 +1,4 @@
-#!/bin/bash
+PROMPT#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -410,7 +410,7 @@ globalnet=${globalnet:-NO}
 ### Main CI Function ###
 
 function setup_workspace() {
-  prompt "Creating workspace and verifying GO installation"
+  PROMPT "Creating workspace and verifying GO installation"
   # DONT trap_commands - Includes credentials, hide from output
 
   # Add HOME dir to PATH
@@ -446,7 +446,7 @@ function setup_workspace() {
 
 function download_ocp_installer() {
 ### Download OCP installer ###
-  prompt "Downloading OCP Installer $GET_OCP_VERSION"
+  PROMPT "Downloading OCP Installer $GET_OCP_VERSION"
   # The nightly builds available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   trap_commands;
 
@@ -490,7 +490,7 @@ function download_ocp_installer() {
 
 function build_ocpup_tool_latest() {
 ### Download OCPUP tool ###
-  prompt "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
+  PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
   trap_commands;
 
   # TODO: Need to fix ocpup alias
@@ -541,7 +541,7 @@ function build_ocpup_tool_latest() {
 
 function build_submariner_e2e_latest() {
 ### Building latest Submariner code and tests ###
-  prompt "Building latest Submariner code, including test packages (unit-tests and E2E)"
+  PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
   trap_commands;
   # Delete old Submariner directory
     # rm -rf $GOPATH/src/github.com/submariner-io/submariner
@@ -583,7 +583,7 @@ function build_submariner_e2e_latest() {
 
 function build_operator_latest() {
 ### Building latest Submariner-Operator code and SubCTL tool ###
-  prompt "Building latest Submariner-Operator code and SubCTL tool"
+  PROMPT "Building latest Submariner-Operator code and SubCTL tool"
   trap_commands;
 
   # Install Docker
@@ -654,7 +654,7 @@ function build_operator_latest() {
 
 function download_subctl_latest_release() {
   ### Download OCP installer ###
-    prompt "Downloading latest release of Submariner-Operator tool - SubCtl"
+    PROMPT "Downloading latest release of Submariner-Operator tool - SubCtl"
     trap_commands;
     # TODO: curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=rc bash
 
@@ -705,38 +705,32 @@ function download_subctl_latest_release() {
 
 function download_subctl_latest_devel() {
   ### Download OCP installer ###
-    prompt "Downloading latest development of SubCtl that was built from Submariner-Operator \"master\" branch"
+    PROMPT "Testing \"getsubctl.sh\" to download and install latest subctl-devel (built from Submariner-Operator \"master\" branch)"
     trap_commands;
 
     cd ${WORKDIR}
 
-    # # DEBUG
-    # which install
-    # install --version
-    # install --help
-    # # DEBUG
-    #
-    # curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel bash -x
-    #
-    # export PATH=$HOME/.local/bin:$PATH
-    #
-    # return
-
-    BUG "Subctl devel binaries leftovers" \
-    "Run as in download_subctl_latest_release (just with \"devel\" tag)" \
+    BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
+    "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
     "https://github.com/submariner-io/submariner-operator/issues/473"
-
     # Workaround:
+    PATH="/usr/bin:$PATH" which install
 
-    BUG "getsubctl.sh fails on an unexpected argument" \
-    "No workaround..." \
-    "https://github.com/submariner-io/submariner-operator/issues/513"
+    #curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel PATH="/usr/bin:$PATH" bash -x
+    #export PATH=$HOME/.local/bin:$PATH
+    BUG "curl: (22) The requested URL returned error: 403 rate limit exceeded"
+    # Workaround: Download with wget:
 
     repo_url="https://github.com/submariner-io/submariner-operator"
     repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
     releases_url="${repo_url}/releases"
-
     file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+
+    BUG "getsubctl.sh pulls non-latest devel version" \
+    "Download subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz" \
+    "https://github.com/submariner-io/submariner-operator/issues/520"
+    # Workround:
+    file_path="download/devel/subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz"
     download_file "${releases_url}/${file_path}"
 
     file_name=$(basename -- "$file_path")
@@ -759,20 +753,12 @@ function download_subctl_latest_devel() {
 # ------------------------------------------
 
 function test_subctl_command() {
-  prompt "Verifying SubCTL (Submariner-Operator command line tool)"
+  PROMPT "Verifying SubCTL (Submariner-Operator command line tool)"
   trap_commands;
-  #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   which subctl
   subctl version
-
-  # Create subctl alias:
-  # unalias subctl
-  # alias subctl="${PWD}/bin/subctl"
-
-  subctl deploy-broker --help
-
-  subctl join --help
+  subctl --help
 
 }
 
@@ -780,7 +766,7 @@ function test_subctl_command() {
 
 function create_aws_cluster_a() {
 ### Create AWS cluster A (public) with OCP installer ###
-  prompt "Creating AWS cluster A (public) with OCP installer"
+  PROMPT "Creating AWS cluster A (public) with OCP installer"
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
@@ -834,7 +820,7 @@ function create_aws_cluster_a() {
 
 function create_osp_cluster_b() {
 ### Create Openstack cluster B (private) with OCPUP tool ###
-  prompt "Creating Openstack cluster B (private) with OCP-UP tool"
+  PROMPT "Creating Openstack cluster B (private) with OCP-UP tool"
   trap_commands;
 
   cd "${OCPUP_DIR}"
@@ -865,7 +851,7 @@ function create_osp_cluster_b() {
 function test_kubeconfig_aws_cluster_a() {
 # Check that AWS cluster A (public) is up and running
   CLUSTER_A_VERSION=${CLUSTER_A_VERSION:+" (OCP Version $CLUSTER_A_VERSION)"}
-  prompt "Testing that AWS cluster A${CLUSTER_A_VERSION} is up and running"
+  PROMPT "Testing that AWS cluster A${CLUSTER_A_VERSION} is up and running"
   trap_commands;
 
   kubconf_a;
@@ -885,7 +871,7 @@ function kubconf_a() {
 function test_kubeconfig_osp_cluster_b() {
 # Check that OSP cluster B (private) is up and running
   CLUSTER_B_VERSION=${CLUSTER_B_VERSION:+" (OCP Version $CLUSTER_B_VERSION)"}
-  prompt "Testing that OSP cluster B${CLUSTER_B_VERSION} is up and running"
+  PROMPT "Testing that OSP cluster B${CLUSTER_B_VERSION} is up and running"
   trap_commands;
 
   kubconf_b;
@@ -939,7 +925,7 @@ function test_cluster_status() {
 
 function destroy_aws_cluster_a() {
 ### Destroy your previous AWS cluster A (public) ###
-  prompt "Destroying previous AWS cluster A (public)"
+  PROMPT "Destroying previous AWS cluster A (public)"
   trap_commands;
   # Temp - CD to main working directory
   cd ${WORKDIR}
@@ -993,7 +979,7 @@ function destroy_aws_cluster_a() {
 
 function destroy_osp_cluster_b() {
 ### If Required - Destroy your previous Openstack cluster B (private) ###
-  prompt "Destroying previous Openstack cluster B (private)"
+  PROMPT "Destroying previous Openstack cluster B (private)"
   trap_commands;
 
   cd "${OCPUP_DIR}"
@@ -1030,11 +1016,11 @@ function destroy_osp_cluster_b() {
 
 function clean_aws_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
+  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
   kubconf_a;
   delete_submariner_namespace_and_crds;
 
-  prompt "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
   "Make sure only 1 node has a gateway label" \
@@ -1050,11 +1036,11 @@ function clean_aws_cluster_a() {
 
 function clean_osp_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (private) ###
-  prompt "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (private)"
+  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (private)"
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
-  prompt "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (private)"
+  PROMPT "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (private)"
   remove_submariner_gateway_labels
 }
 
@@ -1101,7 +1087,7 @@ function remove_submariner_gateway_labels() {
 # ------------------------------------------
 
 function install_netshoot_app_on_cluster_a() {
-  prompt "Install Netshoot application on AWS cluster A (public)"
+  PROMPT "Install Netshoot application on AWS cluster A (public)"
   trap_commands;
 
   kubconf_a;
@@ -1129,7 +1115,7 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_cluster_b() {
-  prompt "Install Ngnix service on OSP cluster B${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
+  PROMPT "Install Ngnix service on OSP cluster B${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   trap_commands;
 
   kubconf_b;
@@ -1161,7 +1147,7 @@ function install_nginx_svc_on_cluster_b() {
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed:
+  PROMPT "Before Submariner is installed:
   Verifying connectivity on the same cluster, from Netshoot to Nginx service"
   trap_commands;
 
@@ -1185,7 +1171,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  prompt "Before Submariner is installed:
+  PROMPT "Before Submariner is installed:
   Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
   trap_commands;
 
@@ -1216,7 +1202,7 @@ function test_clusters_disconnected_before_submariner() {
 function open_firewall_ports_on_the_broker_node() {
 ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
-  prompt "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
+  PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
   trap_commands;
 
   # Installing Terraform
@@ -1258,7 +1244,7 @@ function open_firewall_ports_on_the_broker_node() {
 
 function label_all_gateway_external_ip_cluster_a() {
 ### Label a Gateway node on AWS cluster A (public) ###
-  prompt "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
+  PROMPT "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
   kubconf_a;
   # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
   gateway_label_all_nodes_external_ip
@@ -1266,7 +1252,7 @@ function label_all_gateway_external_ip_cluster_a() {
 
 function label_first_gateway_cluster_b() {
 ### Label a Gateway node on OSP cluster B (private) ###
-  prompt "Adding Gateway label to the first worker node on OSP cluster B (private)"
+  PROMPT "Adding Gateway label to the first worker node on OSP cluster B (private)"
   kubconf_b;
   gateway_label_first_worker_node
 }
@@ -1342,7 +1328,7 @@ function install_broker_aws_cluster_a() {
   kubconf_a;
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
-    prompt "Adding Service-Discovery to Submariner Deploy command"
+    PROMPT "Adding Service-Discovery to Submariner Deploy command"
 
     BUG "kubecontext must be identical to broker-cluster-context, otherwise kubefedctl will fail" \
     "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and broker-cluster-context" \
@@ -1359,12 +1345,12 @@ function install_broker_aws_cluster_a() {
     "Define a new and unique globalnet-cidr for this cluster" \
     "https://github.com/submariner-io/submariner/issues/544"
 
-    prompt "Adding GlobalNet to Submariner Deploy command"
+    PROMPT "Adding GlobalNet to Submariner Deploy command"
     # DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
     DEPLOY_CMD="${DEPLOY_CMD} --globalnet"
   fi
 
-  prompt "Deploying Submariner Broker and joining cluster A"
+  PROMPT "Deploying Submariner Broker and joining cluster A"
 
   # BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
   # "Use a retry mechanism to run the same subctl command again" \
@@ -1389,7 +1375,7 @@ function install_broker_aws_cluster_a() {
 
 function join_submariner_cluster_a() {
 # Join Submariner member - AWS cluster A (public)
-  prompt "Joining cluster A to Submariner Broker (also on cluster A), and verifying CRDs"
+  PROMPT "Joining cluster A to Submariner Broker (also on cluster A), and verifying CRDs"
   kubconf_a;
   join_submariner_current_cluster "${CLUSTER_A_NAME}"
 
@@ -1404,7 +1390,7 @@ function join_submariner_cluster_a() {
 
 function join_submariner_cluster_b() {
 # Join Submariner member - OSP cluster B (private)
-  prompt "Joining cluster B to Submariner Broker (on cluster A), and verifying CRDs"
+  PROMPT "Joining cluster B to Submariner Broker (on cluster A), and verifying CRDs"
   kubconf_b;
   join_submariner_current_cluster "${CLUSTER_B_NAME}"
 
@@ -1477,7 +1463,7 @@ function join_submariner_current_cluster() {
 
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    prompt "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
+    PROMPT "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
 
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
     "Define a new and unique globalnet-cidr for each cluster, or add a wait (1 minute)" \
@@ -1502,7 +1488,7 @@ function join_submariner_current_cluster() {
   # Workaround:
   subctl ${JOIN_CMD} --subm-debug
 
-  prompt "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
+  PROMPT "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
   ${OC} get crds | grep submariners
       # ...
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
@@ -1522,7 +1508,7 @@ function test_submariner_engine_status() {
   cluster_name="$1"
   # ns_name="submariner-operator"
 
-  prompt "Testing Submariner Operator resources on ${cluster_name}"
+  PROMPT "Testing Submariner Operator resources on ${cluster_name}"
 
   ${OC} get all -n ${SUBM_NAMESPACE} |& (! highlight "No resources found") \
   || FATAL "Error: Submariner is not installed on $cluster_name"
@@ -1532,7 +1518,7 @@ function test_submariner_engine_status() {
   submariner_pod="$(< $TEMP_FILE)"
 
   if [[ -z "${subm_cable_driver}" || "${subm_cable_driver}" =~ strongswan ]] ; then
-    prompt "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
+    PROMPT "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
     BUG "strongswan status exit code 3, even when \"security associations\" is up" \
     "Ignore non-zero exit code, by redirecting stderr" \
     "https://github.com/submariner-io/submariner/issues/360"
@@ -1554,12 +1540,12 @@ function test_submariner_engine_status() {
     ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
 
   elif [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    prompt "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
+    PROMPT "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
     # TODO: Check LibreSwan pod status with watch_and_retry
     sleep 2m
   fi
 
-  prompt "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
+  PROMPT "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
   # ${OC} describe Gateway -n ${SUBM_NAMESPACE} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} > "$TEMP_FILE"
@@ -1571,20 +1557,25 @@ function test_submariner_engine_status() {
   fi
 
   # Get some info on installed CRDs
+
+  BUG "If subctl devel binary is not the latest build - 'subctl show' will fail" \
+  "No workaround yet..." \
+  "https://github.com/submariner-io/submariner-operator/issues/513"
+
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
-subctl show networks
+  subctl show networks
   ${OC} describe cm -n openshift-dns
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    prompt "Testing GlobalNet controller status on ${cluster_name}"
+    PROMPT "Testing GlobalNet controller status on ${cluster_name}"
     test_globalnet_status || submariner_status=DOWN
   fi
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing Lighthouse agent status on ${cluster_name}"
+    PROMPT "Testing Lighthouse agent status on ${cluster_name}"
     test_lighthouse_status || submariner_status=DOWN
   fi
 
@@ -1636,7 +1627,7 @@ function test_globalnet_status() {
   # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
   watch_and_retry "$cmd" 3m "$regex"
 
-  prompt "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
+  PROMPT "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
   ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& (! highlight "remove endpoint")
 
@@ -1646,7 +1637,7 @@ function test_globalnet_status() {
 
 function test_submariner_status_cluster_a() {
 # Operator pod status on AWS cluster A (public)
-  prompt "Testing Submariner engine on AWS cluster A (public)"
+  PROMPT "Testing Submariner engine on AWS cluster A (public)"
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 }
@@ -1655,7 +1646,7 @@ function test_submariner_status_cluster_a() {
 
 function test_submariner_status_cluster_b() {
 # Operator pod status on OSP cluster B (private)
-  prompt "Testing Submariner engine on OSP cluster B (private)"
+  PROMPT "Testing Submariner engine on OSP cluster B (private)"
 
   kubconf_b;
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
@@ -1664,7 +1655,7 @@ function test_submariner_status_cluster_b() {
 # ------------------------------------------
 
 function test_clusters_connected_by_service_ip() {
-  prompt "After Submariner is installed:
+  PROMPT "After Submariner is installed:
   Identify Netshoot pod on cluster A, and Nginx service on cluster B"
   trap_commands;
 
@@ -1687,7 +1678,7 @@ function test_clusters_connected_by_service_ip() {
   CURL_CMD="${SUBM_TEST_NS:+-n $SUBM_TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (private)"
+    PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (private)"
     ${OC} exec ${CURL_CMD} || \
     BUG "TODO: This will if fail the clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
       # *   Trying 100.96.72.226:8080...
@@ -1711,7 +1702,7 @@ function test_clusters_connected_by_service_ip() {
       # <
       # * Connection #0 to host 100.96.72.226 left intact
   else
-    prompt "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
+    PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_b}:8080) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
@@ -1725,7 +1716,7 @@ function test_clusters_connected_by_service_ip() {
 function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the Private and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  prompt "Testing GlobalNet annotation - Nginx service on OSP cluster B (private) should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - Nginx service on OSP cluster B (private) should get a GlobalNet IP"
   trap_commands;
 
   kubconf_b;
@@ -1735,29 +1726,29 @@ function test_clusters_connected_overlapping_cidrs() {
    "Wait up to 3 minutes before checking connectivity with GlobalNet on overlapping clusters CIDRs" \
   "https://github.com/submariner-io/submariner/issues/588"
   # Workaround:
-  cmd="${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  #cmd="${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
+  cmd="${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
+
+  regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
   watch_and_retry "$cmd" 3m "$regex" || :
 
   # Should fail if nginx_global_ip was not set
-  nginx_global_ip="$($cmd | tr -d \')" || :
+  # nginx_global_ip="$($cmd | tr -d \')" || :
+  nginx_global_ip="$($cmd | awk -F 'globalIp:' '{ print $2 }')" || :
   [[ -n "$nginx_global_ip" ]] || globalip_status=DOWN
 
-  ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
-  |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
+  # ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
+  # |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
 
   [[ "$globalip_status" != DOWN ]] || \
   FATAL "Error: GlobalNet annotation and IP was not set on Ngnix service ${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
 
-  prompt "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
   kubconf_a;
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-
-  # cmd="${OC} get pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  # regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
 
   #cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk -F 'globalIp:' '{print \$2}' | xargs"
   cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
@@ -1776,7 +1767,7 @@ function test_clusters_connected_overlapping_cidrs() {
   # Workaround - SKIP this:
   [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
 
-  prompt "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
+  PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
 
   kubconf_a;
@@ -1796,13 +1787,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
   new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  prompt "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  PROMPT "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
 
   kubconf_b;
 
   install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
 
-  prompt "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
+  PROMPT "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
   and verify connectivity to the NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
@@ -1816,7 +1807,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} describe pod ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    prompt "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a NEW GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a NEW GlobalNet IP"
     kubconf_b
 
     BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
@@ -1824,19 +1815,28 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
      "Wait up to 3 minutes before checking connectivity with GlobalNet on overlapping clusters CIDRs" \
     "https://github.com/submariner-io/submariner/issues/588"
     # Workaround:
-    cmd="${OC} get svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-    regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+    #cmd="${OC} get svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
+    cmd="${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}"
+
+    # regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+    regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
     watch_and_retry "$cmd" 3m "$regex" || :
+
+    # Should fail if new_nginx_global_ip was not set
+    # new_nginx_global_ip="$($cmd | tr -d \')" || :
+    new_nginx_global_ip="$($cmd | awk -F 'globalIp:' '{ print $2 }')" || :
+    [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
 
     # TODO: Ping to the new_nginx_global_ip
     # [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
 
-    # Should fail if new_nginx_cluster_b did not get Global-IP after 3 minutes
-    ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} \
-    |& highlight "submariner\.io\/globalIp" || \
+    # ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} \
+    # |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
+
+    [[ "$globalip_status" != DOWN ]] || \
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
-    prompt "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
 
     kubconf_a;
 
@@ -1852,7 +1852,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Netshoot pod ${new_netshoot_cluster_a}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
   fi
 
-  prompt "Create ServiceExport on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, for Nginx on SuperCluster domain"
+  PROMPT "Create ServiceExport on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, for Nginx on SuperCluster domain"
 
   kubconf_b;
 
@@ -1885,7 +1885,7 @@ EOF
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
 
 
-  prompt "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
+  PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
@@ -1916,7 +1916,7 @@ EOF
   # Negative test for nginx_cl_b_short_dns FQDN
   nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
-  prompt "Testing Service-Discovery:
+  PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"supercluster\")"
 
   kubconf_a
@@ -1934,7 +1934,7 @@ EOF
 
 function test_submariner_packages() {
 ### Run Submariner Unit tests (mock) ###
-  prompt "Testing Submariner Packages (Unit-Tests) with GO"
+  PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
   export GO111MODULE="on"
@@ -1961,7 +1961,7 @@ function test_submariner_packages() {
 
 function test_submariner_e2e_with_go() {
 # Run E2E Tests of Submariner:
-  prompt "Testing Submariner End-to-End tests with GO"
+  PROMPT "Testing Submariner End-to-End tests with GO"
   trap_commands;
   cd $GOPATH/src/github.com/submariner-io/submariner
 
@@ -1981,10 +1981,13 @@ function test_submariner_e2e_with_go() {
 
   export GO111MODULE="on"
   go env
-  go test -v ./test/e2e -args \
+
+  go test -v ./test/e2e \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
-  -ginkgo.reportPassed -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
+  -ginkgo.reportPassed \
+  -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
+  -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 -connection-attempts 3 \
@@ -1995,17 +1998,17 @@ function test_submariner_e2e_with_go() {
 
 function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
-  prompt "Testing Submariner End-to-End tests with SubCtl command"
+  PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
 
   which subctl
   subctl version
 
-  # BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
-  # "Call Kubeconfig of a single Cluster" \
-  # "https://github.com/submariner-io/submariner-operator/issues/384"
-  # # workaround:
-  # kubconf_a;
+  BUG "Cannot use Merged KUBECONFIG for subctl info command: ${KUBECONFIG}" \
+  "Call Kubeconfig of a single Cluster" \
+  "https://github.com/submariner-io/submariner-operator/issues/384"
+  # workaround:
+  kubconf_a;
 
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
   subctl show networks
@@ -2034,7 +2037,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 (
 
   # Print planned steps according to CLI/User inputs
-  prompt "Input parameters and Test Plan steps"
+  PROMPT "Input parameters and Test Plan steps"
 
   if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
@@ -2231,7 +2234,7 @@ if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
   message="$message - Test exit status: $test_status"
   color="$RED"
 fi
-prompt "$message" "$color"
+PROMPT "$message" "$color"
 
 #REPORT_NAME=$(basename $LOG_FILE .log)
 #REPORT_NAME=( ${REPORT_NAME//_/ } ) # without quotes
