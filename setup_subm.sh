@@ -1,4 +1,4 @@
-PROMPT#!/bin/bash
+#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -414,7 +414,7 @@ function setup_workspace() {
   # DONT trap_commands - Includes credentials, hide from output
 
   # Add HOME dir to PATH
-  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH=$HOME/.local/bin:$PATH
+  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
   mkdir -p $HOME/.local/bin
 
   # CD to main working directory
@@ -664,13 +664,6 @@ function download_subctl_latest_release() {
     repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/v[^"]+' -m 1)"
     releases_url="${repo_url}/releases"
 
-    # BUG "Submariner \"Latest release\" label points to an old release" \
-    # "Specify subctl version to download manually (e.g. \"v0.4.0-rc2\")" \
-    # "https://github.com/submariner-io/submariner/issues/468"
-    # Workaround:
-    #release_url="https://github.com/submariner-io/submariner-operator/releases/"
-    #file_path="$(curl "$release_url/tag/v0.4.0-rc2/" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
-
     file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
     download_file "${releases_url}/${file_path}"
@@ -688,17 +681,17 @@ function download_subctl_latest_release() {
     [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
     chmod +x subctl
 
-    echo "# Copy subctl to system path:"
+    echo "# Install subctl into ${GOBIN}:"
     mkdir -p $GOBIN
-
-    # BUG "Subctl command will CRASH if it was downloaded to an NFS mount location" \
-    # "Download and run [${file_name}] in a local file system path (e.g. /tmp)" \
-    # "https://github.com/submariner-io/submariner-operator/issues/335"
     # cp ./subctl $GOBIN/
-    # /usr/bin/install ./subctl $GOBIN/subctl
-    # workaround:
-    cp ./subctl ~/.local/bin/
-    export PATH=$HOME/.local/bin:$PATH
+    /usr/bin/install ./subctl $GOBIN/subctl
+
+    echo "# Install subctl into user HOME bin:"
+    # cp ./subctl ~/.local/bin/
+    /usr/bin/install ./subctl ~/.local/bin/subctl
+
+    echo "# Add user HOME bin to system PATH:"
+    export PATH="$HOME/.local/bin:$PATH"
 }
 
 # ------------------------------------------
@@ -716,37 +709,49 @@ function download_subctl_latest_devel() {
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    #curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=devel PATH="/usr/bin:$PATH" bash -x
-    #export PATH=$HOME/.local/bin:$PATH
-    BUG "curl: (22) The requested URL returned error: 403 rate limit exceeded"
-    # Workaround: Download with wget:
+    curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh \
+    | VERSION=devel PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
 
-    repo_url="https://github.com/submariner-io/submariner-operator"
-    repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
-    releases_url="${repo_url}/releases"
-    file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+    if [[ "$getsubctl_status" = FAILED ]] ; then
+      BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
+      "Download directly with wget" \
+      "https://github.com/submariner-io/submariner-operator/issues/526"
+      # Workaround: 
 
-    BUG "getsubctl.sh pulls non-latest devel version" \
-    "Download subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz" \
-    "https://github.com/submariner-io/submariner-operator/issues/520"
-    # Workround:
-    file_path="download/devel/subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz"
-    download_file "${releases_url}/${file_path}"
+      repo_url="https://github.com/submariner-io/submariner-operator"
+      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
+      releases_url="${repo_url}/releases"
+      file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
-    file_name=$(basename -- "$file_path")
-    tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
+      # BUG "getsubctl.sh pulls non-latest devel version" \
+      # "Download subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz" \
+      # "https://github.com/submariner-io/submariner-operator/issues/520"
+      # # Workround:
+      # file_path="download/devel/subctl-v0.4.0-12-g0eb4ab8-linux-amd64.tar.xz"
 
-    # Rename last extracted file to subctl
-    extracted_file="$(ls -1 -tu subctl* | head -1)"
+      download_file "${releases_url}/${file_path}"
 
-    [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
-    chmod +x subctl
+      file_name=$(basename -- "$file_path")
+      tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-    echo "# Copy subctl to system path:"
-    mkdir -p $GOBIN
+      # Rename last extracted file to subctl
+      extracted_file="$(ls -1 -tu subctl* | head -1)"
 
-    cp ./subctl ~/.local/bin/
-    export PATH=$HOME/.local/bin:$PATH
+      [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+      chmod +x subctl
+
+      echo "# Install subctl into ${GOBIN}:"
+      mkdir -p $GOBIN
+      # cp ./subctl $GOBIN/
+      /usr/bin/install ./subctl $GOBIN/subctl
+
+      echo "# Install subctl into user HOME bin:"
+      # cp ./subctl ~/.local/bin/
+      /usr/bin/install ./subctl ~/.local/bin/subctl
+    fi
+
+    echo "# Add user HOME bin to system PATH:"
+    export PATH="$HOME/.local/bin:$PATH"
 
 }
 
@@ -1122,25 +1127,6 @@ function install_nginx_svc_on_cluster_b() {
 
   install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}"
 
-  # if [[ -n $SUBM_TEST_NS ]] ; then
-  #   # ${OC} delete --timeout=30s namespace "${SUBM_TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-  #   delete_namespace_and_crds "${SUBM_TEST_NS}"
-  #   ${OC} create namespace "${SUBM_TEST_NS}" || : # || : to ignore none-zero exit code
-  # fi
-  #
-  # # NGINX_CLUSTER_B=nginx-cl-b # Already exported in global subm_variables
-  #
-  # ${OC} delete deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  # ${OC} create deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image=nginxinc/nginx-unprivileged:stable-alpine
-  #
-  # echo "# Expose Ngnix service on port 8080:"
-  # ${OC} delete service ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --ignore-not-found
-  # ${OC} expose deployment ${NGINX_CLUSTER_B} --port=8080 --name=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-  #
-  # echo "# Wait for Ngnix service to be ready:"
-  # ${OC} rollout status deployment ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-  # ${OC} describe pod ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
-
 }
 
 # ------------------------------------------
@@ -1318,10 +1304,6 @@ function install_broker_aws_cluster_a() {
 
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
-  # After 0.4.0 RC2, need to remove: --cable-driver, --clusterid, --ikeport, --nattport, --globalnet, --globalnet-cidr
-  # DEPLOY_CMD="deploy-broker ${subm_cable_driver} --clusterid ${CLUSTER_A_NAME} \
-  # --ikeport $BROKER_IKEPORT --nattport $BROKER_NATPORT"
-
   DEPLOY_CMD="deploy-broker "
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
@@ -1425,12 +1407,6 @@ function join_submariner_current_cluster() {
   #
 
 
-  # BUG "clusterID must be identical to KUBECONFIG context name, otherwise kubefedctl will fail" \
-  # "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and clusterid" \
-  # "https://github.com/submariner-io/submariner-operator/issues/193"
-  # # Workaround:
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
-
   # export KUBECONFIG="${KUBECONF_CLUSTER_B}:${KUBECONF_BROKER}"
   export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view --flatten > ${MERGED_KUBCONF}
@@ -1473,13 +1449,6 @@ function join_submariner_current_cluster() {
     # Workaround
     JOIN_CMD="${JOIN_CMD}"
   fi
-
-  # BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
-  # "Use a retry mechanism to run the same subctl command again" \
-  # "https://github.com/submariner-io/submariner-operator/issues/336"
-  # # Workaround:
-  # # Run 3 attempts, and wait for command exit OK
-  # watch_and_retry "subctl $JOIN_CMD --subm-debug" 3
 
   # subctl --subm-debug ${JOIN_CMD}
   BUG "--subm-debug cannot be used before join argument in subctl command" \
@@ -1557,11 +1526,6 @@ function test_submariner_engine_status() {
   fi
 
   # Get some info on installed CRDs
-
-  BUG "If subctl devel binary is not the latest build - 'subctl show' will fail" \
-  "No workaround yet..." \
-  "https://github.com/submariner-io/submariner-operator/issues/513"
-
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
   subctl show networks
   ${OC} describe cm -n openshift-dns
@@ -1729,43 +1693,51 @@ function test_clusters_connected_overlapping_cidrs() {
   #cmd="${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
   cmd="${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
 
-  regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  watch_and_retry "$cmd" 3m "$regex" || :
-
-  # Should fail if nginx_global_ip was not set
-  # nginx_global_ip="$($cmd | tr -d \')" || :
-  nginx_global_ip="$($cmd | awk -F 'globalIp:' '{ print $2 }')" || :
-  [[ -n "$nginx_global_ip" ]] || globalip_status=DOWN
+  # regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  # watch_and_retry "$cmd" 3m "$regex" || :
+  regex1='submariner\.io\/globalIp'
+  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
 
   # ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   # |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
-
-  [[ "$globalip_status" != DOWN ]] || \
+  $cmd |& highlight "$regex1" || \
   FATAL "Error: GlobalNet annotation and IP was not set on Ngnix service ${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
+
+  # Should fail if nginx_global_ip was not set
+  nginx_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
+  [[ -n "$nginx_global_ip" ]] || globalip_status=DOWN
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
   kubconf_a;
-  # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
-  # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
   #cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk -F 'globalIp:' '{print \$2}' | xargs"
   cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
-  regex='submariner\.io\/globalIp'
-  watch_and_retry "$cmd" 3m "$regex"
+  # regex='submariner\.io\/globalIp'
+  # watch_and_retry "$cmd" 3m "$regex"
+  regex1='submariner\.io\/globalIp'
+  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
 
   # Should fail if netshoot_global_ip was not set
-  #netshoot_global_ip="$($cmd | tr -d \')"
-  netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $2}')"
-  [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
-  ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
 
   BUG "Sometimes Netshoot pod does not get GlobalNet IP." \
   "Skip Globalnet verification for the Netshoot pod." \
   "https://github.com/submariner-io/submariner/issues/625"
   # Workaround - SKIP this:
-  [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
+  # [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
+  $cmd |& highlight "$regex1" || \
+  FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
+
+  #netshoot_global_ip="$($cmd | tr -d \')"
+  #netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $2}')"
+  netshoot_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
+  [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
+
+  # [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
+  # ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
@@ -1818,22 +1790,16 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     #cmd="${OC} get svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
     cmd="${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}"
 
-    # regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-    regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-    watch_and_retry "$cmd" 3m "$regex" || :
-
-    # Should fail if new_nginx_global_ip was not set
-    # new_nginx_global_ip="$($cmd | tr -d \')" || :
-    new_nginx_global_ip="$($cmd | awk -F 'globalIp:' '{ print $2 }')" || :
-    [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
+    regex1='submariner\.io\/globalIp'
+    regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+    watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
 
     # TODO: Ping to the new_nginx_global_ip
+    # new_nginx_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
     # [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
 
-    # ${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} \
-    # |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
-
-    [[ "$globalip_status" != DOWN ]] || \
+    # Should fail if new_nginx_global_ip was not set
+    $cmd |& highlight "$regex1" || \
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
     PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
@@ -1843,12 +1809,17 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     netshoot_pod=$(${OC} get pods -l run=${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
     --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
+    # cmd="${OC} describe pod ${netshoot_pod} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
     cmd="${OC} describe pod ${netshoot_pod} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
-    regex='submariner\.io\/globalIp'
-    watch_and_retry "$cmd" 3m "$regex"
+    #regex='submariner\.io\/globalIp'
+    regex1='submariner\.io\/globalIp'
+    regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+    # watch_and_retry "$cmd" 3m "$regex"
+    watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
 
     # Should fail if netshoot_pod_cluster_a did not get Global-IP after 3 minutes
-    $cmd |& highlight "submariner\.io\/globalIp" || \
+    # $cmd |& highlight "submariner\.io\/globalIp" || \
+    $cmd |& highlight "$regex1" || \
     FATAL "Error: GlobalNet annotation and IP was not set on the NEW Netshoot pod ${new_netshoot_cluster_a}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
   fi
 
@@ -1904,9 +1875,6 @@ EOF
   regex="PING ${nginx_cl_b_dns}"
   watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.supercluster.local (169.254.59.89)
-
-  # ${OC} run ${new_netshoot_cluster_a} --attach=true --restart=Never --pod-running-timeout=1m --rm -i \
-  # ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${new_nginx_cluster_b}:8080"
 
   echo "# Try to CURL from ${new_netshoot_cluster_a} to ${nginx_cl_b_dns}:8080 :"
   ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
@@ -1983,6 +1951,7 @@ function test_submariner_e2e_with_go() {
   go env
 
   go test -v ./test/e2e \
+  -timeout 30m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed \
@@ -1990,7 +1959,7 @@ function test_submariner_e2e_with_go() {
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
-  --connection-timeout 30 -connection-attempts 3 \
+  --connection-timeout 30 --connection-attempts 3 \
   || echo "# Warning: Test execution failure occurred"
 }
 
@@ -2017,8 +1986,8 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
-  subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
-  # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
 
 }
 
@@ -2086,8 +2055,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   fi
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
-  # $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- add Service-Discovery")
-  # [[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- add globalnet"
 
   echo "# System and functional tests for Submariner:"
   if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
