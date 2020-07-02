@@ -1,4 +1,4 @@
-#!/bin/bash
+SCRIPT_DIR#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -93,11 +93,14 @@ $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subc
 
 ### Constants and external sources ###
 
+# Set SCRIPT_DIR as current absolute path where this script runs in
+export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+
 ### Import Submariner setup variables ###
-source "$(dirname $0)/subm_variables"
+source "$SCRIPT_DIR/subm_variables"
 
 ### Import General Helpers Function ###
-source "$(dirname $0)/helper_functions"
+source "$SCRIPT_DIR/helper_functions"
 
 # To trap inside functions
 # set -T # might have issues with kubectl/oc commands
@@ -112,7 +115,7 @@ shopt -s expand_aliases
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
 
 # Set script exit code in advance (saved in file)
-export TEST_STATUS_RC="$(dirname "$(realpath -s $0)")/test_status.out"
+export TEST_STATUS_RC="$SCRIPT_DIR/test_status.out"
 echo 1 > $TEST_STATUS_RC
 
 ####################################################################################
@@ -716,7 +719,7 @@ function download_subctl_latest_devel() {
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
       "Download directly with wget" \
       "https://github.com/submariner-io/submariner-operator/issues/526"
-      # Workaround: 
+      # Workaround:
 
       repo_url="https://github.com/submariner-io/submariner-operator"
       repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
@@ -1907,7 +1910,7 @@ function test_submariner_packages() {
   cd $GOPATH/src/github.com/submariner-io/submariner
   export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
+  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$SCRIPT_DIR/subm_pkg_junit_result.xml"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -1942,7 +1945,6 @@ function test_submariner_e2e_with_go() {
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
   ${OC} config get-contexts
-
     # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
     # *         admin             user-cluster-a   admin
     #           admin_cluster_b   user-cl1         admin
@@ -1955,7 +1957,7 @@ function test_submariner_e2e_with_go() {
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.reportPassed \
-  -ginkgo.reportFile ${WORKDIR}/e2e_junit_result.xml \
+  -ginkgo.reportFile "$SCRIPT_DIR/subm_e2e_junit_result.xml" \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
@@ -2220,8 +2222,16 @@ report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
 [[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
 [[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
-tar -cvzf $report_archive $(ls "$REPORT_FILE" "$LOG_FILE" kubconf_* "$WORKDIR/$BROKER_INFO" 2>/dev/null)
-# tar tvf $report_archive
+tar -cvzf $report_archive $(ls \
+ "$REPORT_FILE" \
+ "$LOG_FILE" \
+ kubconf_* \
+ *junit*.xml \
+ "$WORKDIR/$BROKER_INFO" \
+ 2>/dev/null)
+
+echo -e "# Archive \"$report_archive\" now contains:"
+tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
