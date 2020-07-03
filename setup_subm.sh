@@ -1269,7 +1269,7 @@ function gateway_label_first_worker_node() {
 
 function gateway_label_all_nodes_external_ip() {
 ### Adding submariner gateway label to all worker nodes with an external IP ###
-  # trap_commands;
+  trap_commands;
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex of IPv4
@@ -1281,6 +1281,8 @@ function gateway_label_all_nodes_external_ip() {
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
+  [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)"
+  
   for node in $gw_nodes; do
     # TODO: Run only If there's no Gateway label already:
     ${OC} label node $node "submariner.io/gateway=true" --overwrite
