@@ -15,6 +15,12 @@ export TEMP_FILE="`mktemp`_temp"
 
 export CONDA_ENV_NAME="conda-test"
 
+# Set SCRIPT_DIR as current absolute path where this script runs in
+export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+
+# include shell2junit library
+source "$SCRIPT_DIR/sh2ju.sh"
+
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
 set -o allexport # To export each function when it is declared, to be used on external bash processes
@@ -162,6 +168,54 @@ function BUG() {
   echo -e "${RED}*** Known BUG ***\n Failure:${NO_COLOR} $failed_action"
   [[ -z "$workaround" ]] || echo -e "${RED} Workaround:${NO_COLOR} $workaround"
   [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
+}
+
+
+# ------------------------------------------
+
+# Function to run the command and records its output/error messages in junit format
+# Ref: https://github.com/kubernetes/kubernetes/blob/master/test/cmd/legacy-script.sh
+function junit_run() {
+  # it expects the first to be the name of the command
+  # Example:
+  # record_command run_kubectl_tests
+  #
+  # WARNING: Variable changes in the command will NOT be effective after record_command returns.
+  #          This is because the command runs in subshell.
+
+  # Extract $report_name from current executing script filename
+  local report_name=$(basename "${0%.*}")
+
+  # Extract $output_dir from current executing script filename
+  #local output_dir=$(dirname "$0")
+  local output_dir="$SCRIPT_DIR"
+
+  # $1 => $test_function (the function to run and record as junit test)
+  local test_function="$1"
+
+  # Optional $2 => $test_args (additional arguments)
+  local test_args="$2" # Actually it's $@
+
+  echo "# Recording junit test \"$test_function\" ${test_args:+[$test_args]}
+  into report file \"${output_dir}/junit_${report_name}.xml\""
+
+  juLog -output="${output_dir}" -class="$report_name" -name="${test_function}" "$@"
+
+  # local exitCode=$?
+  # if [[ ${exitCode} -ne 0 ]]; then
+  #   # Record failures for any non-canary commands
+  #   if [ "${test_function}" != "record_command_canary" ]; then
+  #     echo "Error when running ${test_function}"
+  #     foundError="${foundError}""${test_function}"", "
+  #   fi
+  # elif [ "${test_function}" == "record_command_canary" ]; then
+  #   # If the canary command passed, fail
+  #   echo "record_command_canary succeeded unexpectedly"
+  #   foundError="${foundError}""${test_function}"", "
+  # fi
+  #
+  # set -o nounset
+  # set -o errexit
 }
 
 # ------------------------------------------

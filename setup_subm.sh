@@ -506,7 +506,7 @@ function build_ocpup_tool_latest() {
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  #git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
+  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   git fetch && git reset --hard && git checkout --theirs . && git pull
 
   echo "# Build OCPUP and install it to $GOBIN/"
@@ -559,7 +559,7 @@ function build_submariner_e2e_latest() {
 
   #git fetch upstream && git checkout master && git pull upstream master
   # git fetch && git git pull --rebase
-  git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
+  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
 
   # make build # Will fail if Docker is not pre-installed
     # ...
@@ -575,11 +575,13 @@ function build_submariner_e2e_latest() {
     # ...
 
   # Just build repo with go build
-  GO111MODULE="on" go mod vendor
+  export GO111MODULE=on
+  go mod vendor
   # go install -mod vendor # Compile binary and moves it to $GOBIN
   go build -mod vendor # Saves binary in current directory
 
-  ls -l bin/submariner-engine
+  #ls -l bin/submariner-engine
+  ls -l test/e2e/
 }
 
 # ------------------------------------------
@@ -604,7 +606,7 @@ function build_operator_latest() {
   ls
 
   # go get -v -u -t ./...
-  git fetch && git reset --hard && git clean -df && git checkout --theirs . && git pull
+  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   # git log --pretty=fuller
 
   echo "# Build SubCtl tool and install it in $GOBIN/"
@@ -2069,70 +2071,70 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || download_ocp_installer ${GET_OCP_VERSION}
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || junit_run download_ocp_installer ${GET_OCP_VERSION}
 
     # Running destroy_aws_cluster_a if requested
-    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || destroy_aws_cluster_a
+    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || junit_run destroy_aws_cluster_a
 
     # Running create_aws_cluster_a if requested
-    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || create_aws_cluster_a
+    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || junit_run create_aws_cluster_a
 
-    test_kubeconfig_aws_cluster_a
+    junit_run test_kubeconfig_aws_cluster_a
 
     # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || build_ocpup_tool_latest
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || junit_run build_ocpup_tool_latest
 
     # Running destroy_osp_cluster_b if requested
-    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || destroy_osp_cluster_b
+    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || junit_run destroy_osp_cluster_b
 
     # Running create_osp_cluster_b if requested
-    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || create_osp_cluster_b
+    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || junit_run create_osp_cluster_b
 
-    test_kubeconfig_osp_cluster_b
+    junit_run test_kubeconfig_osp_cluster_b
 
     ### Cleanup Submariner from all clusters ###
 
     # Running clean_aws_cluster_a if requested
     [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-    || clean_aws_cluster_a
+    || junit_run clean_aws_cluster_a
 
     # Running clean_osp_cluster_b if requested
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-    || clean_osp_cluster_b
+    || junit_run clean_osp_cluster_b
 
-    install_netshoot_app_on_cluster_a
+    junit_run install_netshoot_app_on_cluster_a
 
-    install_nginx_svc_on_cluster_b
+    junit_run install_nginx_svc_on_cluster_b
 
-    test_basic_cluster_connectivity_before_submariner
+    junit_run test_basic_cluster_connectivity_before_submariner
 
-    test_clusters_disconnected_before_submariner
+    junit_run test_clusters_disconnected_before_submariner
 
     # Running build_operator_latest if requested
-    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || build_operator_latest
+    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || junit_run build_operator_latest
 
     # Running build_submariner_e2e_latest if requested
-    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || build_submariner_e2e_latest
+    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || junit_run build_submariner_e2e_latest
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || download_subctl_latest_release
+    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || junit_run download_subctl_latest_release
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || download_subctl_latest_devel
+    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || junit_run download_subctl_latest_devel
 
-    test_subctl_command
+    junit_run test_subctl_command
 
-    open_firewall_ports_on_the_broker_node
+    junit_run open_firewall_ports_on_the_broker_node
 
-    label_all_gateway_external_ip_cluster_a
+    junit_run label_all_gateway_external_ip_cluster_a
 
-    label_first_gateway_cluster_b
+    junit_run label_first_gateway_cluster_b
 
-    install_broker_aws_cluster_a
+    junit_run install_broker_aws_cluster_a
 
-    join_submariner_cluster_a
+    junit_run join_submariner_cluster_a
 
-    join_submariner_cluster_b
+    junit_run join_submariner_cluster_b
 
   fi
 
@@ -2140,35 +2142,35 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
 
-    test_kubeconfig_aws_cluster_a
+    junit_run test_kubeconfig_aws_cluster_a
 
-    test_kubeconfig_osp_cluster_b
+    junit_run test_kubeconfig_osp_cluster_b
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
     \n# ($TEST_STATUS_RC with exit code 2)"
 
     echo 2 > $TEST_STATUS_RC
 
-    test_submariner_status_cluster_a
+    junit_run test_submariner_status_cluster_a
 
-    test_submariner_status_cluster_b
+    junit_run test_submariner_status_cluster_b
 
     # Run Connectivity tests between the Private and Public clusters,
     # To validate that now Submariner made the connection possible.
 
-    test_clusters_connected_by_service_ip
+    junit_run test_clusters_connected_by_service_ip
 
-    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || test_clusters_connected_overlapping_cidrs
+    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || junit_run test_clusters_connected_overlapping_cidrs
 
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || test_clusters_connected_by_same_service_on_new_namespace
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || junit_run test_clusters_connected_by_same_service_on_new_namespace
 
-    verify_golang
+    junit_run verify_golang
 
-    test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+    junit_run test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
 
-    test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
+    junit_run test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
-    test_submariner_e2e_with_subctl
+    junit_run test_submariner_e2e_with_subctl
   fi
 
   # If got to here - all tests of Submariner has passed ;-)
@@ -2179,7 +2181,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 ####################################################################################
 
-### END (Creating test report) ###
+### END of Submariner Tests (Creating HTML report from console output) ###
 
 # Get test exit status (from file $TEST_STATUS_RC)
 test_status="$([[ ! -f "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
