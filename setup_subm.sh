@@ -1,4 +1,4 @@
-SCRIPT_DIR#!/bin/bash
+#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -1282,7 +1282,7 @@ function gateway_label_all_nodes_external_ip() {
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
   [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)"
-  
+
   for node in $gw_nodes; do
     # TODO: Run only If there's no Gateway label already:
     ${OC} label node $node "submariner.io/gateway=true" --overwrite
@@ -1474,6 +1474,27 @@ function join_submariner_current_cluster() {
 
 }
 
+
+# ------------------------------------------
+
+function test_submariner_status_cluster_a() {
+# Operator pod status on AWS cluster A (public)
+  PROMPT "Testing Submariner engine on AWS cluster A (public)"
+  kubconf_a;
+  test_submariner_engine_status "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_submariner_status_cluster_b() {
+# Operator pod status on OSP cluster B (private)
+  PROMPT "Testing Submariner engine on OSP cluster B (private)"
+
+  kubconf_b;
+  test_submariner_engine_status  "${CLUSTER_B_NAME}"
+}
+
+
 # ------------------------------------------
 
 function test_submariner_engine_status() {
@@ -1604,21 +1625,27 @@ function test_globalnet_status() {
 
 # ------------------------------------------
 
-function test_submariner_status_cluster_a() {
-# Operator pod status on AWS cluster A (public)
-  PROMPT "Testing Submariner engine on AWS cluster A (public)"
-  kubconf_a;
-  test_submariner_engine_status "${CLUSTER_A_NAME}"
-}
+function test_svc_pod_global_ip_created() {
+  # Check that the Service or Pod was annotated with GlobalNet IP
+  # Set external variable GLOBAL_IP if there's a GlobalNet IP
+  trap_commands
 
-# ------------------------------------------
+  obj_type="$1" # "svc" for Service, "pod" for Pod
+  obj_id="$2" # Object name or id
+  namespace="$3" # Optional : namespace
 
-function test_submariner_status_cluster_b() {
-# Operator pod status on OSP cluster B (private)
-  PROMPT "Testing Submariner engine on OSP cluster B (private)"
+  cmd="${OC} describe $obj_type $obj_id ${namespace:+-n $namespace}"
 
-  kubconf_b;
-  test_submariner_engine_status  "${CLUSTER_B_NAME}"
+  regex1='submariner\.io\/globalIp'
+  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  watch_and_retry "$cmd | grep -E '$regex1'" 3m "$regex2"
+
+  $cmd |& highlight "$regex1" || \
+  BUG "GlobalNet annotation and IP was not set on $obj_type : $obj_id ${namespace:+(namespace : $namespace)}"
+
+  # Set the external variable $GLOBAL_IP with the GlobalNet IP
+  # GLOBAL_IP=$($cmd | grep -E "$regex1" | awk '{print $NF}')
+  GLOBAL_IP=$($cmd | grep -E "$regex1" | grep -Eoh "$regex2")
 }
 
 # ------------------------------------------
@@ -1695,54 +1722,25 @@ function test_clusters_connected_overlapping_cidrs() {
    "Wait up to 3 minutes before checking connectivity with GlobalNet on overlapping clusters CIDRs" \
   "https://github.com/submariner-io/submariner/issues/588"
   # Workaround:
-  #cmd="${OC} get svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-  cmd="${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
 
-  # regex='globalIp:\s+[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  # watch_and_retry "$cmd" 3m "$regex" || :
-  regex1='submariner\.io\/globalIp'
-  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
-
-  # ${OC} describe svc ${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
-  # |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
-  $cmd |& highlight "$regex1" || \
-  FATAL "Error: GlobalNet annotation and IP was not set on Ngnix service ${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
-
-  # Should fail if nginx_global_ip was not set
-  nginx_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
-  [[ -n "$nginx_global_ip" ]] || globalip_status=DOWN
+  # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
+  GLOBAL_IP=""
+  test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $SUBM_TEST_NS
+  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Ngnix service (${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS})"
+  nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
   kubconf_a;
   netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
-  #cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk -F 'globalIp:' '{print \$2}' | xargs"
-  cmd="${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
-  # regex='submariner\.io\/globalIp'
-  # watch_and_retry "$cmd" 3m "$regex"
-  regex1='submariner\.io\/globalIp'
-  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
+  # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
+  GLOBAL_IP=""
+  test_svc_pod_global_ip_created pod "$netshoot_pod_cluster_a" $SUBM_TEST_NS
+  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
 
-  # Should fail if netshoot_global_ip was not set
-
-  BUG "Sometimes Netshoot pod does not get GlobalNet IP." \
-  "Skip Globalnet verification for the Netshoot pod." \
-  "https://github.com/submariner-io/submariner/issues/625"
-  # Workaround - SKIP this:
-  # [[ "$globalip_status" != DOWN ]] || FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
-  $cmd |& highlight "$regex1" || \
-  FATAL "Error: GlobalNet annotation and IP was not set on Pod ${NETSHOOT_CLUSTER_A} (${netshoot_pod_cluster_a})"
-
-  #netshoot_global_ip="$($cmd | tr -d \')"
-  #netshoot_global_ip="$($cmd | grep "$regex" | awk '{print $2}')"
-  netshoot_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
-  [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
-
-  # [[ -n "$netshoot_global_ip" ]] || globalip_status=DOWN
-  # ${OC} describe pod ${netshoot_pod_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} |& highlight "submariner\.io\/globalIp" || globalip_status=DOWN
+  # TODO: Ping to the netshoot_global_ip
+  # netshoot_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
@@ -1784,7 +1782,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} describe pod ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a NEW GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a GlobalNet IP"
     kubconf_b
 
     BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
@@ -1792,40 +1790,26 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
      "Wait up to 3 minutes before checking connectivity with GlobalNet on overlapping clusters CIDRs" \
     "https://github.com/submariner-io/submariner/issues/588"
     # Workaround:
-    #cmd="${OC} get svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns} -o jsonpath='{.metadata.annotations.submariner\.io\/globalIp}'"
-    cmd="${OC} describe svc ${new_nginx_cluster_b} ${new_subm_test_ns:+-n $new_subm_test_ns}"
 
-    regex1='submariner\.io\/globalIp'
-    regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-    watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
+    # Should fail if new_nginx_cluster_b was not annotated with GlobalNet IP
+    GLOBAL_IP=""
+    test_svc_pod_global_ip_created svc "$new_nginx_cluster_b" $new_subm_test_ns
+    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Ngnix service (${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
 
     # TODO: Ping to the new_nginx_global_ip
-    # new_nginx_global_ip="$($cmd | grep -E "$regex1" | awk '{print $2}')"
-    # [[ -n "$new_nginx_global_ip" ]] || globalip_status=DOWN
+    # new_nginx_global_ip="$GLOBAL_IP"
 
-    # Should fail if new_nginx_global_ip was not set
-    $cmd |& highlight "$regex1" || \
-    FATAL "Error: GlobalNet annotation and IP was not set on the NEW Nginx service ${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
-
-    PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - NEW Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
 
     kubconf_a;
 
     netshoot_pod=$(${OC} get pods -l run=${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
     --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
 
-    # cmd="${OC} describe pod ${netshoot_pod} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
-    cmd="${OC} describe pod ${netshoot_pod} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}"
-    #regex='submariner\.io\/globalIp'
-    regex1='submariner\.io\/globalIp'
-    regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-    # watch_and_retry "$cmd" 3m "$regex"
-    watch_and_retry "$cmd | grep -E $regex1" 3m "$regex2"
-
-    # Should fail if netshoot_pod_cluster_a did not get Global-IP after 3 minutes
-    # $cmd |& highlight "submariner\.io\/globalIp" || \
-    $cmd |& highlight "$regex1" || \
-    FATAL "Error: GlobalNet annotation and IP was not set on the NEW Netshoot pod ${new_netshoot_cluster_a}${SUBM_TEST_NS:+.$SUBM_TEST_NS}"
+    # Should fail if new_netshoot_cluster_a was not annotated with GlobalNet IP
+    GLOBAL_IP=""
+    test_svc_pod_global_ip_created pod "$new_netshoot_cluster_a" $SUBM_TEST_NS
+    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${new_netshoot_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
   fi
 
   PROMPT "Create ServiceExport on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, for Nginx on SuperCluster domain"
@@ -1958,6 +1942,7 @@ function test_submariner_e2e_with_go() {
   -timeout 30m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
+  -ginkgo.noColor \
   -ginkgo.reportPassed \
   -ginkgo.reportFile "$SCRIPT_DIR/subm_e2e_junit_result.xml" \
   -args \
