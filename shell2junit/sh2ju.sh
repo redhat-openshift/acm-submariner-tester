@@ -42,7 +42,8 @@ else
 fi
 
 # A wrapper for the eval method witch allows catching seg-faults and use tee
-errfile=/tmp/evErr.$$.log
+errfile=`mktemp /tmp/ev_err_log_XXX`
+trap 'rm -f $errfile' EXIT
 function eVal() {
   (eval "$1")
   # stdout and stderr may currently be inverted (see below) so echo may write to stderr
@@ -58,7 +59,9 @@ function juLogClean() {
 # Execute a command and record its results
 function juLog() {
   suite="";
-  errfile=/tmp/evErr.$$.log
+  errfile=`mktemp /tmp/ev_err_log_XXX`
+  trap 'rm -f $outf $errf' EXIT
+
   date="$(which gdate 2>/dev/null || which date)"
   asserts=00; errors=0; total=0; content=""
 
@@ -99,8 +102,10 @@ function juLog() {
   done
 
   # eval the command sending output to a file
-  outf=/var/tmp/ju$$.txt
-  errf=/var/tmp/ju$$-err.txt
+  outf=`mktemp /var/tmp/ju_txt_XXX`
+  errf=`mktemp /var/tmp/ju_err_XXX`
+  trap 'rm -f $outf $errf' EXIT
+
   :>${outf}
   echo ""                         | tee -a ${outf}
   echo "+++ Running case: ${class}.${name} " | tee -a ${outf}

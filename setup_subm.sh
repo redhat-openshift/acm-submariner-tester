@@ -1492,26 +1492,10 @@ function join_submariner_current_cluster() {
   # --repository local --version local broker-info.subm
   #
 
-
-  # export KUBECONFIG="${KUBECONF_CLUSTER_B}:${KUBECONF_BROKER}"
-  export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
-  ${OC} config view --flatten > ${MERGED_KUBCONF}
-
-  # BUG "Multiple Kubconfig cannot have same users (e.g. \"admin\"), otherwise join will fail to get kubefed clientset (Unauthorized)" \
-  # "Rename username in KUBECONFIG, before joining a new cluster" \
-  # "https://github.com/submariner-io/submariner-operator/issues/225"
-  # # Workaround:
-  #
-  # kubconf_b;
-  # ${OC} config view --flatten > ${MERGED_KUBCONF}_b
-  # sed -i 's/admin/cl_b_user/' ${MERGED_KUBCONF}_b
-  # export KUBECONFIG="${KUBECONF_BROKER}:${MERGED_KUBCONF}_b"
+  # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   # ${OC} config view --flatten > ${MERGED_KUBCONF}
 
   ${OC} config view
-
-  # JOIN_CMD="join --kubecontext ${CLUSTER_B_NAME} --kubeconfig ${MERGED_KUBCONF} --clusterid ${CLUSTER_B_NAME} \
-  # ./${BROKER_INFO} --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT} ${subm_cable_driver}"
 
   BUG "Libreswan cable-driver cannot be used with IPSec ports 501 and 4501" \
    "Make sure subctl join used \"--cable-driver strongswan\" (it should be the default for Subctl 0.4)" \
@@ -1519,8 +1503,11 @@ function join_submariner_current_cluster() {
   #Workaround:
   # Use strongswan as in u/s, instead of libreswan
 
-  JOIN_CMD="join --kubecontext ${current_cluster_context_name} --kubeconfig ${MERGED_KUBCONF} \
-  --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
+  # JOIN_CMD="join --kubecontext ${current_cluster_context_name} --kubeconfig ${MERGED_KUBCONF} \
+  # --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
+  # --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
+
+  JOIN_CMD="join --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
 
