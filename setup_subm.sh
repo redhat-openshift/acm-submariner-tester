@@ -69,6 +69,7 @@ Running with pre-defined parameters (optional):
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
 * Import additional variables from file:             --import-vars  [Variable file path]
+* Record Junit Tests result (xml):                   --junit
 
 
 Command examples:
@@ -77,7 +78,7 @@ $ ./setup_subm.sh
 
   Will run interactively (enter choices during execution).
 
-$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
+$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet --junit
 
   Will run:
   - New cluster on AWS (cluster A), with OCP 4.4.6
@@ -85,6 +86,7 @@ $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subc
   - Install latest Submariner release
   - Configure Service-Discovery and GlobalNet
   - Build and run latest E2E tests
+  - Create Junit tests result (xml file)
 
 
 ----------------------------------------------------------------------'
@@ -184,6 +186,10 @@ while [[ $# -gt 0 ]]; do
   --globalnet)
     globalnet=YES
     shift ;;
+  --cable-driver)
+    check_cli_args "$2"
+    subm_cable_driver="--cable-driver $2" # libreswan OR strongswan
+    shift 2 ;;
   --skip-deploy)
     skip_deploy=YES
     shift ;;
@@ -196,10 +202,9 @@ while [[ $# -gt 0 ]]; do
   --config-aws-cli)
     config_aws_cli=YES
     shift ;;
-  --cable-driver)
-    check_cli_args "$2"
-    subm_cable_driver="--cable-driver $2" # libreswan OR strongswan
-    shift 2 ;;
+  --junit)
+    junit_run="junit_run"
+    shift ;;
   # -o|--optional-key-value)
   #   check_cli_args "$2"
   #   key="$2"
@@ -410,7 +415,81 @@ globalnet=${globalnet:-NO}
 ####################################################################################
 
 
-### Main CI Function ###
+### Main CI Functions ###
+
+# ------------------------------------------
+
+function print_test_plan() {
+  PROMPT "Input parameters and Test Plan steps"
+
+  if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
+  else
+    echo "# Openshift clusters creation/cleanup before Submariner deployment:
+
+    AWS cluster A (public):
+    - destroy_aws_cluster_a: $destroy_cluster_a
+    - create_aws_cluster_a: $create_cluster_a
+    - clean_aws_cluster_a: $clean_cluster_a
+
+    OSP cluster B (private):
+    - destroy_osp_cluster_b: $destroy_cluster_b
+    - create_osp_cluster_b: $create_cluster_b
+    - clean_osp_cluster_b: $clean_cluster_b
+
+    OCP and Submariner setup and test tools:
+    - config_golang: $config_golang
+    - config_aws_cli: $config_aws_cli
+    - download_ocp_installer: $get_ocp_installer $GET_OCP_VERSION
+    - build_ocpup_tool_latest: $get_ocpup_tool
+    - build_operator_latest: $build_operator
+    - build_submariner_e2e_latest: $build_submariner_e2e
+    - download_subctl_latest_release: $get_subctl
+    - download_subctl_latest_devel: $get_subctl_devel
+    "
+
+    echo -e "# Submariner deployment and environment setup for the tests:
+
+    - test_kubeconfig_aws_cluster_a
+    - test_kubeconfig_osp_cluster_b
+    - test_subctl_command
+    - install_netshoot_app_on_cluster_a
+    - install_nginx_svc_on_cluster_b
+    - test_basic_cluster_connectivity_before_submariner
+    - test_clusters_disconnected_before_submariner
+    - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
+    - label_all_gateway_external_ip_cluster_a
+    - label_first_gateway_cluster_b
+    - install_broker_aws_cluster_a
+    - join_submariner_cluster_a
+    - join_submariner_cluster_b
+    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
+    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
+    "
+  fi
+
+  # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
+
+  echo "# System and functional tests for Submariner:"
+  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping tests: $skip_tests \n"
+  else
+    echo -e "\n
+    - test_submariner_status_cluster_a
+    - test_submariner_status_cluster_b
+    - test_clusters_connected_by_service_ip
+    - test_clusters_connected_overlapping_cidrs: $globalnet
+    - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
+    - verify_golang
+    - test_submariner_packages
+    - test_submariner_e2e_with_go
+    - test_submariner_e2e_with_subctl
+    "
+  fi
+}
+
+# ------------------------------------------
+
 
 function setup_workspace() {
   PROMPT "Creating workspace and verifying GO installation"
@@ -1997,72 +2076,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 (
 
   # Print planned steps according to CLI/User inputs
-  PROMPT "Input parameters and Test Plan steps"
-
-  if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
-  else
-    echo "# Openshift clusters creation/cleanup before Submariner deployment:
-
-    AWS cluster A (public):
-    - destroy_aws_cluster_a: $destroy_cluster_a
-    - create_aws_cluster_a: $create_cluster_a
-    - clean_aws_cluster_a: $clean_cluster_a
-
-    OSP cluster B (private):
-    - destroy_osp_cluster_b: $destroy_cluster_b
-    - create_osp_cluster_b: $create_cluster_b
-    - clean_osp_cluster_b: $clean_cluster_b
-
-    OCP and Submariner setup and test tools:
-    - config_golang: $config_golang
-    - config_aws_cli: $config_aws_cli
-    - download_ocp_installer: $get_ocp_installer $GET_OCP_VERSION
-    - build_ocpup_tool_latest: $get_ocpup_tool
-    - build_operator_latest: $build_operator
-    - build_submariner_e2e_latest: $build_submariner_e2e
-    - download_subctl_latest_release: $get_subctl
-    - download_subctl_latest_devel: $get_subctl_devel
-    "
-
-    echo -e "# Submariner deployment and environment setup for the tests:
-
-    - test_kubeconfig_aws_cluster_a
-    - test_kubeconfig_osp_cluster_b
-    - test_subctl_command
-    - install_netshoot_app_on_cluster_a
-    - install_nginx_svc_on_cluster_b
-    - test_basic_cluster_connectivity_before_submariner
-    - test_clusters_disconnected_before_submariner
-    - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
-    - label_all_gateway_external_ip_cluster_a
-    - label_first_gateway_cluster_b
-    - install_broker_aws_cluster_a
-    - join_submariner_cluster_a
-    - join_submariner_cluster_b
-    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
-    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
-    "
-  fi
-
-  # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
-
-  echo "# System and functional tests for Submariner:"
-  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping tests: $skip_tests \n"
-  else
-    echo -e "\n
-    - test_submariner_status_cluster_a
-    - test_submariner_status_cluster_b
-    - test_clusters_connected_by_service_ip
-    - test_clusters_connected_overlapping_cidrs: $globalnet
-    - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
-    - verify_golang
-    - test_submariner_packages
-    - test_submariner_e2e_with_go
-    - test_submariner_e2e_with_subctl
-    "
-  fi
+  ${junit_run} print_test_plan
 
   # Setup and verify environment
   setup_workspace
@@ -2071,70 +2085,70 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || junit_run download_ocp_installer ${GET_OCP_VERSION}
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_run} download_ocp_installer ${GET_OCP_VERSION}
 
     # Running destroy_aws_cluster_a if requested
-    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || junit_run destroy_aws_cluster_a
+    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_run} destroy_aws_cluster_a
 
     # Running create_aws_cluster_a if requested
-    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || junit_run create_aws_cluster_a
+    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_run} create_aws_cluster_a
 
-    junit_run test_kubeconfig_aws_cluster_a
+    ${junit_run} test_kubeconfig_aws_cluster_a
 
     # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || junit_run build_ocpup_tool_latest
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_run} build_ocpup_tool_latest
 
     # Running destroy_osp_cluster_b if requested
-    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || junit_run destroy_osp_cluster_b
+    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_run} destroy_osp_cluster_b
 
     # Running create_osp_cluster_b if requested
-    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || junit_run create_osp_cluster_b
+    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_run} create_osp_cluster_b
 
-    junit_run test_kubeconfig_osp_cluster_b
+    ${junit_run} test_kubeconfig_osp_cluster_b
 
     ### Cleanup Submariner from all clusters ###
 
     # Running clean_aws_cluster_a if requested
     [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-    || junit_run clean_aws_cluster_a
+    || ${junit_run} clean_aws_cluster_a
 
     # Running clean_osp_cluster_b if requested
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-    || junit_run clean_osp_cluster_b
+    || ${junit_run} clean_osp_cluster_b
 
-    junit_run install_netshoot_app_on_cluster_a
+    ${junit_run} install_netshoot_app_on_cluster_a
 
-    junit_run install_nginx_svc_on_cluster_b
+    ${junit_run} install_nginx_svc_on_cluster_b
 
-    junit_run test_basic_cluster_connectivity_before_submariner
+    ${junit_run} test_basic_cluster_connectivity_before_submariner
 
-    junit_run test_clusters_disconnected_before_submariner
+    ${junit_run} test_clusters_disconnected_before_submariner
 
     # Running build_operator_latest if requested
-    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || junit_run build_operator_latest
+    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_run} build_operator_latest
 
     # Running build_submariner_e2e_latest if requested
-    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || junit_run build_submariner_e2e_latest
+    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_run} build_submariner_e2e_latest
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || junit_run download_subctl_latest_release
+    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_run} download_subctl_latest_release
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || junit_run download_subctl_latest_devel
+    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_run} download_subctl_latest_devel
 
-    junit_run test_subctl_command
+    ${junit_run} test_subctl_command
 
-    junit_run open_firewall_ports_on_the_broker_node
+    ${junit_run} open_firewall_ports_on_the_broker_node
 
-    junit_run label_all_gateway_external_ip_cluster_a
+    ${junit_run} label_all_gateway_external_ip_cluster_a
 
-    junit_run label_first_gateway_cluster_b
+    ${junit_run} label_first_gateway_cluster_b
 
-    junit_run install_broker_aws_cluster_a
+    ${junit_run} install_broker_aws_cluster_a
 
-    junit_run join_submariner_cluster_a
+    ${junit_run} join_submariner_cluster_a
 
-    junit_run join_submariner_cluster_b
+    ${junit_run} join_submariner_cluster_b
 
   fi
 
@@ -2142,35 +2156,35 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
 
-    junit_run test_kubeconfig_aws_cluster_a
+    ${junit_run} test_kubeconfig_aws_cluster_a
 
-    junit_run test_kubeconfig_osp_cluster_b
+    ${junit_run} test_kubeconfig_osp_cluster_b
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
     \n# ($TEST_STATUS_RC with exit code 2)"
 
     echo 2 > $TEST_STATUS_RC
 
-    junit_run test_submariner_status_cluster_a
+    ${junit_run} test_submariner_status_cluster_a
 
-    junit_run test_submariner_status_cluster_b
+    ${junit_run} test_submariner_status_cluster_b
 
     # Run Connectivity tests between the Private and Public clusters,
     # To validate that now Submariner made the connection possible.
 
-    junit_run test_clusters_connected_by_service_ip
+    ${junit_run} test_clusters_connected_by_service_ip
 
-    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || junit_run test_clusters_connected_overlapping_cidrs
+    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_run} test_clusters_connected_overlapping_cidrs
 
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || junit_run test_clusters_connected_by_same_service_on_new_namespace
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_run} test_clusters_connected_by_same_service_on_new_namespace
 
-    junit_run verify_golang
+    ${junit_run} verify_golang
 
-    junit_run test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+    ${junit_run} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
 
-    junit_run test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
+    ${junit_run} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
-    junit_run test_submariner_e2e_with_subctl
+    ${junit_run} test_submariner_e2e_with_subctl
   fi
 
   # If got to here - all tests of Submariner has passed ;-)
@@ -2227,7 +2241,7 @@ echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox $
 exit $test_status
 
 # You can find latest script here:
-# https://code.engineering.redhat.com/gerrit/gitweb?p=...git;a=blob;f=setup_subm.sh
+# https://github.com/manosnoam/ocp-multi-cluster-tester
 #
 # To create a local script file:
 #        > setup_subm.sh; chmod +x setup_subm.sh; vi setup_subm.sh
@@ -2237,7 +2251,7 @@ exit $test_status
 # ./setup_subm.sh --build-e2e --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using Submariner upstream release (master), and installing on existing AWS cluster:
-# ./setup_subm.sh --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
+# ./setup_subm.sh --get-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using the latest formal release of Submariner, and Re-creating a new AWS cluster:
 # ./setup_subm.sh --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet

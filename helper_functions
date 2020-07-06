@@ -19,7 +19,7 @@ export CONDA_ENV_NAME="conda-test"
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
 # include shell2junit library
-source "$SCRIPT_DIR/sh2ju.sh"
+source "$SCRIPT_DIR/shell2junit/sh2ju.sh"
 
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
