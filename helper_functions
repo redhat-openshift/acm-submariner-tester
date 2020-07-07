@@ -74,13 +74,11 @@ trap_commands
 function trap_on_exit_error() {
   last_exit_code="$1"
   err_line="$2"
-  execute_func="$3 $@"
+  execute_func="$3"
   echo "# Running [$execute_func] if there's an exit error [$last_exit_code]"
 
   if [ "$last_exit_code" != "0" ]; then
     BUG "Exit error $last_exit_code occurred on line $err_line"
-    df -h
-    free -h
     # error handling goes here
     eval "$execute_func"
   fi
@@ -136,7 +134,7 @@ function watch_and_retry() {
   TIMEOUT=10m
 
   # If REGEX was specified - will wait for REGEX to be found in CMD output
-  [[ -z "$REGEX" ]] || CMD="$CMD |& highlight '$REGEX'"
+  [[ -z "$REGEX" ]] || CMD="$CMD | highlight '$REGEX'"
 
   #echo -e "# Watching output of command: $(eval echo \"$CMD\") \
   echo -e "# Watching output of command: $CMD \
@@ -197,7 +195,7 @@ function BUG() {
   workaround="${2}" # optional
   bug_ref="${3}" # optional
 
-  echo -e "${RED}*** Known BUG ***\n Failure:${NO_COLOR} $failed_action"
+  echo -e "${RED}****** BUG ******\n Failure:${NO_COLOR} $failed_action"
   [[ -z "$workaround" ]] || echo -e "${RED} Workaround:${NO_COLOR} $workaround"
   [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
 }
@@ -231,7 +229,7 @@ function junit_run() {
   echo "# Recording junit test \"$test_function\" ${test_args:+[$test_args]}
   into report file \"${output_dir}/junit_${report_name}.xml\""
 
-  juLog -output="${output_dir}" -class="$report_name" -name="${test_function}" "$@"
+  juLog -output="${output_dir}" -index -class="$report_name" -name="${test_function}" "$@"
 
   # local exitCode=$?
   # if [[ ${exitCode} -ne 0 ]]; then

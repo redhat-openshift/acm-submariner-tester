@@ -1554,6 +1554,8 @@ function collect_submariner_info() {
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
 
   PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+  df -h
+  free -h
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
@@ -1663,7 +1665,7 @@ function test_submariner_engine_status() {
 
   # Get some info on installed CRDs
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
-  subctl show networks
+  subctl show networks || :
   ${OC} describe cm -n openshift-dns
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
@@ -1746,17 +1748,17 @@ function test_svc_pod_global_ip_created() {
 
   cmd="${OC} describe $obj_type $obj_id ${namespace:+-n $namespace}"
 
-  regex1='submariner\.io\/globalIp'
-  regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  # TODO: Fix no wait on: watch_and_retry "$cmd | grep -E '$regex1'" 3m "$regex2"
-  watch_and_retry "$cmd \| grep -E '$regex1'" 3m "$regex2"
+  globalnet_tag='submariner.io\/globalIp'
+  ipv4_regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  # TODO: Fix no wait on: watch_and_retry "$cmd | grep -E '$globalnet_tag'" 3m "$ipv4_regex"
+  watch_and_retry "$cmd | grep '$globalnet_tag'" 3m "$ipv4_regex"
 
-  $cmd |& highlight "$regex1" || \
+  $cmd | highlight "$globalnet_tag" || \
   BUG "GlobalNet annotation and IP was not set on $obj_type : $obj_id ${namespace:+(namespace : $namespace)}"
 
   # Set the external variable $GLOBAL_IP with the GlobalNet IP
-  # GLOBAL_IP=$($cmd | grep -E "$regex1" | awk '{print $NF}')
-  GLOBAL_IP=$($cmd | grep -E "$regex1" | grep -Eoh "$regex2")
+  # GLOBAL_IP=$($cmd | grep -E "$globalnet_tag" | awk '{print $NF}')
+  GLOBAL_IP=$($cmd | grep "$globalnet_tag" | grep -Eoh "$ipv4_regex")
 }
 
 # ------------------------------------------
@@ -2080,7 +2082,7 @@ function test_submariner_e2e_with_subctl() {
   kubconf_a;
 
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
-  subctl show networks
+  subctl show networks || :
 
   BUG "No Subctl option to set -ginkgo.reportFile" \
   "No workaround yet..." \
@@ -2106,7 +2108,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 (
   # Trap test exit failure, to print more info before exiting main flow
   #trap_on_exit_error collect_submariner_info
-  trap 'trap_on_exit_error "$?" "$LINENO" "collect_submariner_info"' EXIT
+  trap 'trap_on_exit_error "$?" "$LINENO" "${junit_run} collect_submariner_info"' EXIT
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan

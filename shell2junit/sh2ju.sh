@@ -20,6 +20,7 @@
 ###             -ierror="RegExp"       : same as -error but case insensitive
 ###             -output="Path"         : path to output directory, defaults to "./results"
 ###             -prefix="FilePrefix"   : name to add as prefix for the xml file, defaults to "junit_"
+###             -index                 : add incremental test index (e.g. for alphabetical sort in Jenkins)
 ###     - Junit reports are left in the folder 'result' under the directory where the script is executed.
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
@@ -30,6 +31,7 @@ date="$(which gdate 2>/dev/null || which date)"
 # default output folder and file prefix
 juDIR="$(pwd)/results"
 prefix="junit_"
+testIndex=""
 
 # The name of the suite is calculated based in your script name
 suite=""
@@ -72,12 +74,13 @@ function juLog() {
   ya=""; icase=""
   while [[ -z "$ya" ]]; do
     case "$1" in
-      -name=*)   name="$(echo "$1" | ${SED} -e 's/-name=//')";   shift;;
       -class=*)  class="$(echo "$1" | ${SED} -e 's/-class=//')";   shift;;
+      -name=*)   name="$(echo "$1" | ${SED} -e 's/-name=//')";   shift;;
       -ierror=*) ereg="$(echo "$1" | ${SED} -e 's/-ierror=//')"; icase="-i"; shift;;
       -error=*)  ereg="$(echo "$1" | ${SED} -e 's/-error=//')";  shift;;
       -output=*) juDIR="$(echo "$1" | ${SED} -e 's/-output=//')";  shift;;
-      -junit=*)  prefix="$(echo "$1" | ${SED} -e 's/-prefix=//')";  shift;;
+      -prefix=*) prefix="$(echo "$1" | ${SED} -e 's/-prefix=//')";  shift;;
+      -index)    testIndex="$(echo "$1" | ${SED} -e 's/-index/0/')";  shift;;
       *)         ya=1;;
     esac
   done
@@ -127,10 +130,12 @@ function juLog() {
   # Save output and error messages (without ansi colors and +++), and delete their temp files
   # outMsg=$(cat ${outf})
   outMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$outf")"
-  rm -f "${outf}"
   # errMsg=$(cat ${errf})
   errMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$errf")"
+  set -x
+  rm -f "${outf}"
   rm -f "${errf}"
+  set +x
 
   # set the appropriate error, based in the exit code and the regex
   [[ ${evErr} != 0 ]] && err=1 || err=0
@@ -145,6 +150,7 @@ function juLog() {
   errors=$((errors+err))
   time=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
+  [[ -z "$testIndex" ]] || (( ++testIndex ))
 
   # write the junit xml report
   ## system-out or system-err tag
@@ -161,7 +167,7 @@ function juLog() {
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${name}\" time=\"${time}\" classname=\"${class}\">
+    <testcase assertions=\"1\" name=\"${testIndex:+${testIndex}_}${name}\" time=\"${time}\" classname=\"${class}\">
     ${output}
     </testcase>
   "
