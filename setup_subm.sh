@@ -1390,7 +1390,7 @@ function install_broker_aws_cluster_a() {
 
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
-  DEPLOY_CMD="deploy-broker "
+  DEPLOY_CMD="subctl deploy-broker "
 
   # Deploys the CRDs, creates the SA for the broker, the role and role bindings
   kubconf_a;
@@ -1419,15 +1419,8 @@ function install_broker_aws_cluster_a() {
   fi
 
   PROMPT "Deploying Submariner Broker and joining cluster A"
-
-  # BUG "Running subctl deploy/join may fail on first attempt on \"Operation cannot be fulfilled\"" \
-  # "Use a retry mechanism to run the same subctl command again" \
-  # "https://github.com/submariner-io/submariner-operator/issues/336"
-  # Workaround:
-  # Run 3 attempts, and wait for command exit OK
-  # watch_and_retry "subctl $DEPLOY_CMD --subm-debug" 3
-
-  subctl $DEPLOY_CMD
+  echo "# Executing: ${DEPLOY_CMD}"
+  $DEPLOY_CMD
 
   ${OC} -n ${SUBM_NAMESPACE} get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
 
@@ -1446,12 +1439,6 @@ function join_submariner_cluster_a() {
   PROMPT "Joining cluster A to Submariner Broker (also on cluster A), and verifying CRDs"
   kubconf_a;
   join_submariner_current_cluster "${CLUSTER_A_NAME}"
-
-  BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
-  "Define a new and unique globalnet-cidr for each cluster, or add a wait (1 minute)" \
-  "https://github.com/submariner-io/submariner-operator/issues/299"
-
-  sleep 30s
 }
 
 # ------------------------------------------
@@ -1503,24 +1490,19 @@ function join_submariner_current_cluster() {
   #Workaround:
   # Use strongswan as in u/s, instead of libreswan
 
-  # JOIN_CMD="join --kubecontext ${current_cluster_context_name} --kubeconfig ${MERGED_KUBCONF} \
-  # --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
-  # --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
-
-  JOIN_CMD="join --clusterid ${current_cluster_context_name} ./${BROKER_INFO} ${subm_cable_driver} \
+  JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
+  ./${BROKER_INFO} ${subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
-
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
 
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
-    "Define a new and unique globalnet-cidr for each cluster, or add a wait (1 minute)" \
+    "Define a new and unique globalnet-cidr for each cluster, or add a wait (30 seconds)" \
     "https://github.com/submariner-io/submariner-operator/issues/299"
-
-    # JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19" # or 169.254.0.0/19
     # Workaround
-    JOIN_CMD="${JOIN_CMD}"
+    sleep 30s
+    # JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19" # or 169.254.0.0/19
   fi
 
   # subctl --subm-debug ${JOIN_CMD}
@@ -1528,7 +1510,9 @@ function join_submariner_current_cluster() {
   "Add --subm-debug at the end only" \
   "https://github.com/submariner-io/submariner-operator/issues/340"
   # Workaround:
-  subctl ${JOIN_CMD} --subm-debug
+  JOIN_CMD="${JOIN_CMD} --subm-debug"
+  echo "# Executing: ${JOIN_CMD}"
+  $JOIN_CMD
 
   PROMPT "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
   ${OC} get crds | grep submariners
@@ -1562,6 +1546,64 @@ function test_submariner_status_cluster_b() {
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
 }
 
+
+# ------------------------------------------
+
+function collect_submariner_info() {
+  # print submariner pods descriptions and logs
+  # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
+
+  PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+  ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} describe cm -n openshift-dns || :
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
+  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+
+  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+  # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
+  # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
+  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+  # ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
+
+  subctl show networks || :
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
+  # for pod in $(${OC} get pods -A \
+  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
+  #     echo "######################: Logs for Pod $pod :######################"
+  #     ${OC}  -n $ns describe pod $name
+  #     ${OC}  -n $namespace logs $pod
+  # done
+
+  echo -e "\n#########################################################################################\n"
+
+  local namespace="${SUBM_NAMESPACE}"
+  for pod in $(${OC} get pods -l app=submariner-engine -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo "######################: Logs Submariner Engine pod $pod in namespace $namespace :######################"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
+
+  for pod in $(${OC} get pods -l app=submariner-globalnet -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo "######################: Logs for Submariner Globalnet pod $pod in namespace $namespace :######################"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
+
+  echo -e "\n#########################################################################################\n"
+
+  namespace="kube-system"
+  for pod in $(${OC} get pods -l k8s-app=kube-proxy -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo "######################: Logs for Kube Proxy pod $pod in namespace $namespace :######################"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
+
+  echo -e "\n#########################################################################################\n"
+}
 
 # ------------------------------------------
 
@@ -1706,7 +1748,8 @@ function test_svc_pod_global_ip_created() {
 
   regex1='submariner\.io\/globalIp'
   regex2='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  watch_and_retry "$cmd | grep -E '$regex1'" 3m "$regex2"
+  # TODO: Fix no wait on: watch_and_retry "$cmd | grep -E '$regex1'" 3m "$regex2"
+  watch_and_retry "$cmd \| grep -E '$regex1'" 3m "$regex2"
 
   $cmd |& highlight "$regex1" || \
   BUG "GlobalNet annotation and IP was not set on $obj_type : $obj_id ${namespace:+(namespace : $namespace)}"
@@ -2061,6 +2104,9 @@ LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
 (
+  # Trap test exit failure, to print more info before exiting main flow
+  #trap_on_exit_error collect_submariner_info
+  trap 'trap_on_exit_error "$?" "$LINENO" "collect_submariner_info"' EXIT
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan
@@ -2191,9 +2237,9 @@ test_status="$([[ ! -f "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
 message="Creating HTML Report"
 if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
   message="$message - Test exit status: $test_status"
-  color="$RED"
+  # color="$RED"
 fi
-PROMPT "$message" "$color"
+PROMPT "$message" # "$color"
 
 #REPORT_NAME=$(basename $LOG_FILE .log)
 #REPORT_NAME=( ${REPORT_NAME//_/ } ) # without quotes

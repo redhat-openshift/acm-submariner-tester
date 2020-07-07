@@ -70,6 +70,38 @@ trap_commands
 
 # ------------------------------------------
 
+# Function to trap test exit failure - to print more info before exiting main flow
+function trap_on_exit_error() {
+  last_exit_code="$1"
+  err_line="$2"
+  execute_func="$3 $@"
+  echo "# Running [$execute_func] if there's an exit error [$last_exit_code]"
+
+  if [ "$last_exit_code" != "0" ]; then
+    BUG "Exit error $last_exit_code occurred on line $err_line"
+    df -h
+    free -h
+    # error handling goes here
+    eval "$execute_func"
+  fi
+}
+
+# function trap_on_exit_error() {
+# trap '
+#   last_exit_code="$?"
+#   execute_func="$1"
+#   if [ "$last_exit_code" != "0" ]; then
+#     echo "Exit error $last_exit_code occurred on line $LINENO."
+#     df -h
+#     free -h
+#     # error handling goes here
+#     eval "$execute_func $@"
+#   fi
+# ' EXIT
+# }
+
+# ------------------------------------------
+
 # Function to search rexexp in file (or pipe content),
 # to Highlight matches and Return exit code (5 if no match found):
 function highlight()
