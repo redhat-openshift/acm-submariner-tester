@@ -2112,8 +2112,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 (
   # Trap test exit failure, to print more info before exiting main flow
-  #trap_on_exit_error collect_submariner_info
   trap 'trap_on_exit_error "$?" "$LINENO" "${junit_run} collect_submariner_info"' EXIT
+  # trap 'exit 127' HUP INT TERM  # Trap any script termination as EXIT, too
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan

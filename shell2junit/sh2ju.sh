@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 ### Copyright 2010 Manuel Carrasco Moñino. (manolo at apache.org)
 ###
+### Forked from:
+### https://github.com/kubernetes/kubernetes/blob/master/third_party/forked/shell2junit/sh2ju.sh
+###
 ### Licensed under the Apache License, Version 2.0.
 ### You may obtain a copy of it at
 ### http://www.apache.org/licenses/LICENSE-2.0
@@ -25,6 +28,7 @@
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
 
+
 asserts=00; errors=0; total=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
@@ -47,8 +51,10 @@ else
 fi
 
 # A wrapper for the eval method witch allows catching seg-faults and use tee
-errfile=`mktemp /tmp/ev_err_log_XXX`
-# trap 'rm -f "$errfile"' EXIT
+errfile=/tmp/evErr.$$.log
+# :>${errfile}
+# errfile=$(mktemp /tmp/ev_err_log_XXXXXX)
+
 function eVal() {
   (eval "$1")
   # stdout and stderr may currently be inverted (see below) so echo may write to stderr
@@ -64,9 +70,9 @@ function juLogClean() {
 # Execute a command and record its results
 function juLog() {
   suite=""
-  tmpdir="/var/tmp"
-  errfile=`mktemp "$tmpdir/ev_err_log_XXX"`
-  # trap 'rm -f "$outf" "$errf"' EXIT
+  errfile=/tmp/evErr.$$.log
+  # tmpdir="/var/tmp"
+  # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
   date="$(which gdate 2>/dev/null || which date)"
   asserts=00; errors=0; total=0; content=""
@@ -111,9 +117,11 @@ function juLog() {
   done
 
   # eval the command sending output to a file
-  outf=`mktemp "$tmpdir/ju_txt_XXX"`
-  errf=`mktemp "$tmpdir/ju_err_XXX"`
-  # trap 'rm -f "$outf" "$errf"' EXIT
+  outf=/var/tmp/ju$$.txt
+  errf=/var/tmp/ju$$-err.txt
+  # outf=`mktemp "$tmpdir/ju_txt_XXXXXX"`
+  # errf=`mktemp "$tmpdir/ju_err_XXXXXX"`
+
   :>${outf}
 
   echo ""                         | tee -a ${outf}
@@ -124,20 +132,17 @@ function juLog() {
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
   ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
-  evErr="$(cat ${errfile})"
+
+  evErr="$(cat "${errfile}" || echo "1")"
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${evErr}"        | tee -a ${outf}
 
   # Save output and error messages (without ansi colors and +++), and delete their temp files
-  # outMsg=$(cat ${outf})
-  outMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$outf")"
-  # errMsg=$(cat ${errf})
-  errMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$errf")"
-  set -x
+  outMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$outf" || :)"
+  errMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$errf" || :)"
   rm -f "${outf}"
   rm -f "${errf}"
-  set +x
 
   # set the appropriate error, based in the exit code and the regex
   [[ ${evErr} != 0 ]] && err=1 || err=0
