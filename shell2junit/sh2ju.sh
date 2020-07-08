@@ -31,7 +31,8 @@ date="$(which gdate 2>/dev/null || which date)"
 # default output folder and file prefix
 juDIR="$(pwd)/results"
 prefix="junit_"
-testIndex=""
+export sortTests=""
+export testIndex=0
 
 # The name of the suite is calculated based in your script name
 suite=""
@@ -69,6 +70,7 @@ function juLog() {
 
   date="$(which gdate 2>/dev/null || which date)"
   asserts=00; errors=0; total=0; content=""
+  export testIndex=$(( testIndex+1 ))
 
   # parse arguments
   ya=""; icase=""
@@ -80,7 +82,7 @@ function juLog() {
       -error=*)  ereg="$(echo "$1" | ${SED} -e 's/-error=//')";  shift;;
       -output=*) juDIR="$(echo "$1" | ${SED} -e 's/-output=//')";  shift;;
       -prefix=*) prefix="$(echo "$1" | ${SED} -e 's/-prefix=//')";  shift;;
-      -index)    testIndex="$(echo "$1" | ${SED} -e 's/-index/0/')";  shift;;
+      -index)    sortTests="$(echo "$1" | ${SED} -e 's/-index/TRUE/')";  shift;;
       *)         ya=1;;
     esac
   done
@@ -112,10 +114,10 @@ function juLog() {
   outf=`mktemp "$tmpdir/ju_txt_XXX"`
   errf=`mktemp "$tmpdir/ju_err_XXX"`
   # trap 'rm -f "$outf" "$errf"' EXIT
-
   :>${outf}
+
   echo ""                         | tee -a ${outf}
-  echo "+++ Running case: ${class}.${name} " | tee -a ${outf}
+  echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " | tee -a ${outf}
   echo "+++ working dir: $(pwd)"           | tee -a ${outf}
   echo "+++ command: ${cmd}"            | tee -a ${outf}
   ini="$(${date} +%s.%N)"
@@ -150,7 +152,17 @@ function juLog() {
   errors=$((errors+err))
   time=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
-  [[ -z "$testIndex" ]] || (( ++testIndex ))
+
+  # Set test title with upercase letter and spaces
+  testTitle=( ${name//_/ } )
+  testTitle="${testTitle[@]^}"
+
+  if [[ -n "$sortTests" ]] ; then
+    # Add zero-padding digits to testIndex in title
+    digits=000
+    zero_padding="$digits$testIndex"
+    testTitle="${zero_padding:(-${#digits})} : ${testTitle}"
+  fi
 
   # write the junit xml report
   ## system-out or system-err tag
@@ -167,7 +179,7 @@ function juLog() {
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testIndex:+${testIndex}_}${name}\" time=\"${time}\" classname=\"${class}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${class}\">
     ${output}
     </testcase>
   "

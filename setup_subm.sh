@@ -834,6 +834,11 @@ function download_subctl_latest_devel() {
       /usr/bin/install ./subctl ~/.local/bin/subctl
     fi
 
+    echo "# Copy subctl from user HOME bin into ${GOBIN}:"
+    mkdir -p $GOBIN
+    # cp ./subctl $GOBIN/
+    /usr/bin/install "$HOME/.local/bin/subctl" $GOBIN/subctl
+
     echo "# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
 
