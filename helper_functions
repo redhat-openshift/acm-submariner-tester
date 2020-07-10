@@ -41,6 +41,50 @@ function print_cmd_location() {
 
 # ------------------------------------------
 
+# Function to search and highlight rexexp in file (or pipe content)
+function highlight()
+{
+  #trap_commands
+  pattern="$1"
+  file_input="$2"
+  #shift
+
+  exit_code=0
+  # 0 = Match found
+  # 1 = SED execution error
+  # 3 = Match not found
+  # 4 = Empty string or file
+
+  #local TEMP_FILE="`mktemp`_highlight"
+  # Save all output to temp file
+  #grep -E "$pattern|$" "$@" > $TEMP_FILE
+  grep -E "$pattern|$" ${file_input:+"$file_input"} > $TEMP_FILE
+
+  # Exit if file is empty or contains spaces only
+  grep -q '[^[:space:]]' $TEMP_FILE || return 4
+
+  # Print with match colored
+  # cat $TEMP_FILE | grep --color -E "$pattern|$"
+
+  # Search line for sed command. Highlighting pattern, if found
+  search_line='/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q3'
+
+  # SED with -r : Basic regex
+  sed -r "$search_line" $TEMP_FILE || exit_code=$?
+
+  # If SED had an error, try to search with -e : Extended regex"
+  if [[ "$exit_code" -eq 1 ]] ; then
+    exit_code=0
+    sed -r "$search_line" $TEMP_FILE || exit_code=$?
+  fi
+
+  # Return if match found
+  # cat $TEMP_FILE | grep -q -E "$pattern"
+  return $exit_code
+}
+
+# ------------------------------------------
+
 # function debug_cmd_with_pipe() {
 #   eval "$1"
 # }
@@ -98,25 +142,6 @@ function trap_on_exit_error() {
 # ' EXIT
 # }
 
-# ------------------------------------------
-
-# Function to search rexexp in file (or pipe content),
-# to Highlight matches and Return exit code (5 if no match found):
-function highlight()
-{
-  # trap_commands
-  pattern="$1"
-  shift
-
-  exit_code=0
-  sed -r '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
-  if [[ "$exit_code" -eq 1 ]] ; then
-    exit_code=0
-    sed -e '/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q5' "$@" || exit_code=$?
-  fi
-  echo
-  return $exit_code
-}
 
 # ------------------------------------------
 

@@ -133,7 +133,7 @@ function juLog() {
   # then swapping them back again so that the streams are written correctly for the invoking process
   ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
 
-  evErr="$(cat "${errfile}" || echo "1")"
+  evErr="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${evErr}"        | tee -a ${outf}
