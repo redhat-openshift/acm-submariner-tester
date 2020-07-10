@@ -28,6 +28,7 @@
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
 
+ulimit -s 65536 # Temporary workaround for "Argument list too long" errors
 
 asserts=00; errors=0; total=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
@@ -74,7 +75,7 @@ function juLog() {
   # tmpdir="/var/tmp"
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
-  date="$(which gdate 2>/dev/null || which date)"
+  date="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; errors=0; total=0; content=""
   export testIndex=$(( testIndex+1 ))
 

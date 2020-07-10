@@ -1427,14 +1427,13 @@ function install_broker_aws_cluster_a() {
   echo "# Executing: ${DEPLOY_CMD}"
   $DEPLOY_CMD
 
-  ${OC} -n ${SUBM_NAMESPACE} get pods |& (! highlight "CrashLoopBackOff") || submariner_status=DOWN
-
   # Now looking at cluster A shows that the Submariner broker namespace has been created:
   ${OC} get crds | grep -E 'submariner|lighthouse'
       # clusters.submariner.io                                      2019-12-03T16:45:57Z
       # endpoints.submariner.io                                     2019-12-03T16:45:57Z
 
-  [[ "$submariner_status" != DOWN ]] || FATAL "Submariner pod has Crashed - check its logs"
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
+   || FATAL "Submariner pods have crashed - check pods logs"
 }
 
 # ------------------------------------------
@@ -1582,7 +1581,7 @@ function collect_submariner_info() {
   # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
   ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
   ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-  # ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
+  ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
 
   subctl show networks || :
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
@@ -1682,8 +1681,10 @@ function test_submariner_engine_status() {
   # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
   subctl show networks || :
   ${OC} describe cm -n openshift-dns
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels
-  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
+   || FATAL "Submariner pods have crashed - check pods logs"
+
+  # ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
@@ -1699,11 +1700,11 @@ function test_submariner_engine_status() {
   if [[ "$submariner_status" = DOWN ]]; then
   # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
   # || : to ignore none-zero exit code
-    ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
     ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
-    ${OC} get Submariner -o yaml || :
-    ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-    ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
+    ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
+    # ${OC} get Submariner -o yaml || :
+    # ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+    # ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
     FATAL "Error: Submariner clusters are not connected."
   fi
 }
@@ -1717,6 +1718,7 @@ function test_lighthouse_status() {
   ${OC} describe multiclusterservices --all-namespaces
 
   lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
+  [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace"
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
@@ -1736,6 +1738,7 @@ function test_globalnet_status() {
   trap_commands;
 
   globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
+  [[ -n "$globalnet_pod" ]] || FATAL "GlobalNet pod was not created on ${SUBM_NAMESPACE} namespace"
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
 
