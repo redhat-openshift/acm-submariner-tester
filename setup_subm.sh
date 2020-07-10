@@ -1561,6 +1561,8 @@ function collect_submariner_info() {
   PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
   df -h
   free -h
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
