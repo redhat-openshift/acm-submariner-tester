@@ -1499,6 +1499,14 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
+  if [[ "$get_subctl_devel" =~ ^(y|yes)$ ]]; then
+    BUG "operator image 'devel' should be the default when using subctl devel binary" \
+    "Add '--version devel' to JOIN_CMD" \
+    "https://github.com/submariner-io/submariner-operator/issues/563"
+    # Workaround
+    JOIN_CMD="${JOIN_CMD} --version devel"
+  fi
+
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
 
