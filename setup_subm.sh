@@ -107,8 +107,13 @@ source "$SCRIPT_DIR/helper_functions"
 # To trap inside functions
 # set -T # might have issues with kubectl/oc commands
 
-# To exit on error
-set -e
+# To exit on errors and extended trap
+# set -Eeuo pipefail
+set -Ee
+# -e : Exit at the first error
+# -E : Ensures that ERR traps get inherited by functions, command substitutions, and subshell environments.
+# -u : Treats unset variables as errors.
+# -o pipefail : Propagate intermediate errors (not just last command exit code)
 
 # To expend aliases
 shopt -s expand_aliases
@@ -1297,11 +1302,11 @@ function open_firewall_ports_on_the_broker_node() {
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
   "https://github.com/submariner-io/submariner/issues/240"
-  [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || ./prep_for_subm.sh
+  [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
 
   # Run prep_for_subm script to apply ec2-resources.tf:
-  ./prep_for_subm.sh
+  bash -x ./prep_for_subm.sh
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
     # Outputs:
@@ -1631,8 +1636,8 @@ function test_submariner_engine_status() {
 
   PROMPT "Testing Submariner Operator resources on ${cluster_name}"
 
-  ${OC} get all -n ${SUBM_NAMESPACE} |& (! highlight "No resources found") \
-  || FATAL "Error: Submariner is not installed on $cluster_name"
+  ${OC} get all -n ${SUBM_NAMESPACE} |& (! highlight "Error|CrashLoopBackOff|No resources found") \
+  || FATAL "Error: Submariner was not installed on $cluster_name, or it's Pods have crashed"
 
   # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   ${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
@@ -2125,7 +2130,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 (
   # Trap test exit failure, to print more info before exiting main flow
-  trap 'trap_on_exit_error "$?" "$LINENO" "${junit_run} collect_submariner_info"' EXIT
+  trap 'trap_on_exit_error "$?" "$FUNCNAME" "$LINENO" "${junit_run} collect_submariner_info"' ERR
   # trap 'exit 127' HUP INT TERM  # Trap any script termination as EXIT, too
 
   # Print planned steps according to CLI/User inputs

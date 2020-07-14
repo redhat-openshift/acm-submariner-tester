@@ -117,12 +117,13 @@ trap_commands
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_on_exit_error() {
   last_exit_code="$1"
-  err_line="$2"
-  execute_func="$3"
-  echo "# Running [$execute_func] if there's an exit error [$last_exit_code]"
+  func_name="$2"
+  err_line="$3"
+  execute_func="$4"
+  echo "# Running [$execute_func] only if function [$func_name] returned non-zero exit code."
 
   if [ "$last_exit_code" != "0" ]; then
-    BUG "Exit error $last_exit_code occurred on line $err_line"
+    BUG "Exit error $last_exit_code occurred while running function [$func_name], at line: $err_line"
     # error handling goes here
     eval "$execute_func"
   fi
