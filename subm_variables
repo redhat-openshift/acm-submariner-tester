@@ -8,7 +8,6 @@ export GOBIN="${GOROOT}/bin"
 export WORKDIR=~/submariner-install
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
-export MERGED_KUBCONF="${WORKDIR}/merged_kubeconfig"
 
 # TODO: Change the cluster of Broker to be different than cluster A
 export BROKER_CLUSTER_NAME="cluster-a"

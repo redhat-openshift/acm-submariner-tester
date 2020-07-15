@@ -1395,15 +1395,8 @@ function install_broker_aws_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
 
   trap_commands;
-  cd ${WORKDIR}
-  #cd $GOPATH/src/github.com/submariner-io/submariner-operator
-
-  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
   DEPLOY_CMD="subctl deploy-broker "
-
-  # Deploys the CRDs, creates the SA for the broker, the role and role bindings
-  kubconf_a;
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding Service-Discovery to Submariner Deploy command"
@@ -1419,33 +1412,66 @@ function install_broker_aws_cluster_a() {
   fi
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    PROMPT "Adding GlobalNet to Submariner Deploy command"
+
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
     "Define a new and unique globalnet-cidr for this cluster" \
     "https://github.com/submariner-io/submariner/issues/544"
 
-    PROMPT "Adding GlobalNet to Submariner Deploy command"
     # DEPLOY_CMD="${DEPLOY_CMD} --globalnet --globalnet-cidr 169.254.0.0/19"
     DEPLOY_CMD="${DEPLOY_CMD} --globalnet"
   fi
 
-  PROMPT "Deploying Submariner Broker and joining cluster A"
+  PROMPT "Deploying Submariner Broker on AWS cluster A (public)"
+
+  # Deploys Submariner CRDs, creates the SA for the broker, the role and role bindings
+  kubconf_a;
+
+  cd ${WORKDIR}
+  #cd $GOPATH/src/github.com/submariner-io/submariner-operator
+
+  echo "# Remove previous broker-info.subm (if exists)"
+  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
+
   echo "# Executing: ${DEPLOY_CMD}"
   $DEPLOY_CMD
+}
 
-  # Now looking at cluster A shows that the Submariner broker namespace has been created:
-  ${OC} get crds | grep -E 'submariner|lighthouse'
-      # clusters.submariner.io                                      2019-12-03T16:45:57Z
-      # endpoints.submariner.io                                     2019-12-03T16:45:57Z
+# ------------------------------------------
 
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
-   || FATAL "Submariner pods have crashed - check pods logs"
+function test_broker_before_join() {
+  PROMPT "Verify Submariner CRDs created, but no pods were yet created"
+  trap_commands;
+
+  export KUBECONFIG="${KUBECONF_BROKER}"
+
+  # Now looking at Broker cluster, it should show that CRDs, but no pods in namespace
+  ${OC} get crds | grep 'submariner.io'
+
+  ${OC} describe crds \
+  clusters.submariner.io \
+  endpoints.submariner.io \
+  multiclusterservices.lighthouse.submariner.io \
+  serviceimports.lighthouse.submariner.io \
+  clusters.submariner.io \
+  endpoints.submariner.io \
+  multiclusterservices.lighthouse.submariner.io \
+  serviceimports.lighthouse.submariner.io
+
+  # submariners.submariner.io \
+  # gateways.submariner.io \
+  # servicediscoveries.submariner.io \
+  # serviceexports.lighthouse.submariner.io \
+
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
+   || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
 }
 
 # ------------------------------------------
 
 function join_submariner_cluster_a() {
 # Join Submariner member - AWS cluster A (public)
-  PROMPT "Joining cluster A to Submariner Broker (also on cluster A), and verifying CRDs"
+  PROMPT "Joining cluster A to Submariner Broker (also on cluster A)"
   kubconf_a;
   join_submariner_current_cluster "${CLUSTER_A_NAME}"
 }
@@ -1454,7 +1480,7 @@ function join_submariner_cluster_a() {
 
 function join_submariner_cluster_b() {
 # Join Submariner member - OSP cluster B (private)
-  PROMPT "Joining cluster B to Submariner Broker (on cluster A), and verifying CRDs"
+  PROMPT "Joining cluster B to Submariner Broker (on cluster A)"
   kubconf_b;
   join_submariner_current_cluster "${CLUSTER_B_NAME}"
 
@@ -1511,16 +1537,16 @@ function join_submariner_current_cluster() {
     JOIN_CMD="${JOIN_CMD} --version devel"
   fi
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    PROMPT "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
-
-    BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
-    "Define a new and unique globalnet-cidr for each cluster, or add a wait (30 seconds)" \
-    "https://github.com/submariner-io/submariner-operator/issues/299"
-    # Workaround
-    sleep 30s
-    # JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19" # or 169.254.0.0/19
-  fi
+  # if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+  #   # PROMPT "Adding GlobalNet to Submariner Join command for cluster ${current_cluster_context_name}"
+  #
+  #   BUG "Running subctl join with GlobalNet can fail if glabalnet_cidr address is already assigned" \
+  #   "Define a new and unique globalnet-cidr for each cluster, or add a wait (30 seconds)" \
+  #   "https://github.com/submariner-io/submariner-operator/issues/299"
+  #   # Workaround
+  #   sleep 30s
+  #   # JOIN_CMD="${JOIN_CMD} --globalnet-cidr 169.254.32.0/19" # or 169.254.0.0/19
+  # fi
 
   # subctl --subm-debug ${JOIN_CMD}
   BUG "--subm-debug cannot be used before join argument in subctl command" \
@@ -1569,61 +1595,75 @@ function test_submariner_status_cluster_b() {
 function collect_submariner_info() {
   # print submariner pods descriptions and logs
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
-
   PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
-  df -h
-  free -h
+  trap_commands;
+  local output_log="collect_submariner_info.log"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
-  ${OC} get all -n ${SUBM_NAMESPACE} || :
-  ${OC} describe cm -n openshift-dns || :
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
-  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+  (
+    df -h
+    free -h
 
-  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
-  # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
-  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
+    export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  subctl show networks || :
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+    BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
+    "use an older OC client" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
+    # Workaround:
+    OC="/usr/bin/oc"
 
-  # for pod in $(${OC} get pods -A \
-  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
-  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
-  #     echo "######################: Logs for Pod $pod :######################"
-  #     ${OC}  -n $ns describe pod $name
-  #     ${OC}  -n $namespace logs $pod
-  # done
+    ${OC} get all -n ${SUBM_NAMESPACE} || :
+    ${OC} describe cm -n openshift-dns || :
+    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
+    ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
+    # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
 
-  echo -e "\n#########################################################################################\n"
+    # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+    # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
+    # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
+    ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+    ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+    ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
 
-  local namespace="${SUBM_NAMESPACE}"
-  for pod in $(${OC} get pods -l app=submariner-engine -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo "######################: Logs Submariner Engine pod $pod in namespace $namespace :######################"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
+    subctl show networks || :
+    ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-  for pod in $(${OC} get pods -l app=submariner-globalnet -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo "######################: Logs for Submariner Globalnet pod $pod in namespace $namespace :######################"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
+    # for pod in $(${OC} get pods -A \
+    # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+    # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
+    #     echo "######################: Logs for Pod $pod :######################"
+    #     ${OC}  -n $ns describe pod $name
+    #     ${OC}  -n $namespace logs $pod
+    # done
 
-  echo -e "\n#########################################################################################\n"
+    echo -e "\n#########################################################################################\n"
 
-  namespace="kube-system"
-  for pod in $(${OC} get pods -l k8s-app=kube-proxy -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo "######################: Logs for Kube Proxy pod $pod in namespace $namespace :######################"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
+    local namespace="${SUBM_NAMESPACE}"
+    for pod in $(${OC} get pods -l app=submariner-engine -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+        echo "######################: Logs Submariner Engine pod $pod in namespace $namespace :######################"
+        ${OC} -n $namespace describe pod $pod || :
+        ${OC} -n $namespace logs $pod || :
+    done
 
-  echo -e "\n#########################################################################################\n"
+    for pod in $(${OC} get pods -l app=submariner-globalnet -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+        echo "######################: Logs for Submariner Globalnet pod $pod in namespace $namespace :######################"
+        ${OC} -n $namespace describe pod $pod || :
+        ${OC} -n $namespace logs $pod || :
+    done
+
+    echo -e "\n#########################################################################################\n"
+
+    namespace="kube-system"
+    for pod in $(${OC} get pods -l k8s-app=kube-proxy -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+        echo "######################: Logs for Kube Proxy pod $pod in namespace $namespace :######################"
+        ${OC} -n $namespace describe pod $pod || :
+        ${OC} -n $namespace logs $pod || :
+    done
+
+    echo -e "\n#########################################################################################\n"
+
+  ) &> $output_log
+
+  ${junit_run} "cat" "$output_log"
 }
 
 # ------------------------------------------
@@ -1730,7 +1770,7 @@ function test_lighthouse_status() {
 
   cmd="${OC} logs --tail 100 $lighthouse_pod -n ${SUBM_NAMESPACE}"
   regex="Lighthouse agent syncer started"
-  # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
+  # Run up to 5 minutes (+ 10 seconds interval between retries), and watch for output to include regex
   watch_and_retry "$cmd" 5m "$regex"
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
@@ -2130,8 +2170,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 (
   # Trap test exit failure, to print more info before exiting main flow
-  trap 'trap_on_exit_error "$?" "$FUNCNAME" "$LINENO" "${junit_run} collect_submariner_info"' ERR
-  # trap 'exit 127' HUP INT TERM  # Trap any script termination as EXIT, too
+  # trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO[$i+1]} > ${BASH_SOURCE}:${BASH_LINENO}"; \
+  # trap_on_exit_error "$rc" "collect_submariner_info"' EXIT ERR HUP INT TERM  # Trap any script termination as EXIT, too
+
+  trap_function_on_error "collect_submariner_info"
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan
@@ -2203,6 +2245,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_run} label_first_gateway_cluster_b
 
     ${junit_run} install_broker_aws_cluster_a
+
+    ${junit_run} test_broker_before_join
 
     ${junit_run} join_submariner_cluster_a
 

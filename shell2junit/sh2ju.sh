@@ -140,10 +140,10 @@ function juLog() {
   echo "+++ exit code: ${evErr}"        | tee -a ${outf}
 
   # Save output and error messages (without ansi colors and +++), and delete their temp files
-  outMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$outf" || :)"
-  errMsg="$(${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' "$errf" || :)"
-  rm -f "${outf}"
-  rm -f "${errf}"
+  outMsg="$(cat "$outf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs )"
+  errMsg="$(cat "$errf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs )"
+  rm -f "${outf}" | xargs
+  rm -f "${errf}" | xargs
 
   # set the appropriate error, based in the exit code and the regex
   [[ ${evErr} != 0 ]] && err=1 || err=0

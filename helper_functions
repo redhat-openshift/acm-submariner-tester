@@ -115,34 +115,11 @@ trap_commands
 # ------------------------------------------
 
 # Function to trap test exit failure - to print more info before exiting main flow
-function trap_on_exit_error() {
-  last_exit_code="$1"
-  func_name="$2"
-  err_line="$3"
-  execute_func="$4"
-  echo "# Running [$execute_func] only if function [$func_name] returned non-zero exit code."
-
-  if [ "$last_exit_code" != "0" ]; then
-    BUG "Exit error $last_exit_code occurred while running function [$func_name], at line: $err_line"
-    # error handling goes here
-    eval "$execute_func"
-  fi
+function trap_function_on_error() {
+  func_to_execute="$@"
+  trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO} > ${BASH_SOURCE}:${BASH_LINENO[$i+1]}"; \
+  [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination as EXIT, too
 }
-
-# function trap_on_exit_error() {
-# trap '
-#   last_exit_code="$?"
-#   execute_func="$1"
-#   if [ "$last_exit_code" != "0" ]; then
-#     echo "Exit error $last_exit_code occurred on line $LINENO."
-#     df -h
-#     free -h
-#     # error handling goes here
-#     eval "$execute_func $@"
-#   fi
-# ' EXIT
-# }
-
 
 # ------------------------------------------
 
@@ -198,7 +175,7 @@ EOF
 function PROMPT() {
   message="$1"
   color="${2:-${YELLOW}}"
-  cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S')]"
+  cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S' || :)]"
   echo -e "\n${cur_time}\n"\
   "${color}### $message ###${NO_COLOR}\n"\
   "[${PWD}]\n"
@@ -210,7 +187,8 @@ function PROMPT() {
 function FATAL() {
   failure_msg="${1}"
   echo -e "${RED}*** $failure_msg ***${NO_COLOR}"
-  exit 2
+  #FALSE
+  exit 127
 }
 
 # ------------------------------------------
