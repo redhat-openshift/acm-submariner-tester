@@ -117,7 +117,7 @@ trap_commands
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_function_on_error() {
   func_to_execute="$@"
-  trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO} > ${BASH_SOURCE}:${BASH_LINENO[$i+1]}"; \
+  trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO[$i+1]} > ${BASH_SOURCE[$i+1]}:${BASH_LINENO}"; \
   [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination as EXIT, too
 }
 
@@ -217,6 +217,8 @@ function junit_run() {
   # WARNING: Variable changes in the command will NOT be effective after record_command returns.
   #          This is because the command runs in subshell.
 
+  set +e # To not break the calling script, if juLog has internal error
+
   # Extract $report_name from current executing script filename
   local report_name=$(basename "${0%.*}")
 
@@ -234,22 +236,10 @@ function junit_run() {
   into report file \"${output_dir}/junit_${report_name}.xml\""
 
   juLog -output="${output_dir}" -index -class="$report_name" -name="${test_function}" "$@"
+  local exit_code=$?
 
-  # local exitCode=$?
-  # if [[ ${exitCode} -ne 0 ]]; then
-  #   # Record failures for any non-canary commands
-  #   if [ "${test_function}" != "record_command_canary" ]; then
-  #     echo "Error when running ${test_function}"
-  #     foundError="${foundError}""${test_function}"", "
-  #   fi
-  # elif [ "${test_function}" == "record_command_canary" ]; then
-  #   # If the canary command passed, fail
-  #   echo "record_command_canary succeeded unexpectedly"
-  #   foundError="${foundError}""${test_function}"", "
-  # fi
-  #
-  # set -o nounset
-  # set -o errexit
+  set -e # set -o errexit
+  return $exit_code
 }
 
 # ------------------------------------------
