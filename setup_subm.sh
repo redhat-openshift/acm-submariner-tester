@@ -1597,9 +1597,9 @@ function collect_submariner_info() {
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
   PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
   trap_commands;
-  local output_log="collect_submariner_info.log"
+#  local output_log="collect_submariner_info.log"
 
-  (
+#  (
     df -h
     free -h
 
@@ -1661,9 +1661,9 @@ function collect_submariner_info() {
 
     echo -e "\n#########################################################################################\n"
 
-  ) &> $output_log
+#  ) &> $output_log
 
-  ${junit_run} "cat" "$output_log"
+#  ${junit_run} "cat $output_log"
 }
 
 # ------------------------------------------
@@ -2173,7 +2173,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO[$i+1]} > ${BASH_SOURCE}:${BASH_LINENO}"; \
   # trap_on_exit_error "$rc" "collect_submariner_info"' EXIT ERR HUP INT TERM  # Trap any script termination as EXIT, too
 
-  trap_function_on_error "collect_submariner_info"
+  # trap_function_on_error "collect_submariner_info"
+  trap_function_on_error "${junit_run} collect_submariner_info"
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan

@@ -161,7 +161,11 @@ function juLog() {
   time=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
 
-  # Set test title with upercase letter and spaces
+  # Set suite title with uppercase letter and spaces
+  suiteTitle=( "${suite//[_.]?/ }" )
+  suiteTitle="${suiteTitle[@]^}"
+
+  # Set test title with uppercase letter and spaces
   testTitle=( ${name//_/ } )
   testTitle="${testTitle[@]^}"
 
@@ -215,7 +219,7 @@ EOF
     cat <<EOF > "${juDIR}/${prefix}${suite}.xml"
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-    <testsuite failures="${errors}" assertions="${assertions:-}" name="${suite}" tests="1" errors="${errors}" time="${total}">
+    <testsuite failures="${errors}" assertions="${assertions:-}" name="${suiteTitle}" tests="1" errors="${errors}" time="${total}">
     ${content:-}
     </testsuite>
 </testsuites>
