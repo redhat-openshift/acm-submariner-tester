@@ -1739,7 +1739,7 @@ function test_submariner_engine_status() {
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing Lighthouse agent status on ${cluster_name}"
-    test_lighthouse_status || submariner_status=DOWN
+    test_lighthouse_status || : # submariner_status=DOWN
   fi
 
   if [[ "$submariner_status" = DOWN ]]; then
@@ -1768,10 +1768,10 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
 
-  cmd="${OC} logs --tail 100 $lighthouse_pod -n ${SUBM_NAMESPACE}"
+  cmd="${OC} logs --tail 100 $lighthouse_pod -n ${SUBM_NAMESPACE}; sleep 20s"
   regex="Lighthouse agent syncer started"
   # Run up to 5 minutes (+ 10 seconds interval between retries), and watch for output to include regex
-  watch_and_retry "$cmd" 5m "$regex"
+  watch_and_retry "$cmd" 5 "$regex"
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }

@@ -126,9 +126,9 @@ function juLog() {
   :>${outf}
 
   echo ""                         | tee -a ${outf}
-  echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " | tee -a ${outf}
-  echo "+++ working dir: $(pwd)"           | tee -a ${outf}
-  echo "+++ command: ${cmd}"            | tee -a ${outf}
+  echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
+  echo "+++ working dir: $(pwd)"           # | tee -a ${outf}
+  echo "+++ command: ${cmd}"            # | tee -a ${outf}
   ini="$(${date} +%s.%N)"
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
@@ -137,11 +137,13 @@ function juLog() {
   evErr="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
-  echo "+++ exit code: ${evErr}"        | tee -a ${outf}
+  echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
 
   # Save output and error messages (without ansi colors and +++), and delete their temp files
-  outMsg="$(cat "$outf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
-  errMsg="$(cat "$errf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
+  # outMsg="$(cat "$outf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
+  # errMsg="$(cat "$errf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
+  outMsg="$(cat "$outf" | xargs -0 | ${SED} -e 's/\x1b\[[0-9;]*m//g')"
+  errMsg="$(cat "$errf" | xargs -0 | ${SED} -e 's/\x1b\[[0-9;]*m//g')"
   rm -f "${outf}" | xargs -0
   rm -f "${errf}" | xargs -0
 
@@ -179,6 +181,7 @@ function juLog() {
   else
     output="
     <failure type=\"ScriptError\" message=\"Script Error\"><![CDATA[${class}.${name}]]></failure>
+    <system-out><![CDATA[${outMsg}]]></system-out>
     <system-err><![CDATA[${errMsg}]]></system-err>
     "
   fi
