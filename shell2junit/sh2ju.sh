@@ -139,13 +139,11 @@ function juLog() {
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
 
-  # Save output and error messages (without ansi colors and +++), and delete their temp files
-  # outMsg="$(cat "$outf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
-  # errMsg="$(cat "$errf" | ${SED} -e 's/^\([^+]\)/| \1/g' -e 's/\x1b\[[0-9;]*m//g' | xargs -0)"
-  outMsg="$(cat "$outf" | xargs -0 | ${SED} -e 's/\x1b\[[0-9;]*m//g')"
-  errMsg="$(cat "$errf" | xargs -0 | ${SED} -e 's/\x1b\[[0-9;]*m//g')"
-  rm -f "${outf}" | xargs -0
-  rm -f "${errf}" | xargs -0
+  # Save output and error messages without ansi colors, and delete their temp files
+  outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
+  rm -f "${outf}"
+  errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
+  rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
   [[ ${evErr} != 0 ]] && err=1 || err=0
@@ -153,7 +151,7 @@ function juLog() {
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
       [[ -n "${H}" ]] && err=1
   fi
-  [[ ${err} != 0 ]] && echo "+++ error: ${err}"         | tee -a ${outf}
+  [[ ${err} != 0 ]] && echo "+++ error: ${err}"        # | tee -a ${outf}
 
   # calculate vars
   asserts=$((asserts+1))

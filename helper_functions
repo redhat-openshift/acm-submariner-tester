@@ -117,9 +117,18 @@ trap_commands
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_function_on_error() {
   func_to_execute="$@"
-  trap 'rc=$?; echo "# [$FUNCNAME] returned EXIT $rc: ${BASH_SOURCE[$i-1]}:${BASH_LINENO[$i+1]} > ${BASH_SOURCE[$i+1]}:${BASH_LINENO}"; \
+  trap 'rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
+  ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}"; \
   [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination as EXIT, too
 }
+
+# ------------------------------------------
+
+# # Function to debug this script
+# function debug_a_failure() {
+#   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
+#   FAIL_HERE
+# }
 
 # ------------------------------------------
 
@@ -217,7 +226,7 @@ function junit_run() {
   # WARNING: Variable changes in the command will NOT be effective after record_command returns.
   #          This is because the command runs in subshell.
 
-  set +e # To not break the calling script, if juLog has internal error
+  # set +e # To not break the calling script, if juLog has internal error
 
   # Extract $report_name from current executing script filename
   local report_name=$(basename "${0%.*}")
@@ -238,7 +247,7 @@ function junit_run() {
   juLog -output="${output_dir}" -index -class="$report_name" -name="${test_function}" "$@"
   local exit_code=$?
 
-  set -e # set -o errexit
+  # set -e # set -o errexit
   return $exit_code
 }
 

@@ -108,7 +108,7 @@ source "$SCRIPT_DIR/helper_functions"
 # set -T # might have issues with kubectl/oc commands
 
 # To exit on errors and extended trap
-# set -Eeuo pipefail
+# set -Eeo pipefail
 set -Ee
 # -e : Exit at the first error
 # -E : Ensures that ERR traps get inherited by functions, command substitutions, and subshell environments.
@@ -437,7 +437,7 @@ function print_test_plan() {
     - create_aws_cluster_a: $create_cluster_a
     - clean_aws_cluster_a: $clean_cluster_a
 
-    OSP cluster B (private):
+    OSP cluster B (on-prem):
     - destroy_osp_cluster_b: $destroy_cluster_b
     - create_osp_cluster_b: $create_cluster_b
     - clean_osp_cluster_b: $clean_cluster_b
@@ -918,8 +918,8 @@ function create_aws_cluster_a() {
 # ------------------------------------------
 
 function create_osp_cluster_b() {
-### Create Openstack cluster B (private) with OCPUP tool ###
-  PROMPT "Creating Openstack cluster B (private) with OCP-UP tool"
+### Create Openstack cluster B (on-prem) with OCPUP tool ###
+  PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_commands;
 
   cd "${OCPUP_DIR}"
@@ -929,7 +929,7 @@ function create_osp_cluster_b() {
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
 
-  # Run OCPUP to Create OpenStack cluster B (private)
+  # Run OCPUP to Create OpenStack cluster B (on-prem)
   # ocpup  create clusters --debug --config "$ocpup_yml"
   ocpup  create clusters --config "$ocpup_yml" &
   pid=$!
@@ -968,7 +968,7 @@ function kubconf_a() {
 # ------------------------------------------
 
 function test_kubeconfig_osp_cluster_b() {
-# Check that OSP cluster B (private) is up and running
+# Check that OSP cluster B (on-prem) is up and running
   CLUSTER_B_VERSION=${CLUSTER_B_VERSION:+" (OCP Version $CLUSTER_B_VERSION)"}
   PROMPT "Testing that OSP cluster B${CLUSTER_B_VERSION} is up and running"
   trap_commands;
@@ -979,7 +979,7 @@ function test_kubeconfig_osp_cluster_b() {
 }
 
 function kubconf_b() {
-# Alias of KubeConfig for OSP cluster B (private) (OpenStack):
+# Alias of KubeConfig for OSP cluster B (on-prem) (OpenStack):
   trap_commands;
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}";
 }
@@ -1077,8 +1077,8 @@ function destroy_aws_cluster_a() {
 # ------------------------------------------
 
 function destroy_osp_cluster_b() {
-### If Required - Destroy your previous Openstack cluster B (private) ###
-  PROMPT "Destroying previous Openstack cluster B (private)"
+### If Required - Destroy your previous Openstack cluster B (on-prem) ###
+  PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_commands;
 
   cd "${OCPUP_DIR}"
@@ -1134,12 +1134,12 @@ function clean_aws_cluster_a() {
 # ------------------------------------------
 
 function clean_osp_cluster_b() {
-### Run cleanup of previous Submariner on OSP cluster B (private) ###
-  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (private)"
+### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
+  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (on-prem)"
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
-  PROMPT "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (private)"
+  PROMPT "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (on-prem)"
   remove_submariner_gateway_labels
 }
 
@@ -1252,7 +1252,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   PROMPT "Before Submariner is installed:
-  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (private)"
+  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (on-prem)"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
@@ -1331,8 +1331,8 @@ function label_all_gateway_external_ip_cluster_a() {
 }
 
 function label_first_gateway_cluster_b() {
-### Label a Gateway node on OSP cluster B (private) ###
-  PROMPT "Adding Gateway label to the first worker node on OSP cluster B (private)"
+### Label a Gateway node on OSP cluster B (on-prem) ###
+  PROMPT "Adding Gateway label to the first worker node on OSP cluster B (on-prem)"
   kubconf_b;
   gateway_label_first_worker_node
 }
@@ -1479,7 +1479,7 @@ function join_submariner_cluster_a() {
 # ------------------------------------------
 
 function join_submariner_cluster_b() {
-# Join Submariner member - OSP cluster B (private)
+# Join Submariner member - OSP cluster B (on-prem)
   PROMPT "Joining cluster B to Submariner Broker (on cluster A)"
   kubconf_b;
   join_submariner_current_cluster "${CLUSTER_B_NAME}"
@@ -1562,7 +1562,7 @@ function join_submariner_current_cluster() {
       # ...
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
 
-  # Print details of the Operator in OSP cluster B (private), and in the Broker cluster:
+  # Print details of the Operator in OSP cluster B (on-prem), and in the Broker cluster:
   ${OC} get namespace ${SUBM_NAMESPACE} -o json
 
   ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml
@@ -1582,8 +1582,8 @@ function test_submariner_status_cluster_a() {
 # ------------------------------------------
 
 function test_submariner_status_cluster_b() {
-# Operator pod status on OSP cluster B (private)
-  PROMPT "Testing Submariner engine on OSP cluster B (private)"
+# Operator pod status on OSP cluster B (on-prem)
+  PROMPT "Testing Submariner engine on OSP cluster B (on-prem)"
 
   kubconf_b;
   test_submariner_engine_status  "${CLUSTER_B_NAME}"
@@ -1597,73 +1597,77 @@ function collect_submariner_info() {
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
   PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
   trap_commands;
-#  local output_log="collect_submariner_info.log"
 
-#  (
-    df -h
-    free -h
+  df -h
+  free -h
 
-    export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-    BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
-    "use an older OC client" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
-    # Workaround:
-    OC="/usr/bin/oc"
+  BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
+  "use an older OC client" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
+  # Workaround:
+  OC="/usr/bin/oc"
 
-    ${OC} get all -n ${SUBM_NAMESPACE} || :
-    ${OC} describe cm -n openshift-dns || :
-    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
-    ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
-    # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+  ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} describe cm -n openshift-dns || :
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
+  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
 
-    # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-    # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
-    # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
-    ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-    ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-    ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
+  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+  # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
+  # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
+  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+  ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
 
-    subctl show networks || :
-    ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+  subctl show networks || :
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-    # for pod in $(${OC} get pods -A \
-    # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
-    # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
-    #     echo "######################: Logs for Pod $pod :######################"
-    #     ${OC}  -n $ns describe pod $name
-    #     ${OC}  -n $namespace logs $pod
-    # done
+  # for pod in $(${OC} get pods -A \
+  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
+  #     echo "######################: Logs for Pod $pod :######################"
+  #     ${OC}  -n $ns describe pod $name
+  #     ${OC}  -n $namespace logs $pod
+  # done
 
-    echo -e "\n#########################################################################################\n"
+  local pods_label
+  local namespace
 
-    local namespace="${SUBM_NAMESPACE}"
-    for pod in $(${OC} get pods -l app=submariner-engine -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-        echo "######################: Logs Submariner Engine pod $pod in namespace $namespace :######################"
-        ${OC} -n $namespace describe pod $pod || :
-        ${OC} -n $namespace logs $pod || :
-    done
+  pods_label="app=submariner-engine"
+  namespace="${SUBM_NAMESPACE}"
+  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
 
-    for pod in $(${OC} get pods -l app=submariner-globalnet -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-        echo "######################: Logs for Submariner Globalnet pod $pod in namespace $namespace :######################"
-        ${OC} -n $namespace describe pod $pod || :
-        ${OC} -n $namespace logs $pod || :
-    done
+  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo -e "\n### Submariner Engine pod $pod in namespace $namespace ###\n"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
 
-    echo -e "\n#########################################################################################\n"
+  pods_label="app=submariner-globalnet"
+  namespace="${SUBM_NAMESPACE}"
+  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
 
-    namespace="kube-system"
-    for pod in $(${OC} get pods -l k8s-app=kube-proxy -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-        echo "######################: Logs for Kube Proxy pod $pod in namespace $namespace :######################"
-        ${OC} -n $namespace describe pod $pod || :
-        ${OC} -n $namespace logs $pod || :
-    done
+  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo -e "\n### Submariner Globalnet pod $pod in namespace $namespace ###\n"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
 
-    echo -e "\n#########################################################################################\n"
+  pods_label="k8s-app=kube-proxy"
+  namespace="kube-system"
+  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
 
-#  ) &> $output_log
+  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      echo -e "\n### Kube Proxy pod $pod in namespace $namespace ###\n"
+      ${OC} -n $namespace describe pod $pod || :
+      ${OC} -n $namespace logs $pod || :
+  done
 
-#  ${junit_run} "cat $output_log"
+  echo -e "\n############################## End of Submariner Pods Logs ##############################\n"
+
 }
 
 # ------------------------------------------
@@ -1850,7 +1854,7 @@ function test_clusters_connected_by_service_ip() {
   CURL_CMD="${SUBM_TEST_NS:+-n $SUBM_TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (private)"
+    PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
     ${OC} exec ${CURL_CMD} || \
     BUG "TODO: This will if fail the clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
       # *   Trying 100.96.72.226:8080...
@@ -1886,9 +1890,9 @@ function test_clusters_connected_by_service_ip() {
 # ------------------------------------------
 
 function test_clusters_connected_overlapping_cidrs() {
-### Run Connectivity tests between the Private and Public clusters ###
+### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  PROMPT "Testing GlobalNet annotation - Nginx service on OSP cluster B (private) should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - Nginx service on OSP cluster B (on-prem) should get a GlobalNet IP"
   trap_commands;
 
   kubconf_b;
@@ -2272,7 +2276,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_run} test_submariner_status_cluster_b
 
-    # Run Connectivity tests between the Private and Public clusters,
+    # Run Connectivity tests between the On-Premise and Public clusters,
     # To validate that now Submariner made the connection possible.
 
     ${junit_run} test_clusters_connected_by_service_ip
