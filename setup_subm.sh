@@ -480,8 +480,16 @@ function print_test_plan() {
     echo -e "\n# Skipping tests: $skip_tests \n"
   else
     echo -e "\n
-    - test_submariner_status_cluster_a
-    - test_submariner_status_cluster_b
+    - test_submariner_engine_cluster_a
+    - test_submariner_engine_cluster_b
+    - test_cable_driver_cluster_a
+    - test_cable_driver_cluster_b
+    - test_ha_status_cluster_a
+    - test_ha_status_cluster_b
+    - test_globalnet_status_cluster_a: $globalnet
+    - test_globalnet_status_cluster_b: $globalnet
+    - test_lighthouse_status_cluster_a: $service_discovery
+    - test_lighthouse_status_cluster_b: $service_discovery
     - test_clusters_connected_by_service_ip
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
@@ -1116,7 +1124,9 @@ function destroy_osp_cluster_b() {
 function clean_aws_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
   PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
+  trap_commands;
   kubconf_a;
+
   delete_submariner_namespace_and_crds;
 
   PROMPT "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
@@ -1136,6 +1146,8 @@ function clean_aws_cluster_a() {
 function clean_osp_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
   PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (on-prem)"
+  trap_commands;
+
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
@@ -1220,7 +1232,6 @@ function install_nginx_svc_on_cluster_b() {
   kubconf_b;
 
   install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}"
-
 }
 
 # ------------------------------------------
@@ -1325,6 +1336,8 @@ function open_firewall_ports_on_the_broker_node() {
 function label_all_gateway_external_ip_cluster_a() {
 ### Label a Gateway node on AWS cluster A (public) ###
   PROMPT "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
+  trap_commands;
+
   kubconf_a;
   # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
   gateway_label_all_nodes_external_ip
@@ -1333,6 +1346,8 @@ function label_all_gateway_external_ip_cluster_a() {
 function label_first_gateway_cluster_b() {
 ### Label a Gateway node on OSP cluster B (on-prem) ###
   PROMPT "Adding Gateway label to the first worker node on OSP cluster B (on-prem)"
+  trap_commands;
+
   kubconf_b;
   gateway_label_first_worker_node
 }
@@ -1393,7 +1408,6 @@ function install_broker_aws_cluster_a() {
 ### Installing Submariner Broker on AWS cluster A (public) ###
   # TODO - Should test broker deployment also on different Public cluster (C), rather than on Public cluster A.
   # TODO: Call kubeconfig of broker cluster
-
   trap_commands;
 
   DEPLOY_CMD="subctl deploy-broker "
@@ -1472,6 +1486,8 @@ function test_broker_before_join() {
 function join_submariner_cluster_a() {
 # Join Submariner member - AWS cluster A (public)
   PROMPT "Joining cluster A to Submariner Broker (also on cluster A)"
+  trap_commands;
+
   kubconf_a;
   join_submariner_current_cluster "${CLUSTER_A_NAME}"
 }
@@ -1481,6 +1497,8 @@ function join_submariner_cluster_a() {
 function join_submariner_cluster_b() {
 # Join Submariner member - OSP cluster B (on-prem)
   PROMPT "Joining cluster B to Submariner Broker (on cluster A)"
+  trap_commands;
+
   kubconf_b;
   join_submariner_current_cluster "${CLUSTER_B_NAME}"
 
@@ -1572,71 +1590,20 @@ function join_submariner_current_cluster() {
 
 # ------------------------------------------
 
-function test_submariner_status_cluster_a() {
-# Operator pod status on AWS cluster A (public)
-  PROMPT "Testing Submariner engine on AWS cluster A (public)"
+function test_submariner_engine_cluster_a() {
+  trap_commands;
+
   kubconf_a;
   test_submariner_engine_status "${CLUSTER_A_NAME}"
 }
 
 # ------------------------------------------
 
-function test_submariner_status_cluster_b() {
-# Operator pod status on OSP cluster B (on-prem)
-  PROMPT "Testing Submariner engine on OSP cluster B (on-prem)"
-
-  kubconf_b;
-  test_submariner_engine_status  "${CLUSTER_B_NAME}"
-}
-
-
-# ------------------------------------------
-
-function collect_submariner_info() {
-  # print submariner pods descriptions and logs
-  # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
-  PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+function test_submariner_engine_cluster_b() {
   trap_commands;
 
-  df -h
-  free -h
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
-
-  BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
-  "use an older OC client" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
-  # Workaround:
-  OC="/usr/bin/oc"
-
-  ${OC} get all -n ${SUBM_NAMESPACE} || :
-  ${OC} describe cm -n openshift-dns || :
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
-  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-
-  subctl show networks || :
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
-
-  # for pod in $(${OC} get pods -A \
-  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
-  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
-  #     echo "######################: Logs for Pod $pod :######################"
-  #     ${OC}  -n $ns describe pod $name
-  #     ${OC}  -n $namespace logs $pod
-  # done
-
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-engine"
-
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-globalnet"
-
-  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
-
-  echo -e "\n############################## End of Submariner logs collection ##############################\n"
-
+  kubconf_b;
+  test_submariner_engine_status "${CLUSTER_B_NAME}"
 }
 
 # ------------------------------------------
@@ -1652,9 +1619,38 @@ function test_submariner_engine_status() {
   ${OC} get all -n ${SUBM_NAMESPACE} |& (! highlight "Error|CrashLoopBackOff|No resources found") \
   || FATAL "Error: Submariner was not installed on $cluster_name, or it's Pods have crashed"
 
-  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  ${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
-  submariner_pod="$(< $TEMP_FILE)"
+  # submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
+  # ${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}" > "$TEMP_FILE"
+  # export submariner_engine_pod="$(< $TEMP_FILE)"
+}
+
+
+# ------------------------------------------
+
+function test_cable_driver_cluster_a() {
+  trap_commands;
+
+  kubconf_a;
+  test_submariner_cable_driver "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_cable_driver_cluster_b() {
+  trap_commands;
+
+  kubconf_b;
+  test_submariner_cable_driver "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_submariner_cable_driver() {
+# Check submariner cable driver
+  trap_commands;
+  cluster_name="$1"
+
+  local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
 
   if [[ -z "${subm_cable_driver}" || "${subm_cable_driver}" =~ strongswan ]] ; then
     PROMPT "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
@@ -1662,7 +1658,7 @@ function test_submariner_engine_status() {
     "Ignore non-zero exit code, by redirecting stderr" \
     "https://github.com/submariner-io/submariner/issues/360"
 
-    cmd="${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
+    cmd="${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
     regex='Security Associations \(1 up'
     # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
     watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
@@ -1674,15 +1670,43 @@ function test_submariner_engine_status() {
     BUG "StrongSwan connecting to 'default' URI fails" \
     "Verify StrongSwan with different URI path and ignore failure" \
     "https://github.com/submariner-io/submariner/issues/426"
-    # ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
+    # ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
     # workaround:
-    ${OC} exec $submariner_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
+    ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
 
   elif [[ "${subm_cable_driver}" =~ libreswan ]] ; then
     PROMPT "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
     # TODO: Check LibreSwan pod status with watch_and_retry
     sleep 2m
   fi
+}
+
+
+# ------------------------------------------
+
+function test_ha_status_cluster_a() {
+  trap_commands;
+
+  kubconf_a;
+  test_ha_status "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_ha_status_cluster_b() {
+  trap_commands;
+
+  kubconf_b;
+  test_ha_status "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_ha_status() {
+# Check submariner cable driver
+  trap_commands;
+  cluster_name="$1"
 
   PROMPT "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
   # ${OC} describe Gateway -n ${SUBM_NAMESPACE} |& highlight "Ha Status:\s*active" || submariner_status=DOWN
@@ -1705,32 +1729,74 @@ function test_submariner_engine_status() {
   # ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    PROMPT "Testing GlobalNet controller status on ${cluster_name}"
-    test_globalnet_status || submariner_status=DOWN
-  fi
+  local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
 
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing Lighthouse agent status on ${cluster_name}"
+  ${OC} describe pod $submariner_engine_pod -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-    BUG "Lighthouse pod log is blown with 'transform function returned nil'" \
-    "Ignore result of test_lighthouse_status" \
-    "https://github.com/submariner-io/lighthouse/issues/212"
-    # Workaround:
-    # Ignore result of test_lighthouse_status
-    test_lighthouse_status || : # submariner_status=DOWN
-  fi
+  ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
-  if [[ "$submariner_status" = DOWN ]]; then
-  # if receiving: "Security Associations (0 up, 0 connecting)", we need to check Operator pod logs:
-  # || : to ignore none-zero exit code
-    ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
-    ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
-    # ${OC} get Submariner -o yaml || :
-    # ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-    # ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
-    FATAL "Error: Submariner clusters are not connected."
-  fi
+  [[ "$submariner_status" != DOWN ]] || FATAL "Error: Submariner clusters are not connected."
+}
+
+
+# ------------------------------------------
+
+function test_globalnet_status_cluster_a() {
+  trap_commands;
+
+  kubconf_a;
+  test_globalnet_status "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_globalnet_status_cluster_b() {
+  trap_commands;
+
+  kubconf_b;
+  test_globalnet_status "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_globalnet_status() {
+  # Check Globalnet controller pod status
+  trap_commands;
+  cluster_name="$1"
+
+  PROMPT "Testing GlobalNet controller status on ${cluster_name}"
+
+  globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
+  [[ -n "$globalnet_pod" ]] || FATAL "GlobalNet pod was not created on ${SUBM_NAMESPACE} namespace"
+
+  echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
+
+  regex="Allocating globalIp"
+  watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10
+
+  PROMPT "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
+  echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
+  ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& (! highlight "remove endpoint")
+
+}
+
+
+# ------------------------------------------
+
+function test_lighthouse_status_cluster_a() {
+  trap_commands;
+
+  kubconf_a;
+  test_lighthouse_status "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_lighthouse_status_cluster_b() {
+  trap_commands;
+
+  kubconf_b;
+  test_lighthouse_status "${CLUSTER_B_NAME}"
 }
 
 # ------------------------------------------
@@ -1738,6 +1804,9 @@ function test_submariner_engine_status() {
 function test_lighthouse_status() {
   # Check Lighthouse (the pod for service-discovery) status
   trap_commands;
+  cluster_name="$1"
+
+  PROMPT "Testing Lighthouse agent status on ${cluster_name}"
 
   ${OC} describe multiclusterservices --all-namespaces
 
@@ -1747,38 +1816,17 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
 
-  # cmd="interval=20; ${OC} logs --timestamps --since=\${interval}s $lighthouse_pod -n ${SUBM_NAMESPACE}; sleep \$(( interval++ ))s"
+  BUG "Lighthouse pod log is blown with 'transform function returned nil'" \
+  "Ignore result of test_lighthouse_status" \
+  "https://github.com/submariner-io/lighthouse/issues/212"
+  # Workaround:
+  # Ignore result of watch_pod_logs
   regex="Lighthouse agent syncer started"
-  # Run up to 5 minutes (+ 10 seconds interval between retries), and watch for output to include regex
-  # watch_and_retry "$cmd" 5 "$regex"
-  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
+  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || :
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
 
-# ------------------------------------------
-
-function test_globalnet_status() {
-  # Check Globalnet controller pod status
-  trap_commands;
-
-  globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
-  [[ -n "$globalnet_pod" ]] || FATAL "GlobalNet pod was not created on ${SUBM_NAMESPACE} namespace"
-
-  echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
-
-  # cmd="${OC} logs --tail 100 $globalnet_pod -n ${SUBM_NAMESPACE}"
-  regex="Allocating globalIp"
-  # # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
-  # watch_and_retry "$cmd" 3m "$regex"
-
-  watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10
-
-  PROMPT "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
-  echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
-  ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& (! highlight "remove endpoint")
-
-}
 
 # ------------------------------------------
 
@@ -2059,17 +2107,6 @@ function test_submariner_packages() {
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
 
-        # JUnit report was created: ~/go/src/github.com/submariner-io/submariner-operator/pkg/discovery/network/junit_result.xml
-        # Ran 32 of 32 Specs in 0.012 seconds
-        # SUCCESS! -- 32 Passed | 0 Failed | 0 Pending | 0 Skipped
-        # ...
-        # JUnit report was created: ~/go/src/github.com/submariner-io/submariner-operator/pkg/subctl/datafile/junit_result.xml
-        # Ran 5 of 5 Specs in 0.001 seconds
-        # SUCCESS! -- 5 Passed | 0 Failed | 0 Pending | 0 Skipped
-        # ...
-        # JUnit report was created: ~/go/src/github.com/submariner-io/submariner-operator/pkg/subctl/operator/install/crds/junit_result.xml
-        # Ran 3 of 3 Specs in 0.002 seconds
-        # SUCCESS! -- 3 Passed | 0 Failed | 0 Pending | 0 Skipped
 }
 
 # ------------------------------------------
@@ -2135,6 +2172,54 @@ function test_submariner_e2e_with_subctl() {
 
   # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+}
+
+# ------------------------------------------
+
+function collect_submariner_info() {
+  # print submariner pods descriptions and logs
+  # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
+  PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+  trap_commands;
+
+  df -h
+  free -h
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
+  "use an older OC client" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
+  # Workaround:
+  OC="/usr/bin/oc"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} describe cm -n openshift-dns || :
+  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
+  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+
+  subctl show networks || :
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
+  # for pod in $(${OC} get pods -A \
+  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
+  #     echo "######################: Logs for Pod $pod :######################"
+  #     ${OC}  -n $ns describe pod $name
+  #     ${OC}  -n $namespace logs $pod
+  # done
+
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-engine"
+
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-globalnet"
+
+  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
+
+  echo -e "\n############################## End of Submariner logs collection ##############################\n"
 
 }
 
@@ -2250,9 +2335,27 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     echo 2 > $TEST_STATUS_RC
 
-    ${junit_run} test_submariner_status_cluster_a
+    ${junit_run} test_submariner_engine_cluster_a
 
-    ${junit_run} test_submariner_status_cluster_b
+    ${junit_run} test_submariner_engine_cluster_b
+
+    ${junit_run} test_cable_driver_cluster_a
+
+    ${junit_run} test_cable_driver_cluster_b
+
+    ${junit_run} test_ha_status_cluster_a
+
+    ${junit_run} test_ha_status_cluster_b
+
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+      ${junit_run} test_globalnet_status_cluster_a
+      ${junit_run} test_globalnet_status_cluster_b
+    fi
+
+    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+      ${junit_run} test_lighthouse_status_cluster_a
+      ${junit_run} test_lighthouse_status_cluster_b
+    fi
 
     # Run Connectivity tests between the On-Premise and Public clusters,
     # To validate that now Submariner made the connection possible.
