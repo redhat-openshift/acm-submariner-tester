@@ -1615,12 +1615,8 @@ function collect_submariner_info() {
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
   # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
 
-  # submariner_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  # ${OC} describe pod $submariner_pod -n ${SUBM_NAMESPACE} || :
-  # ${OC} logs $submariner_pod -n ${SUBM_NAMESPACE} |& highlight "received packet" || :
   ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
   ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get pods -o yaml -n ${SUBM_NAMESPACE} || :
 
   subctl show networks || :
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
@@ -1633,40 +1629,13 @@ function collect_submariner_info() {
   #     ${OC}  -n $namespace logs $pod
   # done
 
-  local pods_label
-  local namespace
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-engine"
 
-  pods_label="app=submariner-engine"
-  namespace="${SUBM_NAMESPACE}"
-  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-globalnet"
 
-  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo -e "\n### Submariner Engine pod $pod in namespace $namespace ###\n"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
+  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
-  pods_label="app=submariner-globalnet"
-  namespace="${SUBM_NAMESPACE}"
-  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
-
-  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo -e "\n### Submariner Globalnet pod $pod in namespace $namespace ###\n"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
-
-  pods_label="k8s-app=kube-proxy"
-  namespace="kube-system"
-  echo -e "\n##################### Collecting Pods Logs by Label '$pods_label' in Namespace: ${namespace} #####################\n"
-
-  for pod in $(${OC} get pods -l $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo -e "\n### Kube Proxy pod $pod in namespace $namespace ###\n"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace logs $pod || :
-  done
-
-  echo -e "\n############################## End of Submariner Pods Logs ##############################\n"
+  echo -e "\n############################## End of Submariner logs collection ##############################\n"
 
 }
 
@@ -1743,6 +1712,12 @@ function test_submariner_engine_status() {
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing Lighthouse agent status on ${cluster_name}"
+
+    BUG "Lighthouse pod log is blown with 'transform function returned nil'" \
+    "Ignore result of test_lighthouse_status" \
+    "https://github.com/submariner-io/lighthouse/issues/212"
+    # Workaround:
+    # Ignore result of test_lighthouse_status
     test_lighthouse_status || : # submariner_status=DOWN
   fi
 
@@ -1772,10 +1747,11 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
 
-  cmd="${OC} logs --tail 100 $lighthouse_pod -n ${SUBM_NAMESPACE}; sleep 20s"
+  # cmd="interval=20; ${OC} logs --timestamps --since=\${interval}s $lighthouse_pod -n ${SUBM_NAMESPACE}; sleep \$(( interval++ ))s"
   regex="Lighthouse agent syncer started"
   # Run up to 5 minutes (+ 10 seconds interval between retries), and watch for output to include regex
-  watch_and_retry "$cmd" 5 "$regex"
+  # watch_and_retry "$cmd" 5 "$regex"
+  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
@@ -1791,10 +1767,12 @@ function test_globalnet_status() {
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
 
-  cmd="${OC} logs --tail 100 $globalnet_pod -n ${SUBM_NAMESPACE}"
+  # cmd="${OC} logs --tail 100 $globalnet_pod -n ${SUBM_NAMESPACE}"
   regex="Allocating globalIp"
-  # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
-  watch_and_retry "$cmd" 3m "$regex"
+  # # Run up to 3 minutes (+ 10 seconds interval between retries), and watch for output to include regex
+  # watch_and_retry "$cmd" 3m "$regex"
+
+  watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
   PROMPT "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"

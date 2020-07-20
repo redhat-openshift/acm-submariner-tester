@@ -140,6 +140,7 @@ function juLog() {
   echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
 
   # Save output and error messages without ansi colors, and delete their temp files
+  set +e
   outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
   rm -f "${outf}"
   errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
@@ -224,5 +225,6 @@ EOF
 EOF
   fi
 
+  set -e
   return ${err}
 }
