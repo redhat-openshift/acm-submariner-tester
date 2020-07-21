@@ -226,8 +226,6 @@ function junit_run() {
   # WARNING: Variable changes in the command will NOT be effective after record_command returns.
   #          This is because the command runs in subshell.
 
-  # set +e # To not break the calling script, if juLog has internal error
-
   # Extract $report_name from current executing script filename
   local report_name=$(basename "${0%.*}")
 
@@ -247,7 +245,6 @@ function junit_run() {
   juLog -output="${output_dir}" -index -class="$report_name" -name="${test_function}" "$@"
   local exit_code=$?
 
-  # set -e # set -o errexit
   return $exit_code
 }
 

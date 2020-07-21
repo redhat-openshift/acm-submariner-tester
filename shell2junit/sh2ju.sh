@@ -139,11 +139,15 @@ function juLog() {
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
 
-  # Save output and error messages without ansi colors, and delete their temp files
+  # set +e - To not break the calling script, if juLog has internal error (e.g. in SED)
   set +e
-  outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
+
+  # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
+  # outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
+  outMsg="$(tr -dC '[:print:]\t\n' < "$outf")"
   rm -f "${outf}"
-  errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
+  # errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
+  errMsg="$(tr -dC '[:print:]\t\n' < "$errf")"
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
@@ -161,7 +165,7 @@ function juLog() {
   total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
 
   # Set suite title with uppercase letter and spaces
-  suiteTitle=( "${suite//[_.]?/ }" )
+  suiteTitle=( "${suite//[_.]/ }" )
   suiteTitle="${suiteTitle[@]^}"
 
   # Set test title with uppercase letter and spaces
@@ -191,7 +195,7 @@ function juLog() {
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${class}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${suiteTitle}\">
     ${output}
     </testcase>
   "
@@ -225,6 +229,7 @@ EOF
 EOF
   fi
 
+  # set -e # set -o errexit
   set -e
   return ${err}
 }
