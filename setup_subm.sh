@@ -2078,11 +2078,10 @@ function test_submariner_packages() {
   go env
   go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$SCRIPT_DIR/subm_pkg_junit_result.xml"
 
-  BUG "clean questions/passed->system-out in junit" \
-  "since it beaks polarion results import" \
+  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
   "https://github.com/submariner-io/shipyard/issues/48"        
-  sed -i 's/�//g' "$SCRIPT_DIR/subm_pkg_junit_result.xml"
-  sed -i 's/passed/system-out/g' "$SCRIPT_DIR/subm_pkg_junit_result.xml"
+  sed -i 's/passed/system-out/g' "$SCRIPT_DIR/*junit*.xml"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2137,10 +2136,12 @@ function test_submariner_e2e_with_go() {
   --connection-timeout 30 --connection-attempts 3 \
   || echo "# Warning: Test execution failure occurred"
   
-  BUG " clean hats in junit" \
-  "since it beaks polarion results import" \
+  BUG "Polarion failure when parsing junit xml with special characters" \
+  "Remove � and 🎩︎ from all junit xml results" \
   "https://github.com/submariner-io/shipyard/issues/48"
   sed -i 's/🎩︎//g' "$SCRIPT_DIR/subm_e2e_junit_result.xml"
+  sed -i 's/�//g' "$SCRIPT_DIR/subm_e2e_junit_result.xml"
+
 }
 
 # ------------------------------------------
