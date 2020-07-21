@@ -666,10 +666,10 @@ function watch_pod_logs() {
   local interval=${5:-20s} # time between each retry attempt
   local TEMP_FILE="`mktemp`_pod_log"
 
-  echo -e "# Tailing logs of Pod [$globalnet_pod] in Namespace [$namespace]: \n"
+  echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
-  cmd="${OC} logs --timestamps --since=$interval $pod_to_watch -n $namespace \
-  > $TEMP_FILE && sleep $interval && cat $TEMP_FILE"
+  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
+  > $TEMP_FILE && sleep $interval && grep -E '$regex' -m 1 -C 5 $TEMP_FILE"
 
   watch_and_retry "$cmd" "$retries" "$regex"
 }
