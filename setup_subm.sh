@@ -2222,9 +2222,17 @@ function collect_submariner_info() {
   #     ${OC}  -n $namespace logs $pod
   # done
 
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "name=submariner-operator"
+
   print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-engine"
 
   print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-globalnet"
+
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-lighthouse-agent"
+
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-lighthouse-coredns"
+
+  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-routeagent"
 
   print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 

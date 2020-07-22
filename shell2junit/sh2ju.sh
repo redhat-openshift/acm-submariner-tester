@@ -143,11 +143,9 @@ function juLog() {
   set +e
 
   # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
-  # outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
-  outMsg="$(tr -dC '[:print:]\t\n' < "$outf")"
+  outMsg="$(cat "$outf" | tr -dC '[:print:]\t\n' | sed -r 's:(\x1B)?\[[0-9;]*[mK]::g' )"
   rm -f "${outf}"
-  # errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
-  errMsg="$(tr -dC '[:print:]\t\n' < "$errf")"
+  errMsg="$(cat "$errf" | tr -dC '[:print:]\t\n' | sed -r 's:(\x1B)?\[[0-9;]*[mK]::g' )"
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
