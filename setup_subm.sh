@@ -1218,7 +1218,7 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_cluster_b() {
-  PROMPT "Install Ngnix service on OSP cluster B${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
+  PROMPT "Install Nginx service on OSP cluster B${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   trap_commands;
 
   kubconf_b;
@@ -1471,6 +1471,78 @@ function test_broker_before_join() {
 
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
    || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
+}
+
+# ------------------------------------------
+
+function export_nginx_no_namespace_cluster_b() {
+  PROMPT "Create ServiceExport for $NGINX_CLUSTER_B on OSP cluster B, without specifying Namespace"
+  trap_commands;
+
+  kubconf_b;
+
+  echo -e "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
+  \n# $KUBECONF_CLUSTER_B : ${SUBM_TEST_NS:-default}"
+
+  export_service_in_lighthouse "$NGINX_CLUSTER_B"
+}
+
+# ------------------------------------------
+
+function export_nginx_in_test_namespace_cluster_b() {
+  trap_commands;
+  # Todo: should be on exported variables
+  new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
+
+  PROMPT "Create ServiceExport for NEW $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$new_subm_test_ns'"
+
+  kubconf_b;
+
+  echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
+  \n# $KUBECONF_CLUSTER_B : ${SUBM_TEST_NS:-default}"
+
+  export_service_in_lighthouse "$NGINX_CLUSTER_B" "$new_subm_test_ns"
+}
+
+# ------------------------------------------
+
+function export_service_in_lighthouse() {
+  trap_commands;
+  local svc_name="$1"
+  local namespace="$2"
+
+  subctl export service "${svc_name}" ${namespace:+ -n $namespace}
+
+  #   ${OC} ${namespace:+-n $namespace} apply -f - <<EOF
+  #     apiVersion: lighthouse.submariner.io/v2alpha1
+  #     kind: ServiceExport
+  #     metadata:
+  #       name: ${svc_name}
+  # EOF
+
+  echo "# Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
+
+  # ${OC} rollout status serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  BUG "Rollout status failed: ServiceExport is not a registered version" \
+  "Skip checking for ServiceExport creation status" \
+  "https://github.com/submariner-io/submariner/issues/640"
+  # Workaround:
+  # Do not run this rollout status, but watch pod description:
+  local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+  #local regex='Service was successfully synced to the broker'
+  local regex='Status:\s+True'
+  watch_and_retry "$cmd" 3m "$regex"
+
+  echo "# Show $svc_name ServiceExport information:"
+  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  
+  BUG "kubectl get serviceexport with '-o wide' does not show more info" \
+  "Use '-o yaml' instead" \
+  "https://github.com/submariner-io/submariner/issues/739"
+  # Workaround:
+  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+
 }
 
 # ------------------------------------------
@@ -1773,20 +1845,22 @@ function test_globalnet_status() {
   trap_commands;
   cluster_name="$1"
 
-  PROMPT "Testing GlobalNet controller status on ${cluster_name}"
+  PROMPT "Testing GlobalNet controller, Global IPs and Endpoints status on ${cluster_name}"
 
   globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
-  [[ -n "$globalnet_pod" ]] || FATAL "GlobalNet pod was not created on ${SUBM_NAMESPACE} namespace."
+  [[ -n "$globalnet_pod" ]] || globalnet_status=DOWN
 
-  echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify it allocates Global IPs to cluster services"
+  echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
 
   local regex="Allocating globalIp"
-  watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10
+  watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10 || globalnet_status=DOWN
 
-  PROMPT "Testing Gateway health (no restarts) on ${cluster_name}" # TODO: Should be tested on a seperate function, not related to Globalnet
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
-  ${OC} logs $globalnet_pod -n ${SUBM_NAMESPACE} |& (! highlight "remove endpoint")
 
+  regex="remove endpoint"
+  (! watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 1 "1s") || globalnet_status=DOWN
+
+  [[ "$globalnet_status" != DOWN ]] || FATAL "GlobalNet pod error on ${SUBM_NAMESPACE} namespace, or globalIp / Endpoints failure occurred."
 }
 
 
@@ -1941,7 +2015,7 @@ function test_clusters_connected_overlapping_cidrs() {
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
   test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $SUBM_TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Ngnix service (${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS})"
+  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_B}${SUBM_TEST_NS:+.$SUBM_TEST_NS})"
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
@@ -1975,16 +2049,19 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   new_netshoot_cluster_a=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
-  new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Ngnix service BUT with the SAME name as $NGINX_CLUSTER_B
+  new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Nginx service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  PROMPT "Install NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  PROMPT "Install NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
 
   kubconf_b;
 
   install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
 
+  # Todo: move to test flow
+  ${junit_run} export_nginx_in_test_namespace_cluster_b
+
   PROMPT "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
-  and verify connectivity to the NEW Ngnix service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  and verify connectivity to the NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
   ${OC} delete pod ${new_netshoot_cluster_a} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
@@ -2009,7 +2086,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     # Should fail if new_nginx_cluster_b was not annotated with GlobalNet IP
     GLOBAL_IP=""
     test_svc_pod_global_ip_created svc "$new_nginx_cluster_b" $new_subm_test_ns
-    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Ngnix service (${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
+    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Nginx service (${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
 
     # TODO: Ping to the new_nginx_global_ip
     # new_nginx_global_ip="$GLOBAL_IP"
@@ -2027,34 +2104,11 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${new_netshoot_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
   fi
 
-  PROMPT "Create ServiceExport on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, for Nginx on SuperCluster domain"
 
-  kubconf_b;
-
-  BUG "Service domain (FQDN) on supercluster will not be resolved, if GlobalNet annotation was not set yet" \
-  "Verify Nginx GlobalIP Annotation, prior to creating ServiceExport" \
-  "https://github.com/submariner-io/submariner/issues/627"
-  # Workaround:
-  # Temporarily export ServiceExport after watch_and_retry for globalip annotation, but not before
-
-  ${OC} ${new_subm_test_ns:+-n $new_subm_test_ns} apply -f - <<EOF
-    apiVersion: lighthouse.submariner.io/v2alpha1
-    kind: ServiceExport
-    metadata:
-      name: ${new_nginx_cluster_b}
-EOF
-
-  echo "# Wait for the ServiceExport CR to be ready:"
-
-  BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status" \
-  "https://github.com/submariner-io/submariner/issues/640"
-  # Workaround: Do not run this -
-    # ${OC} rollout status "serviceexport.lighthouse.submariner.io/${new_nginx_cluster_b}" ${new_subm_test_ns:+-n $new_subm_test_ns}
-
-  BUG "Missing documentation about svc.supercluster.local" \
-  "Doc Needed: Ping/Curl svc.supercluster.local" \
-  "https://github.com/submariner-io/submariner-website/issues/167"
+  #
+  # BUG "Missing documentation about svc.supercluster.local" \
+  # "Doc Needed: Ping/Curl svc.supercluster.local" \
+  # "https://github.com/submariner-io/submariner-website/issues/167"
 
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
   nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
@@ -2064,7 +2118,7 @@ EOF
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  BUG "curl to Ngnix with Global-IP on supercluster, sometimes fails" \
+  BUG "curl to Nginx with Global-IP on supercluster, sometimes fails" \
   "Randomly fails, not always" \
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
@@ -2242,6 +2296,14 @@ function collect_submariner_info() {
 
 # ------------------------------------------
 
+# # Function to debug this script
+# function debug_a_failure() {
+#   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
+#   FAIL_HERE
+# }
+
+# ------------------------------------------
+
 
 ####################################################################################
 
@@ -2258,6 +2320,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   # Print planned steps according to CLI/User inputs
   ${junit_run} print_test_plan
+
+  # ${junit_run} debug_a_failure
 
   # Setup and verify environment
   setup_workspace
@@ -2332,6 +2396,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_run} join_submariner_cluster_a
 
     ${junit_run} join_submariner_cluster_b
+
+    ${junit_run} export_nginx_no_namespace_cluster_b
 
   fi
 

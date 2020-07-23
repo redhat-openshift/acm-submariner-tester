@@ -18,6 +18,9 @@ export CONDA_ENV_NAME="conda-test"
 # Set SCRIPT_DIR as current absolute path where this script runs in
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
+# Set junit $JUNIT_REPORT_NAME from current executing script filename
+export JUNIT_REPORT_NAME=$(basename "${0%.*}")
+
 # include shell2junit library
 source "$SCRIPT_DIR/shell2junit/sh2ju.sh"
 
@@ -75,7 +78,7 @@ function highlight()
   # If SED had an error, try to search with -e : Extended regex"
   if [[ "$exit_code" -eq 1 ]] ; then
     exit_code=0
-    sed -r "$search_line" $TEMP_FILE || exit_code=$?
+    sed -e "$search_line" $TEMP_FILE || exit_code=$?
   fi
 
   # Return if match found
@@ -121,14 +124,6 @@ function trap_function_on_error() {
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}"; \
   [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination as EXIT, too
 }
-
-# ------------------------------------------
-
-# # Function to debug this script
-# function debug_a_failure() {
-#   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
-#   FAIL_HERE
-# }
 
 # ------------------------------------------
 
@@ -226,9 +221,6 @@ function junit_run() {
   # WARNING: Variable changes in the command will NOT be effective after record_command returns.
   #          This is because the command runs in subshell.
 
-  # Extract $report_name from current executing script filename
-  local report_name=$(basename "${0%.*}")
-
   # Extract $output_dir from current executing script filename
   #local output_dir=$(dirname "$0")
   local output_dir="$SCRIPT_DIR"
@@ -240,9 +232,9 @@ function junit_run() {
   local test_args="$2" # Actually it's $@
 
   echo "# Recording junit test \"$test_function\" ${test_args:+[$test_args]}
-  into report file \"${output_dir}/junit_${report_name}.xml\""
+  into report file \"${output_dir}/junit_${JUNIT_REPORT_NAME}.xml\""
 
-  juLog -output="${output_dir}" -index -class="$report_name" -name="${test_function}" "$@"
+  juLog -output="${output_dir}" -index -class="$JUNIT_REPORT_NAME" -name="${test_function}" "$@"
   local exit_code=$?
 
   return $exit_code
@@ -266,6 +258,7 @@ function install_anaconda() {
     ./$miniconda_installer -b -u -p ${install_dir}
     conda update -y -n base -c defaults conda
     # conda clean -y --all
+    # conda clean -a
   fi
 
   # Remove old conda environment dir, if it is not configured

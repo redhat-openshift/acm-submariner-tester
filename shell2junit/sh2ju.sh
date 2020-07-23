@@ -28,8 +28,6 @@
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
 
-ulimit -s 65536 # Temporary workaround for "Argument list too long" errors
-
 asserts=00; errors=0; total=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
@@ -142,10 +140,13 @@ function juLog() {
   # set +e - To not break the calling script, if juLog has internal error (e.g. in SED)
   set +e
 
+  # Workaround for "Argument list too long" memory errors
+  # ulimit -s 65536
+
   # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
-  outMsg="$(cat "$outf" | tr -dC '[:print:]\t\n' | sed -r 's:(\x1B)?\[[0-9;]*[mK]::g' )"
+  outMsg="$(cat "$outf" | tr -dC '[:print:]\t\n' | sed -r 's:\[[0-9;]+[mK]::g' )"
   rm -f "${outf}"
-  errMsg="$(cat "$errf" | tr -dC '[:print:]\t\n' | sed -r 's:(\x1B)?\[[0-9;]*[mK]::g' )"
+  errMsg="$(cat "$errf" | tr -dC '[:print:]\t\n' | sed -r 's:\[[0-9;]+[mK]::g' )"
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
