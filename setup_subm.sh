@@ -1536,7 +1536,7 @@ function export_service_in_lighthouse() {
 
   echo "# Show $svc_name ServiceExport information:"
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
-  
+
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
@@ -1763,8 +1763,11 @@ function test_ha_status() {
   # ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
   # || submariner_status=DOWN
 
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} \
-  |& (! highlight "Ha Status:\s*passive|Status Failure\s*\w+") || submariner_status=DOWN
+  gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+
+  echo "$gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
+
+  echo "$gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
 
   ${OC} describe cm -n openshift-dns || submariner_status=DOWN
 
@@ -2162,17 +2165,17 @@ function test_submariner_packages() {
 ### Run Submariner Unit tests (mock) ###
   PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_commands;
-  
+
   cd $GOPATH/src/github.com/submariner-io/submariner
   junit_output="$SCRIPT_DIR/subm_pkg_junit_result.xml"
-  
+
   export GO111MODULE="on"
   go env
   go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$junit_output"
 
   BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
   "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-  "https://github.com/submariner-io/shipyard/issues/48"        
+  "https://github.com/submariner-io/shipyard/issues/48"
   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
 
     # OR with local go modules:
@@ -2186,10 +2189,10 @@ function test_submariner_e2e_with_go() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with GO"
   trap_commands;
-  
+
   cd $GOPATH/src/github.com/submariner-io/submariner
   junit_output="$SCRIPT_DIR/subm_e2e_junit_result.xml"
-  
+
   BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
   "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
   "https://github.com/submariner-io/submariner/issues/245"
@@ -2218,10 +2221,10 @@ function test_submariner_e2e_with_go() {
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
   || echo "# Warning: Test execution failure occurred"
-  
+
   BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
   "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-  "https://github.com/submariner-io/shipyard/issues/48"        
+  "https://github.com/submariner-io/shipyard/issues/48"
   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
 
 }

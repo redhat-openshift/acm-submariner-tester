@@ -675,7 +675,7 @@ function print_pod_logs_in_namespace() {
       echo -e "\n### Pod $pod in Namespace $namespace ###\n"
       ${OC} -n $namespace describe pod $pod || :
       ${OC} -n $namespace get pod $pod -o yaml || :
-      ${OC} -n $namespace logs $pod || :
+      ${OC} -n $namespace logs $pod --limit-bytes=1000000 || :
   done
 }
 
