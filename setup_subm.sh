@@ -2162,10 +2162,18 @@ function test_submariner_packages() {
 ### Run Submariner Unit tests (mock) ###
   PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_commands;
+  
   cd $GOPATH/src/github.com/submariner-io/submariner
+  junit_output="$SCRIPT_DIR/subm_pkg_junit_result.xml"
+  
   export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$SCRIPT_DIR/subm_pkg_junit_result.xml"
+  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$junit_output"
+
+  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+  "https://github.com/submariner-io/shipyard/issues/48"        
+  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2178,8 +2186,10 @@ function test_submariner_e2e_with_go() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with GO"
   trap_commands;
+  
   cd $GOPATH/src/github.com/submariner-io/submariner
-
+  junit_output="$SCRIPT_DIR/subm_e2e_junit_result.xml"
+  
   BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
   "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
   "https://github.com/submariner-io/submariner/issues/245"
@@ -2202,12 +2212,18 @@ function test_submariner_e2e_with_go() {
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed \
-  -ginkgo.reportFile "$SCRIPT_DIR/subm_e2e_junit_result.xml" \
+  -ginkgo.reportFile "$junit_output" \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
   || echo "# Warning: Test execution failure occurred"
+  
+  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+  "https://github.com/submariner-io/shipyard/issues/48"        
+  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
+
 }
 
 # ------------------------------------------
