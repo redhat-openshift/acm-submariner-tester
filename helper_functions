@@ -18,9 +18,6 @@ export CONDA_ENV_NAME="conda-test"
 # Set SCRIPT_DIR as current absolute path where this script runs in
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
-# Set junit $JUNIT_REPORT_NAME from current executing script filename
-export JUNIT_REPORT_NAME=$(basename "${0%.*}")
-
 # include shell2junit library
 source "$SCRIPT_DIR/shell2junit/sh2ju.sh"
 
@@ -50,7 +47,6 @@ function highlight()
   #trap_commands
   pattern="$1"
   file_input="$2"
-  #shift
 
   exit_code=0
   # 0 = Match found
@@ -213,31 +209,35 @@ function BUG() {
 
 # Function to run the command and records its output/error messages in junit format
 # Ref: https://github.com/kubernetes/kubernetes/blob/master/test/cmd/legacy-script.sh
-function junit_run() {
+function record_junit() {
   # it expects the first to be the name of the command
   # Example:
-  # record_command run_kubectl_tests
+  # record_junit function_name arg1 arg2
   #
-  # WARNING: Variable changes in the command will NOT be effective after record_command returns.
+  # WARNING: Variable changes in the command will NOT be effective after record_junit returns.
   #          This is because the command runs in subshell.
 
-  # Extract $output_dir from current executing script filename
+  # $1 => $output_file (file name without directory, to record junit results)
+  local output_file="$1"
+
+  # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
+  shift
+
+  # $2 => $test_name (the function to run and record as junit test)
+  local test_name="$1"
+
+  local func_and_args="$@"
+
   #local output_dir=$(dirname "$0")
   local output_dir="$SCRIPT_DIR"
 
-  # $1 => $test_function (the function to run and record as junit test)
-  local test_function="$1"
+  # Set $junit_suite from current executing script filename
+  local junit_suite=$(basename "${0%.*}")
 
-  # Optional $2 => $test_args (additional arguments)
-  local test_args="$2" # Actually it's $@
+  echo "# Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
+  into xml output file \"${output_dir}/${output_file}\""
 
-  echo "# Recording junit test \"$test_function\" ${test_args:+[$test_args]}
-  into report file \"${output_dir}/junit_${JUNIT_REPORT_NAME}.xml\""
-
-  juLog -output="${output_dir}" -index -class="$JUNIT_REPORT_NAME" -name="${test_function}" "$@"
-  local exit_code=$?
-
-  return $exit_code
+  juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
 }
 
 # ------------------------------------------
@@ -682,10 +682,34 @@ function print_pod_logs_in_namespace() {
 # ------------------------------------------
 
 
-#TODO: Use this function to upload E2E tests results to Polarion
-function upload_test_results_polarion() {
-  # Polarion Jump - update test results
-    PROMPT "Polarion Jump - update test results"
+#TODO: Use this function to upload Junit test results to Polarion
+function upload_junit_to_polarion() {
+    trap_commands;
+
+    local junit_xml="$1"
+    local polarion_project_id="$2"
+    local polarion_testcase_id="$3"
+
+    [[ -s "$junit_xml" ]] || BUG "Failed to upload tests to Polarion: File '$junit_xml' is missing."
+
+    # TODO: Modify xml like:
+    #     <testsuites>
+    #     <properties>
+    #         <property name="polarion-response-myteamsname" value="shotwellresults" />
+    #         <property name="polarion-project-id" value="My_Test_Project"/>
+    #     </properties>
+    #     <testsuite errors="1" failures="1" name="my_component test run" skipped="1" tests="16" time="0">
+    #         <testcase classname="my_component" name="launch">
+    #             <system-out>I am stdout!!</system-out>
+    #             <system-err>I am stderr!!!</system-err>
+    #             <properties>
+    #                 <property name="polarion-testcase-id" value="MTP-76"/>
+    #             </properties>
+    #         </testcase>
+    #         ...
+    #     </testsuites>
+
+    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@/home/bmurray/resultsMinimum1.xml
 
   # git clone ssh://user@code.engineering.redhat.com/jump
   # cd jump

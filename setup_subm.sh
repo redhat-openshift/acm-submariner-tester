@@ -70,6 +70,7 @@ Running with pre-defined parameters (optional):
 * Install AWS-CLI and configure access:              --config-aws-cli
 * Import additional variables from file:             --import-vars  [Variable file path]
 * Record Junit Tests result (xml):                   --junit
+* Upload Junit results to polarion:                  --polarion
 
 
 Command examples:
@@ -92,8 +93,8 @@ $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subc
 ----------------------------------------------------------------------'
 
 ####################################################################################
-
-### Constants and external sources ###
+#          Global bash configurations, constants and external sources              #
+####################################################################################
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
@@ -115,25 +116,32 @@ set -Ee
 # -u : Treats unset variables as errors.
 # -o pipefail : Propagate intermediate errors (not just last command exit code)
 
-# To expend aliases
+# Set Case-insensitive match for string evaluations
+shopt -s nocasematch
+
+# Expend user aliases
 shopt -s expand_aliases
 
 # Date-time signature for log and report files
 export DATE_TIME="$(date +%d%m%Y_%H%M)"
+
+# XML output files for Junit test results
+export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 
 # Set script exit code in advance (saved in file)
 export TEST_STATUS_RC="$SCRIPT_DIR/test_status.out"
 echo 1 > $TEST_STATUS_RC
 
 ####################################################################################
-
-### CLI Script inputs ###
+#                              CLI Script inputs                                   #
+####################################################################################
 
 check_cli_args() {
   [[ -n "$1" ]] || ( echo "# Missing arguments. Please see Help with: -h" && exit 1 )
 }
 
-shopt -s nocasematch # Case-insensitive match for string evaluations
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   export got_user_input=TRUE
@@ -208,7 +216,11 @@ while [[ $# -gt 0 ]]; do
     config_aws_cli=YES
     shift ;;
   --junit)
-    junit_run="junit_run"
+    create_junit_xml=YES
+    junit_cmd="record_junit $SHELL_JUNIT_XML"
+    shift ;;
+  --polarion)
+    upload_to_polarion=YES
     shift ;;
   # -o|--optional-key-value)
   #   check_cli_args "$2"
@@ -232,8 +244,10 @@ done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
 ####################################################################################
+#              Get User inputs (only for missing CLI inputs)                       #
+####################################################################################
 
-### Get User inputs, only for missing CLI inputs ###
+###  ###
 
 if [[ -z "$got_user_input" ]]; then
   echo "# ${disclosure}"
@@ -396,12 +410,28 @@ if [[ -z "$got_user_input" ]]; then
     config_aws_cli=${input:-NO}
   done
 
-fi
+  # User input: $create_junit_xml - to record shell results into Junit xml output
+  while [[ ! "$create_junit_xml" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to record shell results into Junit xml output ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    create_junit_xml=${input:-NO}
+  done
 
+  # User input: $upload_to_polarion - to upload junit xml results to Polarion
+  while [[ ! "$upload_to_polarion" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to upload junit xml results to Polarion ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    upload_to_polarion=${input:-NO}
+  done
+
+fi
 
 ### Set CLI/User inputs - Default to "NO" for any unset value ###
 
 get_ocp_installer=${get_ocp_installer:-NO}
+# GET_OCP_VERSION=${GET_OCP_VERSION:-latest}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO}
 build_submariner_e2e=${build_submariner_e2e:-NO}
@@ -415,12 +445,17 @@ create_cluster_b=${create_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
 service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
+config_golang=${config_golang:-NO}
+config_aws_cli=${config_aws_cli:-NO}
+skip_deploy=${skip_deploy:-NO}
+skip_tests=${skip_tests:-NO}
+create_junit_xml=${create_junit_xml:-NO}
+upload_to_polarion=${upload_to_polarion:-NO}
 
 
 ####################################################################################
-
-
-### Main CI Functions ###
+#                             Main script functions                                #
+####################################################################################
 
 # ------------------------------------------
 
@@ -475,7 +510,7 @@ function print_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  echo "# System and functional tests for Submariner:"
+  echo -e "\n# System and functional tests for Submariner:"
   if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping tests: $skip_tests \n"
   else
@@ -503,8 +538,8 @@ function print_test_plan() {
   fi
 }
 
-# ------------------------------------------
 
+# ------------------------------------------
 
 function setup_workspace() {
   PROMPT "Creating workspace and verifying GO installation"
@@ -572,14 +607,16 @@ function download_ocp_installer() {
   tar -xvf ${ocp_install_gz} -C ${WORKDIR}
   tar -xvf ${oc_client_gz} -C ${WORKDIR}
 
-  echo "# Install OC - Openshift Client:"
-  # sudo cp oc /usr/local/bin/
-  # cp oc ~/.local/bin
-  # cp oc ~/go/bin/
-
+  echo "# Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p $GOBIN
-  # cp oc $GOBIN/
   /usr/bin/install ./oc $GOBIN/oc
+
+  echo "# Install OC into user HOME bin:"
+  /usr/bin/install ./oc ~/.local/bin/oc
+
+  echo "# Add user HOME bin to system PATH:"
+  export PATH="$HOME/.local/bin:$PATH"
+
   ${OC} -h
 }
 
@@ -1763,6 +1800,8 @@ function test_ha_status() {
   # ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
   # || submariner_status=DOWN
 
+  subctl show gateways || submariner_status=DOWN
+
   gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
 
   echo "$gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
@@ -1805,9 +1844,11 @@ function test_submariner_connection_established() {
 
   PROMPT "Check Submariner Engine established connection on ${cluster_name}"
 
-  # Get some info on installed CRDs
-  # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
   subctl show networks || submariner_status=DOWN
+
+  subctl show endpoints || submariner_status=DOWN
+
+  subctl show connections || submariner_status=DOWN
 
   local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
 
@@ -2061,7 +2102,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
 
   # Todo: move to test flow
-  ${junit_run} export_nginx_in_test_namespace_cluster_b
+  ${junit_cmd} export_nginx_in_test_namespace_cluster_b
 
   PROMPT "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
   and verify connectivity to the NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
@@ -2167,16 +2208,10 @@ function test_submariner_packages() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/submariner
-  junit_output="$SCRIPT_DIR/subm_pkg_junit_result.xml"
 
   export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$junit_output"
-
-  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-  "https://github.com/submariner-io/shipyard/issues/48"
-  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
+  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$PKG_JUNIT_XML"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2191,7 +2226,6 @@ function test_submariner_e2e_with_go() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/submariner
-  junit_output="$SCRIPT_DIR/subm_e2e_junit_result.xml"
 
   BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
   "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
@@ -2215,18 +2249,12 @@ function test_submariner_e2e_with_go() {
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed \
-  -ginkgo.reportFile "$junit_output" \
+  -ginkgo.reportFile "$E2E_JUNIT_XML" \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
   || echo "# Warning: Test execution failure occurred"
-
-  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-  "https://github.com/submariner-io/shipyard/issues/48"
-  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$junit_output"
-
 }
 
 # ------------------------------------------
@@ -2245,15 +2273,31 @@ function test_submariner_e2e_with_subctl() {
   # workaround:
   kubconf_a;
 
-  # subctl info # Removed since https://github.com/submariner-io/submariner-operator/issues/467
-  subctl show networks || :
-
   BUG "No Subctl option to set -ginkgo.reportFile" \
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
   # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+}
+
+# ------------------------------------------
+
+function convert_and_upload_junit_to_polarion() {
+  PROMPT "Upload Junit test reults to Polarion"
+  trap_commands;
+
+  # Upload junit results of SHELL tests
+  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$SUBM_POLARION_TESTCASE_ID"
+
+  # Upload junit results of E2E tests
+  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+  "https://github.com/submariner-io/shipyard/issues/48"
+  # Workaround:
+  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
+
+  upload_junit_to_polarion "$E2E_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$E2E_POLARION_TESTCASE_ID"
 }
 
 # ------------------------------------------
@@ -2284,8 +2328,9 @@ function collect_submariner_info() {
   ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
   ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
-  subctl show networks || :
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
+  subctl show all || :
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
@@ -2325,22 +2370,23 @@ function collect_submariner_info() {
 
 
 ####################################################################################
-
-### MAIN ###
+#                    Main - Submariner Deploy and Tests                            #
+####################################################################################
 
 # Logging main output (enclosed with parenthesis) with tee
 
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+> $LOG_FILE
 
 (
   # trap_function_on_error "collect_submariner_info"
-  trap_function_on_error "${junit_run} collect_submariner_info"
+  trap_function_on_error "${junit_cmd} collect_submariner_info"
 
   # Print planned steps according to CLI/User inputs
-  ${junit_run} print_test_plan
+  ${junit_cmd} print_test_plan
 
-  # ${junit_run} debug_a_failure
+  # ${junit_cmd} debug_a_failure
 
   # Setup and verify environment
   setup_workspace
@@ -2349,74 +2395,74 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_run} download_ocp_installer ${GET_OCP_VERSION}
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${GET_OCP_VERSION}
 
     # Running destroy_aws_cluster_a if requested
-    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_run} destroy_aws_cluster_a
+    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_aws_cluster_a
 
     # Running create_aws_cluster_a if requested
-    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_run} create_aws_cluster_a
+    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} create_aws_cluster_a
 
-    ${junit_run} test_kubeconfig_aws_cluster_a
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
     # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_run} build_ocpup_tool_latest
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
     # Running destroy_osp_cluster_b if requested
-    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_run} destroy_osp_cluster_b
+    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
     # Running create_osp_cluster_b if requested
-    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_run} create_osp_cluster_b
+    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
 
-    ${junit_run} test_kubeconfig_osp_cluster_b
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
 
     ### Cleanup Submariner from all clusters ###
 
     # Running clean_aws_cluster_a if requested
     [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-    || ${junit_run} clean_aws_cluster_a
+    || ${junit_cmd} clean_aws_cluster_a
 
     # Running clean_osp_cluster_b if requested
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-    || ${junit_run} clean_osp_cluster_b
+    || ${junit_cmd} clean_osp_cluster_b
 
-    ${junit_run} install_netshoot_app_on_cluster_a
+    ${junit_cmd} install_netshoot_app_on_cluster_a
 
-    ${junit_run} install_nginx_svc_on_cluster_b
+    ${junit_cmd} install_nginx_svc_on_cluster_b
 
-    ${junit_run} test_basic_cluster_connectivity_before_submariner
+    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
 
-    ${junit_run} test_clusters_disconnected_before_submariner
+    ${junit_cmd} test_clusters_disconnected_before_submariner
 
     # Running build_operator_latest if requested
-    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_run} build_operator_latest
+    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
     # Running build_submariner_e2e_latest if requested
-    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_run} build_submariner_e2e_latest
+    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_e2e_latest
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_run} download_subctl_latest_release
+    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_run} download_subctl_latest_devel
+    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_devel
 
-    ${junit_run} test_subctl_command
+    ${junit_cmd} test_subctl_command
 
-    ${junit_run} open_firewall_ports_on_the_broker_node
+    ${junit_cmd} open_firewall_ports_on_the_broker_node
 
-    ${junit_run} label_all_gateway_external_ip_cluster_a
+    ${junit_cmd} label_all_gateway_external_ip_cluster_a
 
-    ${junit_run} label_first_gateway_cluster_b
+    ${junit_cmd} label_first_gateway_cluster_b
 
-    ${junit_run} install_broker_aws_cluster_a
+    ${junit_cmd} install_broker_aws_cluster_a
 
-    ${junit_run} test_broker_before_join
+    ${junit_cmd} test_broker_before_join
 
-    ${junit_run} join_submariner_cluster_a
+    ${junit_cmd} join_submariner_cluster_a
 
-    ${junit_run} join_submariner_cluster_b
+    ${junit_cmd} join_submariner_cluster_b
 
-    ${junit_run} export_nginx_no_namespace_cluster_b
+    ${junit_cmd} export_nginx_no_namespace_cluster_b
 
   fi
 
@@ -2424,68 +2470,78 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
 
-    ${junit_run} test_kubeconfig_aws_cluster_a
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-    ${junit_run} test_kubeconfig_osp_cluster_b
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
     \n# ($TEST_STATUS_RC with exit code 2)"
 
     echo 2 > $TEST_STATUS_RC
 
-    ${junit_run} test_submariner_resources_cluster_a
+    ${junit_cmd} test_submariner_resources_cluster_a
 
-    ${junit_run} test_submariner_resources_cluster_b
+    ${junit_cmd} test_submariner_resources_cluster_b
 
-    ${junit_run} test_cable_driver_cluster_a
+    ${junit_cmd} test_cable_driver_cluster_a
 
-    ${junit_run} test_cable_driver_cluster_b
+    ${junit_cmd} test_cable_driver_cluster_b
 
-    ${junit_run} test_ha_status_cluster_a
+    ${junit_cmd} test_ha_status_cluster_a
 
-    ${junit_run} test_ha_status_cluster_b
+    ${junit_cmd} test_ha_status_cluster_b
 
-    ${junit_run} test_submariner_connection_cluster_a
+    ${junit_cmd} test_submariner_connection_cluster_a
 
-    ${junit_run} test_submariner_connection_cluster_b
+    ${junit_cmd} test_submariner_connection_cluster_b
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-      ${junit_run} test_globalnet_status_cluster_a
-      ${junit_run} test_globalnet_status_cluster_b
+      ${junit_cmd} test_globalnet_status_cluster_a
+      ${junit_cmd} test_globalnet_status_cluster_b
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-      ${junit_run} test_lighthouse_status_cluster_a
-      ${junit_run} test_lighthouse_status_cluster_b
+      ${junit_cmd} test_lighthouse_status_cluster_a
+      ${junit_cmd} test_lighthouse_status_cluster_b
     fi
 
     # Run Connectivity tests between the On-Premise and Public clusters,
     # To validate that now Submariner made the connection possible.
 
-    ${junit_run} test_clusters_connected_by_service_ip
+    ${junit_cmd} test_clusters_connected_by_service_ip
 
-    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_run} test_clusters_connected_overlapping_cidrs
+    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_run} test_clusters_connected_by_same_service_on_new_namespace
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
 
-    ${junit_run} verify_golang
+    ${junit_cmd} verify_golang
 
-    ${junit_run} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+    ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
 
-    ${junit_run} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
+    ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
-    ${junit_run} test_submariner_e2e_with_subctl
+    ${junit_cmd} test_submariner_e2e_with_subctl
   fi
 
-  # If got to here - all tests of Submariner has passed ;-)
+  # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC
 
-) |& tee $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+) |& tee -a $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+
+
+### Upload Junit xmls to Polarion (if requested by user CLI)  ###
+if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+  convert_and_upload_junit_to_polarion |& tee -a $LOG_FILE
+fi
+
+
 
 
 ####################################################################################
+#              End Main - Creating HTML report from console output                 #
+####################################################################################
 
-### END of Submariner Tests (Creating HTML report from console output) ###
+### Creating HTML report from console output ###
 
 # Get test exit status (from file $TEST_STATUS_RC)
 test_status="$([[ ! -f "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
