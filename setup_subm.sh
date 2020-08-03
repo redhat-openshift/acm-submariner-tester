@@ -66,6 +66,7 @@ Running with pre-defined parameters (optional):
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip Submariner deployment:                        --skip-deploy
 * Skip all tests execution:                          --skip-tests
+* Print all pods logs on failure:                    --print-logs
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
 * Import additional variables from file:             --import-vars  [Variable file path]
@@ -208,6 +209,9 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --skip-tests)
     skip_tests=YES
+    shift ;;
+  --print-logs)
+    print_logs=YES
     shift ;;
   --config-golang)
     config_golang=YES
@@ -394,6 +398,13 @@ if [[ -z "$got_user_input" ]]; then
     skip_tests=${input:-NO}
   done
 
+  while [[ ! "$print_logs" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to print full Submariner diagnostics (Pods logs, etc.) on failure ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    print_logs=${input:-NO}
+  done
+
   # User input: $config_golang - to install latest golang if missing
   while [[ ! "$config_golang" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install latest Golang on the environment ? ${NO_COLOR}
@@ -449,6 +460,7 @@ config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
 skip_deploy=${skip_deploy:-NO}
 skip_tests=${skip_tests:-NO}
+print_logs=${print_logs:-NO}
 create_junit_xml=${create_junit_xml:-NO}
 upload_to_polarion=${upload_to_polarion:-NO}
 
@@ -1548,6 +1560,8 @@ function export_service_in_lighthouse() {
   local svc_name="$1"
   local namespace="$2"
 
+  subctl export service -h
+
   subctl export service "${svc_name}" ${namespace:+ -n $namespace}
 
   #   ${OC} ${namespace:+-n $namespace} apply -f - <<EOF
@@ -2287,17 +2301,27 @@ function convert_and_upload_junit_to_polarion() {
   PROMPT "Upload Junit test reults to Polarion"
   trap_commands;
 
+  local uplaod_status=0
+
   # Upload junit results of SHELL tests
-  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$SUBM_POLARION_TESTCASE_ID"
+  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$SUBM_POLARION_TESTCASE_ID" || uplaod_status=1
 
-  # Upload junit results of E2E tests
-  BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-  "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-  "https://github.com/submariner-io/shipyard/issues/48"
-  # Workaround:
-  sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
+  if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
+    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+    "https://github.com/submariner-io/shipyard/issues/48"
+    # Workaround:
+    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
+    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-  upload_junit_to_polarion "$E2E_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$E2E_POLARION_TESTCASE_ID"
+    # Upload junit results of PKG tests
+    upload_junit_to_polarion "$PKG_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$PKG_POLARION_TESTCASE_ID" || uplaod_status=1
+
+    # Upload junit results of E2E tests
+    upload_junit_to_polarion "$E2E_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$E2E_POLARION_TESTCASE_ID" || uplaod_status=1
+  fi
+
+  return $uplaod_status
 }
 
 # ------------------------------------------
@@ -2380,8 +2404,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 > $LOG_FILE
 
 (
-  # trap_function_on_error "collect_submariner_info"
-  trap_function_on_error "${junit_cmd} collect_submariner_info"
+  # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
+  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+    trap_function_on_error "${junit_cmd} collect_submariner_info"
+  fi
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan

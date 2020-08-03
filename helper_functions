@@ -689,8 +689,50 @@ function upload_junit_to_polarion() {
     local junit_xml="$1"
     local polarion_project_id="$2"
     local polarion_testcase_id="$3"
+    local sed_expression
 
-    [[ -s "$junit_xml" ]] || BUG "Failed to upload tests to Polarion: File '$junit_xml' is missing."
+    [[ -s "$junit_xml" ]] || FATAL "Failed to upload tests to Polarion: File '$junit_xml' is missing."
+
+    echo "# Add <testsuites> with Polarion project id: $polarion_project_id"
+
+    # Removing first <testsuiteS> tag (if exists):
+    sed -e '0,/<testsuites>/s/<testsuites>//' -i "$junit_xml"
+    # sed -r "s:<testsuites>::" -i "$junit_xml"
+
+    # Removing last </testsuiteS> tag (if exists):
+    sed -r -z "s:(.*)</testsuite>(.*):\1\2:" -i "$junit_xml"
+
+    # Adding </testsuites> tag, after the last </testsuite> tag:
+    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$junit_xml"
+
+    # Define Polarion <testsuites> property:
+    polarion_suite_content="<testsuites> \n\
+        <properties> \n\
+            <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
+        </properties> \n\
+    <testsuite "
+
+    sed_expression="0,/<testsuite /s,<testsuite ,$polarion_suite_content,"
+
+    # Insert the property instead of the first testsuite tag
+    sed -r "$sed_expression" -i "$junit_xml"
+
+    # ------------------------------------------------------------------------ #
+
+    echo "# Add <testcase> with Polarion test-case id: $polarion_testcase_id"
+
+    # Define Polarion <testcase> property:
+    polarion_testcase_content="\n\
+        <properties> \n\
+            <property name=\"polarion-testcase-id\" value=\"$polarion_testcase_id\" /> \n\
+        </properties> \n\
+    </testcase>"
+
+    sed_expression="s:</testcase>:$polarion_testcase_content:g"
+
+    # Insert the property instead of the first testsuite tag
+    sed -r "$sed_expression" -i "$junit_xml"
+
 
     # TODO: Modify xml like:
     #     <testsuites>
@@ -709,7 +751,7 @@ function upload_junit_to_polarion() {
     #         ...
     #     </testsuites>
 
-    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@/home/bmurray/resultsMinimum1.xml
+    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$junit_xml
 
   # git clone ssh://user@code.engineering.redhat.com/jump
   # cd jump
