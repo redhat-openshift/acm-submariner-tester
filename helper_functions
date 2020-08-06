@@ -11,8 +11,6 @@ export YELLOW='\x1b[33m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
-export TEMP_FILE="`mktemp`_temp"
-
 export CONDA_ENV_NAME="conda-test"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
@@ -54,31 +52,31 @@ function highlight()
   # 3 = Match not found
   # 4 = Empty string or file
 
-  local TEMP_FILE="`mktemp`_highlight"
+  local tmp_file="`mktemp`_highlight"
   # Save all output to temp file
-  #grep -E "$pattern|$" "$@" > $TEMP_FILE
-  grep -E "$pattern|$" ${file_input:+"$file_input"} > $TEMP_FILE
+  #grep -E "$pattern|$" "$@" > $tmp_file
+  grep -E "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
 
   # Exit if file is empty or contains spaces only
-  grep -q '[^[:space:]]' $TEMP_FILE || return 4
+  grep -q '[^[:space:]]' $tmp_file || return 4
 
   # Print with match colored
-  # cat $TEMP_FILE | grep --color -E "$pattern|$"
+  # cat $tmp_file | grep --color -E "$pattern|$"
 
   # Search line for sed command. Highlighting pattern, if found
   search_line='/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q3'
 
   # SED with -r : Basic regex
-  sed -r "$search_line" $TEMP_FILE || exit_code=$?
+  sed -r "$search_line" $tmp_file || exit_code=$?
 
   # If SED had an error, try to search with -e : Extended regex"
   if [[ "$exit_code" -eq 1 ]] ; then
     exit_code=0
-    sed -e "$search_line" $TEMP_FILE || exit_code=$?
+    sed -e "$search_line" $tmp_file || exit_code=$?
   fi
 
   # Return if match found
-  # cat $TEMP_FILE | grep -q -E "$pattern"
+  # cat $tmp_file | grep -q -E "$pattern"
   return $exit_code
 }
 
@@ -118,7 +116,7 @@ function trap_function_on_error() {
   func_to_execute="$@"
   trap 'rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}"; \
-  [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination as EXIT, too
+  [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
 }
 
 # ------------------------------------------
@@ -186,8 +184,10 @@ function PROMPT() {
 # Function to print message about a potential bug/workaround, and an optional bug link
 function FATAL() {
   failure_msg="${1}"
-  echo -e "${RED}*** $failure_msg ***${NO_COLOR}"
-  #FALSE
+  echo -e "\n${RED}*** Fatal error occurred *** \n $failure_msg ${NO_COLOR}" >&2
+  # kill -s TERM $$
+  # kill -s TERM $BASHPID
+  kill -s EXIT $PPID
   exit 127
 }
 
@@ -534,26 +534,27 @@ function delete_aws_dns_records() {
 
   # export PATH=$HOME/.local/bin:$PATH
   # PATH="${PATH}:${aws_install_dir}/bin"
+  local tmp_file="`mktemp`_aws_records"
 
   echo -e "\n# Searching in Hosted Zone [$1] - for a DNS record set: [$2]"
-  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > "$TEMP_FILE"
+  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > "$tmp_file"
 
-  cat $TEMP_FILE
+  cat $tmp_file
 
-  if [[ $(< $TEMP_FILE) == '[]' ]]; then
+  if [[ $(< $tmp_file) == '[]' ]]; then
     echo -e "The DNS record set does not exist in AWS cluster [${CLUSTER_A_NAME}]"
     return
   fi
 
   echo -e "\n# Exporting DNS record set variables:"
-  export_vars_from_json "$TEMP_FILE"
+  export_vars_from_json "$tmp_file"
 
   echo -e "\n# Creating json file for the DNS record set delete command:"
-  create_json_for_dns_delete "$TEMP_FILE"
-  cat "$TEMP_FILE"
+  create_json_for_dns_delete "$tmp_file"
+  cat "$tmp_file"
 
   echo -e "\n# Deleting the DNS record set:"
-  aws route53 change-resource-record-sets --hosted-zone-id $1 --change-batch file://$TEMP_FILE
+  aws route53 change-resource-record-sets --hosted-zone-id $1 --change-batch file://$tmp_file
 
 }
 
@@ -641,6 +642,40 @@ function install_nginx_service() {
 
 }
 
+
+
+# ------------------------------------------
+
+# Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
+function get_running_pod_by_label() {
+  # Do not trap_command, so it will not be printed as return value
+  # set -x
+  local pod_label=$1
+  local namespace=$2 # Optional: Namespace for the pod
+  local tmp_file="`mktemp`_pod_status"
+
+  # Wait up to 3 minutes for the pod to be ready
+  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file
+  pod_status="$(head -1 $tmp_file | awk -F '/| ' '{print $2}' | xargs)"
+
+  # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
+  # Can also run with: -o jsonpath="{.items[0].metadata.name}"
+
+  # set +x
+
+  #if [[ -n "$(echo $pod_status)" && -n "$(echo $pod_id)" ]] ; then
+  if [[ -n "$pod_status" ]]; then
+    # echo "$pod_id"
+    printf '%s' "$pod_status"
+    return 0
+  else
+    # exit 1
+    FATAL "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
+  fi
+
+}
+
+
 # ------------------------------------------
 
 # Function to tail pod logs for N times, after each interval
@@ -654,12 +689,12 @@ function watch_pod_logs() {
   # Optional params:
   local retries=${4:-5}
   local interval=${5:-20s} # time between each retry attempt
-  local TEMP_FILE="`mktemp`_pod_log"
+  local tmp_file="`mktemp`_pod_log"
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
   cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
-  > $TEMP_FILE && sleep $interval && grep -E '$regex' -m 1 -C 5 $TEMP_FILE"
+  > $tmp_file && sleep $interval && grep -E '$regex' -m 1 -C 5 $tmp_file"
 
   watch_and_retry "$cmd" "$retries" "$regex"
 }
@@ -691,7 +726,8 @@ function upload_junit_to_polarion() {
     local polarion_testcase_id="$3"
     local sed_expression
 
-    [[ -s "$junit_xml" ]] || FATAL "Failed to upload tests to Polarion: File '$junit_xml' is missing."
+    [[ -s "$junit_xml" ]] || \
+    echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && exit 1
 
     echo "# Add <testsuites> with Polarion project id: $polarion_project_id"
 
