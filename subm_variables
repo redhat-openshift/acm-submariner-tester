@@ -42,5 +42,8 @@ export BROKER_NATPORT=4500
 export BROKER_IKEPORT=500
 
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
-
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+
+export SUBM_POLARION_PROJECT_ID="<subm-polarion-project-id>"
+export SUBM_POLARION_TESTCASE_ID="<subm-polarion-testcase-id>"
+export E2E_POLARION_TESTCASE_ID="<e2e-polarion-testcase-id>"

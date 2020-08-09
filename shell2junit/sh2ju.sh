@@ -21,26 +21,23 @@
 ###             -name="TestName"       : the test name which will be shown in the junit report
 ###             -error="RegExp"        : a regexp which sets the test as failure when the output matches it
 ###             -ierror="RegExp"       : same as -error but case insensitive
-###             -output="Path"         : path to output directory, defaults to "./results"
-###             -prefix="FilePrefix"   : name to add as prefix for the xml file, defaults to "junit_"
+###             -output="OutputDir"    : path of output directory, defaults to "./results"
+###             -file="OutputFile"     : name of output file, defaults to "junit.xml"
 ###             -index                 : add incremental test index (e.g. for alphabetical sort in Jenkins)
 ###     - Junit reports are left in the folder 'result' under the directory where the script is executed.
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
 
-ulimit -s 65536 # Temporary workaround for "Argument list too long" errors
+set +x
 
 asserts=00; errors=0; total=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
-# default output folder and file prefix
+# default output directory and file
 juDIR="$(pwd)/results"
-prefix="junit_"
+juFILE="junit.xml"
 export sortTests=""
 export testIndex=0
-
-# The name of the suite is calculated based in your script name
-suite=""
 
 if LANG=C sed --help 2>&1 | grep -q GNU; then
   SED="sed"
@@ -65,12 +62,11 @@ function eVal() {
 # TODO: Method to clean old tests
 function juLogClean() {
   echo "+++ Removing old junit reports from: ${juDIR} "
-  find ${juDIR} -maxdepth 1 -name "${prefix}*.xml" -delete
+  find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
 }
 
 # Execute a command and record its results
 function juLog() {
-  suite=""
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
@@ -88,11 +84,18 @@ function juLog() {
       -ierror=*) ereg="$(echo "$1" | ${SED} -e 's/-ierror=//')"; icase="-i"; shift;;
       -error=*)  ereg="$(echo "$1" | ${SED} -e 's/-error=//')";  shift;;
       -output=*) juDIR="$(echo "$1" | ${SED} -e 's/-output=//')";  shift;;
-      -prefix=*) prefix="$(echo "$1" | ${SED} -e 's/-prefix=//')";  shift;;
+      -file=*)   juFILE="$(echo "$1" | ${SED} -e 's/-file=//')";  shift;;
       -index)    sortTests="$(echo "$1" | ${SED} -e 's/-index/TRUE/')";  shift;;
       *)         ya=1;;
     esac
   done
+
+  if [[ "${class}" = "" ]]; then
+    class="default"
+  fi
+
+  # set output file name as class name, if it was not given
+  juFILE="${class}_junit.xml"
 
   # create output directory
   mkdir -p "${juDIR}" || exit
@@ -101,12 +104,6 @@ function juLog() {
     name="${asserts}-$1"
     shift
   fi
-
-  if [[ "${class}" = "" ]]; then
-    class="default"
-  fi
-
-  suite=${class}
 
   # calculate command to eval
   [[ -z "$1" ]] && return
@@ -139,11 +136,16 @@ function juLog() {
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
 
-  # Save output and error messages without ansi colors, and delete their temp files
+  # set +e - To not break the calling script, if juLog has internal error (e.g. in SED)
   set +e
-  outMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$outf" | xargs -n1 -0 )"
+
+  # Workaround for "Argument list too long" memory errors
+  # ulimit -s 65536
+
+  # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
+  outMsg="$(cat "$outf" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g' )"
   rm -f "${outf}"
-  errMsg="$(${SED} -e 's/\x1b\[[0-9;]*m//g' "$errf" | xargs -n1 -0 )"
+  errMsg="$(cat "$errf" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g' )"
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
@@ -160,8 +162,8 @@ function juLog() {
   time=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
 
-  # Set suite title with uppercase letter and spaces
-  suiteTitle=( "${suite//[_.]?/ }" )
+  # Set test suite title with uppercase letter and spaces
+  suiteTitle=( "${class//[_.]/ }" )
   suiteTitle="${suiteTitle[@]^}"
 
   # Set test title with uppercase letter and spaces
@@ -191,23 +193,23 @@ function juLog() {
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${class}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${suiteTitle}\">
     ${output}
     </testcase>
   "
   ## testsuite block
 
-  if [[ -e "${juDIR}/${prefix}${suite}.xml" ]]; then
+  if [[ -e "${juDIR}/${juFILE}" ]]; then
     # file exists. first update the failures count
-    failCount=$(${SED} -n "s/.*testsuite.*failures=\"\([0-9]*\)\".*/\1/p" "${juDIR}/${prefix}${suite}.xml")
+    failCount=$(${SED} -n "s/.*testsuite.*failures=\"\([0-9]*\)\".*/\1/p" "${juDIR}/${juFILE}")
     errors=$((failCount+errors))
-    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${errors}\"/" "${juDIR}/${prefix}${suite}.xml"
-    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${errors}\"/" "${juDIR}/${prefix}${suite}.xml"
+    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${errors}\"/" "${juDIR}/${juFILE}"
+    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${errors}\"/" "${juDIR}/${juFILE}"
 
     # file exists. Need to append to it. If we remove the testsuite end tag, we can just add it in after.
-    ${SED} -i "s^</testsuite>^^g" "${juDIR}/${prefix}${suite}.xml" ## remove testSuite so we can add it later
-    ${SED} -i "s^</testsuites>^^g" "${juDIR}/${prefix}${suite}.xml"
-    cat <<EOF >> "$juDIR/${prefix}$suite.xml"
+    ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}" ## remove testSuite so we can add it later
+    ${SED} -i "s^</testsuites>^^g" "${juDIR}/${juFILE}"
+    cat <<EOF >> "$juDIR/${juFILE}"
      ${content:-}
     </testsuite>
 </testsuites>
@@ -215,7 +217,7 @@ EOF
 
   else
     # no file exists. Adding a new file
-    cat <<EOF > "${juDIR}/${prefix}${suite}.xml"
+    cat <<EOF > "${juDIR}/${juFILE}"
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
     <testsuite failures="${errors}" assertions="${assertions:-}" name="${suiteTitle}" tests="1" errors="${errors}" time="${total}">
@@ -225,6 +227,7 @@ EOF
 EOF
   fi
 
+  # set -e # set -o errexit
   set -e
   return ${err}
 }
