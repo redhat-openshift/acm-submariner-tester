@@ -1,5 +1,8 @@
 #!/bin/bash
 ### Global variables for Submariner setup and tests ###
+#
+# To override variable with an existing environment variable from active session:
+# Change variable assignment format from VAR="value" to VAR="${VAR:-value}"
 
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
@@ -44,6 +47,6 @@ export BROKER_IKEPORT=500
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
-export SUBM_POLARION_PROJECT_ID="<subm-polarion-project-id>"
-export SUBM_POLARION_TESTCASE_ID="<subm-polarion-testcase-id>"
-export E2E_POLARION_TESTCASE_ID="<e2e-polarion-testcase-id>"
+export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-polarion-project-id}"
+export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-subm-polarion-testrun-id}"
+export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-e2e-polarion-testrun-id}"

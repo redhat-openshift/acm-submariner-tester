@@ -134,9 +134,17 @@ export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 
-# Set script exit code in advance (saved in file)
+# File to store test status
 export TEST_STATUS_RC="$SCRIPT_DIR/test_status.out"
 echo 1 > $TEST_STATUS_RC
+
+# File to store OCP cluster A version
+export CLUSTER_A_VERSION="$SCRIPT_DIR/cluster_a_version.out"
+> $CLUSTER_A_VERSION
+
+# File to store OCP cluster B version
+export CLUSTER_B_VERSION="$SCRIPT_DIR/cluster_b_version.out"
+> $CLUSTER_B_VERSION
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -205,7 +213,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    subm_cable_driver="--cable-driver $2" # libreswan OR strongswan
+    subm_cable_driver="$2" # libreswan OR strongswan
     shift 2 ;;
   --skip-deploy)
     skip_deploy=YES
@@ -1001,14 +1009,17 @@ function create_osp_cluster_b() {
 
 function test_kubeconfig_aws_cluster_a() {
 # Check that AWS cluster A (public) is up and running
-  CLUSTER_A_VERSION=${CLUSTER_A_VERSION:+" (OCP Version $CLUSTER_A_VERSION)"}
-  PROMPT "Testing that AWS cluster A${CLUSTER_A_VERSION} is up and running"
+
+  # Get OCP cluster A version (from file $CLUSTER_A_VERSION)
+  cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION" ]] || cat "$CLUSTER_A_VERSION")"
+
+  PROMPT "Testing that AWS cluster A${cl_a_version:+ (OCP Version $cl_a_version)} is up and running"
   trap_commands;
 
   kubconf_a;
   test_cluster_status
-  export CLUSTER_A_VERSION=$(${OC} version | awk '/Server Version/ { print $3 }')
-  # cd -
+  cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+  echo "$cl_a_version" > "$CLUSTER_A_VERSION"
 }
 
 function kubconf_a() {
@@ -1021,13 +1032,17 @@ function kubconf_a() {
 
 function test_kubeconfig_osp_cluster_b() {
 # Check that OSP cluster B (on-prem) is up and running
-  CLUSTER_B_VERSION=${CLUSTER_B_VERSION:+" (OCP Version $CLUSTER_B_VERSION)"}
-  PROMPT "Testing that OSP cluster B${CLUSTER_B_VERSION} is up and running"
+
+  # Get OCP cluster B version (from file $CLUSTER_B_VERSION)
+  cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION" ]] || cat "$CLUSTER_B_VERSION")"
+
+  PROMPT "Testing that OSP cluster B${cl_b_version:+ (OCP Version $cl_b_version)} is up and running"
   trap_commands;
 
   kubconf_b;
   test_cluster_status
-  export CLUSTER_B_VERSION=$(${OC} version | awk '/Server Version/ { print $3 }')
+  cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+  echo "$cl_b_version" > "$CLUSTER_A_VERSION"
 }
 
 function kubconf_b() {
@@ -1589,7 +1604,7 @@ function export_service_in_lighthouse() {
   # Do not run this rollout status, but watch pod description:
   local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
   #local regex='Service was successfully synced to the broker'
-  local regex='Status:\s+True'
+  local regex='Type:\s+Exported'
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Show $svc_name ServiceExport information:"
@@ -1655,23 +1670,16 @@ function join_submariner_current_cluster() {
   #
 
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
-  # ${OC} config view --flatten > ${MERGED_KUBCONF}
-
   ${OC} config view
 
   JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
-  ./${BROKER_INFO} ${subm_cable_driver} \
+  ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
   if [[ "$get_subctl_devel" =~ ^(y|yes)$ ]]; then
 
     if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-      BUG "Libreswan cable-driver cannot be used with IPSec ports 501 and 4501" \
-      "Make sure subctl join used \"--cable-driver strongswan\" (it should be the default for Subctl 0.4)" \
-      "https://github.com/submariner-io/submariner/issues/683"
-      #Workaround:
       JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
     else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
@@ -1762,37 +1770,34 @@ function test_submariner_cable_driver() {
   trap_commands;
   cluster_name="$1"
 
+  PROMPT "Testing Cable-Driver '${subm_cable_driver}' on ${cluster_name}"
+
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
+  local regex="CableEngine controller started"
+  # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
+  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || submariner_status=DOWN
 
-  if [[ -z "${subm_cable_driver}" || "${subm_cable_driver}" =~ strongswan ]] ; then
-    PROMPT "Testing Submariner StrongSwan (cable driver) on ${cluster_name}"
-    BUG "strongswan status exit code 3, even when \"security associations\" is up" \
-    "Ignore non-zero exit code, by redirecting stderr" \
-    "https://github.com/submariner-io/submariner/issues/360"
-
-    cmd="${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
-    local regex='Security Associations \(1 up'
-    # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
-    watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
+  if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
+    # cmd="${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
+    # local regex='Security Associations \(1 up'
+    # # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
+    # watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
       # Security Associations (1 up, 0 connecting):
       # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
       # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
       # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
 
-    BUG "StrongSwan connecting to 'default' URI fails" \
-    "Verify StrongSwan with different URI path and ignore failure" \
-    "https://github.com/submariner-io/submariner/issues/426"
+    # BUG "StrongSwan connecting to 'default' URI fails" \
+    # "Verify StrongSwan with different URI path and ignore failure" \
+    # "https://github.com/submariner-io/submariner/issues/426"
     # ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
     # workaround:
+    echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
     "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
-
-  elif [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    PROMPT "Testing Submariner LibreSwan (cable driver) on ${cluster_name}"
-    # TODO: Check LibreSwan pod status with watch_and_retry
-    sleep 2m
   fi
+
 }
 
 
@@ -1877,7 +1882,8 @@ function test_submariner_connection_established() {
   echo "# Tailing logs in Submariner-Engine pod [$submariner_engine_pod] to verify connection between clusters"
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
-  local regex="received packet"
+  # local regex="received packet"
+  local regex="Successfully installed Endpoint cable .* with remote IP"
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2327,8 +2333,8 @@ function convert_and_upload_junit_to_polarion() {
 
   local uplaod_status=0
 
-  # Upload junit results of SHELL tests
-  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$SUBM_POLARION_TESTCASE_ID" || uplaod_status=1
+  echo -e "\n### Upload junit results of SHELL tests ###\n"
+  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" || uplaod_status=1
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2338,11 +2344,11 @@ function convert_and_upload_junit_to_polarion() {
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    # Upload junit results of PKG tests
-    upload_junit_to_polarion "$PKG_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$PKG_POLARION_TESTCASE_ID" || uplaod_status=1
+    echo -e "\n### Upload junit results of PKG tests ###\n"
+    upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || uplaod_status=1
 
-    # Upload junit results of E2E tests
-    upload_junit_to_polarion "$E2E_JUNIT_XML" "$SUBM_POLARION_PROJECT_ID" "$E2E_POLARION_TESTCASE_ID" || uplaod_status=1
+    echo -e "\n### Upload junit results of E2E tests ###\n"
+    upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || uplaod_status=1
   fi
 
   return $uplaod_status
@@ -2563,7 +2569,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
 
-    # ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     # Run Ginkgo tests of Submariner repositories
 
@@ -2597,7 +2603,7 @@ fi
 ### Creating HTML report from console output ###
 
 # Get test exit status (from file $TEST_STATUS_RC)
-test_status="$([[ ! -f "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
+test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
 
 # Create HTML Report from log file (with title extracted from log file name)
 message="Creating HTML Report"
