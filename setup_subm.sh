@@ -488,7 +488,7 @@ function print_test_plan() {
   if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
   else
-    echo "# Openshift clusters creation/cleanup before Submariner deployment:
+    echo "### Will execute: Openshift clusters creation/cleanup before Submariner deployment:
 
     AWS cluster A (public):
     - destroy_aws_cluster_a: $destroy_cluster_a
@@ -533,11 +533,8 @@ function print_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  echo -e "\n# System and functional tests for Submariner:"
-  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping tests: $skip_tests \n"
-  else
-    echo -e "\n
+  echo -e "\n### Will execute: High-level (Sanity) tests of Submariner:
+
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
     - test_cable_driver_cluster_a
@@ -553,7 +550,13 @@ function print_test_plan() {
     - test_clusters_connected_by_service_ip
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
-    - verify_golang
+    "
+
+  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping E2E and Unit-tests: $skip_tests \n"
+  else
+    echo -e "\n### Will execute: E2E and Unit-tests of Submariner:
+
     - test_submariner_packages
     - test_submariner_e2e_with_go
     - test_submariner_e2e_with_subctl
@@ -2520,59 +2523,61 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
-  ### Running Submariner Tests ###
+  ### Running High-level (Sanity) tests of Submariner ###
+
+  # if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
+
+  ${junit_cmd} test_kubeconfig_aws_cluster_a
+
+  ${junit_cmd} test_kubeconfig_osp_cluster_b
+
+  echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+  \n# ($TEST_STATUS_RC with exit code 2)"
+
+  echo 2 > $TEST_STATUS_RC
+
+  ${junit_cmd} test_submariner_resources_cluster_a
+
+  ${junit_cmd} test_submariner_resources_cluster_b
+
+  ${junit_cmd} test_cable_driver_cluster_a
+
+  ${junit_cmd} test_cable_driver_cluster_b
+
+  ${junit_cmd} test_ha_status_cluster_a
+
+  ${junit_cmd} test_ha_status_cluster_b
+
+  ${junit_cmd} test_submariner_connection_cluster_a
+
+  ${junit_cmd} test_submariner_connection_cluster_b
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} test_globalnet_status_cluster_a
+    ${junit_cmd} test_globalnet_status_cluster_b
+  fi
+
+  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} export_nginx_no_namespace_cluster_b
+    ${junit_cmd} test_lighthouse_status_cluster_a
+    ${junit_cmd} test_lighthouse_status_cluster_b
+  fi
+
+  # Run Connectivity tests between the On-Premise and Public clusters,
+  # To validate that now Submariner made the connection possible.
+
+  ${junit_cmd} test_clusters_connected_by_service_ip
+
+  [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
+
+  [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
+
+  ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
+
+  ### Running E2E and Unit-tests from Submariner repositories (Ginkgo)
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
-
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    ${junit_cmd} test_kubeconfig_osp_cluster_b
-
-    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-    \n# ($TEST_STATUS_RC with exit code 2)"
-
-    echo 2 > $TEST_STATUS_RC
-
-    ${junit_cmd} test_submariner_resources_cluster_a
-
-    ${junit_cmd} test_submariner_resources_cluster_b
-
-    ${junit_cmd} test_cable_driver_cluster_a
-
-    ${junit_cmd} test_cable_driver_cluster_b
-
-    ${junit_cmd} test_ha_status_cluster_a
-
-    ${junit_cmd} test_ha_status_cluster_b
-
-    ${junit_cmd} test_submariner_connection_cluster_a
-
-    ${junit_cmd} test_submariner_connection_cluster_b
-
-    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-      ${junit_cmd} test_globalnet_status_cluster_a
-      ${junit_cmd} test_globalnet_status_cluster_b
-    fi
-
-    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-      ${junit_cmd} export_nginx_no_namespace_cluster_b
-      ${junit_cmd} test_lighthouse_status_cluster_a
-      ${junit_cmd} test_lighthouse_status_cluster_b
-    fi
-
-    # Run Connectivity tests between the On-Premise and Public clusters,
-    # To validate that now Submariner made the connection possible.
-
-    ${junit_cmd} test_clusters_connected_by_service_ip
-
-    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
-    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
-
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
-
-    # Run Ginkgo tests of Submariner repositories
-
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
