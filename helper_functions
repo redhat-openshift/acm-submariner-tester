@@ -694,7 +694,7 @@ function watch_pod_logs() {
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
   cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
-  > $tmp_file && sleep $interval && grep -E '$regex' -m 1 -C 5 $tmp_file"
+  > $tmp_file && grep -E '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex"
 }
@@ -723,11 +723,10 @@ function upload_junit_to_polarion() {
 
     local junit_xml="$1"
     local polarion_project_id="$2"
-    local polarion_testcase_id="$3"
+    local polarion_testrun_id="$3"
     local sed_expression
 
-    [[ -s "$junit_xml" ]] || \
-    echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && exit 1
+    [[ -s "$junit_xml" ]] || ( echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && return 1 )
 
     echo "# Add <testsuites> with Polarion project id: $polarion_project_id"
 
@@ -755,12 +754,12 @@ function upload_junit_to_polarion() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testcase> with Polarion test-case id: $polarion_testcase_id"
+    echo "# Add <testcase> with Polarion test-case id: $polarion_testrun_id"
 
     # Define Polarion <testcase> property:
     polarion_testcase_content="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-id\" value=\"$polarion_testcase_id\" /> \n\
+            <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
         </properties> \n\
     </testcase>"
 

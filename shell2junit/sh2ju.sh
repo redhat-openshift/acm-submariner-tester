@@ -30,7 +30,7 @@
 
 set +x
 
-asserts=00; errors=0; total=0; content=""
+asserts=00; errors=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
 # default output directory and file
@@ -72,7 +72,7 @@ function juLog() {
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
   date="$(which gdate 2>/dev/null || which date || :)"
-  asserts=00; errors=0; total=0; content=""
+  asserts=00; errors=0; suiteDuration=0; content=""
   export testIndex=$(( testIndex+1 ))
 
   # parse arguments
@@ -159,8 +159,8 @@ function juLog() {
   # calculate vars
   asserts=$((asserts+1))
   errors=$((errors+err))
-  time=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
-  total=$(echo "${total} ${time}" | awk '{print $1 + $2}')
+  testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
+  suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
   # Set test suite title with uppercase letter and spaces
   suiteTitle=( "${class//[_.]/ }" )
@@ -193,7 +193,7 @@ function juLog() {
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${time}\" classname=\"${suiteTitle}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${suiteTitle}\">
     ${output}
     </testcase>
   "
@@ -215,12 +215,16 @@ function juLog() {
 </testsuites>
 EOF
 
+    # Update suite summary on the first <testsuite> tag:
+    sed -e "0,/<testsuite .*>/s/<testsuite .*>/\
+    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${errors}\" errors=\"${errors}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
+
   else
     # no file exists. Adding a new file
     cat <<EOF > "${juDIR}/${juFILE}"
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-    <testsuite failures="${errors}" assertions="${assertions:-}" name="${suiteTitle}" tests="1" errors="${errors}" time="${total}">
+    <testsuite name="${suiteTitle}">
     ${content:-}
     </testsuite>
 </testsuites>
