@@ -135,7 +135,7 @@ function watch_and_retry() {
   TIMEOUT=10m
 
   # If REGEX was specified - will wait for REGEX to be found in CMD output
-  [[ -z "$REGEX" ]] || CMD="$CMD | highlight '$REGEX'"
+  [[ -z "$REGEX" ]] || CMD="( $CMD ) | highlight '$REGEX'"
 
   #echo -e "# Watching output of command: $(eval echo \"$CMD\") \
   echo -e "# Watching output of command: $CMD \
@@ -724,86 +724,57 @@ function upload_junit_to_polarion() {
     local junit_xml="$1"
     local polarion_project_id="$2"
     local polarion_testrun_id="$3"
+    local polarion_team_name="$4"
     local sed_expression
 
     [[ -s "$junit_xml" ]] || ( echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && return 1 )
 
-    echo "# Add <testsuites> with Polarion project id: $polarion_project_id"
+    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
-    # Removing first <testsuiteS> tag (if exists):
+    # Remove first <testsuiteS> tag (if exists):
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$junit_xml"
     # sed -r "s:<testsuites>::" -i "$junit_xml"
 
-    # Removing last </testsuiteS> tag (if exists):
-    sed -r -z "s:(.*)</testsuite>(.*):\1\2:" -i "$junit_xml"
-
-    # Adding </testsuites> tag, after the last </testsuite> tag:
-    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$junit_xml"
-
-    # Define Polarion <testsuites> property:
+    # Define Polarion <testsuites> properties:
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
             <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
+            <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
+            <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
+            <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
         </properties> \n\
     <testsuite "
 
     sed_expression="0,/<testsuite /s,<testsuite ,$polarion_suite_content,"
 
-    # Insert the property instead of the first testsuite tag
+    # Insert this <testsuiteS> properties instead of the first <testsuite> tag:
     sed -r "$sed_expression" -i "$junit_xml"
+
+    # Remove last </testsuiteS> tag (if exists):
+    sed -r -z "s:(.*)</testsuites>(.*):\1\2:" -i "$junit_xml"
+
+    # Add </testsuiteS> tag, after the last </testsuite> tag:
+    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$junit_xml"
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testcase> with Polarion test-case id: $polarion_testrun_id"
+    # echo "# Add <testcase> with Polarion test-run id: $polarion_testrun_id"
+    #
+    # # Define Polarion <testcase> property:
+    # polarion_testcase_content="\n\
+    #     <properties> \n\
+    #         <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
+    #     </properties> \n\
+    # </testcase>"
+    #
+    # sed_expression="s:</testcase>:$polarion_testcase_content:g"
+    #
+    # # Insert the property instead of EACH testcase tag
+    # sed -r "$sed_expression" -i "$junit_xml"
 
-    # Define Polarion <testcase> property:
-    polarion_testcase_content="\n\
-        <properties> \n\
-            <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
-        </properties> \n\
-    </testcase>"
-
-    sed_expression="s:</testcase>:$polarion_testcase_content:g"
-
-    # Insert the property instead of the first testsuite tag
-    sed -r "$sed_expression" -i "$junit_xml"
-
-
-    # TODO: Modify xml like:
-    #     <testsuites>
-    #     <properties>
-    #         <property name="polarion-response-myteamsname" value="shotwellresults" />
-    #         <property name="polarion-project-id" value="My_Test_Project"/>
-    #     </properties>
-    #     <testsuite errors="1" failures="1" name="my_component test run" skipped="1" tests="16" time="0">
-    #         <testcase classname="my_component" name="launch">
-    #             <system-out>I am stdout!!</system-out>
-    #             <system-err>I am stderr!!!</system-err>
-    #             <properties>
-    #                 <property name="polarion-testcase-id" value="MTP-76"/>
-    #             </properties>
-    #         </testcase>
-    #         ...
-    #     </testsuites>
 
     # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$junit_xml
 
-  # git clone ssh://user@code.engineering.redhat.com/jump
-  # cd jump
-  # virtualenv venv
-  # source venv/bin/activate
-  # python -V
-  # ./prepare_pylarion.sh
-  # pip install colorlog
-  #
-  # To upload to this test:
-  # https://polarion.engineering.redhat.com/polarion/#/project/RHELOpenStackPlatform/testrun?id=20190815-0853
-  #
-  # python jump.py --testrun-id="20190815-0853" --xml-file="junit__01.xml" --update_testcases=True --debug=True # --jenkins_build_url=\$BUILD_URL
-  #
-  # python jump.py --testrun-id="20181118-1147" --xml-file="junit__01.xml" --debug=True # --jenkins_build_url=\$BUILD_URL
-  #
-  # ./rhos-qe-jenkins/jobs/defaults/include/jump.groovy.inc
 }
 
 # ------------------------------------------

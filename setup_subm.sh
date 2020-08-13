@@ -2334,7 +2334,7 @@ function convert_and_upload_junit_to_polarion() {
   local uplaod_status=0
 
   echo -e "\n### Upload junit results of SHELL tests ###\n"
-  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" || uplaod_status=1
+  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || uplaod_status=1
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2415,7 +2415,7 @@ function collect_submariner_info() {
 # ------------------------------------------
 
 # # Function to debug this script
-# function debug_a_failure() {
+# function FAIL_DEBUG() {
 #   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
 #   FAIL_HERE
 # }
@@ -2442,7 +2442,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
-  # ${junit_cmd} debug_a_failure
+  # ${junit_cmd} FAIL_DEBUG
 
   # Setup and verify environment
   setup_workspace
