@@ -694,7 +694,7 @@ function watch_pod_logs() {
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
   cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
-  > $tmp_file && sleep $interval && grep -E '$regex' -m 1 -C 5 $tmp_file"
+  > $tmp_file && grep -E '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex"
 }

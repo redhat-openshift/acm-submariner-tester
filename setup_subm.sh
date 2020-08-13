@@ -1693,12 +1693,9 @@ function join_submariner_current_cluster() {
 
   fi
 
-  # subctl --subm-debug ${JOIN_CMD}
-  BUG "--subm-debug cannot be used before join argument in subctl command" \
-  "Add --subm-debug at the end only" \
-  "https://github.com/submariner-io/submariner-operator/issues/340"
-  # Workaround:
-  JOIN_CMD="${JOIN_CMD} --subm-debug"
+  echo "# Adding '--enable-pod-debugging' to the ${JOIN_CMD} for tractability"
+  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging"
+
   echo "# Executing: ${JOIN_CMD}"
   $JOIN_CMD
 
