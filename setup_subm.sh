@@ -1045,7 +1045,7 @@ function test_kubeconfig_osp_cluster_b() {
   kubconf_b;
   test_cluster_status
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "$cl_b_version" > "$CLUSTER_A_VERSION"
+  echo "$cl_b_version" > "$CLUSTER_B_VERSION"
 }
 
 function kubconf_b() {
@@ -1770,7 +1770,7 @@ function test_submariner_cable_driver() {
   trap_commands;
   cluster_name="$1"
 
-  PROMPT "Testing Cable-Driver '${subm_cable_driver}' on ${cluster_name}"
+  PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
@@ -2007,7 +2007,7 @@ function test_svc_pod_global_ip_created() {
 
   # Set the external variable $GLOBAL_IP with the GlobalNet IP
   # GLOBAL_IP=$($cmd | grep -E "$globalnet_tag" | awk '{print $NF}')
-  GLOBAL_IP=$($cmd | grep "$globalnet_tag" | grep -Eoh "$ipv4_regex")
+  export GLOBAL_IP=$($cmd | grep "$globalnet_tag" | grep -Eoh "$ipv4_regex")
 }
 
 # ------------------------------------------
@@ -2102,9 +2102,10 @@ function test_clusters_connected_overlapping_cidrs() {
   GLOBAL_IP=""
   test_svc_pod_global_ip_created pod "$netshoot_pod_cluster_a" $SUBM_TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
+  netshoot_global_ip="$GLOBAL_IP"
 
   # TODO: Ping to the netshoot_global_ip
-  # netshoot_global_ip="$GLOBAL_IP"
+
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
@@ -2327,14 +2328,14 @@ function test_submariner_e2e_with_subctl() {
 
 # ------------------------------------------
 
-function convert_and_upload_junit_to_polarion() {
+function create_polarion_xml_files() {
   PROMPT "Upload Junit test reults to Polarion"
   trap_commands;
 
-  local uplaod_status=0
+  local polarion_rc=0
 
   echo -e "\n### Upload junit results of SHELL tests ###\n"
-  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || uplaod_status=1
+  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
 
   if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2345,13 +2346,13 @@ function convert_and_upload_junit_to_polarion() {
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
     echo -e "\n### Upload junit results of PKG tests ###\n"
-    upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || uplaod_status=1
+    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
 
     echo -e "\n### Upload junit results of E2E tests ###\n"
-    upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || uplaod_status=1
+    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
   fi
 
-  return $uplaod_status
+  return $polarion_rc
 }
 
 # ------------------------------------------
@@ -2366,6 +2367,24 @@ function collect_submariner_info() {
   free -h
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  subctl show all || :
+
+  kubconf_a;
+  print_submariner_pod_logs "${CLUSTER_A_NAME}"
+
+  kubconf_b;
+  print_submariner_pod_logs "${CLUSTER_B_NAME}"
+
+}
+
+# ------------------------------------------
+
+function print_submariner_pod_logs() {
+  trap_commands;
+  current_cluster_context_name="$1"
+
+  echo -e "\n############################## Printing Submariner logs on ${current_cluster_context_name} ##############################\n"
 
   BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
   "use an older OC client" \
@@ -2384,7 +2403,7 @@ function collect_submariner_info() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-  subctl show all || :
+  ${OC} get events -A
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
@@ -2408,7 +2427,7 @@ function collect_submariner_info() {
 
   print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
-  echo -e "\n############################## End of Submariner logs collection ##############################\n"
+  echo -e "\n############################## End of Submariner logs collection on ${current_cluster_context_name} ##############################\n"
 
 }
 
@@ -2592,7 +2611,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  convert_and_upload_junit_to_polarion |& tee -a $LOG_FILE
+  create_polarion_xml_files |& tee -a $LOG_FILE
 fi
 
 
