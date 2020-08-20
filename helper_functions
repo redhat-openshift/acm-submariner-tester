@@ -237,7 +237,8 @@ function record_junit() {
   echo "# Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
   into xml output file \"${output_dir}/${output_file}\""
 
-  juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
+  # juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
+  juLog -output="$output_dir" -file="$output_file" -class="$junit_suite" -name="$test_name" "$func_and_args"
 }
 
 # ------------------------------------------
@@ -723,18 +724,21 @@ function create_polarion_test_cases_from_junit() {
     local junit_xml="$1"
     local polarion_project_id="$2" # ocp
     local polarion_team_name="$3" # Multi-Cluster-Networking
-
     local tc_list="`mktemp`_testcases"
-    local tc_xml="${junit_xml%%.*}_polarion_testcases.xml"
+
+    # Output file for Polarion test-cases, should be without "junit" substring in file name
+    local polarion_testcases_filepath="${junit_xml%%.*}_polarion_testcases.xml"
+    tc_xml_name="$(basename "${polarion_testcases_filepath}")"
+    polarion_testcases_filepath="$(dirname "${polarion_testcases_filepath}")/${tc_xml_name//junit}"
 
     # cat $junit_xml | grep "<testcase " | grep -oE "name=\".+\" " | cut -d '"' -f 2 > $tc_list
     cat $junit_xml | grep -oP '<testcase.* name="\K[^"]+' | cut -d ':' -f 2 > $tc_list
 
     echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\"?>  \n\
-    <testcases project-id=\"OSE\" document-relative-path=\"${polarion_team_name}/${polarion_team_name}-Test-Cases\">  \n\
+    <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_team_name} Test Cases\">  \n\
       <properties>  \n\
           <property name=\"lookup-method\" value=\"name\"/>  \n\
-      </properties>" > "$tc_xml"
+      </properties>" > "$polarion_testcases_filepath"
 
     while read line ; do
       echo "<testcase approver-ids=\"achernet:approved\" status-id=\"draft\">
@@ -743,13 +747,13 @@ function create_polarion_test_cases_from_junit() {
             <custom-fields>
               <custom-field content=\"${polarion_team_name}\" id=\"subteam\"/>
               <custom-field content=\"functional\" id=\"testtype\"/>
-              <custom-field content=\"${polarion_project_id}\" id=\"products\"/>
+              <custom-field content=\"ocp\" id=\"products\"/>
             </custom-fields>
         </testcase>
-        " >> "$tc_xml"
+        " >> "$polarion_testcases_filepath"
       done < "$tc_list"
 
-      echo "</testcases>" >> "$tc_xml"
+      echo "</testcases>" >> "$polarion_testcases_filepath"
 
 #     <?xml version="1.0" encoding="UTF-8"?>
 # <testcases project-id="OSE" document-relative-path="Multi-Cluster-Networking/Multi-Cluster-Networking-Test-Cases">
@@ -775,51 +779,68 @@ function create_polarion_test_cases_from_junit() {
 
 # ------------------------------------------
 
-# Function to upload Junit test results into Polarion test runs
+# Function to create Polarion test run (xml) from Junit
 function create_polarion_test_runs_from_junit() {
     trap_commands;
 
     local junit_xml="$1"
     local polarion_project_id="$2"
-    local polarion_testrun_id="$3"
-    local polarion_team_name="$4"
+    # local polarion_testrun_id="$3"
+    local polarion_team_name="$3"
+    local polarion_testrun_title="$4"
     local sed_expression
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || ( echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && return 1 )
 
-    # Create Polarion test cases template (xml)
-    echo -e "# Create Polarion test-cases template (xml) for Junit results: $junit_xml
+    # Create Polarion test cases template (xml) with function create_polarion_test_cases_from_junit()
+    echo -e "### Creating Polarion test-cases template (xml) for Junit results: $junit_xml
     \n\ Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
-    
+
     create_polarion_test_cases_from_junit "$junit_xml" "$polarion_project_id" "$polarion_team_name"
+
+    # Create Polarion test run results (without "junit" substring in xml file name)
+    local polarion_testrun_filepath="${junit_xml%%.*}"
+    local tr_xml_name="$(basename "${polarion_testrun_filepath}")"
+    polarion_testrun_title="${polarion_testrun_title:-${tr_xml_name%%.*} - $polarion_team_name Test Run}"
+    polarion_testrun_filepath="$(dirname "${polarion_testrun_filepath}")/${tr_xml_name//junit}_polarion_testrun.xml"
+
+    echo -e "### Creating Polarion test-run file. \
+    \n Project [${polarion_project_id}], Title [${polarion_testrun_title}]: \
+    \n $polarion_testrun_filepath \n"
+
+    cp "$junit_xml" "$polarion_testrun_filepath"
 
     echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
     # Remove first <testsuiteS> tag (if exists):
-    sed -e '0,/<testsuites>/s/<testsuites>//' -i "$junit_xml"
-    # sed -r "s:<testsuites>::" -i "$junit_xml"
+    sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_filepath"
+    # sed -r "s:<testsuites>::" -i "$polarion_testrun_filepath"
 
     # Define Polarion <testsuites> properties:
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
             <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
-            <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
-            <property name=\"polarion-lookup-method\" value=\"custom\" /> \n\
+            <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
+            <property name=\"polarion-testrun-title\" value=\"$polarion_testrun_title\" /> \n\
+            <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
     <testsuite "
+
+    # Removed: <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
+    # Removed: <property name=\"polarion-testrun-template-id\" value=\"Build Acceptance type\" /> \n\
 
     sed_expression="0,/<testsuite /s,<testsuite ,$polarion_suite_content,"
 
     # Insert this <testsuiteS> properties instead of the first <testsuite> tag:
-    sed -r "$sed_expression" -i "$junit_xml"
+    sed -r "$sed_expression" -i "$polarion_testrun_filepath"
 
     # Remove last </testsuiteS> tag (if exists):
-    sed -r -z "s:(.*)</testsuites>(.*):\1\2:" -i "$junit_xml"
+    sed -r -z "s:(.*)</testsuites>(.*):\1\2:" -i "$polarion_testrun_filepath"
 
     # Add </testsuiteS> tag, after the last </testsuite> tag:
-    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$junit_xml"
+    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$polarion_testrun_filepath"
 
     # ------------------------------------------------------------------------ #
 
@@ -835,10 +856,10 @@ function create_polarion_test_runs_from_junit() {
     # sed_expression="s:</testcase>:$polarion_testcase_content:g"
     #
     # # Insert the property instead of EACH testcase tag
-    # sed -r "$sed_expression" -i "$junit_xml"
+    # sed -r "$sed_expression" -i "$polarion_testrun_filepath"
 
 
-    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$junit_xml
+    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$polarion_testrun_filepath
 
 }
 

@@ -65,7 +65,7 @@ Running with pre-defined parameters (optional):
 * Install Global Net:                                --globalnet
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip Submariner deployment:                        --skip-deploy
-* Skip all tests execution:                          --skip-tests
+* Skip all tests execution:                          --skip-tests [sys / e2e / pkg / all]
 * Print all pods logs on failure:                    --print-logs
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
@@ -213,14 +213,15 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    subm_cable_driver="$2" # libreswan OR strongswan
+    subm_cable_driver="$2" # libreswan / strongswan
     shift 2 ;;
   --skip-deploy)
     skip_deploy=YES
     shift ;;
   --skip-tests)
-    skip_tests=YES
-    shift ;;
+    check_cli_args "$2"
+    skip_tests="$2" # sys / e2e / pkg / all
+    shift 2 ;;
   --print-logs)
     print_logs=YES
     shift ;;
@@ -401,10 +402,10 @@ if [[ -z "$got_user_input" ]]; then
     skip_deploy=${input:-NO}
   done
 
-  # User input: $skip_tests - to skip all test functions
-  while [[ ! "$skip_tests" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without executing Submariner E2E and Unit-Tests ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
+  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all
+  while [[ ! "$skip_tests" =~ ^(sys|e2e|pkg|all)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
+    Enter either \"sys | e2e | pkg | all\", or nothing to skip: "
     read -r input
     skip_tests=${input:-NO}
   done
@@ -533,7 +534,10 @@ function print_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  echo -e "\n### Will execute: High-level (Sanity) tests of Submariner:
+  if [[ "$skip_tests" =~ ^(sys|all)$ ]]; then
+    echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
+  else
+  echo -e "\n### Will execute: High-level (System) tests of Submariner:
 
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
@@ -551,17 +555,27 @@ function print_test_plan() {
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     "
+  fi
 
-  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping E2E and Unit-tests: $skip_tests \n"
+  if [[ "$skip_tests" =~ ^(pkg|all)$ ]]; then
+    echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
-    echo -e "\n### Will execute: E2E and Unit-tests of Submariner:
+    echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
 
     - test_submariner_packages
+    "
+  fi
+
+  if [[ "$skip_tests" =~ ^(e2e|all)$ ]]; then
+    echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
+  else
+    echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
+
     - test_submariner_e2e_with_go
     - test_submariner_e2e_with_subctl
     "
   fi
+
 }
 
 
@@ -2335,25 +2349,36 @@ function create_polarion_xml_files() {
   local polarion_rc=0
 
   echo -e "\n### Upload junit results of SHELL tests ###\n"
-  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  #create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
 
-  if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
+  if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
     "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
     "https://github.com/submariner-io/shipyard/issues/48"
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
-    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
     echo -e "\n### Upload junit results of PKG tests ###\n"
-    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
+    # create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
+    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  fi
+
+  if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+    "https://github.com/submariner-io/shipyard/issues/48"
+    # Workaround:
+    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
     echo -e "\n### Upload junit results of E2E tests ###\n"
-    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
+    # create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
+    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
   fi
 
   return $polarion_rc
 }
+
 
 # ------------------------------------------
 
@@ -2539,69 +2564,78 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
-  ### Running High-level (Sanity) tests of Submariner ###
+  ### Running High-level (System) tests of Submariner ###
 
-  # if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
 
-  ${junit_cmd} test_kubeconfig_aws_cluster_a
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-  ${junit_cmd} test_kubeconfig_osp_cluster_b
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
 
-  echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-  \n# ($TEST_STATUS_RC with exit code 2)"
+    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+    \n# ($TEST_STATUS_RC with exit code 2)"
 
-  echo 2 > $TEST_STATUS_RC
+    echo 2 > $TEST_STATUS_RC
 
-  ${junit_cmd} test_submariner_resources_cluster_a
+    ${junit_cmd} test_submariner_resources_cluster_a
 
-  ${junit_cmd} test_submariner_resources_cluster_b
+    ${junit_cmd} test_submariner_resources_cluster_b
 
-  ${junit_cmd} test_cable_driver_cluster_a
+    ${junit_cmd} test_cable_driver_cluster_a
 
-  ${junit_cmd} test_cable_driver_cluster_b
+    ${junit_cmd} test_cable_driver_cluster_b
 
-  ${junit_cmd} test_ha_status_cluster_a
+    ${junit_cmd} test_ha_status_cluster_a
 
-  ${junit_cmd} test_ha_status_cluster_b
+    ${junit_cmd} test_ha_status_cluster_b
 
-  ${junit_cmd} test_submariner_connection_cluster_a
+    ${junit_cmd} test_submariner_connection_cluster_a
 
-  ${junit_cmd} test_submariner_connection_cluster_b
+    ${junit_cmd} test_submariner_connection_cluster_b
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    ${junit_cmd} test_globalnet_status_cluster_a
-    ${junit_cmd} test_globalnet_status_cluster_b
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} test_globalnet_status_cluster_a
+      ${junit_cmd} test_globalnet_status_cluster_b
+    fi
+
+    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} export_nginx_no_namespace_cluster_b
+      ${junit_cmd} test_lighthouse_status_cluster_a
+      ${junit_cmd} test_lighthouse_status_cluster_b
+    fi
+
+    # Run Connectivity tests between the On-Premise and Public clusters,
+    # To validate that now Submariner made the connection possible.
+
+    ${junit_cmd} test_clusters_connected_by_service_ip
+
+    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
+
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
+
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
   fi
 
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    ${junit_cmd} export_nginx_no_namespace_cluster_b
-    ${junit_cmd} test_lighthouse_status_cluster_a
-    ${junit_cmd} test_lighthouse_status_cluster_b
-  fi
+  ### Running Unit-tests from Submariner repositories (Ginkgo)
 
-  # Run Connectivity tests between the On-Premise and Public clusters,
-  # To validate that now Submariner made the connection possible.
-
-  ${junit_cmd} test_clusters_connected_by_service_ip
-
-  [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
-  [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
-
-  ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
-
-
-  ### Running E2E and Unit-tests from Submariner repositories (Ginkgo)
-
-  if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+
+  fi
+
+  ### Running E2E tests from Submariner repositories (Ginkgo)
+
+  if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
+    verify_golang
 
     ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
     ${junit_cmd} test_submariner_e2e_with_subctl
   fi
+
 
   # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC

@@ -94,6 +94,10 @@ function juLog() {
     class="default"
   fi
 
+  # Set test suite title to class name with uppercase letter and spaces
+  suiteTitle=( "${class//[_.]/ }" )
+  suiteTitle="${suiteTitle[@]^}"
+
   # set output file name as class name, if it was not given
   juFILE="${class}_junit.xml"
 
@@ -103,6 +107,17 @@ function juLog() {
   if [[ -z "${name}" ]]; then
     name="${asserts}-$1"
     shift
+  fi
+
+  if [[ ! -e "${juDIR}/${juFILE}" ]]; then
+    # no Junit file exists. Adding a new file
+    cat <<EOF > "${juDIR}/${juFILE}"
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+    <testsuite name="${suiteTitle}" tests="0" assertions="" failures="0" errors="0" time="0">
+    </testsuite>
+</testsuites>
+EOF
   fi
 
   # calculate command to eval
@@ -162,10 +177,6 @@ function juLog() {
   testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
-  # Set test suite title with uppercase letter and spaces
-  suiteTitle=( "${class//[_.]/ }" )
-  suiteTitle="${suiteTitle[@]^}"
-
   # Set test title with uppercase letter and spaces
   testTitle=( ${name//_/ } )
   testTitle="${testTitle[@]^}"
@@ -218,17 +229,6 @@ EOF
     # Update suite summary on the first <testsuite> tag:
     sed -e "0,/<testsuite .*>/s/<testsuite .*>/\
     <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${errors}\" errors=\"${errors}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
-
-  else
-    # no file exists. Adding a new file
-    cat <<EOF > "${juDIR}/${juFILE}"
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-    <testsuite name="${suiteTitle}">
-    ${content:-}
-    </testsuite>
-</testsuites>
-EOF
   fi
 
   # set -e # set -o errexit
