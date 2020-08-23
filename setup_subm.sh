@@ -65,7 +65,7 @@ Running with pre-defined parameters (optional):
 * Install Global Net:                                --globalnet
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip Submariner deployment:                        --skip-deploy
-* Skip all tests execution:                          --skip-tests
+* Skip all tests execution:                          --skip-tests [sys / e2e / pkg / all]
 * Print all pods logs on failure:                    --print-logs
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
@@ -213,14 +213,15 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    subm_cable_driver="$2" # libreswan OR strongswan
+    subm_cable_driver="$2" # libreswan / strongswan
     shift 2 ;;
   --skip-deploy)
     skip_deploy=YES
     shift ;;
   --skip-tests)
-    skip_tests=YES
-    shift ;;
+    check_cli_args "$2"
+    skip_tests="$2" # sys / e2e / pkg / all
+    shift 2 ;;
   --print-logs)
     print_logs=YES
     shift ;;
@@ -401,10 +402,10 @@ if [[ -z "$got_user_input" ]]; then
     skip_deploy=${input:-NO}
   done
 
-  # User input: $skip_tests - to skip all test functions
-  while [[ ! "$skip_tests" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without executing Submariner E2E and Unit-Tests ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
+  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all
+  while [[ ! "$skip_tests" =~ ^(sys|e2e|pkg|all)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
+    Enter either \"sys | e2e | pkg | all\", or nothing to skip: "
     read -r input
     skip_tests=${input:-NO}
   done
@@ -533,7 +534,10 @@ function print_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  echo -e "\n### Will execute: High-level (Sanity) tests of Submariner:
+  if [[ "$skip_tests" =~ ^(sys|all)$ ]]; then
+    echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
+  else
+  echo -e "\n### Will execute: High-level (System) tests of Submariner:
 
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
@@ -551,17 +555,27 @@ function print_test_plan() {
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_clusters_connected_by_same_service_on_new_namespace: $service_discovery
     "
+  fi
 
-  if [[ "$skip_tests" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping E2E and Unit-tests: $skip_tests \n"
+  if [[ "$skip_tests" =~ ^(pkg|all)$ ]]; then
+    echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
-    echo -e "\n### Will execute: E2E and Unit-tests of Submariner:
+    echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
 
     - test_submariner_packages
+    "
+  fi
+
+  if [[ "$skip_tests" =~ ^(e2e|all)$ ]]; then
+    echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
+  else
+    echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
+
     - test_submariner_e2e_with_go
     - test_submariner_e2e_with_subctl
     "
   fi
+
 }
 
 
@@ -815,50 +829,26 @@ function build_operator_latest() {
 # ------------------------------------------
 
 function download_subctl_latest_release() {
-  ### Download OCP installer ###
-    PROMPT "Downloading latest release of Submariner-Operator tool - SubCtl"
-    trap_commands;
-    # TODO: curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=rc bash
-
-    cd ${WORKDIR}
-
-    repo_url="https://github.com/submariner-io/submariner-operator"
-    repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/v[^"]+' -m 1)"
-    releases_url="${repo_url}/releases"
-
-    file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
-
-    download_file "${releases_url}/${file_path}"
-
-    file_name=$(basename -- "$file_path")
-    tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
-
-    # Rename last extracted file to subctl
-    extracted_file="$(ls -1 -tu subctl* | head -1)"
-
-    [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
-    chmod +x subctl
-
-    echo "# Install subctl into ${GOBIN}:"
-    mkdir -p $GOBIN
-    # cp ./subctl $GOBIN/
-    /usr/bin/install ./subctl $GOBIN/subctl
-
-    echo "# Install subctl into user HOME bin:"
-    # cp ./subctl ~/.local/bin/
-    /usr/bin/install ./subctl ~/.local/bin/subctl
-
-    echo "# Add user HOME bin to system PATH:"
-    export PATH="$HOME/.local/bin:$PATH"
+  ### Download SubCtl - Submariner installer - Latest RC release ###
+    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
+    download_subctl_by_tag "rc"
 }
 
 # ------------------------------------------
 
 function download_subctl_latest_devel() {
-  ### Download OCP installer ###
-    PROMPT "Testing \"getsubctl.sh\" to download and install latest subctl-devel (built from Submariner-Operator \"master\" branch)"
+  ### Download SubCtl - Submariner installer - Latest DEVEL release ###
+    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"master\" branch)"
+    download_subctl_by_tag "devel"
+  }
+
+# ------------------------------------------
+
+function download_subctl_by_tag() {
+  ### Download SubCtl - Submariner installer ###
     trap_commands;
 
+    local subctl_tag="${1:-rc}" # If not specifying a tag, it will use "rc" tag
     cd ${WORKDIR}
 
     BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
@@ -867,8 +857,8 @@ function download_subctl_latest_devel() {
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh \
-    | VERSION=devel PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+    curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
+    || getsubctl_status=FAILED
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
@@ -877,7 +867,7 @@ function download_subctl_latest_devel() {
       # Workaround:
 
       repo_url="https://github.com/submariner-io/submariner-operator"
-      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
+      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
       releases_url="${repo_url}/releases"
       file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
@@ -1045,7 +1035,7 @@ function test_kubeconfig_osp_cluster_b() {
   kubconf_b;
   test_cluster_status
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "$cl_b_version" > "$CLUSTER_A_VERSION"
+  echo "$cl_b_version" > "$CLUSTER_B_VERSION"
 }
 
 function kubconf_b() {
@@ -1770,7 +1760,7 @@ function test_submariner_cable_driver() {
   trap_commands;
   cluster_name="$1"
 
-  PROMPT "Testing Cable-Driver '${subm_cable_driver}' on ${cluster_name}"
+  PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
@@ -2007,7 +1997,7 @@ function test_svc_pod_global_ip_created() {
 
   # Set the external variable $GLOBAL_IP with the GlobalNet IP
   # GLOBAL_IP=$($cmd | grep -E "$globalnet_tag" | awk '{print $NF}')
-  GLOBAL_IP=$($cmd | grep "$globalnet_tag" | grep -Eoh "$ipv4_regex")
+  export GLOBAL_IP=$($cmd | grep "$globalnet_tag" | grep -Eoh "$ipv4_regex")
 }
 
 # ------------------------------------------
@@ -2102,9 +2092,10 @@ function test_clusters_connected_overlapping_cidrs() {
   GLOBAL_IP=""
   test_svc_pod_global_ip_created pod "$netshoot_pod_cluster_a" $SUBM_TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
+  netshoot_global_ip="$GLOBAL_IP"
 
   # TODO: Ping to the netshoot_global_ip
-  # netshoot_global_ip="$GLOBAL_IP"
+
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
@@ -2189,8 +2180,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   kubconf_a
 
   BUG "curl to Nginx with Global-IP on supercluster, sometimes fails" \
-  "Randomly fails, not always" \
+  "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/644"
+  # No workaround
+
+  BUG "Service discovery on supercluster.local: Name does not resolve" \
+  "Fails sometimes... No workaround yet" \
+  "https://github.com/submariner-io/submariner/issues/768"
   # No workaround
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
@@ -2327,32 +2323,43 @@ function test_submariner_e2e_with_subctl() {
 
 # ------------------------------------------
 
-function convert_and_upload_junit_to_polarion() {
+function create_polarion_xml_files() {
   PROMPT "Upload Junit test reults to Polarion"
   trap_commands;
 
-  local uplaod_status=0
+  local polarion_rc=0
 
   echo -e "\n### Upload junit results of SHELL tests ###\n"
-  upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" || uplaod_status=1
+  #create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
 
-  if [[ ! "$skip_tests" =~ ^(y|yes)$ ]] ; then
+  if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
     "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
     "https://github.com/submariner-io/shipyard/issues/48"
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
-    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
     echo -e "\n### Upload junit results of PKG tests ###\n"
-    upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || uplaod_status=1
-
-    echo -e "\n### Upload junit results of E2E tests ###\n"
-    upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || uplaod_status=1
+    # create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
+    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
   fi
 
-  return $uplaod_status
+  if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
+    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
+    "https://github.com/submariner-io/shipyard/issues/48"
+    # Workaround:
+    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
+
+    echo -e "\n### Upload junit results of E2E tests ###\n"
+    # create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
+    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  fi
+
+  return $polarion_rc
 }
+
 
 # ------------------------------------------
 
@@ -2366,6 +2373,24 @@ function collect_submariner_info() {
   free -h
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  subctl show all || :
+
+  kubconf_a;
+  print_submariner_pod_logs "${CLUSTER_A_NAME}"
+
+  kubconf_b;
+  print_submariner_pod_logs "${CLUSTER_B_NAME}"
+
+}
+
+# ------------------------------------------
+
+function print_submariner_pod_logs() {
+  trap_commands;
+  current_cluster_context_name="$1"
+
+  echo -e "\n############################## Printing Submariner logs on ${current_cluster_context_name} ##############################\n"
 
   BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
   "use an older OC client" \
@@ -2384,7 +2409,7 @@ function collect_submariner_info() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-  subctl show all || :
+  ${OC} get events -A
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
@@ -2408,14 +2433,14 @@ function collect_submariner_info() {
 
   print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
-  echo -e "\n############################## End of Submariner logs collection ##############################\n"
+  echo -e "\n############################## End of Submariner logs collection on ${current_cluster_context_name} ##############################\n"
 
 }
 
 # ------------------------------------------
 
 # # Function to debug this script
-# function debug_a_failure() {
+# function FAIL_DEBUG() {
 #   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
 #   FAIL_HERE
 # }
@@ -2442,7 +2467,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
-  # ${junit_cmd} debug_a_failure
+  # ${junit_cmd} FAIL_DEBUG
 
   # Setup and verify environment
   setup_workspace
@@ -2520,69 +2545,77 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
-  ### Running High-level (Sanity) tests of Submariner ###
-
-  # if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
-
   ${junit_cmd} test_kubeconfig_aws_cluster_a
 
   ${junit_cmd} test_kubeconfig_osp_cluster_b
+
+  ### Running High-level (System) tests of Submariner ###
+
+  if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
+
+    ${junit_cmd} test_submariner_resources_cluster_a
+
+    ${junit_cmd} test_submariner_resources_cluster_b
+
+    ${junit_cmd} test_cable_driver_cluster_a
+
+    ${junit_cmd} test_cable_driver_cluster_b
+
+    ${junit_cmd} test_ha_status_cluster_a
+
+    ${junit_cmd} test_ha_status_cluster_b
+
+    ${junit_cmd} test_submariner_connection_cluster_a
+
+    ${junit_cmd} test_submariner_connection_cluster_b
+
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} test_globalnet_status_cluster_a
+      ${junit_cmd} test_globalnet_status_cluster_b
+    fi
+
+    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} export_nginx_no_namespace_cluster_b
+      ${junit_cmd} test_lighthouse_status_cluster_a
+      ${junit_cmd} test_lighthouse_status_cluster_b
+    fi
+
+    # Run Connectivity tests between the On-Premise and Public clusters,
+    # To validate that now Submariner made the connection possible.
+
+    ${junit_cmd} test_clusters_connected_by_service_ip
+
+    [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
+
+    [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
+
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
+  fi
 
   echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
   \n# ($TEST_STATUS_RC with exit code 2)"
 
   echo 2 > $TEST_STATUS_RC
 
-  ${junit_cmd} test_submariner_resources_cluster_a
+  ### Running Unit-tests from Submariner repositories (Ginkgo)
 
-  ${junit_cmd} test_submariner_resources_cluster_b
-
-  ${junit_cmd} test_cable_driver_cluster_a
-
-  ${junit_cmd} test_cable_driver_cluster_b
-
-  ${junit_cmd} test_ha_status_cluster_a
-
-  ${junit_cmd} test_ha_status_cluster_b
-
-  ${junit_cmd} test_submariner_connection_cluster_a
-
-  ${junit_cmd} test_submariner_connection_cluster_b
-
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    ${junit_cmd} test_globalnet_status_cluster_a
-    ${junit_cmd} test_globalnet_status_cluster_b
-  fi
-
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
-    ${junit_cmd} export_nginx_no_namespace_cluster_b
-    ${junit_cmd} test_lighthouse_status_cluster_a
-    ${junit_cmd} test_lighthouse_status_cluster_b
-  fi
-
-  # Run Connectivity tests between the On-Premise and Public clusters,
-  # To validate that now Submariner made the connection possible.
-
-  ${junit_cmd} test_clusters_connected_by_service_ip
-
-  [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
-  [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
-
-  ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
-
-
-  ### Running E2E and Unit-tests from Submariner repositories (Ginkgo)
-
-  if [[ ! "$skip_tests" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+  fi
+
+  ### Running E2E tests from Submariner repositories (Ginkgo)
+
+  if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
+    verify_golang
 
     ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
     ${junit_cmd} test_submariner_e2e_with_subctl
   fi
+
 
   # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC
@@ -2592,7 +2625,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  convert_and_upload_junit_to_polarion |& tee -a $LOG_FILE
+  create_polarion_xml_files |& tee -a $LOG_FILE
 fi
 
 
