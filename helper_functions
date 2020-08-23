@@ -715,16 +715,30 @@ function print_pod_logs_in_namespace() {
   done
 }
 
+
 # ------------------------------------------
 
 # Function to create test case template in Polarion for each Junit testcase
 function create_polarion_test_cases_from_junit() {
     trap_commands;
 
-    local junit_xml="$1"
-    local polarion_project_id="$2" # ocp
-    local polarion_team_name="$3" # Multi-Cluster-Networking
+    local polarion_url="$1"
+    polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
+
+    # local polarion_rc="$2" # curl netrc file to access Polarion
+    local polarion_auth="$2" # Polarion AUTH=$(echo -ne 'user:password' | base64 --wrap 0)
+
+    local junit_xml="$3"
+    local polarion_project_id="$4" # ocp
+    local polarion_team_name="$5" # Multi-Cluster-Networking
+
     local tc_list="`mktemp`_testcases"
+
+    echo -e "### Creating Polarion test-cases template (xml) for Junit results: $junit_xml
+    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+
+    # Verify junit file exists
+    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." && return 1 )
 
     # Output file for Polarion test-cases, should be without "junit" substring in file name
     local polarion_testcases_filepath="${junit_xml%%.*}_polarion_testcases.xml"
@@ -755,24 +769,9 @@ function create_polarion_test_cases_from_junit() {
 
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
-#     <?xml version="1.0" encoding="UTF-8"?>
-# <testcases project-id="OSE" document-relative-path="Multi-Cluster-Networking/Multi-Cluster-Networking-Test-Cases">
-#   <properties>
-#     <property name="lookup-method" value="name"/>
-#   </properties>
-#   <testcase approver-ids="achernet:approved" status-id="draft">
-#     <title>submariner tc debug 1</title>
-#     <description>Submariner TC Debug 1</description>
-#     <custom-fields>
-#       <custom-field content="Multi-Cluster-Networking" id="subteam"/>
-#       <custom-field content="functional" id="testtype"/>
-#       <custom-field content="ocp" id="products"/>
-#     </custom-fields>
-#     <linked-work-items>
-#         <linked-work-item workitem-id="OCP-34048" role-id="verifies"/>
-#     </linked-work-items>
-#   </testcase>
-# </testcases>
+      # curl -k --netrc-file "$polarion_rc" -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
+      curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
+
 
 }
 
@@ -780,24 +779,28 @@ function create_polarion_test_cases_from_junit() {
 # ------------------------------------------
 
 # Function to create Polarion test run (xml) from Junit
-function create_polarion_test_runs_from_junit() {
+function create_polarion_test_run_from_junit() {
     trap_commands;
 
-    local junit_xml="$1"
-    local polarion_project_id="$2"
+    local polarion_url="$1"
+    polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
+
+    # local polarion_rc="$2" # curl netrc file to access Polarion
+    local polarion_auth="$2" # Polarion AUTH=$(echo -ne 'user:password' | base64 --wrap 0)
+
+    local junit_xml="$3"
+    local polarion_project_id="$4"
     # local polarion_testrun_id="$3"
-    local polarion_team_name="$3"
-    local polarion_testrun_title="$4"
+    local polarion_team_name="$5"
+    local polarion_testrun_title="$6"
+
     local sed_expression
 
+    echo -e "### Creating Polarion test-run (xml) for Junit results: $junit_xml
+    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || ( echo "Failed to upload tests to Polarion: File '$junit_xml' is missing." && return 1 )
-
-    # Create Polarion test cases template (xml) with function create_polarion_test_cases_from_junit()
-    echo -e "### Creating Polarion test-cases template (xml) for Junit results: $junit_xml
-    \n\ Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
-
-    create_polarion_test_cases_from_junit "$junit_xml" "$polarion_project_id" "$polarion_team_name"
+    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-run file: '$junit_xml' is missing." && return 1 )
 
     # Create Polarion test run results (without "junit" substring in xml file name)
     local polarion_testrun_filepath="${junit_xml%%.*}"
@@ -805,9 +808,8 @@ function create_polarion_test_runs_from_junit() {
     polarion_testrun_title="${polarion_testrun_title:-${tr_xml_name%%.*} - $polarion_team_name Test Run}"
     polarion_testrun_filepath="$(dirname "${polarion_testrun_filepath}")/${tr_xml_name//junit}_polarion_testrun.xml"
 
-    echo -e "### Creating Polarion test-run file. \
-    \n Project [${polarion_project_id}], Title [${polarion_testrun_title}]: \
-    \n $polarion_testrun_filepath \n"
+    echo -e "### Polarion Test-run Title: [${polarion_testrun_title}],
+    \n# Polarion Test-run file [${polarion_testrun_filepath}] \n"
 
     cp "$junit_xml" "$polarion_testrun_filepath"
 
@@ -860,6 +862,9 @@ function create_polarion_test_runs_from_junit() {
 
 
     # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$polarion_testrun_filepath
+
+    # curl -k --netrc-file "$polarion_rc" -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
+    curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
 
 }
 

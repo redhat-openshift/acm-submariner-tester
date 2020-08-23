@@ -47,6 +47,9 @@ export BROKER_IKEPORT=500
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
+export POLARION_SERVER="polarion.server.name" # without " https:// "
+export POLARION_USR="polarion-user"
+export POLARION_PWD='polarion-pass' # in single quotes
 export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
 export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
 export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}"

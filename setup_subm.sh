@@ -477,6 +477,12 @@ create_junit_xml=${create_junit_xml:-NO}
 upload_to_polarion=${upload_to_polarion:-NO}
 
 
+# trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
+if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+  trap_function_on_error "${junit_cmd} collect_submariner_info"
+fi
+
+
 ####################################################################################
 #                             Main script functions                                #
 ####################################################################################
@@ -582,7 +588,7 @@ function print_test_plan() {
 # ------------------------------------------
 
 function setup_workspace() {
-  PROMPT "Creating workspace and verifying GO installation"
+  PROMPT "Creating workspace, verifying GO-lang, and configuring AWS and Polarion access"
   # DONT trap_commands - Includes credentials, hide from output
 
   # Add HOME dir to PATH
@@ -609,6 +615,11 @@ function setup_workspace() {
   # Installing if $config_aws_cli = yes/y
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
   "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
+
+  # Set Polarion credentials if $upload_to_polarion = yes/y
+  [[ ! "$upload_to_polarion" =~ ^(y|yes)$ ]] || \
+  export POLARION_AUTH=$(echo -ne "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+  # $( echo "machine $POLARION_SERVER login $POLARION_USR password $POLARION_PWD" > ${WORKDIR}/POLARION_RC )
 
   # Trim trailing and leading spaces from $SUBM_TEST_NS
   SUBM_TEST_NS="$(echo "$SUBM_TEST_NS" | xargs)"
@@ -2323,15 +2334,36 @@ function test_submariner_e2e_with_subctl() {
 
 # ------------------------------------------
 
-function create_polarion_xml_files() {
+function upload_junit_xml_to_polarion() {
+  trap_commands;
+  local junit_file="$1"
+  echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
+
+  # create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
+  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+  #
+  # create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
+  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+  create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
+  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+  create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
+  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+}
+
+# ------------------------------------------
+
+function upload_junit_xmls_to_polarion() {
   PROMPT "Upload Junit test reults to Polarion"
   trap_commands;
 
   local polarion_rc=0
 
-  echo -e "\n### Upload junit results of SHELL tests ###\n"
-  #create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
-  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  # Upload junit results of SHELL tests
+  #create_and_upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  upload_junit_xml_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" || polarion_rc=1
 
   if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2340,9 +2372,9 @@ function create_polarion_xml_files() {
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
 
-    echo -e "\n### Upload junit results of PKG tests ###\n"
-    # create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
-    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+    # Upload junit results of PKG tests
+    # create_and_upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
+    upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
   fi
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
@@ -2352,9 +2384,9 @@ function create_polarion_xml_files() {
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    echo -e "\n### Upload junit results of E2E tests ###\n"
-    # create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
-    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+    # Upload junit results of E2E tests
+    # create_and_upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
   fi
 
   return $polarion_rc
@@ -2453,25 +2485,22 @@ function print_submariner_pod_logs() {
 ####################################################################################
 
 # Logging main output (enclosed with parenthesis) with tee
-
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 > $LOG_FILE
 
 (
-  # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info"
-  fi
-
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
   # ${junit_cmd} FAIL_DEBUG
 
-  # Setup and verify environment
-  setup_workspace
+) |& tee -a $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 
+# Setup and verify environment
+setup_workspace # This is NOT logged to $LOG_FILE
+
+(
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
@@ -2620,12 +2649,12 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC
 
-) |& tee -a $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+) |& tee -a $LOG_FILE
 
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  create_polarion_xml_files |& tee -a $LOG_FILE
+  upload_junit_xmls_to_polarion |& tee -a $LOG_FILE
 fi
 
 
@@ -2669,7 +2698,7 @@ tar -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
  kubconf_* \
- *junit*.xml \
+ *.xml \
  "$WORKDIR/$BROKER_INFO" \
  2>/dev/null)
 
