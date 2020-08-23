@@ -829,50 +829,26 @@ function build_operator_latest() {
 # ------------------------------------------
 
 function download_subctl_latest_release() {
-  ### Download OCP installer ###
-    PROMPT "Downloading latest release of Submariner-Operator tool - SubCtl"
-    trap_commands;
-    # TODO: curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh | VERSION=rc bash
-
-    cd ${WORKDIR}
-
-    repo_url="https://github.com/submariner-io/submariner-operator"
-    repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/v[^"]+' -m 1)"
-    releases_url="${repo_url}/releases"
-
-    file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
-
-    download_file "${releases_url}/${file_path}"
-
-    file_name=$(basename -- "$file_path")
-    tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
-
-    # Rename last extracted file to subctl
-    extracted_file="$(ls -1 -tu subctl* | head -1)"
-
-    [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
-    chmod +x subctl
-
-    echo "# Install subctl into ${GOBIN}:"
-    mkdir -p $GOBIN
-    # cp ./subctl $GOBIN/
-    /usr/bin/install ./subctl $GOBIN/subctl
-
-    echo "# Install subctl into user HOME bin:"
-    # cp ./subctl ~/.local/bin/
-    /usr/bin/install ./subctl ~/.local/bin/subctl
-
-    echo "# Add user HOME bin to system PATH:"
-    export PATH="$HOME/.local/bin:$PATH"
+  ### Download SubCtl - Submariner installer - Latest RC release ###
+    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
+    download_subctl_by_tag "rc"
 }
 
 # ------------------------------------------
 
 function download_subctl_latest_devel() {
-  ### Download OCP installer ###
-    PROMPT "Testing \"getsubctl.sh\" to download and install latest subctl-devel (built from Submariner-Operator \"master\" branch)"
+  ### Download SubCtl - Submariner installer - Latest DEVEL release ###
+    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"master\" branch)"
+    download_subctl_by_tag "devel"
+  }
+
+# ------------------------------------------
+
+function download_subctl_by_tag() {
+  ### Download SubCtl - Submariner installer ###
     trap_commands;
 
+    local subctl_tag="${1:-rc}" # If not specifying a tag, it will use "rc" tag
     cd ${WORKDIR}
 
     BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
@@ -881,8 +857,8 @@ function download_subctl_latest_devel() {
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    curl -Ls  https://raw.githubusercontent.com/submariner-io/submariner-operator/master/scripts/subctl/getsubctl.sh \
-    | VERSION=devel PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+    curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
+    || getsubctl_status=FAILED
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
@@ -891,7 +867,7 @@ function download_subctl_latest_devel() {
       # Workaround:
 
       repo_url="https://github.com/submariner-io/submariner-operator"
-      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh 'tag/dev[^"]+' -m 1)"
+      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
       releases_url="${repo_url}/releases"
       file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
@@ -2204,8 +2180,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   kubconf_a
 
   BUG "curl to Nginx with Global-IP on supercluster, sometimes fails" \
-  "Randomly fails, not always" \
+  "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/644"
+  # No workaround
+
+  BUG "Service discovery on supercluster.local: Name does not resolve" \
+  "Fails sometimes... No workaround yet" \
+  "https://github.com/submariner-io/submariner/issues/768"
   # No workaround
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
@@ -2564,18 +2545,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
+  ${junit_cmd} test_kubeconfig_aws_cluster_a
+
+  ${junit_cmd} test_kubeconfig_osp_cluster_b
+
   ### Running High-level (System) tests of Submariner ###
 
   if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
-
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    ${junit_cmd} test_kubeconfig_osp_cluster_b
-
-    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-    \n# ($TEST_STATUS_RC with exit code 2)"
-
-    echo 2 > $TEST_STATUS_RC
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
@@ -2617,13 +2593,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
+  echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+  \n# ($TEST_STATUS_RC with exit code 2)"
+
+  echo 2 > $TEST_STATUS_RC
+
   ### Running Unit-tests from Submariner repositories (Ginkgo)
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
-
   fi
 
   ### Running E2E tests from Submariner repositories (Ginkgo)
