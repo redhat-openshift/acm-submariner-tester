@@ -723,7 +723,7 @@ function create_polarion_test_cases_from_junit() {
     trap_commands;
 
     local polarion_url="$1"
-    polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
+    # polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
 
     # local polarion_rc="$2" # curl netrc file to access Polarion
     local polarion_auth="$2" # Polarion AUTH=$(echo -ne 'user:password' | base64 --wrap 0)
@@ -769,9 +769,7 @@ function create_polarion_test_cases_from_junit() {
 
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
-      # curl -k --netrc-file "$polarion_rc" -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
       curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
-
 
 }
 
@@ -783,7 +781,7 @@ function create_polarion_test_run_from_junit() {
     trap_commands;
 
     local polarion_url="$1"
-    polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
+    # polarion_url="https://polarion.stage.engineering.redhat.com/polarion"
 
     # local polarion_rc="$2" # curl netrc file to access Polarion
     local polarion_auth="$2" # Polarion AUTH=$(echo -ne 'user:password' | base64 --wrap 0)
@@ -805,7 +803,10 @@ function create_polarion_test_run_from_junit() {
     # Create Polarion test run results (without "junit" substring in xml file name)
     local polarion_testrun_filepath="${junit_xml%%.*}"
     local tr_xml_name="$(basename "${polarion_testrun_filepath}")"
+
     polarion_testrun_title="${polarion_testrun_title:-${tr_xml_name%%.*} - $polarion_team_name Test Run}"
+    local polarion_testrun_id="${polarion_testrun_title//[^[:alnum:]]/_}"
+
     polarion_testrun_filepath="$(dirname "${polarion_testrun_filepath}")/${tr_xml_name//junit}_polarion_testrun.xml"
 
     echo -e "### Polarion Test-run Title: [${polarion_testrun_title}],
@@ -826,6 +827,7 @@ function create_polarion_test_run_from_junit() {
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             <property name=\"polarion-testrun-title\" value=\"$polarion_testrun_title\" /> \n\
+            <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
     <testsuite "
@@ -846,24 +848,26 @@ function create_polarion_test_run_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    # echo "# Add <testcase> with Polarion test-run id: $polarion_testrun_id"
-    #
-    # # Define Polarion <testcase> property:
+    echo "# Add <testcase> with Polarion test-run title: $polarion_testrun_title"
+
+    # Define Polarion <testcase> property:
+    polarion_testcase_content="\n\
+        <properties> \n\
+            <property name=\"polarion-testcase-comment\" value=\"$polarion_testrun_title\" /> \n\
+        </properties> \n\
+    </testcase>"
+
     # polarion_testcase_content="\n\
     #     <properties> \n\
     #         <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
     #     </properties> \n\
     # </testcase>"
-    #
-    # sed_expression="s:</testcase>:$polarion_testcase_content:g"
-    #
-    # # Insert the property instead of EACH testcase tag
-    # sed -r "$sed_expression" -i "$polarion_testrun_filepath"
 
+    sed_expression="s:</testcase>:$polarion_testcase_content:g"
 
-    # curl -k -u stester1:mypassword -w %{http_code} -X POST -F file=@$polarion_testrun_filepath
+    # Insert the property instead of EACH testcase tag
+    sed -r "$sed_expression" -i "$polarion_testrun_filepath"
 
-    # curl -k --netrc-file "$polarion_rc" -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
     curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
 
 }

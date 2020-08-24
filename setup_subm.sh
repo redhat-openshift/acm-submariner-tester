@@ -97,7 +97,7 @@ $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subc
 #          Global bash configurations, constants and external sources              #
 ####################################################################################
 
-# Set SCRIPT_DIR as current absolute path where this script runs in
+# Set SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
 ### Import Submariner setup variables ###
@@ -477,11 +477,6 @@ create_junit_xml=${create_junit_xml:-NO}
 upload_to_polarion=${upload_to_polarion:-NO}
 
 
-# trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
-if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-  trap_function_on_error "${junit_cmd} collect_submariner_info"
-fi
-
 
 ####################################################################################
 #                             Main script functions                                #
@@ -623,6 +618,9 @@ function setup_workspace() {
 
   # Trim trailing and leading spaces from $SUBM_TEST_NS
   SUBM_TEST_NS="$(echo "$SUBM_TEST_NS" | xargs)"
+
+  # CD to previous directory
+  cd -
 }
 
 # ------------------------------------------
@@ -2355,8 +2353,8 @@ function upload_junit_xml_to_polarion() {
 
 # ------------------------------------------
 
-function upload_junit_xmls_to_polarion() {
-  PROMPT "Upload Junit test reults to Polarion"
+function create_all_test_results_in_polarion() {
+  PROMPT "Upload all test results to Polarion"
   trap_commands;
 
   local polarion_rc=0
@@ -2484,10 +2482,17 @@ function print_submariner_pod_logs() {
 #                    Main - Submariner Deploy and Tests                            #
 ####################################################################################
 
+cd ${SCRIPT_DIR}
+
 # Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 > $LOG_FILE
+
+# trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
+if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+  trap_function_on_error "${junit_cmd} collect_submariner_info" |& tee -a $LOG_FILE
+fi
 
 (
   # Print planned steps according to CLI/User inputs
@@ -2500,6 +2505,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 # Setup and verify environment
 setup_workspace # This is NOT logged to $LOG_FILE
 
+cd ${SCRIPT_DIR}
 (
   ### Running Submariner Deploy ###
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
@@ -2574,13 +2580,17 @@ setup_workspace # This is NOT logged to $LOG_FILE
 
   fi
 
-  ${junit_cmd} test_kubeconfig_aws_cluster_a
+  ### Running (or skipping) tests ###
 
-  ${junit_cmd} test_kubeconfig_osp_cluster_b
+  if [[ ! "$skip_tests" =~ ^(all)$ ]]; then
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-  ### Running High-level (System) tests of Submariner ###
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
+  fi
 
   if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
+
+    ### Running High-level (System) tests of Submariner ###
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
@@ -2620,24 +2630,26 @@ setup_workspace # This is NOT logged to $LOG_FILE
 
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
+    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+    \n# ($TEST_STATUS_RC with exit code 2)"
+
+    echo 2 > $TEST_STATUS_RC
   fi
 
-  echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-  \n# ($TEST_STATUS_RC with exit code 2)"
-
-  echo 2 > $TEST_STATUS_RC
-
-  ### Running Unit-tests from Submariner repositories (Ginkgo)
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
+
+    ### Running Unit-tests from Submariner repositories (Ginkgo)
+
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
   fi
 
-  ### Running E2E tests from Submariner repositories (Ginkgo)
-
   if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
+
+    ### Running E2E tests from Submariner repositories (Ginkgo)
+
     verify_golang
 
     ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
@@ -2654,7 +2666,7 @@ setup_workspace # This is NOT logged to $LOG_FILE
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  upload_junit_xmls_to_polarion |& tee -a $LOG_FILE
+  create_all_test_results_in_polarion |& tee -a $LOG_FILE
 fi
 
 
@@ -2663,6 +2675,8 @@ fi
 ####################################################################################
 #              End Main - Creating HTML report from console output                 #
 ####################################################################################
+
+cd ${SCRIPT_DIR}
 
 ### Creating HTML report from console output ###
 
