@@ -2183,33 +2183,33 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
+  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.clusterset.local"
 
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  BUG "curl to Nginx with Global-IP on supercluster, sometimes fails" \
+  BUG "curl to Nginx with Global-IP on clusterset, sometimes fails" \
   "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
 
-  BUG "Service discovery on supercluster.local: Name does not resolve" \
+  BUG "Service discovery on clusterset.local: Name does not resolve" \
   "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/768"
   # No workaround
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
-  #TODO: Validate both GlobalIP and svc.supercluster.local with   ${OC} get all
+  #TODO: Validate both GlobalIP and svc.clusterset.local with   ${OC} get all
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
-      # service/openshift    ExternalName   <none>       kubernetes.default.svc.supercluster.local   <none>    32m
+      # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
 
   cmd="${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
   local regex="PING ${nginx_cl_b_dns}"
   watch_and_retry "$cmd" 3m "$regex"
-    # PING netshoot-cl-a-new.test-submariner-new.svc.supercluster.local (169.254.59.89)
+    # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
   echo "# Try to CURL from ${new_netshoot_cluster_a} to ${nginx_cl_b_dns}:8080 :"
   ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
@@ -2220,11 +2220,11 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"supercluster\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   kubconf_a
 
-  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"supercluster\")."
+  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"clusterset\")."
 
   ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
