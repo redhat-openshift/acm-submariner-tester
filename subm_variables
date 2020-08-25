@@ -45,6 +45,8 @@ export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export BROKER_NATPORT=4500
 export BROKER_IKEPORT=500
 
+export MULTI_CLUSTER_DOMAIN="clusterset.local"
+
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
