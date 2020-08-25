@@ -59,6 +59,8 @@ Running with pre-defined parameters (optional):
 * Create OSP cluster B:                              --create-cluster-b
 * Destroy existing AWS cluster A:                    --destroy-cluster-a
 * Destroy existing OSP cluster B:                    --destroy-cluster-b
+* Reset (create & destroy) AWS cluster A:            --reset-cluster-a
+* Reset (create & destroy) OSP cluster B:            --reset-cluster-b
 * Clean existing AWS cluster A:                      --clean-cluster-a
 * Clean existing OSP cluster B:                      --clean-cluster-b
 * Install Service-Discovery (lighthouse):            --service-discovery
@@ -80,7 +82,7 @@ $ ./setup_subm.sh
 
   Will run interactively (enter choices during execution).
 
-$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet --junit
+$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit
 
   Will run:
   - New cluster on AWS (cluster A), with OCP 4.4.6
@@ -97,7 +99,7 @@ $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subc
 #          Global bash configurations, constants and external sources              #
 ####################################################################################
 
-# Set SCRIPT_DIR as current absolute path where this script runs in
+# Set SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
 ### Import Submariner setup variables ###
@@ -192,6 +194,9 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --create-cluster-a)
     create_cluster_a=YES
+    shift ;;
+  --reset-cluster-a)
+    reset_cluster_a=YES
     shift ;;
   --clean-cluster-a)
     clean_cluster_a=YES
@@ -294,24 +299,16 @@ if [[ -z "$got_user_input" ]]; then
     get_ocpup_tool=${input:-no}
   done
 
-  # User input: $create_cluster_a - to create_aws_cluster_a
-  while [[ ! "$create_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to create AWS cluster A ? ${NO_COLOR}
+  # User input: $reset_cluster_a - to destroy_aws_cluster_a AND create_aws_cluster_a
+  while [[ ! "$reset_cluster_a" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to destroy & create AWS cluster A ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    create_cluster_a=${input:-no}
-  done
-
-  # User input: $destroy_cluster_a - to destroy_aws_cluster_a
-  while [[ ! "$destroy_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to DESTROY AWS cluster A ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    destroy_cluster_a=${input:-no}
+    reset_cluster_a=${input:-no}
   done
 
   # User input: $clean_cluster_a - to clean_aws_cluster_a
-  if [[ "$destroy_cluster_a" =~ ^(no|n)$ ]]; then
+  if [[ "$reset_cluster_a" =~ ^(no|n)$ ]]; then
     while [[ ! "$clean_cluster_a" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to clean AWS cluster A ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -320,24 +317,16 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $destroy_cluster_b - to destroy_osp_cluster_b
-  while [[ ! "$destroy_cluster_b" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to DESTROY OSP cluster B ? ${NO_COLOR}
+  # User input: $reset_cluster_b - to destroy_osp_cluster_b AND create_osp_cluster_b
+  while [[ ! "$reset_cluster_b" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    destroy_cluster_b=${input:-no}
-  done
-
-  # User input: $create_cluster_b - to create_osp_cluster_b
-  while [[ ! "$create_cluster_a" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to create OSP cluster B ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    create_cluster_b=${input:-no}
+    reset_cluster_b=${input:-no}
   done
 
   # User input: $clean_cluster_b - to clean_osp_cluster_b
-  if [[ "$destroy_cluster_b" =~ ^(no|n)$ ]]; then
+  if [[ "$reset_cluster_b" =~ ^(no|n)$ ]]; then
     while [[ ! "$clean_cluster_b" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -462,9 +451,11 @@ get_subctl=${get_subctl:-NO}
 get_subctl_devel=${get_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
+reset_cluster_a=${reset_cluster_a:-NO}
 clean_cluster_a=${clean_cluster_a:-NO}
 destroy_cluster_b=${destroy_cluster_b:-NO}
 create_cluster_b=${create_cluster_b:-NO}
+reset_cluster_b=${reset_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
 service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
@@ -475,6 +466,7 @@ skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
 create_junit_xml=${create_junit_xml:-NO}
 upload_to_polarion=${upload_to_polarion:-NO}
+
 
 
 ####################################################################################
@@ -494,11 +486,13 @@ function print_test_plan() {
     AWS cluster A (public):
     - destroy_aws_cluster_a: $destroy_cluster_a
     - create_aws_cluster_a: $create_cluster_a
+    - reset_aws_cluster_a: $reset_cluster_a
     - clean_aws_cluster_a: $clean_cluster_a
 
     OSP cluster B (on-prem):
     - destroy_osp_cluster_b: $destroy_cluster_b
     - create_osp_cluster_b: $create_cluster_b
+    - reset_osp_cluster_b: $reset_cluster_b
     - clean_osp_cluster_b: $clean_cluster_b
 
     OCP and Submariner setup and test tools:
@@ -582,16 +576,18 @@ function print_test_plan() {
 # ------------------------------------------
 
 function setup_workspace() {
-  PROMPT "Creating workspace and verifying GO installation"
+  PROMPT "Creating workspace, verifying GO-lang, and configuring AWS and Polarion access"
   # DONT trap_commands - Includes credentials, hide from output
 
-  # Add HOME dir to PATH
-  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
+  # Create WORKDIR and local BIN dir (if not yet exists)
+  mkdir -p ${WORKDIR}
   mkdir -p $HOME/.local/bin
 
-  # CD to main working directory
-  mkdir -p ${WORKDIR}
-  cd ${WORKDIR}
+  # Add local BIN dir to PATH
+  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
+
+  # # CD to main working directory
+  # cd ${WORKDIR}
 
   # Installing if $config_golang = yes/y
   [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang "${WORKDIR}"
@@ -610,8 +606,16 @@ function setup_workspace() {
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
   "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
 
+  # Set Polarion credentials if $upload_to_polarion = yes/y
+  [[ ! "$upload_to_polarion" =~ ^(y|yes)$ ]] || \
+  export POLARION_AUTH=$(echo -ne "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+  # $( echo "machine $POLARION_SERVER login $POLARION_USR password $POLARION_PWD" > ${WORKDIR}/POLARION_RC )
+
   # Trim trailing and leading spaces from $SUBM_TEST_NS
   SUBM_TEST_NS="$(echo "$SUBM_TEST_NS" | xargs)"
+
+  # # CD to previous directory
+  # cd -
 }
 
 # ------------------------------------------
@@ -1673,6 +1677,13 @@ function join_submariner_current_cluster() {
 
     if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
       JOIN_CMD="${JOIN_CMD} --version libreswan-git"
+
+      BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
+      "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
+      "https://github.com/submariner-io/submariner-operator/issues/651"
+      # Workaround:
+      export MULTI_CLUSTER_DOMAIN='supercluster.local'
+
     else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
@@ -1962,13 +1973,8 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
 
-  BUG "Lighthouse pod log is blown with 'transform function returned nil'" \
-  "Ignore result of test_lighthouse_status" \
-  "https://github.com/submariner-io/lighthouse/issues/212"
-  # Workaround:
-  # Ignore result of watch_pod_logs
   local regex="Lighthouse agent syncer started"
-  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || :
+  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
@@ -2126,8 +2132,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # Todo: move to test flow
   ${junit_cmd} export_nginx_in_test_namespace_cluster_b
 
-  PROMPT "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)},
-  and verify connectivity to the NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  PROMPT "Install NEW Netshoot pod on AWS cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
   ${OC} delete pod ${new_netshoot_cluster_a} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
@@ -2172,33 +2177,33 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.supercluster.local"
+  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
-  BUG "curl to Nginx with Global-IP on supercluster, sometimes fails" \
+  BUG "curl to Nginx with Global-IP on clusterset, sometimes fails" \
   "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
 
-  BUG "Service discovery on supercluster.local: Name does not resolve" \
+  BUG "Service discovery on ${MULTI_CLUSTER_DOMAIN}: Name does not resolve" \
   "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/768"
   # No workaround
 
   echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
-  #TODO: Validate both GlobalIP and svc.supercluster.local with   ${OC} get all
+  #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
-      # service/openshift    ExternalName   <none>       kubernetes.default.svc.supercluster.local   <none>    32m
+      # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
 
   cmd="${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- ping -c 1 $nginx_cl_b_dns"
   local regex="PING ${nginx_cl_b_dns}"
   watch_and_retry "$cmd" 3m "$regex"
-    # PING netshoot-cl-a-new.test-submariner-new.svc.supercluster.local (169.254.59.89)
+    # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
   echo "# Try to CURL from ${new_netshoot_cluster_a} to ${nginx_cl_b_dns}:8080 :"
   ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
@@ -2209,11 +2214,11 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"supercluster\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   kubconf_a
 
-  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"supercluster\")."
+  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"clusterset\")."
 
   ${OC} exec ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} \
   -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
@@ -2323,15 +2328,36 @@ function test_submariner_e2e_with_subctl() {
 
 # ------------------------------------------
 
-function create_polarion_xml_files() {
-  PROMPT "Upload Junit test reults to Polarion"
+function upload_junit_xml_to_polarion() {
+  trap_commands;
+  local junit_file="$1"
+  echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
+
+  # create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
+  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+  #
+  # create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
+  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+  create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
+  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+  create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
+  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+
+}
+
+# ------------------------------------------
+
+function create_all_test_results_in_polarion() {
+  PROMPT "Upload all test results to Polarion"
   trap_commands;
 
   local polarion_rc=0
 
-  echo -e "\n### Upload junit results of SHELL tests ###\n"
-  #create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
-  create_polarion_test_runs_from_junit "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  # Upload junit results of SHELL tests
+  #create_and_upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  upload_junit_xml_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" || polarion_rc=1
 
   if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2340,9 +2366,9 @@ function create_polarion_xml_files() {
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
 
-    echo -e "\n### Upload junit results of PKG tests ###\n"
-    # create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
-    create_polarion_test_runs_from_junit "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+    # Upload junit results of PKG tests
+    # create_and_upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
+    upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
   fi
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
@@ -2352,9 +2378,9 @@ function create_polarion_xml_files() {
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    echo -e "\n### Upload junit results of E2E tests ###\n"
-    # create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
-    create_polarion_test_runs_from_junit "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+    # Upload junit results of E2E tests
+    # create_and_upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
   fi
 
   return $polarion_rc
@@ -2452,50 +2478,69 @@ function print_submariner_pod_logs() {
 #                    Main - Submariner Deploy and Tests                            #
 ####################################################################################
 
-# Logging main output (enclosed with parenthesis) with tee
+cd ${SCRIPT_DIR}
 
+# Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
 > $LOG_FILE
 
+# Printing output both to stdout and to $LOG_FILE with tee
+# TODO: consider adding timestemps with: ts '%H:%M:%.S' -s
 (
+
   # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info"
+    trap_function_on_error "${junit_cmd} collect_submariner_info" # |& tee -a $LOG_FILE
   fi
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
+  # Debug function
   # ${junit_cmd} FAIL_DEBUG
 
   # Setup and verify environment
   setup_workspace
 
-  ### Running Submariner Deploy ###
+  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_deploy) ###
+
   if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${GET_OCP_VERSION}
 
-    # Running destroy_aws_cluster_a if requested
-    [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_aws_cluster_a
+    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} destroy_aws_cluster_a
+      ${junit_cmd} create_aws_cluster_a
+    else
+      # Running destroy_aws_cluster_a if requested
+      [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_aws_cluster_a
 
-    # Running create_aws_cluster_a if requested
-    [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} create_aws_cluster_a
+      # Running create_aws_cluster_a if requested
+      [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} create_aws_cluster_a
+    fi
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
 
     # Running build_ocpup_tool_latest if requested
     [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
-    # Running destroy_osp_cluster_b if requested
-    [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
+    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} destroy_osp_cluster_b
+      ${junit_cmd} create_osp_cluster_b
+    else
+      # Running destroy_osp_cluster_b if requested
+      [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
-    # Running create_osp_cluster_b if requested
-    [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
+      # Running create_osp_cluster_b if requested
+      [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
+    fi
 
     ${junit_cmd} test_kubeconfig_osp_cluster_b
+
 
     ### Cleanup Submariner from all clusters ###
 
@@ -2517,6 +2562,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running build_operator_latest if requested
     [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
+
+
+    ### Deploy Submariner on the clusters ###
 
     # Running build_submariner_e2e_latest if requested
     [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_e2e_latest
@@ -2545,13 +2593,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
-  ${junit_cmd} test_kubeconfig_aws_cluster_a
+  ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
 
-  ${junit_cmd} test_kubeconfig_osp_cluster_b
+  if [[ ! "$skip_tests" =~ ^(all)$ ]]; then
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-  ### Running High-level (System) tests of Submariner ###
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
+  fi
 
   if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
+
+    ### Running High-level (System) tests of Submariner ###
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
@@ -2591,24 +2643,26 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
+    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
+    \n# ($TEST_STATUS_RC with exit code 2)"
+
+    echo 2 > $TEST_STATUS_RC
   fi
 
-  echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-  \n# ($TEST_STATUS_RC with exit code 2)"
-
-  echo 2 > $TEST_STATUS_RC
-
-  ### Running Unit-tests from Submariner repositories (Ginkgo)
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
+
+    ### Running Unit-tests from Submariner repositories (Ginkgo)
+
     verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
   fi
 
-  ### Running E2E tests from Submariner repositories (Ginkgo)
-
   if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
+
+    ### Running E2E tests from Submariner repositories (Ginkgo)
+
     verify_golang
 
     ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
@@ -2620,27 +2674,26 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC
 
-) |& tee -a $LOG_FILE # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+) |& tee -a $LOG_FILE
 
+
+#####################################################################################
+#   End Main - Now publish to Polarion, Create HTML report, and archive artifacts   #
+#####################################################################################
+
+cd ${SCRIPT_DIR}
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  create_polarion_xml_files |& tee -a $LOG_FILE
+  create_all_test_results_in_polarion |& tee -a $LOG_FILE
 fi
-
-
-
-
-####################################################################################
-#              End Main - Creating HTML report from console output                 #
-####################################################################################
 
 ### Creating HTML report from console output ###
 
 # Get test exit status (from file $TEST_STATUS_RC)
 test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
 
-# Create HTML Report from log file (with title extracted from log file name)
+# Set HTML prompt message
 message="Creating HTML Report"
 if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
   message="$message - Test exit status: $test_status"
@@ -2648,9 +2701,7 @@ if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
 fi
 PROMPT "$message" # "$color"
 
-#REPORT_NAME=$(basename $LOG_FILE .log)
-#REPORT_NAME=( ${REPORT_NAME//_/ } ) # without quotes
-#REPORT_NAME="${REPORT_NAME[*]^}"
+# Create HTML Report from log file (with title extracted from log file name)
 echo "# REPORT_NAME = $REPORT_NAME" # May have been set externally
 echo "# REPORT_FILE = $REPORT_FILE" # May have been set externally
 
@@ -2669,7 +2720,7 @@ tar -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
  kubconf_* \
- *junit*.xml \
+ *.xml \
  "$WORKDIR/$BROKER_INFO" \
  2>/dev/null)
 
@@ -2678,6 +2729,7 @@ tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
+# Exit the script with $test_status return code
 exit $test_status
 
 # You can find latest script here:
@@ -2688,11 +2740,11 @@ exit $test_status
 #
 # Execution example:
 # Re-creating a new AWS cluster:
-# ./setup_subm.sh --build-e2e --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
+# ./setup_subm.sh --build-e2e --reset-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using Submariner upstream release (master), and installing on existing AWS cluster:
 # ./setup_subm.sh --get-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
 #
 # Using the latest formal release of Submariner, and Re-creating a new AWS cluster:
-# ./setup_subm.sh --build-e2e --get-subctl --destroy-cluster-a --create-cluster-a --clean-cluster-b --service-discovery --globalnet
+# ./setup_subm.sh --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet
 #

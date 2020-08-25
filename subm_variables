@@ -4,11 +4,12 @@
 # To override variable with an existing environment variable from active session:
 # Change variable assignment format from VAR="value" to VAR="${VAR:-value}"
 
+export WORKDIR=~/submariner-install
+
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
-export GOBIN="${GOROOT}/bin"
+export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golnag
 
-export WORKDIR=~/submariner-install
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
 
@@ -44,10 +45,15 @@ export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export BROKER_NATPORT=4500
 export BROKER_IKEPORT=500
 
+export MULTI_CLUSTER_DOMAIN="clusterset.local"
+
 export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
+export POLARION_SERVER="polarion.server.name" # without " https:// "
+export POLARION_USR="polarion-user"
+export POLARION_PWD='polarion-pass' # in single quotes
 export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
 export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
-export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}"
-export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-}"
+export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}" # not in use
+export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-}" # not in use
