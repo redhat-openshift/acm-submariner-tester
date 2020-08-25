@@ -1971,13 +1971,8 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
 
-  BUG "Lighthouse pod log is blown with 'transform function returned nil'" \
-  "Ignore result of test_lighthouse_status" \
-  "https://github.com/submariner-io/lighthouse/issues/212"
-  # Workaround:
-  # Ignore result of watch_pod_logs
   local regex="Lighthouse agent syncer started"
-  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || :
+  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }

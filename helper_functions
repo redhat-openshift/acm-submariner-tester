@@ -705,7 +705,7 @@ function watch_pod_logs() {
 function print_pod_logs_in_namespace() {
   local namespace="$1"
   local pods_label="${2:+ -l $2}"
-  echo -e "\n##################### Pods descriptions and logs ${2:+ by label "$2"} in Namespace: ${namespace} #####################\n"
+  echo -e "\n##################### Pods descriptions and logs${2:+ by label "$2"} in Namespace: ${namespace} #####################\n"
 
   for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
       echo -e "\n### Pod $pod in Namespace $namespace ###\n"

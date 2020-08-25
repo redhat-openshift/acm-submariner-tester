@@ -4,11 +4,12 @@
 # To override variable with an existing environment variable from active session:
 # Change variable assignment format from VAR="value" to VAR="${VAR:-value}"
 
+export WORKDIR=~/submariner-install
+
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
-export GOBIN="${GOROOT}/bin"
+export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golnag
 
-export WORKDIR=~/submariner-install
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
 
@@ -52,5 +53,5 @@ export POLARION_USR="polarion-user"
 export POLARION_PWD='polarion-pass' # in single quotes
 export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
 export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
-export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}"
-export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-}"
+export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}" # not in use
+export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-}" # not in use
