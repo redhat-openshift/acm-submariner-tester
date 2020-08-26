@@ -2391,21 +2391,34 @@ function create_all_test_results_in_polarion() {
 function collect_submariner_info() {
   # print submariner pods descriptions and logs
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
-  PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
-  trap_commands;
 
-  df -h
-  free -h
+  local log_file="${1:-subm_pods.log}"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+  (
+    PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+    trap_commands;
 
-  subctl show all || :
+    df -h
+    free -h
 
-  kubconf_a;
-  print_submariner_pod_logs "${CLUSTER_A_NAME}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  kubconf_b;
-  print_submariner_pod_logs "${CLUSTER_B_NAME}"
+    # oc version
+    BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
+    "use an older OC client, or run oc commands for each cluster separately" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
+    # Workaround:
+    # OC="/usr/bin/oc"
+    oc version || :
+
+    subctl show all || :
+
+    kubconf_a;
+    print_submariner_pod_logs "${CLUSTER_A_NAME}"
+
+    kubconf_b;
+    print_submariner_pod_logs "${CLUSTER_B_NAME}"
+  ) |& tee -a $log_file
 
 }
 
@@ -2416,12 +2429,6 @@ function print_submariner_pod_logs() {
   current_cluster_context_name="$1"
 
   echo -e "\n############################## Printing Submariner logs on ${current_cluster_context_name} ##############################\n"
-
-  BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
-  "use an older OC client" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
-  # Workaround:
-  OC="/usr/bin/oc"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
@@ -2464,11 +2471,11 @@ function print_submariner_pod_logs() {
 
 # ------------------------------------------
 
-# # Function to debug this script
-# function FAIL_DEBUG() {
-#   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
-#   FAIL_HERE
-# }
+# Function to debug this script
+function FAIL_DEBUG() {
+  find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
+  FAIL_HERE
+}
 
 # ------------------------------------------
 
@@ -2490,17 +2497,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info" # |& tee -a $LOG_FILE
+    trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
-  # Debug function
-  # ${junit_cmd} FAIL_DEBUG
-
   # Setup and verify environment
   setup_workspace
+
+  # Debug function
+  # ${junit_cmd} FAIL_DEBUG
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_deploy) ###
 
