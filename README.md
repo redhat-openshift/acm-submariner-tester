@@ -32,13 +32,14 @@ Running with pre-defined parameters (optional):
 * Upload Junit results to polarion:                  --polarion
 ```
 
-Command examples:
+### Command examples:
 
 `$ ./setup_subm.sh`
 
   Will run interactively (user enter choices).
 
-`$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
+`$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl \
+   --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
 
   Will run:
   - Recreate new cluster on AWS (cluster A), with OCP 4.4.6
