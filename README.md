@@ -23,7 +23,7 @@ Running with pre-defined parameters (optional):
 * Install Global Net:                                --globalnet
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip Submariner deployment:                        --skip-deploy
-* Skip all tests execution:                          --skip-tests [sys / e2e / pkg / all]
+* Skip test suites execution:                        --skip-tests [sys / e2e / pkg / all]
 * Print all pods logs on failure:                    --print-logs
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
