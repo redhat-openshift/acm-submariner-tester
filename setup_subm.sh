@@ -1290,7 +1290,7 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}"
+  install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}" "--port=8080"
 }
 
 # ------------------------------------------
@@ -1561,7 +1561,7 @@ function export_nginx_in_test_namespace_cluster_b() {
   # Todo: should be on exported variables
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
 
-  PROMPT "Create ServiceExport for NEW $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$new_subm_test_ns'"
+  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$new_subm_test_ns'"
 
   kubconf_b;
 
@@ -2120,13 +2120,13 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   new_netshoot_cluster_a=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
-  new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Nginx service BUT with the SAME name as $NGINX_CLUSTER_B
+  headless_nginx_cluster_b=${NGINX_CLUSTER_B} # HEADLESS Nginx service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  PROMPT "Install NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  PROMPT "Install HEADLESS Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
 
   kubconf_b;
 
-  install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
+  install_nginx_service "${headless_nginx_cluster_b}" "${new_subm_test_ns}" "--port=8080 --cluster-ip=''"
 
   # Todo: move to test flow
   ${junit_cmd} export_nginx_in_test_namespace_cluster_b
@@ -2144,7 +2144,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} describe pod ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on OSP cluster B should get a GlobalNet IP"
     kubconf_b
 
     BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
@@ -2153,10 +2153,10 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     "https://github.com/submariner-io/submariner/issues/588"
     # Workaround:
 
-    # Should fail if new_nginx_cluster_b was not annotated with GlobalNet IP
+    # Should fail if headless_nginx_cluster_b was not annotated with GlobalNet IP
     GLOBAL_IP=""
-    test_svc_pod_global_ip_created svc "$new_nginx_cluster_b" $new_subm_test_ns
-    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Nginx service (${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
+    test_svc_pod_global_ip_created svc "$headless_nginx_cluster_b" $new_subm_test_ns
+    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on the HEADLESS Nginx service (${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
 
     # TODO: Ping to the new_nginx_global_ip
     # new_nginx_global_ip="$GLOBAL_IP"
@@ -2176,11 +2176,11 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
+  nginx_cl_b_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
-  To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
+  To the HEADLESS Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
   BUG "curl to Nginx with Global-IP on clusterset, sometimes fails" \
@@ -2193,7 +2193,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   "https://github.com/submariner-io/submariner/issues/768"
   # No workaround
 
-  echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
+  echo "# Try to ping ${headless_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
@@ -2210,7 +2210,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
   # Negative test for nginx_cl_b_short_dns FQDN
-  nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+  nginx_cl_b_short_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
