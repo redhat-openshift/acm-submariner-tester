@@ -41,8 +41,7 @@
 # Script description
 disclosure='----------------------------------------------------------------------
 
-This is an interactive script to create Openshift clusters on OSP and AWS,
-and test multi-cluster network connectivity with Submariner:
+Interactive script to create Openshift multi-clusters on private and public clouds, and test inter-connectivity with Submariner.
 
 Running with pre-defined parameters (optional):
 
@@ -80,12 +79,12 @@ Command examples:
 
 $ ./setup_subm.sh
 
-  Will run interactively (enter choices during execution).
+  Will run interactively (user enter choices).
 
 $ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit
 
   Will run:
-  - New cluster on AWS (cluster A), with OCP 4.4.6
+  - Recreate new cluster on AWS (cluster A), with OCP 4.4.6
   - Clean existing cluster on OSP (cluster B)
   - Install latest Submariner release
   - Configure Service-Discovery and GlobalNet

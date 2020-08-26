@@ -466,7 +466,7 @@ function configure_aws_access() {
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
   download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
-  unzip -n ${aws_cli_installer} -d ${install_dir}
+  unzip -n "${install_dir}/${aws_cli_installer}" -d "${install_dir}"
 
   # export PATH=$HOME/.local/bin:$PATH
   # ${install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
