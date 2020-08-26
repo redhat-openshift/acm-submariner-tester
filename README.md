@@ -37,7 +37,7 @@ Command examples:
 `$ ./setup_subm.sh`
 
   Will run interactively (user enter choices).
-  
+
 `$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
 
   Will run:
