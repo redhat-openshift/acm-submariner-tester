@@ -621,7 +621,7 @@ function install_nginx_service() {
 
   ngnix_name="${1:-NginX}"
   target_namespace="$2" # The Namespace for Ngnix
-  service_params="$3" # e.g. to expose Nginx as headless service on port 8080 pass: " --port=8080 --cluster-ip='' "
+  service_params="$3" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
   nginx_image="nginxinc/nginx-unprivileged:stable-alpine"
 

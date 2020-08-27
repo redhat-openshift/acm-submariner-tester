@@ -536,6 +536,7 @@ function print_test_plan() {
     - test_submariner_resources_cluster_b
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
+    - test_subctl_show_on_merged_kubeconfigs
     - test_ha_status_cluster_a
     - test_ha_status_cluster_b
     - test_submariner_connection_cluster_a
@@ -1779,20 +1780,6 @@ function test_submariner_cable_driver() {
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || submariner_status=DOWN
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
-    # cmd="${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
-    # local regex='Security Associations \(1 up'
-    # # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
-    # watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
-      # Security Associations (1 up, 0 connecting):
-      # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
-      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
-      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
-
-    # BUG "StrongSwan connecting to 'default' URI fails" \
-    # "Verify StrongSwan with different URI path and ignore failure" \
-    # "https://github.com/submariner-io/submariner/issues/426"
-    # ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
-    # workaround:
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
     "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
@@ -1829,8 +1816,9 @@ function test_ha_status() {
 
   PROMPT "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
 
-  # ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
-  # || submariner_status=DOWN
+  # BUG "HA Status is 'active' before cable driver is ready" \
+  # "Verify cable driver status before checking HA status" \
+  # "https://github.com/submariner-io/submariner/issues/624"
 
   gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
 
@@ -2126,7 +2114,8 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
 
   kubconf_b;
 
-  install_nginx_service "${headless_nginx_cluster_b}" "${new_subm_test_ns}" "--port=8080 --cluster-ip=''"
+  # Headless service is created when disabling it's cluster-ip with --cluster-ip=None
+  install_nginx_service "${headless_nginx_cluster_b}" "${new_subm_test_ns}" "--port=8080 --cluster-ip=None"
 
   # Todo: move to test flow
   ${junit_cmd} export_nginx_in_test_namespace_cluster_b
@@ -2619,6 +2608,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_cable_driver_cluster_b
 
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
     ${junit_cmd} test_ha_status_cluster_a
 
     ${junit_cmd} test_ha_status_cluster_b
@@ -2646,8 +2637,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
     [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
-
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
     \n# ($TEST_STATUS_RC with exit code 2)"
