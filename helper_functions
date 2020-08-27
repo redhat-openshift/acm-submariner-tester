@@ -90,8 +90,8 @@ function highlight()
 function trap_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ (echo|read|while|for|PROMPT|BUG|FATAL) ]] ; then
-     cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" 2>/dev/null)"
-     cmd_eval=$(eval "echo -e \"$cmd_escaped\"" 2>/dev/null)
+     cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" )" || :
+     cmd_eval="$(eval "echo -e \"$cmd_escaped\"" )" || :
      if [[ -n $cmd_eval ]] ; then
        if [[ "$cmd_escaped" =~ \$\(.+\) ]] ; then
          cmd_to_print="${cmd_escaped}\n${cmd_eval}"

@@ -2095,6 +2095,9 @@ function test_clusters_connected_overlapping_cidrs() {
 
 # ------------------------------------------
 
+# TODO: Split this test to multiple tests,
+# and add new test for service discovery of NON-headless $NGINX_CLUSTER_B
+
 function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
@@ -2158,8 +2161,18 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   fi
 
   # Get FQDN on clusterset.local when using Service-Discovery (lighthouse)
-  nginx_cl_b_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
+    if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+      JOIN_CMD="${JOIN_CMD} --version libreswan-git"
+
+      BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
+      "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
+      "https://github.com/submariner-io/submariner-operator/issues/651"
+      # Workaround:
+      export MULTI_CLUSTER_DOMAIN='supercluster.local'
+    fi
+
+  nginx_cl_b_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
   To the HEADLESS Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
@@ -2169,16 +2182,6 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   "Fails sometimes... No workaround yet" \
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
-
-  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
-    BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
-    "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
-    "https://github.com/submariner-io/submariner-operator/issues/651"
-    # Workaround:
-    export MULTI_CLUSTER_DOMAIN='supercluster.local'
-  fi
 
   echo "# Try to ping ${headless_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
