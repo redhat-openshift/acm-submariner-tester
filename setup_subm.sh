@@ -1677,13 +1677,6 @@ function join_submariner_current_cluster() {
 
     if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
       JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
-      BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
-      "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
-      "https://github.com/submariner-io/submariner-operator/issues/651"
-      # Workaround:
-      export MULTI_CLUSTER_DOMAIN='supercluster.local'
-
     else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
@@ -2164,7 +2157,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${new_netshoot_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
   fi
 
-  # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
+  # Get FQDN on clusterset.local when using Service-Discovery (lighthouse)
   nginx_cl_b_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
 
@@ -2177,10 +2170,15 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
 
-  BUG "Service discovery on ${MULTI_CLUSTER_DOMAIN}: Name does not resolve" \
-  "Fails sometimes... No workaround yet" \
-  "https://github.com/submariner-io/submariner/issues/768"
-  # No workaround
+  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+    JOIN_CMD="${JOIN_CMD} --version libreswan-git"
+
+    BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
+    "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
+    "https://github.com/submariner-io/submariner-operator/issues/651"
+    # Workaround:
+    export MULTI_CLUSTER_DOMAIN='supercluster.local'
+  fi
 
   echo "# Try to ping ${headless_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
