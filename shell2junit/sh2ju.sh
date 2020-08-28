@@ -59,7 +59,20 @@ function eVal() {
   echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
 }
 
-# TODO: Method to clean old tests
+# TODO: Use this function to clean old test results (xmls)
+function juLogClean() {
+  echo "+++ Removing old junit reports from: ${juDIR} "
+  find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
+}
+
+# Function to print text file without special characters and ansi colors
+function printPlainTextFile() {
+  local data_file="$1"
+  cat "$data_file" | tr -dC '[:print:]\t\n' | ${SED} -r -f - << EOF
+  s:\[[0-9;]+[mK]::g
+EOF
+}
+
 function juLogClean() {
   echo "+++ Removing old junit reports from: ${juDIR} "
   find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
@@ -158,9 +171,9 @@ EOF
   # ulimit -s 65536
 
   # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
-  outMsg="$(cat "$outf" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g' )"
+  outMsg="$(printPlainTextFile "$outf")"
   rm -f "${outf}"
-  errMsg="$(cat "$errf" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g' )"
+  errMsg="$(printPlainTextFile "$errf")"
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex

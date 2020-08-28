@@ -536,6 +536,7 @@ function print_test_plan() {
     - test_submariner_resources_cluster_b
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
+    - test_subctl_show_on_merged_kubeconfigs
     - test_ha_status_cluster_a
     - test_ha_status_cluster_b
     - test_submariner_connection_cluster_a
@@ -1290,7 +1291,7 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}"
+  install_nginx_service "${NGINX_CLUSTER_B}" "${SUBM_TEST_NS}" "--port=8080"
 }
 
 # ------------------------------------------
@@ -1561,7 +1562,7 @@ function export_nginx_in_test_namespace_cluster_b() {
   # Todo: should be on exported variables
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
 
-  PROMPT "Create ServiceExport for NEW $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$new_subm_test_ns'"
+  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$new_subm_test_ns'"
 
   kubconf_b;
 
@@ -1676,13 +1677,6 @@ function join_submariner_current_cluster() {
 
     if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
       JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
-      BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
-      "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
-      "https://github.com/submariner-io/submariner-operator/issues/651"
-      # Workaround:
-      export MULTI_CLUSTER_DOMAIN='supercluster.local'
-
     else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
@@ -1779,20 +1773,6 @@ function test_submariner_cable_driver() {
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || submariner_status=DOWN
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
-    # cmd="${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} strongswan stroke statusall"
-    # local regex='Security Associations \(1 up'
-    # # Run up to 30 retries (+ 10 seconds interval between retries), and watch for output to include regex
-    # watch_and_retry "$cmd" 30 "$regex" || submariner_status=DOWN
-      # Security Associations (1 up, 0 connecting):
-      # submariner-cable-subm-cluster-a-10-0-89-164[1]: ESTABLISHED 11 minutes ago, 10.166.0.13[66.187.233.202]...35.171.45.208[35.171.45.208]
-      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: c9cfd847_i cddea21b_o
-      # submariner-child-submariner-cable-subm-cluster-a-10-0-89-164{1}:   10.166.0.13/32 10.252.0.0/14 100.96.0.0/16 === 10.0.89.164/32 10.128.0.0/14 172.30.0.0/16
-
-    # BUG "StrongSwan connecting to 'default' URI fails" \
-    # "Verify StrongSwan with different URI path and ignore failure" \
-    # "https://github.com/submariner-io/submariner/issues/426"
-    # ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c "swanctl --list-sas"
-    # workaround:
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
     "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
@@ -1829,8 +1809,9 @@ function test_ha_status() {
 
   PROMPT "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
 
-  # ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff") \
-  # || submariner_status=DOWN
+  # BUG "HA Status is 'active' before cable driver is ready" \
+  # "Verify cable driver status before checking HA status" \
+  # "https://github.com/submariner-io/submariner/issues/624"
 
   gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
 
@@ -2114,19 +2095,23 @@ function test_clusters_connected_overlapping_cidrs() {
 
 # ------------------------------------------
 
+# TODO: Split this test to multiple tests,
+# and add new test for service discovery of NON-headless $NGINX_CLUSTER_B
+
 function test_clusters_connected_by_same_service_on_new_namespace() {
 ### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
   trap_commands;
 
   new_netshoot_cluster_a=netshoot-cl-a-new # A NEW Netshoot pod on cluster A
   new_subm_test_ns=${SUBM_TEST_NS:+${SUBM_TEST_NS}-new} # A NEW Namespace on cluster B
-  new_nginx_cluster_b=${NGINX_CLUSTER_B} # NEW Nginx service BUT with the SAME name as $NGINX_CLUSTER_B
+  headless_nginx_cluster_b=${NGINX_CLUSTER_B} # HEADLESS Nginx service BUT with the SAME name as $NGINX_CLUSTER_B
 
-  PROMPT "Install NEW Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
+  PROMPT "Install HEADLESS Nginx service on OSP cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}"
 
   kubconf_b;
 
-  install_nginx_service "${new_nginx_cluster_b}" "${new_subm_test_ns}"
+  # Headless service is created when disabling it's cluster-ip with --cluster-ip=None
+  install_nginx_service "${headless_nginx_cluster_b}" "${new_subm_test_ns}" "--port=8080 --cluster-ip=None"
 
   # Todo: move to test flow
   ${junit_cmd} export_nginx_in_test_namespace_cluster_b
@@ -2144,7 +2129,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   ${OC} describe pod ${new_netshoot_cluster_a} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing GlobalNet annotation - NEW Nginx service on OSP cluster B should get a GlobalNet IP"
+    PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on OSP cluster B should get a GlobalNet IP"
     kubconf_b
 
     BUG "When you create a pod/service, GN Controller gets notified about the Pod/Service notification
@@ -2153,10 +2138,10 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     "https://github.com/submariner-io/submariner/issues/588"
     # Workaround:
 
-    # Should fail if new_nginx_cluster_b was not annotated with GlobalNet IP
+    # Should fail if headless_nginx_cluster_b was not annotated with GlobalNet IP
     GLOBAL_IP=""
-    test_svc_pod_global_ip_created svc "$new_nginx_cluster_b" $new_subm_test_ns
-    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Nginx service (${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
+    test_svc_pod_global_ip_created svc "$headless_nginx_cluster_b" $new_subm_test_ns
+    [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on the HEADLESS Nginx service (${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns})"
 
     # TODO: Ping to the new_nginx_global_ip
     # new_nginx_global_ip="$GLOBAL_IP"
@@ -2175,12 +2160,22 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
     [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${new_netshoot_cluster_a}${SUBM_TEST_NS:+ in $SUBM_TEST_NS})"
   fi
 
-  # Get FQDN on Supercluster when using Service-Discovery (lighthouse)
-  nginx_cl_b_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
+  # Get FQDN on clusterset.local when using Service-Discovery (lighthouse)
 
+    if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+      JOIN_CMD="${JOIN_CMD} --version libreswan-git"
+
+      BUG "libreswan.git tagged image in quay.io cannot be used with lighthouse 'clusterset'" \
+      "export MULTI_CLUSTER_DOMAIN='supercluster.local'" \
+      "https://github.com/submariner-io/submariner-operator/issues/651"
+      # Workaround:
+      export MULTI_CLUSTER_DOMAIN='supercluster.local'
+    fi
+
+  nginx_cl_b_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${SUBM_TEST_NS:+ (Namespace $SUBM_TEST_NS)}
-  To NEW Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
+  To the HEADLESS Nginx service on cluster B${new_subm_test_ns:+ (Namespace $new_subm_test_ns)}, by DNS hostname: $nginx_cl_b_dns"
   kubconf_a
 
   BUG "curl to Nginx with Global-IP on clusterset, sometimes fails" \
@@ -2188,12 +2183,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   "https://github.com/submariner-io/submariner/issues/644"
   # No workaround
 
-  BUG "Service discovery on ${MULTI_CLUSTER_DOMAIN}: Name does not resolve" \
-  "Fails sometimes... No workaround yet" \
-  "https://github.com/submariner-io/submariner/issues/768"
-  # No workaround
-
-  echo "# Try to ping ${new_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
+  echo "# Try to ping ${headless_nginx_cluster_b} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
@@ -2210,7 +2200,7 @@ function test_clusters_connected_by_same_service_on_new_namespace() {
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
   # Negative test for nginx_cl_b_short_dns FQDN
-  nginx_cl_b_short_dns="${new_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
+  nginx_cl_b_short_dns="${headless_nginx_cluster_b}${new_subm_test_ns:+.$new_subm_test_ns}"
 
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
@@ -2391,21 +2381,34 @@ function create_all_test_results_in_polarion() {
 function collect_submariner_info() {
   # print submariner pods descriptions and logs
   # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
-  PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
-  trap_commands;
 
-  df -h
-  free -h
+  local log_file="${1:-subm_pods.log}"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+  (
+    PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+    trap_commands;
 
-  subctl show all || :
+    df -h
+    free -h
 
-  kubconf_a;
-  print_submariner_pod_logs "${CLUSTER_A_NAME}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  kubconf_b;
-  print_submariner_pod_logs "${CLUSTER_B_NAME}"
+    # oc version
+    BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
+    "use an older OC client, or run oc commands for each cluster separately" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
+    # Workaround:
+    # OC="/usr/bin/oc"
+    oc version || :
+
+    subctl show all || :
+
+    kubconf_a;
+    print_submariner_pod_logs "${CLUSTER_A_NAME}"
+
+    kubconf_b;
+    print_submariner_pod_logs "${CLUSTER_B_NAME}"
+  ) |& tee -a $log_file
 
 }
 
@@ -2416,12 +2419,6 @@ function print_submariner_pod_logs() {
   current_cluster_context_name="$1"
 
   echo -e "\n############################## Printing Submariner logs on ${current_cluster_context_name} ##############################\n"
-
-  BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
-  "use an older OC client" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
-  # Workaround:
-  OC="/usr/bin/oc"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
@@ -2464,11 +2461,11 @@ function print_submariner_pod_logs() {
 
 # ------------------------------------------
 
-# # Function to debug this script
-# function FAIL_DEBUG() {
-#   find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
-#   FAIL_HERE
-# }
+# Function to debug this script
+function FAIL_DEBUG() {
+  find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
+  FAIL_HERE
+}
 
 # ------------------------------------------
 
@@ -2490,17 +2487,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info" # |& tee -a $LOG_FILE
+    trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} print_test_plan
 
-  # Debug function
-  # ${junit_cmd} FAIL_DEBUG
-
   # Setup and verify environment
   setup_workspace
+
+  # Debug function
+  # ${junit_cmd} FAIL_DEBUG
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_deploy) ###
 
@@ -2612,6 +2609,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_cable_driver_cluster_b
 
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
     ${junit_cmd} test_ha_status_cluster_a
 
     ${junit_cmd} test_ha_status_cluster_b
@@ -2639,8 +2638,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     [[ ! "$globalnet" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
     [[ ! "$service_discovery" =~ ^(y|yes)$ ]] || ${junit_cmd} test_clusters_connected_by_same_service_on_new_namespace
-
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
     \n# ($TEST_STATUS_RC with exit code 2)"
