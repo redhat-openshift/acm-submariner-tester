@@ -885,7 +885,7 @@ function log_to_html() {
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
   repo_url=https://github.com/theZiz/aha.git
-  repo_branch=0.5
+  repo_branch=0.5.1
   repo_dir=$(basename $repo_url .git)
 
   # Get AHA binary
