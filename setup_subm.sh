@@ -1574,6 +1574,14 @@ function export_nginx_headless_namespace_cluster_b() {
   PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$HEADLESS_SUBM_TEST_NS'"
   trap_commands;
 
+  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    BUG "HEADLESS Service is not supported with GlobalNet" \
+     "No workaround yet - Skip the whole test" \
+    "https://github.com/submariner-io/lighthouse/issues/273"
+    # No workaround yet
+    return 1
+  fi
+  
   kubconf_b;
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
@@ -2218,6 +2226,15 @@ function test_nginx_headless_global_ip_cluster_b() {
   trap_commands;
 
   PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on OSP cluster B should get a GlobalNet IP"
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    BUG "HEADLESS Service is not supported with GlobalNet" \
+     "No workaround yet - Skip the whole test" \
+    "https://github.com/submariner-io/lighthouse/issues/273"
+    # No workaround yet
+    return 1
+  fi
+
   kubconf_b
 
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
@@ -2247,8 +2264,8 @@ function test_clusters_connected_headless_service_on_new_namespace() {
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
     # No workaround yet
-
-  else
+    return 1
+  fi
 
     kubconf_a
 
@@ -2268,7 +2285,6 @@ function test_clusters_connected_headless_service_on_new_namespace() {
 
     # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
-  fi # IF closure due to bug https://github.com/submariner-io/submariner/issues/588
 }
 
 # ------------------------------------------
@@ -2728,7 +2744,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
-      ${junit_cmd} test_nginx_headless_global_ip_cluster_b
+      ${junit_cmd} test_nginx_headless_global_ip_cluster_b || :
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
@@ -2743,9 +2759,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       # Test the new netshoot and headless nginx service discovery
 
-      ${junit_cmd} export_nginx_headless_namespace_cluster_b
+      ${junit_cmd} export_nginx_headless_namespace_cluster_b || :
 
-      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace || :
 
       ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
     fi
