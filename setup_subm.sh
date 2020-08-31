@@ -1030,6 +1030,8 @@ function test_kubeconfig_aws_cluster_a() {
   test_cluster_status
   cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_a_version" > "$CLUSTER_A_VERSION"
+
+  # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 }
 
 function kubconf_a() {
@@ -1053,6 +1055,8 @@ function test_kubeconfig_osp_cluster_b() {
   test_cluster_status
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_b_version" > "$CLUSTER_B_VERSION"
+
+  # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 }
 
 function kubconf_b() {
@@ -1323,7 +1327,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${SUBM_TEST_NS:+-n $SUBM_TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot on OSP cluster B, and verify connectivity to $nginx_IP_cluster_b:8080 on the SAME cluster"
+  echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${SUBM_TEST_NS:+-n $SUBM_TEST_NS}
 
@@ -1581,7 +1585,7 @@ function export_nginx_headless_namespace_cluster_b() {
     # No workaround yet
     return 1
   fi
-  
+
   kubconf_b;
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
@@ -1831,17 +1835,23 @@ function test_ha_status() {
   cluster_name="$1"
   local submariner_status=UP
 
-  PROMPT "Check HA status and IPSEC tunnel of Submariner Gateways on ${cluster_name}"
+  PROMPT "Check HA status and IPSEC tunnel of Submariner and Gateway resources on ${cluster_name}"
 
-  # BUG "HA Status is 'active' before cable driver is ready" \
-  # "Verify cable driver status before checking HA status" \
-  # "https://github.com/submariner-io/submariner/issues/624"
+  # Checking "Gateway" resource
 
-  gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
 
-  echo "$gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
+  echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
-  echo "$gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+  echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+
+  # Checking "Submariner" resource
+
+  submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
+
+  echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
+
+  echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
 
   ${OC} describe cm -n openshift-dns || submariner_status=DOWN
 
@@ -2039,7 +2049,11 @@ function test_clusters_connected_by_service_ip() {
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
     ${OC} exec ${CURL_CMD} || \
-    BUG "TODO: This will if fail the clusters have Overlapping CIDRs, while Submariner was not deployed with --globalnet"
+    BUG "Submariner without Globalnet - IP is not reachable between clusters
+    \n (or maybe you installed clusters with overlapping CIDRs ?)" \
+    "No Workaround yet..." \
+    "https://github.com/submariner-io/submariner/issues/779"
+
       # *   Trying 100.96.72.226:8080...
       # * TCP_NODELAY set
       # * Connected to 100.96.72.226 (100.96.72.226) port 8080 (#0)
@@ -2528,9 +2542,11 @@ function print_submariner_pod_logs() {
   ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
   ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
+  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
+
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-  ${OC} get events -A
+  ${OC} get events -A || :
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
