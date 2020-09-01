@@ -1023,7 +1023,7 @@ function test_kubeconfig_aws_cluster_a() {
   # Get OCP cluster A version (from file $CLUSTER_A_VERSION)
   cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION" ]] || cat "$CLUSTER_A_VERSION")"
 
-  PROMPT "Testing that AWS cluster A${cl_a_version:+ (OCP Version $cl_a_version)} is up and running"
+  PROMPT "Testing status of AWS cluster A${cl_a_version:+ (OCP Version $cl_a_version)}"
   trap_commands;
 
   kubconf_a;
@@ -1048,7 +1048,7 @@ function test_kubeconfig_osp_cluster_b() {
   # Get OCP cluster B version (from file $CLUSTER_B_VERSION)
   cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION" ]] || cat "$CLUSTER_B_VERSION")"
 
-  PROMPT "Testing that OSP cluster B${cl_b_version:+ (OCP Version $cl_b_version)} is up and running"
+  PROMPT "Testing status of OSP cluster B${cl_b_version:+ (OCP Version $cl_b_version)}"
   trap_commands;
 
   kubconf_b;
@@ -1543,16 +1543,13 @@ function test_broker_before_join() {
   clusters.submariner.io \
   endpoints.submariner.io \
   multiclusterservices.lighthouse.submariner.io \
-  serviceimports.lighthouse.submariner.io \
-  clusters.submariner.io \
-  endpoints.submariner.io \
-  multiclusterservices.lighthouse.submariner.io \
   serviceimports.lighthouse.submariner.io
 
+  # serviceexports.lighthouse.submariner.io \
+  # servicediscoveries.submariner.io \
   # submariners.submariner.io \
   # gateways.submariner.io \
-  # servicediscoveries.submariner.io \
-  # serviceexports.lighthouse.submariner.io \
+
 
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
    || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
@@ -1858,7 +1855,14 @@ function test_ha_status() {
   # ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-  [[ "$submariner_status" != DOWN ]] || FATAL "Submariner HA failure occurred."
+  if [[ "$submariner_status" = DOWN ]] ; then
+    BUG "Strongswan No IKE SA found: charon.vici file is missing" \
+    "No Workaround yet..." \
+    "https://github.com/submariner-io/submariner/issues/781"
+
+    FATAL "Submariner HA failure occurred."
+  fi
+
 }
 
 
@@ -1976,9 +1980,11 @@ function test_lighthouse_status() {
   trap_commands;
   cluster_name="$1"
 
-  PROMPT "Testing Lighthouse agent status on ${cluster_name}"
+  PROMPT "Testing Lighthouse services and agent status on ${cluster_name}"
 
   ${OC} describe multiclusterservices --all-namespaces
+  ${OC} describe serviceimports --all-namespaces
+  ${OC} describe serviceexports --all-namespaces
 
   # lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace."
@@ -2529,9 +2535,9 @@ function collect_submariner_info() {
 
 function print_submariner_pod_logs() {
   trap_commands;
-  current_cluster_context_name="$1"
+  local cluster_name="$1"
 
-  echo -e "\n############################## Printing Submariner logs on ${current_cluster_context_name} ##############################\n"
+  echo -e "\n############################## Printing Submariner logs on ${cluster_name} ##############################\n"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
@@ -2556,21 +2562,21 @@ function print_submariner_pod_logs() {
   #     ${OC}  -n $namespace logs $pod
   # done
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "name=submariner-operator"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-engine"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-engine"
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-globalnet"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-globalnet"
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-lighthouse-agent"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-agent"
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-lighthouse-coredns"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
 
-  print_pod_logs_in_namespace "${SUBM_NAMESPACE}" "app=submariner-routeagent"
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
-  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
+  print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
 
-  echo -e "\n############################## End of Submariner logs collection on ${current_cluster_context_name} ##############################\n"
+  echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 
 }
 
