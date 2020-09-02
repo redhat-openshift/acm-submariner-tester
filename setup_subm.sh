@@ -848,7 +848,7 @@ function build_operator_latest() {
 function download_subctl_latest_release() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
-    download_subctl_by_tag "rc"
+    download_subctl_by_tag "v[0-9]"
 }
 
 # ------------------------------------------
@@ -865,7 +865,10 @@ function download_subctl_by_tag() {
   ### Download SubCtl - Submariner installer ###
     trap_commands;
 
-    local subctl_tag="${1:-rc}" # If not specifying a tag, it will use "rc" tag
+    local subctl_tag="${1:-v[0-9]}" # If not specifying a tag, it will download latest version released
+    local repo_url="https://github.com/submariner-io/submariner-operator"
+    local repo_tag="$(curl "$repo_url/tags/" | grep -Po -m 1 'tag/\K.*'${subctl_tag}'[^"]*')"
+
     cd ${WORKDIR}
 
     BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
@@ -874,7 +877,8 @@ function download_subctl_by_tag() {
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
+    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
+    curl https://get.submariner.io/ | VERSION=${repo_tag} PATH="/usr/bin:$PATH" bash -x \
     || getsubctl_status=FAILED
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
@@ -883,10 +887,10 @@ function download_subctl_by_tag() {
       "https://github.com/submariner-io/submariner-operator/issues/526"
       # Workaround:
 
-      repo_url="https://github.com/submariner-io/submariner-operator"
-      repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
+      # repo_url="https://github.com/submariner-io/submariner-operator"
+      # repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
       releases_url="${repo_url}/releases"
-      file_path="$(curl "${releases_url}/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+      file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
       download_file "${releases_url}/${file_path}"
 
@@ -1542,14 +1546,12 @@ function test_broker_before_join() {
   ${OC} describe crds \
   clusters.submariner.io \
   endpoints.submariner.io \
-  multiclusterservices.lighthouse.submariner.io \
   serviceimports.lighthouse.submariner.io
 
   # serviceexports.lighthouse.submariner.io \
   # servicediscoveries.submariner.io \
   # submariners.submariner.io \
   # gateways.submariner.io \
-
 
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
    || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
@@ -1631,6 +1633,11 @@ function export_service_in_lighthouse() {
   "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+
+  echo -e "\n# Describe Lighthouse services:\n"
+
+  ${OC} describe serviceimports --all-namespaces
+  ${OC} describe serviceexports --all-namespaces
 
 }
 
@@ -1848,7 +1855,7 @@ function test_ha_status() {
 
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
-  echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
+  echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
 
   ${OC} describe cm -n openshift-dns || submariner_status=DOWN
 
@@ -1980,11 +1987,7 @@ function test_lighthouse_status() {
   trap_commands;
   cluster_name="$1"
 
-  PROMPT "Testing Lighthouse services and agent status on ${cluster_name}"
-
-  ${OC} describe multiclusterservices --all-namespaces
-  ${OC} describe serviceimports --all-namespaces
-  ${OC} describe serviceexports --all-namespaces
+  PROMPT "Testing Lighthouse agent status on ${cluster_name}"
 
   # lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace."
