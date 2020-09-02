@@ -135,21 +135,32 @@ export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 
+# Common test variables
+export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
+export HEADLESS_SUBM_TEST_NS="${SUBM_TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_B service
+
+### Store dynamic variable values in local files
+
 # File to store test status
 export TEST_STATUS_RC="$SCRIPT_DIR/test_status.out"
 echo 1 > $TEST_STATUS_RC
 
 # File to store OCP cluster A version
-export CLUSTER_A_VERSION="$SCRIPT_DIR/cluster_a_version.out"
+export CLUSTER_A_VERSION="$SCRIPT_DIR/cluster_a.ver"
 > $CLUSTER_A_VERSION
 
 # File to store OCP cluster B version
-export CLUSTER_B_VERSION="$SCRIPT_DIR/cluster_b_version.out"
+export CLUSTER_B_VERSION="$SCRIPT_DIR/cluster_b.ver"
 > $CLUSTER_B_VERSION
 
-# Common test variables
-export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
-export HEADLESS_SUBM_TEST_NS="${SUBM_TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_B service
+# File to store SubCtl version
+export SUBCTL_VERSION="$SCRIPT_DIR/subctl.ver"
+> $SUBCTL_VERSION
+
+# File to store Polarion auth
+export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
+> $POLARION_AUTH
+
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -620,9 +631,10 @@ function setup_workspace() {
   "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
 
   # Set Polarion credentials if $upload_to_polarion = yes/y
-  [[ ! "$upload_to_polarion" =~ ^(y|yes)$ ]] || \
-  export POLARION_AUTH=$(echo -ne "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
-  # $( echo "machine $POLARION_SERVER login $POLARION_USR password $POLARION_PWD" > ${WORKDIR}/POLARION_RC )
+  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+    local polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+    echo "--header \"Authorization: Basic ${polauth}\"" > "$POLARION_AUTH"
+  fi
 
   # Trim trailing and leading spaces from $SUBM_TEST_NS
   SUBM_TEST_NS="$(echo "$SUBM_TEST_NS" | xargs)"
@@ -921,13 +933,19 @@ function download_subctl_by_tag() {
     echo "# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
 
+    echo "# Store SubCtl version in $SUBCTL_VERSION"
+    subctl version > "$SUBCTL_VERSION"
+
 }
 
 # ------------------------------------------
 
 function test_subctl_command() {
-  PROMPT "Verifying SubCTL (Submariner-Operator command line tool)"
   trap_commands;
+  # Get SubCTL version (from file $SUBCTL_VERSION)
+  local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
+
+  PROMPT "Verifying Submariner CLI tool ${subctl_version:+ (Subctl version: $subctl_version)}"
 
   which subctl
   subctl version
@@ -1863,10 +1881,6 @@ function test_ha_status() {
   ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
-    BUG "Strongswan No IKE SA found: charon.vici file is missing" \
-    "No Workaround yet..." \
-    "https://github.com/submariner-io/submariner/issues/781"
-
     FATAL "Submariner HA failure occurred."
   fi
 
@@ -2355,6 +2369,11 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
+  subctl show versions || \
+  BUG "'subctl show versions' has failed with merged kubeconfigs" \
+    "Ignore exit code" \
+    "https://github.com/submariner-io/submariner-operator/issues/671"
+
   subctl show networks || subctl_info=ERROR
 
   subctl show endpoints || subctl_info=ERROR
@@ -2444,17 +2463,11 @@ function upload_junit_xml_to_polarion() {
   local junit_file="$1"
   echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
 
-  # create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
-  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
-  #
-  # create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
-  # "${WORKDIR}/POLARION_RC" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+  create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
 
-  create_polarion_test_cases_from_junit "https://$POLARION_SERVER/polarion" \
-  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
-
-  create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" \
-  "${POLARION_AUTH}" "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+  create_polarion_test_run_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE"
 
 }
 
@@ -2478,7 +2491,6 @@ function create_all_test_results_in_polarion() {
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
 
     # Upload junit results of PKG tests
-    # create_and_upload_junit_to_polarion "$PKG_JUNIT_XML" "$POLARION_PROJECT_ID" "$PKG_POLARION_TESTRUN_ID" || polarion_rc=1
     upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
   fi
 
@@ -2490,7 +2502,6 @@ function create_all_test_results_in_polarion() {
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
     # Upload junit results of E2E tests
-    # create_and_upload_junit_to_polarion "$E2E_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_E2E_TESTRUN_ID" || polarion_rc=1
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
   fi
 
