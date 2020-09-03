@@ -1861,6 +1861,10 @@ function test_ha_status() {
 
   # Checking "Gateway" resource
 
+  BUG "API 'describe Gateway' does not show Gateway crashing and cable-driver failure" \
+  "No workaround" \
+  "https://github.com/submariner-io/submariner/issues/777"
+
   submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
 
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
@@ -2071,11 +2075,15 @@ function test_clusters_connected_by_service_ip() {
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
-    ${OC} exec ${CURL_CMD} || \
-    BUG "Submariner without Globalnet - IP is not reachable between clusters
-    \n (or maybe you installed clusters with overlapping CIDRs ?)" \
-    "No Workaround yet..." \
-    "https://github.com/submariner-io/submariner/issues/779"
+
+    if ! ${OC} exec ${CURL_CMD} ; then
+      BUG "Submariner without Globalnet - IP is not reachable between clusters" \
+      "No Workaround yet..." \
+      "https://github.com/submariner-io/submariner/issues/779"
+
+      FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
+      \n Maybe you installed clusters with overlapping CIDRs ?"
+    fi
 
       # *   Trying 100.96.72.226:8080...
       # * TCP_NODELAY set
@@ -2097,6 +2105,7 @@ function test_clusters_connected_by_service_ip() {
       # < Accept-Ranges: bytes
       # <
       # * Connection #0 to host 100.96.72.226 left intact
+
   else
     PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 

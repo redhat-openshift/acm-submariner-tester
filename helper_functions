@@ -756,7 +756,7 @@ function create_polarion_test_cases_from_junit() {
       </properties>" > "$polarion_testcases_filepath"
 
     while read line ; do
-      echo "<testcase approver-ids=\"achernet:approved\" status-id=\"draft\">
+      echo "<testcase approver-ids=\"${polarion_team_name}:approved\" status-id=\"approved\">
           <title>$line</title>
             <description>$line</description>
             <custom-fields>
