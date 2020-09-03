@@ -2099,7 +2099,8 @@ function test_clusters_connected_by_service_ip() {
     if ! ${OC} exec ${CURL_CMD} ; then
       BUG "Submariner without Globalnet - IP is not reachable between clusters" \
       "No Workaround yet..." \
-      "https://github.com/submariner-io/submariner/issues/779"
+      "https://github.com/submariner-io/submariner/issues/779 
+      https://github.com/submariner-io/submariner/issues/784"
 
       FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
       \n Maybe you installed clusters with overlapping CIDRs ?"
