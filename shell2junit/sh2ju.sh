@@ -68,9 +68,8 @@ function juLogClean() {
 # Function to print text file without special characters and ansi colors
 function printPlainTextFile() {
   local data_file="$1"
-  cat "$data_file" | tr -dC '[:print:]\t\n' | ${SED} -r -f - << EOF
-  s:\[[0-9;]+[mK]::g
-EOF
+  local data="$(cat "$data_file" | tr -dC '[:print:]\t\n')"
+  echo "$data" | sed -r 's:\[[0-9;]+[mK]::g'
 }
 
 function juLogClean() {

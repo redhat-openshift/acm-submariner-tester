@@ -17,6 +17,7 @@ export OCPUP_DIR="${WORKDIR}/ocpup"
 export BROKER_CLUSTER_NAME="cluster-a"
 export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
 export BROKER_INFO="broker-info.subm"
+export BROKER_NAMESPACE="submariner-k8s-broker"
 export SUBM_NAMESPACE="submariner-operator"
 
 export CLUSTER_A_NAME="cluster-a"
@@ -47,7 +48,7 @@ export BROKER_IKEPORT=500
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
-export SUBM_TEST_NS="${SUBM_TEST_NS:-test-submariner}"
+export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
 export POLARION_SERVER="polarion.server.name" # without " https:// "
@@ -55,5 +56,4 @@ export POLARION_USR="polarion-user"
 export POLARION_PWD='polarion-pass' # in single quotes
 export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
 export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
-export POLARION_SUBM_TESTRUN_ID="${POLARION_SUBM_TESTRUN_ID:-}" # not in use
-export POLARION_E2E_TESTRUN_ID="${POLARION_E2E_TESTRUN_ID:-}" # not in use
+export POLARION_TESTRUN_TEMPLATE="${POLARION_TESTRUN_TEMPLATE:-}"
