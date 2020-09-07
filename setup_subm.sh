@@ -1737,7 +1737,12 @@ function join_submariner_current_cluster() {
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view
 
-  JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
+  # BUG "Generate a cluster id if one is not provided" \
+  # "Pass '--clusterid ${current_cluster_context_name}' to subctl join command" \
+  # "https://github.com/submariner-io/submariner-operator/issues/539"
+
+  # JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
+  JOIN_CMD="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
 
@@ -1879,8 +1884,14 @@ function test_ha_status() {
 
   PROMPT "Check HA status and IPSEC tunnel of Submariner and Gateway resources on ${cluster_name}"
 
-  # Checking "Gateway" resource
+  ${OC} describe cm -n openshift-dns || submariner_status=DOWN
 
+  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || submariner_status=DOWN
+
+  # TODO: Need to get current cluster ID
+  #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
+
+  # Checking "Gateway" resource
   BUG "API 'describe Gateway' does not show Gateway crashing and cable-driver failure" \
   "No workaround" \
   "https://github.com/submariner-io/submariner/issues/777"
@@ -1898,11 +1909,6 @@ function test_ha_status() {
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
-
-  ${OC} describe cm -n openshift-dns || submariner_status=DOWN
-
-  # ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide
-  ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
     FATAL "Submariner HA failure occurred."
@@ -2099,7 +2105,7 @@ function test_clusters_connected_by_service_ip() {
     if ! ${OC} exec ${CURL_CMD} ; then
       BUG "Submariner without Globalnet - IP is not reachable between clusters" \
       "No Workaround yet..." \
-      "https://github.com/submariner-io/submariner/issues/779 
+      "https://github.com/submariner-io/submariner/issues/779
       https://github.com/submariner-io/submariner/issues/784"
 
       FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.

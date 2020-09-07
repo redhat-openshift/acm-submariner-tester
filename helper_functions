@@ -747,7 +747,10 @@ function create_polarion_test_cases_from_junit() {
     tc_xml_name="$(basename "${polarion_testcases_filepath}")"
     polarion_testcases_filepath="$(dirname "${polarion_testcases_filepath}")/${tc_xml_name//junit}"
 
-    cat $junit_xml | grep -oP '<testcase.* name="\K[^"]+' | cut -d ':' -f 2 > $tc_list
+    # cat $junit_xml | grep -oP '<testcase.* name="\K[^"]+' | cut -d ':' -f 2 > $tc_list
+    # grep -oP '<testcase.* name="\K[^"]+' "$junit_xml" | cut -d ':' -f 2 > $tc_list
+    # grep '<testcase ' "$junit_xml" | sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/ /_/g' > $tc_list
+    grep '<testcase ' "$junit_xml" | sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/' > $tc_list
 
     echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\"?>  \n\
     <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_team_name} Test Cases\">  \n\
@@ -755,18 +758,33 @@ function create_polarion_test_cases_from_junit() {
           <property name=\"lookup-method\" value=\"name\"/>  \n\
       </properties>" > "$polarion_testcases_filepath"
 
-    while read line ; do
-      echo "<testcase approver-ids=\"${polarion_team_name}:approved\" status-id=\"approved\">
-          <title>$line</title>
-            <description>$line</description>
+      # Maybe required: <response-property name="${polarion_team_name}" value="testcase_importer"/>
+
+    while read tc_name ; do
+      echo "<testcase approver-ids=\"nmanos:approved\" status-id=\"approved\" assignee-id=\"nmanos\">
+          <title>${tc_name}</title>
+            <description>${tc_name}</description>
             <custom-fields>
-              <custom-field content=\"${polarion_team_name}\" id=\"subteam\"/>
-              <custom-field content=\"functional\" id=\"testtype\"/>
-              <custom-field content=\"ocp\" id=\"products\"/>
+              <custom-field id=\"products\" content=\"ocp\" />
+              <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
+              <custom-field id=\"casecomponent\" content=\"submariner\" />
+              <custom-field id=\"testtype\" content=\"functional\" />
+              <custom-field id=\"caseimportance\" content=\"medium\" />
+              <custom-field id=\"caselevel\" content=\"system\" />
+              <custom-field id=\"caseposneg\" content=\"positive\" />
+              <custom-field id=\"caseautomation\" content=\"automated\" />
+              <custom-field id=\"automation_script\" content=\"${BASH_SOURCE[$i+1]}\" />
             </custom-fields>
+            <linked-work-items>
+              <linked-work-item workitem-id=\"${tc_name}\" role-id=\"derived_from\" />
+              <linked-work-item workitem-id=\"${tc_name}\" role-id=\"refines\" />
+            </linked-work-items>
         </testcase>
         " >> "$polarion_testcases_filepath"
       done < "$tc_list"
+
+      # <linked-work-item workitem-id=\"<requirement-id>\" role-id=\"verifies\" />
+      # <custom-field id=\"legacytest\" content=\"true\" />
 
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
@@ -789,7 +807,7 @@ function create_polarion_test_run_from_junit() {
     local junit_xml="$3"
     local polarion_project_id="$4"
     # local polarion_testrun_id="$3"
-    # local polarion_testrun_id="$3//[^[:alnum:]]/_}"
+    # local polarion_testrun_id="${3//[^[:alnum:]]/_}"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
 
@@ -851,6 +869,8 @@ function create_polarion_test_run_from_junit() {
     # Define Polarion <testcase> property:
     polarion_testcase_content="\n\
         <properties> \n\
+            <property name=\"polarion-testcase-project-id\" value=\"$polarion_project_id\"/>
+            <property name=\"polarion-testcase-lookup-method\" value=\"name\"/>
             <property name=\"polarion-testcase-comment\" value=\"$polarion_testrun_title\" /> \n\
         </properties> \n\
     </testcase>"
