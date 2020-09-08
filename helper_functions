@@ -237,8 +237,8 @@ function record_junit() {
   echo "# Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
   into xml output file \"${output_dir}/${output_file}\""
 
-  # juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
-  juLog -output="$output_dir" -file="$output_file" -class="$junit_suite" -name="$test_name" "$func_and_args"
+  juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
+  # juLog -output="$output_dir" -file="$output_file" -class="$junit_suite" -name="$test_name" "$func_and_args"
 }
 
 # ------------------------------------------
@@ -747,10 +747,12 @@ function create_polarion_test_cases_from_junit() {
     tc_xml_name="$(basename "${polarion_testcases_filepath}")"
     polarion_testcases_filepath="$(dirname "${polarion_testcases_filepath}")/${tc_xml_name//junit}"
 
-    # cat $junit_xml | grep -oP '<testcase.* name="\K[^"]+' | cut -d ':' -f 2 > $tc_list
-    # grep -oP '<testcase.* name="\K[^"]+' "$junit_xml" | cut -d ':' -f 2 > $tc_list
-    # grep '<testcase ' "$junit_xml" | sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/ /_/g' > $tc_list
-    grep '<testcase ' "$junit_xml" | sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/' > $tc_list
+    echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
+    grep '<testcase ' "$junit_xml" | \
+    sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/[0-9]+ : //' > "$tc_list"
+    #sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/ /_/g ; s/[0-9]+_:_//' > "$tc_list"
+
+    cat "$tc_list"
 
     echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\"?>  \n\
     <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_team_name} Test Cases\">  \n\
@@ -772,23 +774,23 @@ function create_polarion_test_cases_from_junit() {
               <custom-field id=\"caseimportance\" content=\"medium\" />
               <custom-field id=\"caselevel\" content=\"system\" />
               <custom-field id=\"caseposneg\" content=\"positive\" />
+              <custom-field id=\"legacytest\" content=\"true\" />
               <custom-field id=\"caseautomation\" content=\"automated\" />
               <custom-field id=\"automation_script\" content=\"${BASH_SOURCE[$i+1]}\" />
             </custom-fields>
-            <linked-work-items>
-              <linked-work-item workitem-id=\"${tc_name}\" role-id=\"derived_from\" />
-              <linked-work-item workitem-id=\"${tc_name}\" role-id=\"refines\" />
-            </linked-work-items>
         </testcase>
         " >> "$polarion_testcases_filepath"
       done < "$tc_list"
-
-      # <linked-work-item workitem-id=\"<requirement-id>\" role-id=\"verifies\" />
-      # <custom-field id=\"legacytest\" content=\"true\" />
-
+      # More options:
+      #
+      # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
+      # <linked-work-items>
+      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"verifies\" />
+      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
+      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"refines\" />
+      # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
-      #curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
       curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
 
 }
@@ -831,13 +833,16 @@ function create_polarion_test_run_from_junit() {
 
     cp "$junit_xml" "$polarion_testrun_filepath"
 
+    echo "# Remove Test-Cases Junit index (if added within sh2ju): "
+    sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_filepath"
+
     echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
     # Remove first <testsuiteS> tag (if exists):
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_filepath"
     # sed -r "s:<testsuites>::" -i "$polarion_testrun_filepath"
 
-    # Define Polarion <testsuites> properties:
+    # Define Polarion <testsuites> properties (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
             <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
@@ -866,20 +871,12 @@ function create_polarion_test_run_from_junit() {
 
     echo "# Add <testcase> with Polarion test-run title: $polarion_testrun_title"
 
-    # Define Polarion <testcase> property:
+    # Define Polarion <testcase> property  (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_testcase_content="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-project-id\" value=\"$polarion_project_id\"/>
-            <property name=\"polarion-testcase-lookup-method\" value=\"name\"/>
             <property name=\"polarion-testcase-comment\" value=\"$polarion_testrun_title\" /> \n\
         </properties> \n\
     </testcase>"
-
-    # polarion_testcase_content="\n\
-    #     <properties> \n\
-    #         <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
-    #     </properties> \n\
-    # </testcase>"
 
     sed_expression="s:</testcase>:$polarion_testcase_content:g"
 

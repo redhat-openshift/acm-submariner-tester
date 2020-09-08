@@ -198,7 +198,7 @@ while [[ $# -gt 0 ]]; do
   --get-subctl-devel)
     get_subctl_devel=YES
     shift ;;
-  --build-operator)
+  --build-operator) # [DEPRECATED]
     build_operator=YES
     shift ;;
   --build-e2e)
@@ -380,7 +380,7 @@ if [[ -z "$got_user_input" ]]; then
     globalnet=${input:-no}
   done
 
-  # User input: $build_operator - to build_operator_latest
+  # User input: $build_operator - to build_operator_latest # [DEPRECATED]
   while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
@@ -474,7 +474,7 @@ fi
 get_ocp_installer=${get_ocp_installer:-NO}
 # GET_OCP_VERSION=${GET_OCP_VERSION:-latest}
 get_ocpup_tool=${get_ocpup_tool:-NO}
-build_operator=${build_operator:-NO}
+build_operator=${build_operator:-NO} # [DEPRECATED]
 build_submariner_e2e=${build_submariner_e2e:-NO}
 get_subctl=${get_subctl:-NO}
 get_subctl_devel=${get_subctl_devel:-NO}
@@ -505,7 +505,7 @@ upload_to_polarion=${upload_to_polarion:-NO}
 
 # ------------------------------------------
 
-function print_test_plan() {
+function show_test_plan() {
   PROMPT "Input parameters and Test Plan steps"
 
   if [[ "$skip_setup" =~ ^(y|yes)$ ]]; then
@@ -538,7 +538,7 @@ function print_test_plan() {
     - config_golang: $config_golang
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
-    - build_operator_latest: $build_operator
+    - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_e2e_latest: $build_submariner_e2e
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $get_subctl_devel
@@ -638,21 +638,23 @@ function setup_workspace() {
   # cd ${WORKDIR}
 
   # Installing if $config_golang = yes/y
-  [[ ! "$config_golang" =~ ^(y|yes)$ ]] || install_local_golang "${WORKDIR}"
+  if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
+    install_local_golang "${WORKDIR}"
 
-  # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
-  export GOBIN="${WORKDIR}/GOBIN"
-  mkdir -p "$GOBIN"
-  verify_golang "$GOBIN"
+    # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
+    export GOBIN="${WORKDIR}/GOBIN"
+    mkdir -p "$GOBIN"
+    verify_golang "$GOBIN"
 
-  if [[ -e ${GOBIN} ]] ; then
-    echo "# Re-exporting global variables"
-    export OC="${GOBIN}/oc"
+    if [[ -e ${GOBIN} ]] ; then
+      echo "# Re-exporting global variables"
+      export OC="${GOBIN}/oc"
+    fi
   fi
 
   # Installing if $config_aws_cli = yes/y
   [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
-  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${WORKDIR}/GOBIN")
+  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}")
 
   # Set Polarion credentials if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
@@ -770,6 +772,9 @@ function build_submariner_e2e_latest() {
 ### Building latest Submariner code and tests ###
   PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
   trap_commands;
+
+  verify_golang
+
   # Delete old Submariner directory
     # rm -rf $GOPATH/src/github.com/submariner-io/submariner
 
@@ -810,10 +815,12 @@ function build_submariner_e2e_latest() {
 
 # ------------------------------------------
 
-function build_operator_latest() {
+function build_operator_latest() {  # [DEPRECATED]
 ### Building latest Submariner-Operator code and SubCTL tool ###
   PROMPT "Building latest Submariner-Operator code and SubCTL tool"
   trap_commands;
+
+  verify_golang
 
   # Install Docker
   # install_local_docker "${WORKDIR}"
@@ -2662,7 +2669,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   fi
 
   # Print planned steps according to CLI/User inputs
-  ${junit_cmd} print_test_plan
+  ${junit_cmd} show_test_plan
 
   # Setup and verify environment
   setup_workspace
@@ -2674,6 +2681,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_setup) ###
 
   if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+
+    verify_golang
 
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${GET_OCP_VERSION}
@@ -2733,7 +2742,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_clusters_disconnected_before_submariner
 
-    # Running build_operator_latest if requested
+    # Running build_operator_latest if requested  # [DEPRECATED]
     [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
     # Running build_submariner_e2e_latest if requested
@@ -2847,12 +2856,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     echo 2 > $TEST_STATUS_RC
   fi
 
+if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
+    ### Running Ginkgo tests of Submariner repositories
+
+    verify_golang
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
 
     ### Running Unit-tests from Submariner repositories (Ginkgo)
-
-    verify_golang
 
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
   fi
@@ -2861,12 +2872,11 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ### Running E2E tests from Submariner repositories (Ginkgo)
 
-    verify_golang
-
     ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
 
     ${junit_cmd} test_submariner_e2e_with_subctl
   fi
+fi
 
 
   # If script got to here - all tests of Submariner has passed ;-)
