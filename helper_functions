@@ -723,7 +723,7 @@ function print_pod_logs_in_namespace() {
 # ------------------------------------------
 
 # Function to create test cases document in Polarion from Junit xml
-function create_polarion_test_cases_from_junit() {
+function create_polarion_testcases_doc_from_junit() {
     trap_commands;
 
     # Input params (5) :
@@ -791,15 +791,24 @@ function create_polarion_test_cases_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
-      curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase
+      echo -e "\n# Import test-cases document [$polarion_testcases_filepath] into [${polarion_url}/import/testcase] :\n"
+      local polarion_curl_output="`mktemp`_polarion_tc"
+      curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase |& tee $polarion_curl_output
 
+      echo -e "\n# Polarion Xunit import log for the test-cases document:\n"
+      local testcase_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
+
+      # Watch testcase-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
+      local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/testcase-log?jobId=${testcase_jobid}"
+      local regex='ImportTestcaseThread.+Message sent'
+      watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
 }
 
 
 # ------------------------------------------
 
 # Function to create Polarion test run (xml) from Junit
-function create_polarion_test_run_from_junit() {
+function create_polarion_testrun_result_from_junit() {
     trap_commands;
 
     # Input params (6) :
@@ -883,8 +892,27 @@ function create_polarion_test_run_from_junit() {
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_filepath"
 
-    # curl -k --header "Authorization: Basic $polarion_auth" -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
-    curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit
+    echo -e "\n# Import test-run results [$polarion_testrun_filepath] into [${polarion_url}/import/xunit] :\n"
+    local polarion_curl_output="`mktemp`_polarion_tr"
+    curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit |& tee $polarion_curl_output
+
+    echo -e "\n# Polarion Xunit import log for the test-run results::\n"
+    local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
+
+    local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
+    local regex='ImportXUnitThread.+Message sent'
+
+    # Watch xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
+    watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
+
+    local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
+
+    echo -e "\n### The new test-run was successfully added to Polarion ###
+    \n# $testrun_url \n
+    \n# All test-runs by template-id '${polarion_testrun_template}':
+    \n# ${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A(\"${polarion_testrun_template// /%20}\")
+    \n# All test-runs by title '${polarion_testrun_title}':
+    \n# ${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A(\"${polarion_testrun_title// /%20}\")"
 
 }
 
