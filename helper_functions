@@ -106,8 +106,8 @@ function trap_commands() {
   ' DEBUG
 }
 
-export -f trap_commands
-trap_commands
+# export -f trap_commands
+# trap_commands
 
 # ------------------------------------------
 
@@ -234,8 +234,8 @@ function record_junit() {
   # Set $junit_suite from current executing script filename
   local junit_suite=$(basename "${0%.*}")
 
-  echo "# Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
-  into xml output file \"${output_dir}/${output_file}\""
+  echo "+++ Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
+  +++ into xml output file \"${output_dir}/${output_file}\""
 
   juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
   # juLog -output="$output_dir" -file="$output_file" -class="$junit_suite" -name="$test_name" "$func_and_args"
@@ -365,15 +365,6 @@ function download_file() {
 
   # Optional: $2 => $target_file (where to save)
   target_file=${2:-$(basename "$1")}
-
-  # Optional: $3 = Target FILE_NAME (and source_file is treated as Directory path)
-  # if [[ -z "$3" ]]; then
-  #   source_file="$1"
-  #   FILE_NAME=$(basename "$1")
-  # else
-  #   source_file="$1/$3"
-  #   FILE_NAME=$3
-  # fi
 
   echo "# Downloading [$source_file] into $target_file"
   ls -ld
@@ -791,7 +782,7 @@ function create_polarion_testcases_doc_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_filepath"
 
-      echo -e "\n# Import test-cases document [$polarion_testcases_filepath] into [${polarion_url}/import/testcase] :\n"
+      echo -e "\n# Import test-cases document [$polarion_testcases_filepath] into ${polarion_url}/import/testcase :\n"
       local polarion_curl_output="`mktemp`_polarion_tc"
       curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_filepath} ${polarion_url}/import/testcase |& tee $polarion_curl_output
 
@@ -817,8 +808,6 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
     local junit_xml="$3"
     local polarion_project_id="$4"
-    # local polarion_testrun_id="$3"
-    # local polarion_testrun_id="${3//[^[:alnum:]]/_}"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
 
@@ -896,7 +885,7 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_curl_output="`mktemp`_polarion_tr"
     curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testrun_filepath} ${polarion_url}/import/xunit |& tee $polarion_curl_output
 
-    echo -e "\n# Polarion Xunit import log for the test-run results::\n"
+    echo -e "\n# Polarion Xunit import log for the test-run results:\n"
     local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
@@ -907,12 +896,18 @@ function create_polarion_testrun_result_from_junit() {
 
     local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
+    # Set link for all templates:
+    all_templates_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A\"${polarion_testrun_template// /%20}\""
+
+    # Set links for all titles:
+    all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${polarion_testrun_title// /%20}\""
+
     echo -e "\n### The new test-run was successfully added to Polarion ###
     \n# $testrun_url \n
     \n# All test-runs by template-id '${polarion_testrun_template}':
-    \n# ${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A(\"${polarion_testrun_template// /%20}\")
+    \n# ${all_templates_link}
     \n# All test-runs by title '${polarion_testrun_title}':
-    \n# ${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A(\"${polarion_testrun_title// /%20}\")"
+    \n# ${all_titles_link}"
 
 }
 
@@ -923,9 +918,11 @@ function log_to_html() {
   log_file="$1"
   title="${2:-"${log_file%%.*}"}" # full file path without extension
   html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
+  description="$4"
 
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
+
   repo_url=https://github.com/theZiz/aha.git
   repo_branch=0.5.1
   repo_dir=$(basename $repo_url .git)
@@ -983,19 +980,28 @@ function log_to_html() {
     overflow: hidden;
     background-color: LightSkyBlue;
   }
+  .line-break {
+    white-space: pre-line;
+  }
   </style>
   </head>
   <body style="background-color:LightSkyBlue">
   <h1>${title}</h1>
+  <h3><div class="line-break">
+  ${description}
+  </div></h3>
   <pre>
 EOF
 
   # Trim empty lines (from top) and spaces (not tabs) from each line in the log file
   #sed '/\S/,$!d; s/^ \+//; s/ \+$//' -i $log_file
-  sed '/\S/,$!d' -i $log_file
+  sed '/\S/,$!d' -i "$log_file"
 
   # Create HTML content with AHA
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
+
+  # Make all urls as hyperlinks
+  sed -r "s|^[^<]*(https?://[^> \t]+)[^>]*$|<a href='\1'>\1</a>|" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output

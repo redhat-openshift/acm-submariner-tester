@@ -108,9 +108,6 @@ source "$SCRIPT_DIR/subm_variables"
 ### Import General Helpers Function ###
 source "$SCRIPT_DIR/helper_functions"
 
-# To trap inside functions
-# set -T # might have issues with kubectl/oc commands
-
 # To exit on errors and extended trap
 # set -Eeo pipefail
 set -Ee
@@ -162,6 +159,8 @@ export SUBCTL_VERSION="$SCRIPT_DIR/subctl.ver"
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 > $POLARION_AUTH
 
+# Counter for the number of Polarion test-run reports
+export POLARION_TESTRUN_COUNTER=1
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -180,7 +179,7 @@ while [[ $# -gt 0 ]]; do
     echo "# ${disclosure}" && exit 0
     shift ;;
   -d|--debug)
-    export OC="${OC} -v=6" # verbose for oc commands
+    script_debug_mode=YES
     shift ;;
   --get-ocp-installer)
     get_ocp_installer=YES
@@ -256,7 +255,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --junit)
     create_junit_xml=YES
-    junit_cmd="record_junit $SHELL_JUNIT_XML"
+    export junit_cmd="record_junit $SHELL_JUNIT_XML"
     shift ;;
   --polarion)
     upload_to_polarion=YES
@@ -285,8 +284,6 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 ####################################################################################
 #              Get User inputs (only for missing CLI inputs)                       #
 ####################################################################################
-
-###  ###
 
 if [[ -z "$got_user_input" ]]; then
   echo "# ${disclosure}"
@@ -496,7 +493,7 @@ skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
 create_junit_xml=${create_junit_xml:-NO}
 upload_to_polarion=${upload_to_polarion:-NO}
-
+script_debug_mode=${script_debug_mode:-NO}
 
 
 ####################################################################################
@@ -2383,11 +2380,6 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"clusterset\")."
 
-  # ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
-  # -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
-  # |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
-  #   # command terminated with exit code 28
-
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
@@ -2412,10 +2404,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  subctl show versions || \
-  BUG "'subctl show versions' has failed with merged kubeconfigs" \
-    "Ignore exit code" \
-    "https://github.com/submariner-io/submariner-operator/issues/671"
+  subctl show versions || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
 
@@ -2535,6 +2524,8 @@ function create_all_test_results_in_polarion() {
 
     # Upload junit results of PKG tests
     upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
+
+    export POLARION_TESTRUN_COUNTER=$(( POLARION_TESTRUN_COUNTER+1 ))
   fi
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
@@ -2546,6 +2537,8 @@ function create_all_test_results_in_polarion() {
 
     # Upload junit results of E2E tests
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
+
+    export POLARION_TESTRUN_COUNTER=$(( POLARION_TESTRUN_COUNTER+1 ))
   fi
 
   return $polarion_rc
@@ -2652,12 +2645,22 @@ function FAIL_DEBUG() {
 #                    Main - Submariner Deploy and Tests                            #
 ####################################################################################
 
+### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
+if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
+  # To trap inside functions
+  # set -T # might have issues with kubectl/oc commands
+  export OC="${OC} -v=6" # verbose for oc commands
+else
+  # Disable (empty) trap_commands function
+  trap_commands() { :; }
+fi
+
 cd ${SCRIPT_DIR}
 
 # Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
-> $LOG_FILE
+> "$LOG_FILE"
 
 # Printing output both to stdout and to $LOG_FILE with tee
 # TODO: consider adding timestemps with: ts '%H:%M:%.S' -s
@@ -2882,7 +2885,7 @@ fi
   # If script got to here - all tests of Submariner has passed ;-)
   echo 0 > $TEST_STATUS_RC
 
-) |& tee -a $LOG_FILE
+) |& tee -a "$LOG_FILE"
 
 
 #####################################################################################
@@ -2893,7 +2896,18 @@ cd ${SCRIPT_DIR}
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  create_all_test_results_in_polarion |& tee -a $LOG_FILE
+  create_all_test_results_in_polarion |& tee -a "$LOG_FILE"
+
+  echo "# Get $POLARION_TESTRUN_COUNTER Polarion testrun links: "
+  polarion_search_string="Polarion results published to:"
+
+  tail -n $(( POLARION_TESTRUN_COUNTER * 500 )) "$LOG_FILE" \
+  | grep -Po -m $POLARION_TESTRUN_COUNTER "${polarion_search_string}\K.*" > "$TEMP_FILE"
+
+  cat "$TEMP_FILE"
+
+  REPORT_DESCRIPTION="Polarion results:
+  $(< $TEMP_FILE)"
 fi
 
 ### Creating HTML report from console output ###
@@ -2909,11 +2923,16 @@ if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
 fi
 PROMPT "$message" # "$color"
 
-# Create HTML Report from log file (with title extracted from log file name)
-echo "# REPORT_NAME = $REPORT_NAME" # May have been set externally
-echo "# REPORT_FILE = $REPORT_FILE" # May have been set externally
+echo "# Creating HTML Report from:
+# LOG_FILE = $LOG_FILE
+# REPORT_NAME = $REPORT_NAME
+# REPORT_FILE = $REPORT_FILE
+"
 
-log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE"
+# Clean LOG_FILE from sh2ju debug lines (+++), if CLI option: --debug was NOT used
+[[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$LOG_FILE"
+
+log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
 
 # If REPORT_FILE was not passed externally, set it as the latest html file that was created
 REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
