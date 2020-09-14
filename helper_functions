@@ -55,7 +55,7 @@ function highlight()
   local tmp_file="`mktemp`_highlight"
   # Save all output to temp file
   #grep -E "$pattern|$" "$@" > $tmp_file
-  grep -E "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
+  grep -Ei "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
 
   # Exit if file is empty or contains spaces only
   grep -q '[^[:space:]]' $tmp_file || return 4
@@ -64,7 +64,7 @@ function highlight()
   # cat $tmp_file | grep --color -E "$pattern|$"
 
   # Search line for sed command. Highlighting pattern, if found
-  search_line='/'"$pattern"'/,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q3'
+  search_line='/'"$pattern"'/I,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q3'
 
   # SED with -r : Basic regex
   sed -r "$search_line" $tmp_file || exit_code=$?
@@ -688,7 +688,7 @@ function watch_pod_logs() {
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
   cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
-  > $tmp_file && grep -E '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
+  > $tmp_file && grep -Ei '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex"
 }

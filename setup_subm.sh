@@ -62,8 +62,8 @@ Running with pre-defined parameters (optional):
 * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
 * Clean existing AWS cluster A:                      --clean-cluster-a
 * Clean existing OSP cluster B:                      --clean-cluster-b
-* Install Service-Discovery (lighthouse):            --service-discovery
-* Install Global Net:                                --globalnet
+* Configure and test Service Discovery:              --service-discovery
+* Configure and test GlobalNet:                      --globalnet
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
 * Skip Submariner deployment:                        --skip-deploy
@@ -1767,8 +1767,8 @@ function join_submariner_current_cluster() {
       JOIN_CMD="${JOIN_CMD} --version devel"
   fi
 
-  echo "# Adding '--enable-pod-debugging' to the ${JOIN_CMD} for tractability"
-  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging"
+  echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability"
+  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
 
   echo "# Executing: ${JOIN_CMD}"
   $JOIN_CMD
@@ -1848,14 +1848,14 @@ function test_submariner_cable_driver() {
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
-  local regex="CableEngine controller started"
+  local regex="cable .*started"
   # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
-  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || submariner_status=DOWN
+  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || :
   fi
 
 }
@@ -1957,7 +1957,7 @@ function test_submariner_connection_established() {
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   # local regex="received packet"
-  local regex="Successfully installed Endpoint cable .* with remote IP"
+  local regex="Successfully installed Endpoint cable .* remote IP"
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2042,9 +2042,7 @@ function test_lighthouse_status() {
   lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' $SUBM_NAMESPACE`"
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
-  # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
-
-  local regex="Lighthouse agent syncer started"
+  local regex="agent .*started"
   watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
