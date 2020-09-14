@@ -3,13 +3,20 @@
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
 # By Noam Manos, nmanos@redhat.com                                                                    #
-# The script is based on the Submariner MVP Doc:                                                      #
-# https://docs.google.com/document/d/1HCbyuNX8AELNyB6TE4H05Kj3gujwS4-Im3-BG796zIw                     #
 #                                                                                                     #
-# It is assumed that you have existing OCP "install-config.yaml" for both cluster A (OSP) and B (OSP),#
-# in the current directory. For cluster B, use the existing config of OCPUP multi-cluster-networking. #                                                                         #
+# You can find latest script here:                                                                    #
+# https://github.com/manosnoam/ocp-multi-cluster-tester                                               #
 #                                                                                                     #
-# For cluster A, you can create config with AWS pull secret and SSH public key. To do so:             #
+# It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
+# for both cluster A (AWS) and cluster B (OSP), in the current directory.                             #
+#                                                                                                     #
+# For cluster A, use Openshift-installer config format:                                               #
+# https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
+#                                                                                                     #
+# For cluster B, use OCPUP config format:                                                             #
+# https://github.com/dimaunx/ocpup#create-config-file                                                 #
+#                                                                                                     #
+# To create those config files, you need to supply your AWS pull secret, and SSH public key:          #
 #                                                                                                     #
 # (1) Get access to Upshift account.                                                                  #
 # - Follow PnT Resource Workflow:                                                                     #
@@ -29,11 +36,11 @@
 #                                                                                                     #
 # (3) Your Red Hat Openshift pull secret, found in:                                                   #
 # https://cloud.redhat.com/openshift/install/aws/installer-provisioned                                #
-# It is used by OCP Installer to download OCP images from Red Hat repositories.                       #
+# It is used by Openshift-installer to download OCP images from Red Hat repositories.                 #
 #                                                                                                     #
 # (4) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
 # cat ~/.ssh/id_rsa.pub                                                                               #
-# Your SSH key is used by OCP Installer for authentication.                                           #
+# It is required by Openshift-installer for authentication.                                           #
 #                                                                                                     #
 #                                                                                                     #
 #######################################################################################################
@@ -62,8 +69,8 @@ Running with pre-defined parameters (optional):
 * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
 * Clean existing AWS cluster A:                      --clean-cluster-a
 * Clean existing OSP cluster B:                      --clean-cluster-b
-* Install Service-Discovery (lighthouse):            --service-discovery
-* Install Global Net:                                --globalnet
+* Configure and test Service Discovery:              --service-discovery
+* Configure and test GlobalNet:                      --globalnet
 * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
 * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
 * Skip Submariner deployment:                        --skip-deploy
@@ -78,20 +85,30 @@ Running with pre-defined parameters (optional):
 
 Command examples:
 
-$ ./setup_subm.sh
+- To run interactively (user enter options):
 
-  Will run interactively (user enter choices).
+  `./setup_subm.sh`
 
-$ ./setup_subm.sh --get-ocp-installer --ocp-version 4.4.6 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit
 
-  Will run:
-  - Recreate new cluster on AWS (cluster A), with OCP 4.4.6
-  - Clean existing cluster on OSP (cluster B)
-  - Install latest Submariner release
-  - Configure Service-Discovery and GlobalNet
-  - Build and run latest E2E tests
-  - Create Junit tests result (xml file)
+- Example with pre-defined parameters:
+  * Recreate new cluster on AWS (cluster A), with OCP 4.5.1
+  * Clean existing cluster on OSP (cluster B)
+  * Install latest Submariner release
+  * Configure Service-Discovery and GlobalNet
+  * Build and run latest E2E tests
+  * Create Junit tests result (xml file)
 
+  `./setup_subm.sh --get-ocp-installer --ocp-version 4.5.1 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
+
+
+- Installing latest Submariner (master development), and using existing AWS cluster:
+
+  `./setup_subm.sh --get-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet`
+
+
+- Installing last Submariner release, and re-creating a new AWS cluster:
+
+  `./setup_subm.sh --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet`
 
 ----------------------------------------------------------------------'
 
@@ -159,8 +176,10 @@ export SUBCTL_VERSION="$SCRIPT_DIR/subctl.ver"
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 > $POLARION_AUTH
 
-# Counter for the number of Polarion test-run reports
-export POLARION_TESTRUN_COUNTER=1
+# File to store Polarion test-run report link
+export POLARION_REPORTS="$SCRIPT_DIR/polarion.reports"
+> $POLARION_REPORTS
+
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -1767,8 +1786,8 @@ function join_submariner_current_cluster() {
       JOIN_CMD="${JOIN_CMD} --version devel"
   fi
 
-  echo "# Adding '--enable-pod-debugging' to the ${JOIN_CMD} for tractability"
-  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging"
+  echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability"
+  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
 
   echo "# Executing: ${JOIN_CMD}"
   $JOIN_CMD
@@ -1848,14 +1867,14 @@ function test_submariner_cable_driver() {
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
-  local regex="CableEngine controller started"
+  local regex="cable.* started"
   # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
-  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || submariner_status=DOWN
+  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || submariner_status=UP
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || :
   fi
 
 }
@@ -1957,7 +1976,7 @@ function test_submariner_connection_established() {
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   # local regex="received packet"
-  local regex="Successfully installed Endpoint cable .* with remote IP"
+  local regex="Successfully installed Endpoint cable .* remote IP"
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2042,9 +2061,7 @@ function test_lighthouse_status() {
   lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' $SUBM_NAMESPACE`"
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
-  # ${OC} logs $lighthouse_pod -n ${SUBM_NAMESPACE} |& highlight "Lighthouse agent syncer started"
-
-  local regex="Lighthouse agent syncer started"
+  local regex="agent .* started"
   watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
@@ -2496,7 +2513,7 @@ function upload_junit_xml_to_polarion() {
   echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
 
   create_polarion_testcases_doc_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
-  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME"
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR"
 
   create_polarion_testrun_result_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
   "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE"
@@ -2524,8 +2541,6 @@ function create_all_test_results_in_polarion() {
 
     # Upload junit results of PKG tests
     upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
-
-    export POLARION_TESTRUN_COUNTER=$(( POLARION_TESTRUN_COUNTER+1 ))
   fi
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
@@ -2537,8 +2552,6 @@ function create_all_test_results_in_polarion() {
 
     # Upload junit results of E2E tests
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
-
-    export POLARION_TESTRUN_COUNTER=$(( POLARION_TESTRUN_COUNTER+1 ))
   fi
 
   return $polarion_rc
@@ -2892,36 +2905,28 @@ fi
 #   End Main - Now publish to Polarion, Create HTML report, and archive artifacts   #
 #####################################################################################
 
+# ------------------------------------------
+
 cd ${SCRIPT_DIR}
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  create_all_test_results_in_polarion |& tee -a "$LOG_FILE"
 
-  echo "# Get $POLARION_TESTRUN_COUNTER Polarion testrun links: "
+  # Temp file to store Polarion output
+  > "$TEMP_FILE"
+  # Redirecting output both to stdout, TEMP_FILE and LOG_FILE
+  create_all_test_results_in_polarion |& tee -a "$TEMP_FILE" "$LOG_FILE"
+
+  echo "# Get Polarion testrun links: "
   polarion_search_string="Polarion results published to:"
 
-  tail -n $(( POLARION_TESTRUN_COUNTER * 500 )) "$LOG_FILE" \
-  | grep -Po -m $POLARION_TESTRUN_COUNTER "${polarion_search_string}\K.*" > "$TEMP_FILE"
-
-  cat "$TEMP_FILE"
-
-  REPORT_DESCRIPTION="Polarion results:
-  $(< $TEMP_FILE)"
+  grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS"
+  cat "$POLARION_REPORTS"
 fi
+
+# ------------------------------------------
 
 ### Creating HTML report from console output ###
-
-# Get test exit status (from file $TEST_STATUS_RC)
-test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
-
-# Set HTML prompt message
-message="Creating HTML Report"
-if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
-  message="$message - Test exit status: $test_status"
-  # color="$RED"
-fi
-PROMPT "$message" # "$color"
 
 echo "# Creating HTML Report from:
 # LOG_FILE = $LOG_FILE
@@ -2929,10 +2934,31 @@ echo "# Creating HTML Report from:
 # REPORT_FILE = $REPORT_FILE
 "
 
+# set REPORT_DESCRIPTION for html report
+REPORT_DESCRIPTION="Polarion results:
+$(< "$POLARION_REPORTS")"
+
+# Get test exit status (from file $TEST_STATUS_RC)
+test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
+
+# prompt message (this is the last print into LOG_FILE
+message="Creating HTML Report"
+if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
+  message="$message - Test exit status: $test_status"
+  color="$RED"
+fi
+PROMPT "$message" "$color" |& tee -a "$LOG_FILE"
+
 # Clean LOG_FILE from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$LOG_FILE"
 
+# Call log_to_html to create REPORT_FILE (html) from LOG_FILE
 log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
+
+
+# ------------------------------------------
+
+### Collecting artifacts ###
 
 # If REPORT_FILE was not passed externally, set it as the latest html file that was created
 REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
@@ -2959,19 +2985,4 @@ echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox $
 # Exit the script with $test_status return code
 exit $test_status
 
-# You can find latest script here:
-# https://github.com/manosnoam/ocp-multi-cluster-tester
-#
-# To create a local script file:
-#        > setup_subm.sh; chmod +x setup_subm.sh; vi setup_subm.sh
-#
-# Execution example:
-# Re-creating a new AWS cluster:
-# ./setup_subm.sh --build-e2e --reset-cluster-a --clean-cluster-b --service-discovery --globalnet
-#
-# Using Submariner upstream release (master), and installing on existing AWS cluster:
-# ./setup_subm.sh --get-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet
-#
-# Using the latest formal release of Submariner, and Re-creating a new AWS cluster:
-# ./setup_subm.sh --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet
-#
+# ------------------------------------------
