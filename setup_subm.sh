@@ -2687,12 +2687,11 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
-  # Setup and verify environment
-  setup_workspace
-
   # Debug function
   # ${junit_cmd} FAIL_DEBUG
 
+  # Setup and verify environment
+  setup_workspace
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_setup) ###
 
