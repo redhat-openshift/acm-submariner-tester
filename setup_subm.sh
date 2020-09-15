@@ -56,8 +56,7 @@ Running with pre-defined parameters (optional):
 * Show debug info (verbose) for commands:            -d / --debug
 # Build latest Submariner-Operator (SubCtl):         --build-operator  [DEPRECATED]
 * Build latest Submariner E2E (test packages):       --build-e2e
-* Download OCP Installer:                            --get-ocp-installer
-* Specify OCP version:                               --ocp-version [x.x.x]
+* Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
 * Download latest OCPUP Tool:                        --get-ocpup-tool
 * Download latest release of SubCtl:                 --get-subctl
 * Download development release of SubCtl:            --get-subctl-devel
@@ -78,7 +77,7 @@ Running with pre-defined parameters (optional):
 * Print all pods logs on failure:                    --print-logs
 * Install Golang if missing:                         --config-golang
 * Install AWS-CLI and configure access:              --config-aws-cli
-* Import additional variables from file:             --import-vars  [Variable file path]
+* Import additional variables from file:             --import-vars  [variables file path]
 * Record Junit Tests result (xml):                   --junit
 * Upload Junit results to polarion:                  --polarion
 
@@ -91,14 +90,15 @@ Command examples:
 
 
 - Example with pre-defined parameters:
-  * Recreate new cluster on AWS (cluster A), with OCP 4.5.1
+  * Download OCP installer version 4.5.1
+  * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
   * Install latest Submariner release
   * Configure Service-Discovery and GlobalNet
   * Build and run latest E2E tests
   * Create Junit tests result (xml file)
 
-  `./setup_subm.sh --get-ocp-installer --ocp-version 4.5.1 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
 
 
 - Installing latest Submariner (master development), and using existing AWS cluster:
@@ -201,11 +201,9 @@ while [[ $# -gt 0 ]]; do
     script_debug_mode=YES
     shift ;;
   --get-ocp-installer)
-    get_ocp_installer=YES
-    shift ;;
-  --ocp-version)
     check_cli_args "$2"
-    export GET_OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    get_ocp_installer=YES
     shift 2 ;;
   --get-ocpup-tool)
     get_ocpup_tool=YES
@@ -325,13 +323,13 @@ if [[ -z "$got_user_input" ]]; then
       get_ocp_installer=${input:-no}
     done
 
-    # User input: $GET_OCP_VERSION - to download_ocp_installer with specific version
+    # User input: $OCP_VERSION - to download_ocp_installer with specific version
     if [[ "$get_ocp_installer" =~ ^(yes|y)$ ]]; then
-      while [[ ! "$GET_OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+      while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
         echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
         Enter version number, or nothing to install latest version: "
         read -r input
-        GET_OCP_VERSION=${input:-latest}
+        OCP_VERSION=${input:-latest}
       done
     fi
 
@@ -487,8 +485,7 @@ fi
 
 ### Set CLI/User inputs - Default to "NO" for any unset value ###
 
-get_ocp_installer=${get_ocp_installer:-NO}
-# GET_OCP_VERSION=${GET_OCP_VERSION:-latest}
+get_ocp_installer=${OCP_VERSION:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
 build_submariner_e2e=${build_submariner_e2e:-NO}
@@ -529,7 +526,7 @@ function show_test_plan() {
   else
     echo "### Will execute: Openshift clusters creation/cleanup before Submariner deployment:
 
-    - download_ocp_installer: $get_ocp_installer $GET_OCP_VERSION
+    - download_ocp_installer: $get_ocp_installer $OCP_VERSION
 
     AWS cluster A (public):
     - destroy_aws_cluster_a: $destroy_cluster_a
@@ -689,14 +686,14 @@ function setup_workspace() {
 
 function download_ocp_installer() {
 ### Download OCP installer ###
-  PROMPT "Downloading OCP Installer $GET_OCP_VERSION"
+  PROMPT "Downloading OCP Installer $OCP_VERSION"
   # The nightly builds available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   trap_commands;
 
-  # Optional param: $1 => $GET_OCP_VERSION (default = latest)
+  # Optional param: $1 => $OCP_VERSION (default = latest)
   ocp_major_version="$(echo "$1" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
   ocp_major_version="${ocp_major_version:-4}" # if no major version was found (e.g. "latest"), the default OCP is 4
-  GET_OCP_VERSION="${1:-latest}"
+  OCP_VERSION="${1:-latest}"
 
   cd ${WORKDIR}
 
@@ -704,7 +701,7 @@ function download_ocp_installer() {
   "Run OCP Installer 4.4.6 instead" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1850099"
 
-  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${GET_OCP_VERSION}/"
+  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${OCP_VERSION}/"
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
@@ -2700,7 +2697,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     verify_golang
 
     # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${GET_OCP_VERSION}
+    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
     # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
