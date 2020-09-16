@@ -1016,7 +1016,10 @@ function create_aws_cluster_a() {
   fi
 
   mkdir -p "${CLUSTER_A_DIR}"
-  cp "${CLUSTER_A_YAML}" "${CLUSTER_A_DIR}/install-config.yaml"
+  local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
+  cp "${CLUSTER_A_YAML}" "$ocp_install_yaml"
+
+  update_config_aws_cluster_a "$ocp_install_yaml"
 
   # OR to create new OCP install-config.yaml:
       # ./openshift-install create install-config --dir user-cluster-a
@@ -1034,11 +1037,6 @@ function create_aws_cluster_a() {
         # ? Pull Secret
 
   # Run OCP installer with the user-cluster-a.yaml:
-
-    # This has a bug in bugzilla - using "--dir"
-    # $ cd ..
-    # $ ./openshift-install create install-config --dir user-cluster-a
-
   cd ${CLUSTER_A_DIR}
   ../openshift-install create cluster --log-level debug
 
@@ -1049,6 +1047,20 @@ function create_aws_cluster_a() {
     # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
       # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
       # "Login to the console with user: kubeadmin, password: ..."
+}
+
+# ------------------------------------------
+
+function update_config_aws_cluster_a() {
+### Update the OCP installer configuration (YAML) of AWS cluster A ###
+  PROMPT "Update the OCP installer configuration (YAML) of AWS cluster A"
+  trap_commands;
+
+  local ocp_install_yaml="$1"
+
+  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
+
+  # Todo: change more key : values in $ocp_install_yaml, from variables file
 }
 
 # ------------------------------------------
