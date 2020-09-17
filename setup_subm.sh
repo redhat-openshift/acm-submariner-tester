@@ -238,6 +238,9 @@ while [[ $# -gt 0 ]]; do
   --create-cluster-b)
     create_cluster_b=YES
     shift ;;
+  --reset-cluster-b)
+    reset_cluster_b=YES
+    shift ;;
   --clean-cluster-b)
     clean_cluster_b=YES
     shift ;;
