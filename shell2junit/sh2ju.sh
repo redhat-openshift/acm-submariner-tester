@@ -68,9 +68,6 @@ function juLogClean() {
 # Function to print text file without special characters and ansi colors
 function printPlainTextFile() {
   local data_file="$1"
-  # local data="$(cat "$data_file" | tr -dC '[:print:]\t\n')"
-  # echo "$data" | sed -r 's:\[[0-9;]+[mK]::g'
-
   # echo "$(tr -dC '[:print:]\t\n' < "$data_file")" > "$data_file"
   # sed -r 's:\[[0-9;]+[mK]::g' "$data_file"
 
@@ -215,8 +212,9 @@ EOF
     "
   else
     output="
-    <failure type=\"ScriptError\" message=\"Script Error\"><![CDATA[${class}.${name}]]></failure>
-    <system-out><![CDATA[${outMsg}]]></system-out>
+    <failure type=\"ScriptError\" message=\"Failure in ${class}.${name}\">
+    <![CDATA[${outMsg}]]>
+    </failure>
     <system-err><![CDATA[${errMsg}]]></system-err>
     "
   fi

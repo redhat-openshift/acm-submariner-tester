@@ -451,33 +451,36 @@ function change_yaml_key_value() {
   local new_value="$3"
   local section="$4" # optional section that the key is underneath
 
-  echo -e "\n# Modifying YAML file [$yaml_file] key [$key] with a new value [$new_value]"
+  echo -e "\n# Modifying YAML file [$yaml_file]: Key [$key_name] => Value [$new_value] ${section:+, under [$section].}"
+
+  local section="${section:-.*}" # section default value is any string
+
   # sed -r "s/^(\s*${key}\s*:\s*).*/\1${new_value}/" -i "$yaml_file"
 
-   awk \
-   -v key="(^[ \t]*(- )?${key_name}: )(.*)" \
-   -v value="${new_value}" \
-   -v section="/^[ \t]*(- )?${section}/" \
-   '
-    BEGIN {
-     done=0
-     }
-    {
-       if (!done && $0 ~ section) {
-         ++section_found
-         key_found=0
+   echo "$(awk \
+     -v key="(^[ \t]*(- )?${key_name}[ \t]*:?)(.*)$" \
+     -v value="${new_value}" \
+     -v section="${section}" \
+     '
+      BEGIN {
+       done=0
        }
-       replace = gensub(key, "\\1"value, "g")
-       if ($0 ~ key && replace) {
-         ++key_found
-       }
-       if (!done && section_found>0 && key_found>0) {
-         $0=replace
-         done=1
-       }
-       print $0
-     } ' "$yaml_file"
-
+      {
+         if (!done && $0 ~ section) {
+           ++section_found
+           key_found=0
+         }
+         replace = gensub(key, "\\1 "value, "g")
+         if ($0 ~ key && replace) {
+           ++key_found
+         }
+         if (!done && section_found>0 && key_found>0) {
+           $0=replace
+           done=1
+         }
+         print $0
+       } ' "$yaml_file" \
+    )" > "$yaml_file"
 }
 
 # ------------------------------------------
@@ -943,6 +946,8 @@ function create_polarion_testrun_result_from_junit() {
 
     echo -e "\n# Polarion Xunit import log for the test-run results:\n"
     local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
+
+    [[ -n "$xunit_jobid" ]] || FATAL "Error importing test-run results to Polarion"
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
     local regex='ImportXUnitThread.+Message sent'

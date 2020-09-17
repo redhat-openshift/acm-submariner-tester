@@ -1021,6 +1021,7 @@ function create_aws_cluster_a() {
   mkdir -p "${CLUSTER_A_DIR}"
   local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
   cp "${CLUSTER_A_YAML}" "$ocp_install_yaml"
+  chmod 777 "$ocp_install_yaml"
 
   update_config_aws_cluster_a "$ocp_install_yaml"
 
@@ -2940,12 +2941,12 @@ if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
   # Temp file to store Polarion output
   > "$TEMP_FILE"
   # Redirecting output both to stdout, TEMP_FILE and LOG_FILE
-  create_all_test_results_in_polarion |& tee -a "$TEMP_FILE" "$LOG_FILE"
+  create_all_test_results_in_polarion |& tee -a "$TEMP_FILE" "$LOG_FILE" || :
 
   echo "# Get Polarion testrun links: "
   polarion_search_string="Polarion results published to:"
 
-  grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS"
+  grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS" || :
   cat "$POLARION_REPORTS"
 fi
 
