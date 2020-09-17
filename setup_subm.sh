@@ -1278,6 +1278,11 @@ function clean_aws_cluster_a() {
   trap_commands;
   kubconf_a;
 
+  BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
+  "Run cleanup (oc delete) of any existing resource of submariner-operator" \
+  "https://github.com/submariner-io/submariner-operator/issues/88
+  https://github.com/submariner-io/submariner-website/issues/272"
+
   delete_submariner_namespace_and_crds;
 
   PROMPT "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
@@ -1290,6 +1295,19 @@ function clean_aws_cluster_a() {
   BUG "Submariner gateway label cannot be removed once created" \
   "No Resolution yet" \
   "https://github.com/submariner-io/submariner/issues/432"
+
+  # Todo: Should also include globalnet network cleanup:
+  #
+  # 1 If you are using vanilla Submariner, please delete the following iptable chains from the nat/filter table of worker nodes
+  #   SUBMARINER-INPUT
+  #   SUBMARINER-POSTROUTING
+  #
+  # 2 The following chains will have to be deleted if you are using Globalnet:
+  #   SUBMARINER-GN-INGRESS
+  #   SUBMARINER-GN-EGRESS
+  #   SUBMARINER-GN-MARK
+  #
+  # 3 its recommended that you delete the vx-submariner interface from all the nodes.
 }
 
 # ------------------------------------------
@@ -1311,10 +1329,6 @@ function clean_osp_cluster_b() {
 function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner on current KUBECONFIG cluster ###
   trap_commands;
-
-  BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
-  "Run cleanup (oc delete) of any existing resource of submariner-operator" \
-  "https://github.com/submariner-io/submariner-operator/issues/88"
 
   delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
 

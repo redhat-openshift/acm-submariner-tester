@@ -447,11 +447,36 @@ function backup_and_remove_dir() {
 # Function to change value of a key, in a YAML file:
 function change_yaml_key_value() {
   local yaml_file="$1"
-  local key="$2"
+  local key_name="$2"
   local new_value="$3"
+  local section="$4" # optional section that the key is underneath
 
   echo -e "\n# Modifying YAML file [$yaml_file] key [$key] with a new value [$new_value]"
-  sed -r "s/^(\s*${key}\s*:\s*).*/\1${new_value}/" -i "$yaml_file"
+  # sed -r "s/^(\s*${key}\s*:\s*).*/\1${new_value}/" -i "$yaml_file"
+
+   awk \
+   -v key="(^[ \t]*(- )?${key_name}: )(.*)" \
+   -v value="${new_value}" \
+   -v section="/^[ \t]*(- )?${section}/" \
+   '
+    BEGIN {
+     done=0
+     }
+    {
+       if (!done && $0 ~ section) {
+         ++section_found
+         key_found=0
+       }
+       replace = gensub(key, "\\1"value, "g")
+       if ($0 ~ key && replace) {
+         ++key_found
+       }
+       if (!done && section_found>0 && key_found>0) {
+         $0=replace
+         done=1
+       }
+       print $0
+     } ' "$yaml_file"
 
 }
 
