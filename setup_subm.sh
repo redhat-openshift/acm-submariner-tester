@@ -2642,7 +2642,7 @@ function print_submariner_pod_logs() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
-  ${OC} get events -A || :
+  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
