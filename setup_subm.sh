@@ -497,7 +497,8 @@ fi
 
 ### Set CLI/User inputs - Default to "NO" for any unset value ###
 
-get_ocp_installer=${OCP_VERSION:-NO}
+get_ocp_installer=${get_ocp_installer:-NO}
+# OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
 build_submariner_e2e=${build_submariner_e2e:-NO}
