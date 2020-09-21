@@ -984,6 +984,9 @@ function log_to_html() {
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
 
+  # Set description div
+  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\">${description}</div></h3>"
+
   repo_url=https://github.com/theZiz/aha.git
   repo_branch=0.5.1
   repo_dir=$(basename $repo_url .git)
@@ -1041,16 +1044,11 @@ function log_to_html() {
     overflow: hidden;
     background-color: LightSkyBlue;
   }
-  .line-break {
-    white-space: pre-line;
-  }
   </style>
   </head>
   <body style="background-color:LightSkyBlue">
   <h1>${title}</h1>
-  <h3><div class="line-break">
   ${description}
-  </div></h3>
   <pre>
 EOF
 

@@ -2958,6 +2958,10 @@ if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
 
   grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS" || :
   cat "$POLARION_REPORTS"
+
+  # set REPORT_DESCRIPTION for html report
+  REPORT_DESCRIPTION="Polarion results:
+  $(< "$POLARION_REPORTS")"
 fi
 
 # ------------------------------------------
@@ -2969,10 +2973,6 @@ echo "# Creating HTML Report from:
 # REPORT_NAME = $REPORT_NAME
 # REPORT_FILE = $REPORT_FILE
 "
-
-# set REPORT_DESCRIPTION for html report
-REPORT_DESCRIPTION="Polarion results:
-$(< "$POLARION_REPORTS")"
 
 # Get test exit status (from file $TEST_STATUS_RC)
 test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
