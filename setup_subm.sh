@@ -903,12 +903,12 @@ function build_operator_latest() {  # [DEPRECATED]
 
   ls -l ./bin/subctl
   mkdir -p $GOBIN
-  # cp ./bin/subctl $GOBIN/
+  # cp -f ./bin/subctl $GOBIN/
   /usr/bin/install ./bin/subctl $GOBIN/subctl
 
   # Create symbolic link /usr/local/bin/subctl :
   #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
-  #cp ./bin/subctl ~/.local/bin
+  #cp -f ./bin/subctl ~/.local/bin
 
 }
 
@@ -974,17 +974,17 @@ function download_subctl_by_tag() {
 
       echo "# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
-      # cp ./subctl $GOBIN/
+      # cp -f ./subctl $GOBIN/
       /usr/bin/install ./subctl $GOBIN/subctl
 
       echo "# Install subctl into user HOME bin:"
-      # cp ./subctl ~/.local/bin/
+      # cp -f ./subctl ~/.local/bin/
       /usr/bin/install ./subctl ~/.local/bin/subctl
     fi
 
     echo "# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
-    # cp ./subctl $GOBIN/
+    # cp -f ./subctl $GOBIN/
     /usr/bin/install "$HOME/.local/bin/subctl" $GOBIN/subctl
 
     echo "# Add user HOME bin to system PATH:"
@@ -1027,7 +1027,7 @@ function create_aws_cluster_a() {
 
   mkdir -p "${CLUSTER_A_DIR}"
   local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
-  cp "${CLUSTER_A_YAML}" "$ocp_install_yaml"
+  cp -f "${CLUSTER_A_YAML}" "$ocp_install_yaml"
   chmod 777 "$ocp_install_yaml"
 
   update_config_aws_cluster_a "$ocp_install_yaml"
@@ -1085,7 +1085,7 @@ function create_osp_cluster_b() {
   cd "${OCPUP_DIR}"
 
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  cp "${CLUSTER_B_YAML}" ./
+  cp -f "${CLUSTER_B_YAML}" ./
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
 
@@ -1166,7 +1166,7 @@ function test_cluster_status() {
   # Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was previously set)
   if [[ $TEST_NS ]] ; then
     echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak"
-    cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+    cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
     BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
     "Set the default namespace to \"${TEST_NS}\"" \
@@ -1259,7 +1259,7 @@ function destroy_osp_cluster_b() {
 
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    cp "${CLUSTER_B_YAML}" ./
+    cp -f "${CLUSTER_B_YAML}" ./
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l "$ocpup_yml"
 
@@ -3002,8 +3002,8 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
-[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
-[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
+[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
 tar -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
