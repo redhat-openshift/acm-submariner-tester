@@ -2733,8 +2733,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
 
-    verify_golang
-
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
