@@ -560,17 +560,13 @@ function export_vars_from_json() {
 
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
-  PROMPT "Deleting DNS record for AWS Cluster A (Public): $2"
   # trap_commands;
-  # Input $1 : Hosted Zone ID
-  # Input $2 : DNS record-set (name) to delete
-
-  # export PATH=$HOME/.local/bin:$PATH
-  # PATH="${PATH}:${aws_install_dir}/bin"
+  local hosted_zone_id="$1"
+  local dns_record_set="$2"
   local tmp_file="`mktemp`_aws_records"
 
-  echo -e "\n# Searching in Hosted Zone [$1] - for a DNS record set: [$2]"
-  aws route53 list-resource-record-sets --hosted-zone-id $1 --query "ResourceRecordSets[?Name == '$2']" --out json > "$tmp_file"
+  echo -e "\n# Searching in Hosted Zone [$hosted_zone_id] - for a DNS record set: [$dns_record_set]"
+  aws route53 list-resource-record-sets --hosted-zone-id $hosted_zone_id --query "ResourceRecordSets[?Name == '$dns_record_set']" --out json > "$tmp_file"
 
   cat $tmp_file
 
@@ -587,7 +583,7 @@ function delete_aws_dns_records() {
   cat "$tmp_file"
 
   echo -e "\n# Deleting the DNS record set:"
-  aws route53 change-resource-record-sets --hosted-zone-id $1 --change-batch file://$tmp_file
+  aws route53 change-resource-record-sets --hosted-zone-id $hosted_zone_id --change-batch file://$tmp_file
 
 }
 

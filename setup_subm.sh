@@ -1018,11 +1018,8 @@ function create_aws_cluster_a() {
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
-  BUG "OCP Install failure creating IAM Role worker-role" \
-  "No workaround yet" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1846630"
-
   cd ${WORKDIR}
+  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
   if [[ -d "$CLUSTER_A_DIR" ]] && [[ -n `ls -A "$CLUSTER_A_DIR"` ]] ; then
     FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
@@ -1201,6 +1198,8 @@ function destroy_aws_cluster_a() {
   trap_commands;
   # Temp - CD to main working directory
   cd ${WORKDIR}
+
+  aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
   # TODO: should first check if it was not already purged, because it can save a lot of time.
