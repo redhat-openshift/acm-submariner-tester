@@ -772,7 +772,7 @@ function build_ocpup_tool_latest() {
   which ocpup
     # ~/go/bin/ocpup
 
-  ocpup  -h
+  ocpup -h
       # Create multiple OCP4 clusters and resources
       #
       # Usage:
@@ -1081,9 +1081,10 @@ function create_osp_cluster_b() {
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_commands;
 
+  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  # TODO: This YAML file should be copied from a secure path
   cp "${CLUSTER_B_YAML}" ./
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
@@ -1253,10 +1254,11 @@ function destroy_osp_cluster_b() {
   PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_commands;
 
+  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    # TODO: This YAML file should be copied from a secure path
     cp "${CLUSTER_B_YAML}" ./
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l "$ocpup_yml"
