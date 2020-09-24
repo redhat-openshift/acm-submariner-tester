@@ -76,7 +76,6 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  # Build latest Submariner-Operator (SubCtl):         --build-operator  [DEPRECATED]
   * Build latest Submariner E2E (test packages):       --build-e2e
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
   * Print all pods logs on failure:                    --print-logs
@@ -90,7 +89,7 @@ Running with pre-defined parameters (optional):
 * Show this help menu:                               -h / --help
 
 
-Command examples:
+### Command examples:
 
 - To run interactively (user enter options):
 
@@ -289,12 +288,6 @@ while [[ $# -gt 0 ]]; do
   --polarion)
     upload_to_polarion=YES
     shift ;;
-  # -o|--optional-key-value)
-  #   check_cli_args "$2"
-  #   key="$2"
-  #   [[ $key = x ]] && echo "Run x"
-  #   [[ $key = y ]] && echo "Run y"
-  #   shift 2 ;;
   --import-vars)
     check_cli_args "$2"
     export GLOBAL_VARS="$2"
