@@ -52,37 +52,44 @@ Interactive script to create Openshift multi-clusters on private and public clou
 
 Running with pre-defined parameters (optional):
 
-* Show this help menu:                               -h / --help
-* Show debug info (verbose) for commands:            -d / --debug
-# Build latest Submariner-Operator (SubCtl):         --build-operator  [DEPRECATED]
-* Build latest Submariner E2E (test packages):       --build-e2e
-* Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
-* Download latest OCPUP Tool:                        --get-ocpup-tool
-* Download latest release of SubCtl:                 --get-subctl
-* Download development release of SubCtl:            --get-subctl-devel
-* Create AWS cluster A:                              --create-cluster-a
-* Create OSP cluster B:                              --create-cluster-b
-* Destroy existing AWS cluster A:                    --destroy-cluster-a
-* Destroy existing OSP cluster B:                    --destroy-cluster-b
-* Reset (create & destroy) AWS cluster A:            --reset-cluster-a
-* Reset (create & destroy) OSP cluster B:            --reset-cluster-b
-* Clean existing AWS cluster A:                      --clean-cluster-a
-* Clean existing OSP cluster B:                      --clean-cluster-b
-* Configure and test Service Discovery:              --service-discovery
-* Configure and test GlobalNet:                      --globalnet
-* Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-* Skip OCP clusters setup (destroy/create/clean):    --skip-setup
-* Skip Submariner deployment:                        --skip-deploy
-* Skip all tests execution:                          --skip-tests [sys / e2e / pkg / all]
-* Print all pods logs on failure:                    --print-logs
-* Install Golang if missing:                         --config-golang
-* Install AWS-CLI and configure access:              --config-aws-cli
+- Openshift setup and environment options:
+
+  * Create AWS cluster A:                              --create-cluster-a
+  * Create OSP cluster B:                              --create-cluster-b
+  * Destroy existing AWS cluster A:                    --destroy-cluster-a
+  * Destroy existing OSP cluster B:                    --destroy-cluster-b
+  * Reset (create & destroy) AWS cluster A:            --reset-cluster-a
+  * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
+  * Clean existing AWS cluster A:                      --clean-cluster-a
+  * Clean existing OSP cluster B:                      --clean-cluster-b
+  * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
+  * Download latest OCPUP Tool:                        --get-ocpup-tool
+  * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
+  * Install Golang if missing:                         --config-golang
+  * Install AWS-CLI and configure access:              --config-aws-cli
+
+- Submariner installation and test options:
+
+  * Install latest release of Submariner:              --install-subctl
+  * Install development release of Submariner:         --install-subctl-devel
+  * Skip Submariner installation:                      --skip-install
+  * Configure and test Service Discovery:              --service-discovery
+  * Configure and test GlobalNet:                      --globalnet
+  * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
+  * Build latest Submariner E2E (test packages):       --build-e2e
+  * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
+  * Print all pods logs on failure:                    --print-logs
+
+- General script options:
+
 * Import additional variables from file:             --import-vars  [variables file path]
 * Record Junit Tests result (xml):                   --junit
 * Upload Junit results to polarion:                  --polarion
+* Show debug info (verbose) for commands:            -d / --debug
+* Show this help menu:                               -h / --help
 
 
-Command examples:
+### Command examples:
 
 - To run interactively (user enter options):
 
@@ -90,6 +97,7 @@ Command examples:
 
 
 - Example with pre-defined parameters:
+
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
@@ -98,17 +106,17 @@ Command examples:
   * Build and run latest E2E tests
   * Create Junit tests result (xml file)
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --build-e2e --install-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
 
 
 - Installing latest Submariner (master development), and using existing AWS cluster:
 
-  `./setup_subm.sh --get-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet`
+  `./setup_subm.sh --install-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet`
 
 
 - Installing last Submariner release, and re-creating a new AWS cluster:
 
-  `./setup_subm.sh --build-e2e --get-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet`
+  `./setup_subm.sh --build-e2e --install-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet`
 
 ----------------------------------------------------------------------'
 
@@ -208,11 +216,11 @@ while [[ $# -gt 0 ]]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
-  --get-subctl)
+  --install-subctl)
     get_subctl=YES
     shift ;;
-  --get-subctl-devel)
-    get_subctl_devel=YES
+  --install-subctl-devel)
+    install_subctl_devel=YES
     shift ;;
   --build-operator) # [DEPRECATED]
     build_operator=YES
@@ -257,8 +265,8 @@ while [[ $# -gt 0 ]]; do
   --skip-setup)
     skip_setup=YES
     shift ;;
-  --skip-deploy)
-    skip_deploy=YES
+  --skip-install)
+    skip_install=YES
     shift ;;
   --skip-tests)
     check_cli_args "$2"
@@ -280,12 +288,6 @@ while [[ $# -gt 0 ]]; do
   --polarion)
     upload_to_polarion=YES
     shift ;;
-  # -o|--optional-key-value)
-  #   check_cli_args "$2"
-  #   key="$2"
-  #   [[ $key = x ]] && echo "Run x"
-  #   [[ $key = y ]] && echo "Run y"
-  #   shift 2 ;;
   --import-vars)
     check_cli_args "$2"
     export GLOBAL_VARS="$2"
@@ -413,12 +415,12 @@ if [[ -z "$got_user_input" ]]; then
     get_subctl=${input:-no}
   done
 
-  # User input: $get_subctl_devel - to download_subctl_latest_devel
-  while [[ ! "$get_subctl_devel" =~ ^(yes|no)$ ]]; do
+  # User input: $install_subctl_devel - to download_subctl_latest_devel
+  while [[ ! "$install_subctl_devel" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to get the latest development of SubCtl (Submariner-Operator \"master\" branch) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    get_subctl_devel=${input:-no}
+    install_subctl_devel=${input:-no}
   done
 
   # User input: $build_submariner_e2e - to build_submariner_e2e_latest
@@ -429,12 +431,12 @@ if [[ -z "$got_user_input" ]]; then
     build_submariner_e2e=${input:-YES}
   done
 
-  # User input: $skip_deploy - to skip submariner deployment
-  while [[ ! "$skip_deploy" =~ ^(yes|no)$ ]]; do
+  # User input: $skip_install - to skip submariner deployment
+  while [[ ! "$skip_install" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run without deploying Submariner ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    skip_deploy=${input:-NO}
+    skip_install=${input:-NO}
   done
 
   # User input: $skip_tests - to skip tests: sys / e2e / pkg / all
@@ -488,12 +490,13 @@ fi
 
 ### Set CLI/User inputs - Default to "NO" for any unset value ###
 
-get_ocp_installer=${OCP_VERSION:-NO}
+get_ocp_installer=${get_ocp_installer:-NO}
+# OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
 build_submariner_e2e=${build_submariner_e2e:-NO}
 get_subctl=${get_subctl:-NO}
-get_subctl_devel=${get_subctl_devel:-NO}
+install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
 reset_cluster_a=${reset_cluster_a:-NO}
@@ -507,7 +510,7 @@ globalnet=${globalnet:-NO}
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
 skip_setup=${skip_setup:-NO}
-skip_deploy=${skip_deploy:-NO}
+skip_install=${skip_install:-NO}
 skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
 create_junit_xml=${create_junit_xml:-NO}
@@ -545,8 +548,8 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_deploy" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping deployment and preparations: $skip_deploy \n"
+  if [[ "$skip_install" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping deployment and preparations: $skip_install \n"
   else
     echo "### Will execute Submariner deployment and environment preparations:
 
@@ -557,14 +560,14 @@ function show_test_plan() {
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_e2e_latest: $build_submariner_e2e
     - download_subctl_latest_release: $get_subctl
-    - download_subctl_latest_devel: $get_subctl_devel
+    - download_subctl_latest_devel: $install_subctl_devel
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
 
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - test_subctl_command
+    - install_subctl_command
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -762,7 +765,7 @@ function build_ocpup_tool_latest() {
   which ocpup
     # ~/go/bin/ocpup
 
-  ocpup  -h
+  ocpup -h
       # Create multiple OCP4 clusters and resources
       #
       # Usage:
@@ -893,12 +896,12 @@ function build_operator_latest() {  # [DEPRECATED]
 
   ls -l ./bin/subctl
   mkdir -p $GOBIN
-  # cp ./bin/subctl $GOBIN/
+  # cp -f ./bin/subctl $GOBIN/
   /usr/bin/install ./bin/subctl $GOBIN/subctl
 
   # Create symbolic link /usr/local/bin/subctl :
   #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
-  #cp ./bin/subctl ~/.local/bin
+  #cp -f ./bin/subctl ~/.local/bin
 
 }
 
@@ -964,17 +967,17 @@ function download_subctl_by_tag() {
 
       echo "# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
-      # cp ./subctl $GOBIN/
+      # cp -f ./subctl $GOBIN/
       /usr/bin/install ./subctl $GOBIN/subctl
 
       echo "# Install subctl into user HOME bin:"
-      # cp ./subctl ~/.local/bin/
+      # cp -f ./subctl ~/.local/bin/
       /usr/bin/install ./subctl ~/.local/bin/subctl
     fi
 
     echo "# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
-    # cp ./subctl $GOBIN/
+    # cp -f ./subctl $GOBIN/
     /usr/bin/install "$HOME/.local/bin/subctl" $GOBIN/subctl
 
     echo "# Add user HOME bin to system PATH:"
@@ -1008,11 +1011,8 @@ function create_aws_cluster_a() {
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
-  BUG "OCP Install failure creating IAM Role worker-role" \
-  "No workaround yet" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1846630"
-
   cd ${WORKDIR}
+  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
   if [[ -d "$CLUSTER_A_DIR" ]] && [[ -n `ls -A "$CLUSTER_A_DIR"` ]] ; then
     FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
@@ -1020,7 +1020,7 @@ function create_aws_cluster_a() {
 
   mkdir -p "${CLUSTER_A_DIR}"
   local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
-  cp "${CLUSTER_A_YAML}" "$ocp_install_yaml"
+  cp -f "${CLUSTER_A_YAML}" "$ocp_install_yaml"
   chmod 777 "$ocp_install_yaml"
 
   update_config_aws_cluster_a "$ocp_install_yaml"
@@ -1074,10 +1074,11 @@ function create_osp_cluster_b() {
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_commands;
 
+  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  # TODO: This YAML file should be copied from a secure path
-  cp "${CLUSTER_B_YAML}" ./
+  cp -f "${CLUSTER_B_YAML}" ./
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
 
@@ -1158,7 +1159,7 @@ function test_cluster_status() {
   # Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was previously set)
   if [[ $TEST_NS ]] ; then
     echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak"
-    cp "${KUBECONFIG}" "${KUBECONFIG}.bak"
+    cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
     BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
     "Set the default namespace to \"${TEST_NS}\"" \
@@ -1191,6 +1192,8 @@ function destroy_aws_cluster_a() {
   trap_commands;
   # Temp - CD to main working directory
   cd ${WORKDIR}
+
+  aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
   # TODO: should first check if it was not already purged, because it can save a lot of time.
@@ -1244,11 +1247,12 @@ function destroy_osp_cluster_b() {
   PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_commands;
 
+  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    # TODO: This YAML file should be copied from a secure path
-    cp "${CLUSTER_B_YAML}" ./
+    cp -f "${CLUSTER_B_YAML}" ./
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l "$ocpup_yml"
 
@@ -1620,7 +1624,7 @@ function install_broker_aws_cluster_a() {
   echo "# Remove previous broker-info.subm (if exists)"
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
-  echo "# Executing: ${DEPLOY_CMD}"
+  echo "# Executing deploy command: ${DEPLOY_CMD}"
   $DEPLOY_CMD
 }
 
@@ -1805,7 +1809,7 @@ function join_submariner_current_cluster() {
     # Workaround:
     export MULTI_CLUSTER_DOMAIN='supercluster.local'
 
-  elif [[ "$get_subctl_devel" =~ ^(y|yes)$ ]]; then
+  elif [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
@@ -1816,7 +1820,7 @@ function join_submariner_current_cluster() {
   echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability"
   JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
 
-  echo "# Executing: ${JOIN_CMD}"
+  echo "# Executing join command: ${JOIN_CMD}"
   $JOIN_CMD
 
   PROMPT "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
@@ -2724,8 +2728,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
 
-    verify_golang
-
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
@@ -2772,9 +2774,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   fi
 
-  ### Deploy Submariner on the clusters (if not requested to skip_deploy) ###
+  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
 
-  if [[ ! "$skip_deploy" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     ${junit_cmd} install_netshoot_app_on_cluster_a
 
@@ -2794,7 +2796,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_devel
+    [[ ! "$install_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_devel
 
     ${junit_cmd} test_subctl_command
 
@@ -2948,6 +2950,10 @@ if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
 
   grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS" || :
   cat "$POLARION_REPORTS"
+
+  # set REPORT_DESCRIPTION for html report
+  REPORT_DESCRIPTION="Polarion results:
+  $(< "$POLARION_REPORTS")"
 fi
 
 # ------------------------------------------
@@ -2959,10 +2965,6 @@ echo "# Creating HTML Report from:
 # REPORT_NAME = $REPORT_NAME
 # REPORT_FILE = $REPORT_FILE
 "
-
-# set REPORT_DESCRIPTION for html report
-REPORT_DESCRIPTION="Polarion results:
-$(< "$POLARION_REPORTS")"
 
 # Get test exit status (from file $TEST_STATUS_RC)
 test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
@@ -2993,8 +2995,8 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
-[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
-[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
+[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
 tar -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
