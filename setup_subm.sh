@@ -1945,24 +1945,31 @@ function test_ha_status() {
   # TODO: Need to get current cluster ID
   #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-  # Checking "Gateway" resource
+  ### Checking "Gateway" resource ###
   BUG "API 'describe Gateway' does not show Gateway crashing and cable-driver failure" \
   "No workaround" \
   "https://github.com/submariner-io/submariner/issues/777"
 
-  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  local regex="Ha Status:\s*active"
+  watch_and_retry "$cmd" 3m "$regex"
 
+  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+  # echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
-  echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+  ### Checking "Submariner" resource ###
+  BUG "Gateway status error: No IKE SA found for cable submariner" \
+  "No workaround" \
+  "https://github.com/submariner-io/submariner/issues/759"
 
-  # Checking "Submariner" resource
+  cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
+  local regex="Status:\s*connected"
+  watch_and_retry "$cmd" 3m "$regex"
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
-
+  # echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
-
-  echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
     FATAL "Submariner HA failure occurred."
