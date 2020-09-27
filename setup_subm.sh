@@ -1005,9 +1005,9 @@ function test_subctl_command() {
 
 # ------------------------------------------
 
-function create_aws_cluster_a() {
-### Create AWS cluster A (public) with OCP installer ###
-  PROMPT "Creating AWS cluster A (public) with OCP installer"
+function prepare_install_aws_cluster_a() {
+### Prepare installation files for AWS cluster A (public) ###
+  PROMPT "Preparing installation files for AWS cluster A (public)"
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
@@ -1018,27 +1018,40 @@ function create_aws_cluster_a() {
     FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
   fi
 
+  # To manually create new OCP install-config.yaml:
+  # ./openshift-install create install-config --dir user-cluster-a
+  #
+  # $ cluster_name=user-cluster-a
+  # $ mkdir ${cluster_name}
+  # $ cd ${cluster_name}
+  # $ ../openshift-install create install-config
+
+    # ? SSH Public Key ~/.ssh/id_rsa.pub
+    # ? Platform aws
+    # ? Region us-east-1
+    # ? Base Domain devcluster.openshift.com
+    # ? cluster Name user-cluster-a
+    # ? Pull Secret
+
   mkdir -p "${CLUSTER_A_DIR}"
   local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
   cp -f "${CLUSTER_A_YAML}" "$ocp_install_yaml"
   chmod 777 "$ocp_install_yaml"
 
-  update_config_aws_cluster_a "$ocp_install_yaml"
+  echo "# Update the OCP installer configuration (YAML) of AWS cluster A"
 
-  # OR to create new OCP install-config.yaml:
-      # ./openshift-install create install-config --dir user-cluster-a
-      #
-      # $ cluster_name=user-cluster-a
-      # $ mkdir ${cluster_name}
-      # $ cd ${cluster_name}
-      # $ ../openshift-install create install-config
+  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
 
-        # ? SSH Public Key ~/.ssh/id_rsa.pub
-        # ? Platform aws
-        # ? Region us-east-1
-        # ? Base Domain devcluster.openshift.com
-        # ? cluster Name user-cluster-a
-        # ? Pull Secret
+  # TODO: change more {keys : values} in $ocp_install_yaml, with external variables file
+
+}
+
+# ------------------------------------------
+
+function create_aws_cluster_a() {
+### Create AWS cluster A (public) with OCP installer ###
+  PROMPT "Creating AWS cluster A (public) with OCP installer"
+  trap_commands;
 
   # Run OCP installer with the user-cluster-a.yaml:
   cd ${CLUSTER_A_DIR}
@@ -1051,20 +1064,6 @@ function create_aws_cluster_a() {
     # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
       # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
       # "Login to the console with user: kubeadmin, password: ..."
-}
-
-# ------------------------------------------
-
-function update_config_aws_cluster_a() {
-### Update the OCP installer configuration (YAML) of AWS cluster A ###
-  PROMPT "Update the OCP installer configuration (YAML) of AWS cluster A"
-  trap_commands;
-
-  local ocp_install_yaml="$1"
-
-  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
-
-  # Todo: change more key : values in $ocp_install_yaml, from variables file
 }
 
 # ------------------------------------------
@@ -2745,16 +2744,22 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
-    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} destroy_aws_cluster_a
+      ${junit_cmd} prepare_install_aws_cluster_a
       ${junit_cmd} create_aws_cluster_a
     else
-      # Running destroy_aws_cluster_a if requested
-      [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_aws_cluster_a
+      # Running destroy_aws_cluster_a and create_aws_cluster_a separately
 
-      # Running create_aws_cluster_a if requested
-      [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} create_aws_cluster_a
+      if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} destroy_aws_cluster_a
+      fi
+
+      if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} prepare_install_aws_cluster_a
+        ${junit_cmd} create_aws_cluster_a
+      fi
     fi
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
@@ -2762,15 +2767,15 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running build_ocpup_tool_latest if requested
     [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
-    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} destroy_osp_cluster_b
       ${junit_cmd} create_osp_cluster_b
     else
-      # Running destroy_osp_cluster_b if requested
+      # Running destroy_aws_cluster_b and create_aws_cluster_b separately
+
       [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
-      # Running create_osp_cluster_b if requested
       [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
     fi
 
