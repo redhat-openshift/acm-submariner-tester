@@ -357,6 +357,27 @@ function install_local_docker() {
 
 # ------------------------------------------
 
+# Function to download particular file or directory from particular Github commit or branch
+function download_github_file_or_dir() {
+  # trap_commands
+
+  local git_user="$1"
+  local git_project="$2"
+  local commit_or_branch="${3:-master}" # default is master branch
+  local dir_or_file="$4" # default is whole project tree
+
+  archive_url="https://github.com/${git_user}/${git_project}/archive/${commit_or_branch}.tar.gz"
+
+  echo -e "\n# Downloading from Github project: ${git_user}/${git_project} \
+  ${commit_or_branch:+\n# Commit ID: $commit_or_branch} \
+  \n# Directory: ${dir_or_file:-Whole project tree} \n"
+
+  wget -O - ${archive_url} | tar xz --strip=1 "${git_project}-${commit_or_branch}/${dir_or_file}"
+
+}
+
+# ------------------------------------------
+
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
   # trap_commands
