@@ -1292,16 +1292,15 @@ function clean_aws_cluster_a() {
 
   delete_submariner_namespace_and_crds;
 
-  PROMPT "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
   "Make sure only 1 node has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
+
   remove_submariner_gateway_labels
 
-  BUG "Submariner gateway label cannot be removed once created" \
-  "No Resolution yet" \
-  "https://github.com/submariner-io/submariner/issues/432"
+  remove_submariner_machine_sets
 
   # Todo: Should also include globalnet network cleanup:
   #
@@ -1315,6 +1314,7 @@ function clean_aws_cluster_a() {
   #   SUBMARINER-GN-MARK
   #
   # 3 its recommended that you delete the vx-submariner interface from all the nodes.
+
 }
 
 # ------------------------------------------
@@ -1327,8 +1327,10 @@ function clean_osp_cluster_b() {
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
-  PROMPT "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (on-prem)"
+  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
   remove_submariner_gateway_labels
+
+  remove_submariner_machine_sets
 }
 
 # ------------------------------------------
@@ -1366,9 +1368,26 @@ EOF
 function remove_submariner_gateway_labels() {
   trap_commands;
 
-  # Remove previous submariner gateway labels from all node in the cluster:
-  ${OC} label --all node submariner.io/gateway-
+  echo "# Remove previous submariner gateway labels from all node in the cluster:"
 
+  ${OC} label --all node submariner.io/gateway-
+}
+
+# ------------------------------------------
+
+function remove_submariner_machine_sets() {
+  trap_commands;
+
+  echo "# Remove previous machineset (if it has a template with submariner gateway label)"
+
+  local subm_machineset="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' )"
+  local ns="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}')"
+
+  if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
+    ${OC} delete machineset $subm_machineset -n $ns
+  fi
+
+  ${OC} get machineset -A -o wide
 }
 
 # ------------------------------------------
@@ -1498,6 +1517,12 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
 
+  BUG "External IP cannot be assigned on current ec2-resources.tf" \
+  "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
+  "----"
+  # Workaround:
+  sed -r 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
+
   # Run prep_for_subm script to apply ec2-resources.tf:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
 
@@ -1566,7 +1591,7 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
-    failed_machines=$(oc get Machine -A -o=jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
     FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
