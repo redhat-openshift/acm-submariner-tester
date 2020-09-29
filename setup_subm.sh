@@ -1380,8 +1380,8 @@ function remove_submariner_machine_sets() {
 
   echo "# Remove previous machineset (if it has a template with submariner gateway label)"
 
-  local subm_machineset="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' )"
-  local ns="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}')"
+  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' `"
+  local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
     ${OC} delete machineset $subm_machineset -n $ns
@@ -1494,22 +1494,35 @@ function open_firewall_ports_on_the_broker_node() {
   # Installing Terraform
   install_local_terraform "${WORKDIR}"
 
-  kubconf_a;
-
   local git_user="submariner-io"
   local git_project="submariner"
   local commit_or_branch="master" # "7ffe6146081d5a7f14ea103e5f290411d3746a4a"
-  local dir_or_file="tools/openshift/ocp-ipi-aws"
+  local prep_for_subm_dir="tools/openshift/ocp-ipi-aws"
 
-  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$dir_or_file"
+  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
 
-  cd "$dir_or_file"
+  # echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
+  # cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
+  # cd "${CLUSTER_A_DIR}"
+
+  cd "$prep_for_subm_dir"
+
+  kubconf_a;
 
   BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
   "https://github.com/submariner-io/submariner/issues/241"
   # Workaround:
-  sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
+  sed "s/terraform apply/terraform apply -auto-approve/g" -i ./prep_for_subm.sh
+
+
+  BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
+  "Modify 'prep_for_subm.sh' so it will download all 'ocp-ipi-aws/*' and remove 'cd ocp-ipi-aws'" \
+  "----"
+  # Workaround:
+  sed 's:$TMP/$IPI_AWS:$TMP/$IPI_AWS/*:' -i ./prep_for_subm.sh
+  sed 's/cd ocp-ipi-aws//' -i ./prep_for_subm.sh
+
 
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
@@ -1517,14 +1530,21 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
 
+
   BUG "External IP cannot be assigned on current ec2-resources.tf" \
   "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
   "----"
   # Workaround:
-  sed -r 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
+  sed "s/instanceType: .*/instanceType: m4.large/g" -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
+
 
   # Run prep_for_subm script to apply ec2-resources.tf:
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  set -x
+  pwd
+  ls -ltr
+  ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  set +x
 
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
