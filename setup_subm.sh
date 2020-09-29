@@ -1479,7 +1479,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch="7ffe6146081d5a7f14ea103e5f290411d3746a4a"
+  local commit_or_branch="master" # "7ffe6146081d5a7f14ea103e5f290411d3746a4a"
   local dir_or_file="tools/openshift/ocp-ipi-aws"
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$dir_or_file"
@@ -1562,15 +1562,23 @@ function gateway_label_all_nodes_external_ip() {
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex of IPv4
-  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" \
+  200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
+
+  if [[ "$external_ips" = NONE ]] ; then
+    failed_machines=$(oc get Machine -A -o=jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    ${failed_machines:+ Failed Machines: \n$failed_machines}"
+  fi
+
+  # [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
+
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
-
-  [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   for node in $gw_nodes; do
     # TODO: Run only If there's no Gateway label already:
@@ -2658,6 +2666,19 @@ function print_submariner_pod_logs() {
   ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get Machine -A || :
+
+  oc get Machine -A | awk '{
+    if (NR>1) {
+      namespace = $1
+      machine = $2
+      printf ("\n###################### Machine: %s (Namespece: %s) ######################\n", machine, namespace )
+      cmd = "oc describe Machine " machine " -n " namespace
+      printf ("\n$ %s\n\n", cmd)
+      system("oc describe Machine "$2" -n "$1)
+    }
+  }'
 
   ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
