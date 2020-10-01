@@ -25,8 +25,13 @@
 # https://docs.google.com/forms/d/e/1FAIpQLScxbNCO1fNFeIeFUghlCSr9uqVZncYwYmgSR2CLNIQv5AUTaw/viewform #
 # - OpenShift on OpenStack (using PSI) Mojo page:                                                     #
 # https://mojo.redhat.com/docs/DOC-1207953                                                            #
+# - Make sure your user is included in the Rover group with the same OSP project name:                #
+# https://rover.redhat.com/groups/group/{your-rover-group-name}                                       #
 # - Login to Openstack Admin with your kerberos credentials (and your company domain.com):            #
 # https://rhos-d.infra.prod.upshift.rdu2.redhat.com/dashboard/project/                                #
+# - Support email: psi-openstack-users@redhat.com                                                     #
+# - Support IRC: #psi , #ops-escalation                                                               #
+# - Support Google-Chat: exd-infra-escalation                                                         #
 #                                                                                                     #
 # (2) Get access to AWS account.                                                                      #
 # - To get it, please fill AWS request form:                                                          #
@@ -656,8 +661,10 @@ function setup_workspace() {
   # # CD to main working directory
   # cd ${WORKDIR}
 
-  # Installing if $config_golang = yes/y
+  # Installing GoLang with Anaconda if $config_golang = yes/y
   if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
+    install_anaconda "${WORKDIR}"
+
     install_local_golang "${WORKDIR}"
 
     # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
@@ -1295,7 +1302,7 @@ function clean_aws_cluster_a() {
   PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
-  "Make sure only 1 node has a gateway label" \
+  "Make sure one node with external IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
   remove_submariner_gateway_labels
@@ -1343,10 +1350,6 @@ function delete_submariner_namespace_and_crds() {
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   delete_namespace_and_crds "${BROKER_NAMESPACE}"
-
-  BUG "Recreating ServiceExport should update the Lighthouse DNS list" \
-  "Run cleanup for ServiceExport DNS list" \
-  "https://github.com/submariner-io/submariner/issues/641"
 
   echo "# Clean Lighthouse ServiceExport DNS list:"
 
@@ -1501,11 +1504,11 @@ function open_firewall_ports_on_the_broker_node() {
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
 
-  # echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
-  # cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
-  # cd "${CLUSTER_A_DIR}"
+  echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
+  cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
+  cd "${CLUSTER_A_DIR}"
 
-  cd "$prep_for_subm_dir"
+  # cd "$prep_for_subm_dir"
 
   kubconf_a;
 
@@ -1522,6 +1525,7 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed 's:$TMP/$IPI_AWS:$TMP/$IPI_AWS/*:' -i ./prep_for_subm.sh
   sed 's/cd ocp-ipi-aws//' -i ./prep_for_subm.sh
+  sed "s/-d ocp-ipi-aws/true/g" -i ./prep_for_subm.sh
 
 
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
@@ -1539,12 +1543,12 @@ function open_firewall_ports_on_the_broker_node() {
 
 
   # Run prep_for_subm script to apply ec2-resources.tf:
-  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
-  set -x
-  pwd
-  ls -ltr
-  ./prep_for_subm.sh "${CLUSTER_A_DIR}"
-  set +x
+  bash -x ./prep_for_subm.sh
+  # set -x
+  # pwd
+  # ls -ltr
+  # ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  # set +x
 
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
