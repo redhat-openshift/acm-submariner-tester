@@ -343,7 +343,7 @@ function install_local_terraform() {
   echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge terraform
+  conda install -y --update-deps -c conda-forge terraform=0.12.23
   conda list
 }
 
@@ -529,7 +529,6 @@ function configure_aws_access() {
   install_dir="${5:-./}"
   aws_bin_dir="${6:-$HOME/.local/bin}"
 
-  PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
   download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
@@ -542,13 +541,16 @@ function configure_aws_access() {
 
   aws --version
 
-  aws configure set profile $AWS_PROFILE_NAME
-  aws configure set aws_access_key_id $AWS_KEY
-  aws configure set aws_secret_access_key $AWS_SECRET
+  (
+    # subshell to hide commands
+    aws configure set profile $AWS_PROFILE_NAME
+    aws configure set aws_access_key_id $AWS_KEY
+    aws configure set aws_secret_access_key $AWS_SECRET
 
-  aws configure set default.region $AWS_REGION
-  aws configure set output text
-  aws configure set color on
+    aws configure set default.region $AWS_REGION
+    aws configure set output text
+    aws configure set color on
+  )
 
   # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
   aws sts get-caller-identity

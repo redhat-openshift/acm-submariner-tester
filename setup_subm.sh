@@ -679,8 +679,11 @@ function setup_workspace() {
   fi
 
   # Installing if $config_aws_cli = yes/y
-  [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
-  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}")
+  if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
+    PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    configure_aws_access \
+    "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+  fi
 
   # Set Polarion credentials if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
@@ -1516,7 +1519,7 @@ function open_firewall_ports_on_the_broker_node() {
   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
   "https://github.com/submariner-io/submariner/issues/241"
   # Workaround:
-  sed "s/terraform apply/terraform apply -auto-approve/g" -i ./prep_for_subm.sh
+  sed "s/terraform apply/terraform apply -auto-approve -lock-timeout=3m /g" -i ./prep_for_subm.sh
 
 
   BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
@@ -1543,12 +1546,9 @@ function open_firewall_ports_on_the_broker_node() {
 
 
   # Run prep_for_subm script to apply ec2-resources.tf:
-  bash -x ./prep_for_subm.sh
-  # set -x
-  # pwd
-  # ls -ltr
-  # ./prep_for_subm.sh "${CLUSTER_A_DIR}"
-  # set +x
+  set -x
+  ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  set +x
 
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
