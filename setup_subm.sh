@@ -751,6 +751,8 @@ function build_ocpup_tool_latest() {
   PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
   trap_commands;
 
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+
   # TODO: Need to fix ocpup alias
 
   cd ${WORKDIR}
@@ -802,7 +804,7 @@ function build_submariner_e2e_latest() {
   PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
   trap_commands;
 
-  verify_golang
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   # Delete old Submariner directory
     # rm -rf $GOPATH/src/github.com/submariner-io/submariner
@@ -849,7 +851,7 @@ function build_operator_latest() {  # [DEPRECATED]
   PROMPT "Building latest Submariner-Operator code and SubCTL tool"
   trap_commands;
 
-  verify_golang
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   # Install Docker
   # install_local_docker "${WORKDIR}"
@@ -1498,20 +1500,30 @@ function open_firewall_ports_on_the_broker_node() {
   trap_commands;
 
   # Installing Terraform
-  install_local_terraform "${WORKDIR}"
+  BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
+  "Use Terraform v0.12" \
+  "https://github.com/submariner-io/submariner/issues/847"
+  # Workaround:
+  install_local_terraform "${WORKDIR}" "0.12.23"
+
+  # TODO : Add to terraform 'main.tf' :
+    #   terraform {
+    #   required_version = ">= 0.12"
+    #   required_version = "< 0.13"
+    # }
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch="master" # "7ffe6146081d5a7f14ea103e5f290411d3746a4a"
+  local commit_or_branch="7ffe6146081d5a7f14ea103e5f290411d3746a4a" # "master" #
   local prep_for_subm_dir="tools/openshift/ocp-ipi-aws"
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
 
-  echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
-  cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
-  cd "${CLUSTER_A_DIR}"
+  # echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
+  # cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
+  # cd "${CLUSTER_A_DIR}"
 
-  # cd "$prep_for_subm_dir"
+  cd "$prep_for_subm_dir"
 
   kubconf_a;
 
@@ -1519,7 +1531,8 @@ function open_firewall_ports_on_the_broker_node() {
   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
   "https://github.com/submariner-io/submariner/issues/241"
   # Workaround:
-  sed "s/terraform apply/terraform apply -auto-approve -lock-timeout=3m /g" -i ./prep_for_subm.sh
+  sed 's/terraform apply/terraform apply -auto-approve -lock-timeout=3m /g' -i ./prep_for_subm.sh
+  #sed "s/terraform init/terraform init -upgrade/g" -i ./prep_for_subm.sh
 
 
   BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
@@ -1528,7 +1541,14 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed 's:$TMP/$IPI_AWS:$TMP/$IPI_AWS/*:' -i ./prep_for_subm.sh
   sed 's/cd ocp-ipi-aws//' -i ./prep_for_subm.sh
-  sed "s/-d ocp-ipi-aws/true/g" -i ./prep_for_subm.sh
+  sed 's/-d ocp-ipi-aws/true/g' -i ./prep_for_subm.sh
+
+
+  BUG "'prep_for_subm.sh' should not cd into \$OCP_INS_DIR just to read metadata.json" \
+  "Modify 'prep_for_subm.sh' so it will read '\$OCP_INS_DIR/metadata.json' instead" \
+  "----"
+  # Workaround:
+  sed 's:metadata.json:$OCP_INS_DIR/metadata.json:g' -i ./prep_for_subm.sh
 
 
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
@@ -1542,13 +1562,13 @@ function open_firewall_ports_on_the_broker_node() {
   "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
   "----"
   # Workaround:
-  sed "s/instanceType: .*/instanceType: m4.large/g" -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
+  sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
 
 
   # Run prep_for_subm script to apply ec2-resources.tf:
-  set -x
-  ./prep_for_subm.sh "${CLUSTER_A_DIR}"
-  set +x
+  # set -x
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+  # set +x
 
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
@@ -2992,7 +3012,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
     ### Running Ginkgo tests of Submariner repositories
 
-    verify_golang
+    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
 

@@ -295,23 +295,23 @@ function install_local_golang() {
   trap_commands
   echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
 
-  install_dir="${1:-.}/"
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
   verify_anaconda "${install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge go-nocgo_linux-64
+  conda install -y --update-deps -c conda-forge go-nocgo_linux-64${pkg_version:+=$pkg_version}
   conda list
 }
 
 # ------------------------------------------
-
+# Function to verify Golang is installed
 function verify_golang() {
-  # Verify Golang installed.
-  # Optional: $1 - GOBIN path
   echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
-  go version || FATAL "No Golang installation found"
+  go version
 
   # export GOROOT=/usr/local/go
   export GOROOT=$(go env GOROOT)
@@ -319,7 +319,7 @@ function verify_golang() {
   # export GOPATH=~/go
   export GOPATH=$(go env GOPATH)
 
-  # export GOBIN=$GOROOT/bin
+  # Optional: exporting $1 as GOBIN path
   export GOBIN="${1:-$GOROOT/bin}"
 
   # export PATH=$PATH:$GOROOT/bin
@@ -337,13 +337,15 @@ function install_local_terraform() {
   # Installing Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
   trap_commands
 
-  install_dir="${1:-.}/"
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
   verify_anaconda "${install_dir}"
 
   echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge terraform=0.12.23
+  conda install -y --update-deps -c conda-forge terraform=${pkg_version:+=$pkg_version}
   conda list
 }
 
@@ -359,13 +361,15 @@ function install_local_docker() {
   # SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh -s -- --experimental
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
-  install_dir="${1:-.}/"
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
   verify_anaconda "${install_dir}"
 
   echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge docker
+  conda install -y --update-deps -c conda-forge docker${pkg_version:+=$pkg_version}
   conda list
 }
 
