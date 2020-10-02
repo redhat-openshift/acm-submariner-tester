@@ -1514,7 +1514,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch="7ffe6146081d5a7f14ea103e5f290411d3746a4a" # "master" #
+  local commit_or_branch=master # "7ffe6146081d5a7f14ea103e5f290411d3746a4a" # "master" #
   local prep_for_subm_dir="tools/openshift/ocp-ipi-aws"
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
@@ -1548,7 +1548,8 @@ function open_firewall_ports_on_the_broker_node() {
   "Modify 'prep_for_subm.sh' so it will read '\$OCP_INS_DIR/metadata.json' instead" \
   "----"
   # Workaround:
-  sed 's:metadata.json:$OCP_INS_DIR/metadata.json:g' -i ./prep_for_subm.sh
+  sed 's/cd $OCP_INS_DIR//' -i ./prep_for_subm.sh
+  sed 's: metadata.json: $METADATA_JSON:g' -i ./prep_for_subm.sh
 
 
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
@@ -1564,11 +1565,8 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
 
-
-  # Run prep_for_subm script to apply ec2-resources.tf:
-  # set -x
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
-  # set +x
+  echo "# Running 'prep_for_subm.sh' script to apply Terraform 'ec2-resources.tf'"
+  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
 
     # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
     #
@@ -1581,6 +1579,13 @@ function open_firewall_ports_on_the_broker_node() {
     # Applying machineset changes to deploy gateway node:
     # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
     # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
+
+  BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
+  "Ignore output" \
+  "----"
+  # Workaound:
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" || :
+
 }
 
 # ------------------------------------------
