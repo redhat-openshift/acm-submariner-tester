@@ -1580,25 +1580,60 @@ function open_firewall_ports_on_the_broker_node() {
   echo "# Running 'prep_for_subm.sh' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
 
-    # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
-    #
-    # Outputs:
-    #
-    # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
-    # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
-    # target_public_subnet = subnet-016d75737faa4b219
-    #
-    # Applying machineset changes to deploy gateway node:
-    # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
-    # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
-
   BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
-  "Ignore output" \
-  "----"
+  "No workaround yet (it will probably fail later when searching external IP)" \
+  "https://github.com/submariner-io/submariner/issues/240"
   # Workaound:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" || :
 
+  # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  #
+  # Outputs:
+  #
+  # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
+  # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
+  # target_public_subnet = subnet-016d75737faa4b219
+  #
+  # Applying machineset changes to deploy gateway node:
+  # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
+  # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
+
 }
+
+# function open_firewall_ports_on_the_broker_node() {
+# ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
+#   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
+#   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
+#   trap_commands;
+#
+#   # Installing Terraform
+#   BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
+#   "Use Terraform v0.12" \
+#   "https://github.com/submariner-io/submariner/issues/847"
+#   # Workaround:
+#   install_local_terraform "${WORKDIR}" "0.12.23"
+#
+#   kubconf_a;
+#   cd "${CLUSTER_A_DIR}"
+#
+#   curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
+#   chmod a+x ./prep_for_subm.sh
+#
+#   BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
+#   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
+#   "https://github.com/submariner-io/submariner/issues/241"
+#   sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
+#
+#   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
+#   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
+#   "https://github.com/submariner-io/submariner/issues/240"
+#   [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
+#   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
+#
+#   # Run prep_for_subm script to apply ec2-resources.tf:
+#   bash -x ./prep_for_subm.sh
+#
+# }
 
 # ------------------------------------------
 
