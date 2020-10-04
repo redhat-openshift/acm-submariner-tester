@@ -1089,19 +1089,28 @@ function create_osp_cluster_b() {
   cd "${OCPUP_DIR}"
 
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  cp -f "${CLUSTER_B_YAML}" ./
+  cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
 
-  # Run OCPUP to Create OpenStack cluster B (on-prem)
+  local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
+  local ocpup_project_name="$(awk '/projectName:/ {print $NF}' $ocpup_yml)"
+  local ocpup_user_name="$(awk '/userName:/ {print $NF}' $ocpup_yml)"
+
+  echo -e "# Running OCPUP to create OpenStack cluster B (on-prem):
+  \n# Cluster name: $ocpup_cluster_name
+  \n# OSP Project: $ocpup_project_name
+  \n# OSP User: $ocpup_user_name"
+
   # ocpup  create clusters --debug --config "$ocpup_yml"
   ocpup  create clusters --config "$ocpup_yml" &
   pid=$!
-  tail --pid=$pid -f --retry .config/cl1/.openshift_install.log &
+  tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
   tail --pid=$pid -f /dev/null
 
   # To tail all OpenShift Installer logs (in a new session):
-    # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
+    # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
 
   # Login to the new created cluster:
   # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
@@ -1177,7 +1186,7 @@ function test_cluster_status() {
     "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
 
     echo "# Create namespace for Submariner tests: ${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # || : to ignore none-zero exit code
+    ${OC} create namespace "${TEST_NS}" || : # Ignore none-zero exit code (if namespace already exists
 
     echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS}"
     cur_context="$(${OC} config current-context)"
@@ -1263,23 +1272,26 @@ function destroy_osp_cluster_b() {
 
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    cp -f "${CLUSTER_B_YAML}" ./
+    cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l "$ocpup_yml"
+
+    local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
     # ocpup  destroy clusters --debug --config "$ocpup_yml"
     ocpup  destroy clusters --config "$ocpup_yml" & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
-    # tail --pid=$pid -f .config/cl1/.openshift_install.log && tail -f /proc/$pid/fd/1
+    # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
 
     # Wait until the background process finish
-    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/cl1/.openshift_install.log &
+    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log &
     #tail --pid=$pid -f /dev/null # wait until the background process finish
 
-    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/cl1/.openshift_install.log"
+    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
     # To tail all OpenShift Installer logs (in a new session):
-      # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
+      # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
 
     echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_B_NAME} "
     backup_and_remove_dir ".config"
@@ -2808,6 +2820,15 @@ else
 fi
 
 cd ${SCRIPT_DIR}
+
+# Setting Cluster A and Broker config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
+export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
+export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
+export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
+
+# Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
+export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
+export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
 # Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
