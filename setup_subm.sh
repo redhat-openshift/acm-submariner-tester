@@ -773,9 +773,7 @@ function build_ocpup_tool_latest() {
   # go build -mod vendor # Saves binary in current directory
 
   # Check OCPUP command
-    # sudo ln -sf ocpup /usr/local/bin/ocpup
-  which ocpup
-    # ~/go/bin/ocpup
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -1009,7 +1007,7 @@ function test_subctl_command() {
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ (Subctl version: $subctl_version)}"
 
-  which subctl
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
   subctl --help
 
@@ -1511,12 +1509,14 @@ function open_firewall_ports_on_the_broker_node() {
   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
   trap_commands;
 
-  # Installing Terraform
-  BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
-  "Use Terraform v0.12" \
-  "https://github.com/submariner-io/submariner/issues/847"
-  # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.23"
+  # # Installing Terraform
+  install_local_terraform "${WORKDIR}"
+
+  # BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
+  # "Use Terraform v0.12" \
+  # "https://github.com/submariner-io/submariner/issues/847"
+  # # Workaround:
+  # install_local_terraform "${WORKDIR}" "0.12.23"
 
   # TODO : Add to terraform 'main.tf' :
     #   terraform {
@@ -2667,7 +2667,7 @@ function test_submariner_e2e_with_subctl() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  which subctl
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
 
   BUG "No Subctl option to set -ginkgo.reportFile" \

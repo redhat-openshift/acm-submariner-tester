@@ -416,7 +416,7 @@ function download_file() {
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       rm -rf "$target_file"
-      if [[ $(which wget) ]] ; then
+      if [[ -x "$(command -v wget)" ]] ; then
         target_dir=$(dirname -- "$target_file")
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
         source_file=$(basename -- "$source_file")
@@ -1022,7 +1022,8 @@ function log_to_html() {
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
 
   # Set description div
-  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\">${description}</div></h3>"
+  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
+  </div></h3>"
 
   repo_url=https://github.com/theZiz/aha.git
   repo_branch=0.5.1
