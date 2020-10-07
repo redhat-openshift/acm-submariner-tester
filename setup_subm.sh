@@ -1242,7 +1242,20 @@ function destroy_aws_cluster_a() {
     echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
 
-  # To remove YOUR DNS record sets from Route53:
+  BUG "WARNING: OCP destroy command does not remove the previous DNS record sets from AWS Route53" \
+  "Delete previous DNS record sets from AWS Route53" \
+  "---"
+  # Workaround:
+
+  # set AWS DNS record sets to be deleted
+  AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+  AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+
+  echo -e "# Deleting AWS DNS record sets from Route53:
+  # $AWS_DNS_ALIAS1
+  # $AWS_DNS_ALIAS2
+  "
+  
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
   # chmod +x delete_aws_dns_alias_zones.sh
   # ./delete_aws_dns_alias_zones.sh "${CLUSTER_A_NAME}"
@@ -1510,13 +1523,13 @@ function open_firewall_ports_on_the_broker_node() {
   trap_commands;
 
   # # Installing Terraform
-  install_local_terraform "${WORKDIR}"
+  # install_local_terraform "${WORKDIR}"
 
-  # BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
-  # "Use Terraform v0.12" \
-  # "https://github.com/submariner-io/submariner/issues/847"
-  # # Workaround:
-  # install_local_terraform "${WORKDIR}" "0.12.23"
+  BUG "Terraform v0.13 is not supported when using prep_for_subm.sh" \
+  "Use Terraform v0.12.2" \
+  "https://github.com/submariner-io/submariner/issues/847"
+  # Workaround:
+  install_local_terraform "${WORKDIR}" "0.12.2"
 
   # TODO : Add to terraform 'main.tf' :
     #   terraform {
@@ -1539,36 +1552,12 @@ function open_firewall_ports_on_the_broker_node() {
 
   kubconf_a;
 
-  BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
-  "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
-  "https://github.com/submariner-io/submariner/issues/241"
-  # Workaround:
-  sed 's/terraform apply/terraform apply -auto-approve -lock-timeout=3m /g' -i ./prep_for_subm.sh
-  #sed "s/terraform init/terraform init -upgrade/g" -i ./prep_for_subm.sh
-
-
-  BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
-  "Modify 'prep_for_subm.sh' so it will download all 'ocp-ipi-aws/*' and remove 'cd ocp-ipi-aws'" \
-  "----"
-  # Workaround:
-  sed 's:$TMP/$IPI_AWS:$TMP/$IPI_AWS/*:' -i ./prep_for_subm.sh
-  sed 's/cd ocp-ipi-aws//' -i ./prep_for_subm.sh
-  sed 's/-d ocp-ipi-aws/true/g' -i ./prep_for_subm.sh
-
-
-  BUG "'prep_for_subm.sh' should not cd into \$OCP_INS_DIR just to read metadata.json" \
-  "Modify 'prep_for_subm.sh' so it will read '\$OCP_INS_DIR/metadata.json' instead" \
-  "----"
-  # Workaround:
-  sed 's/cd $OCP_INS_DIR//' -i ./prep_for_subm.sh
-  sed 's: metadata.json: $METADATA_JSON:g' -i ./prep_for_subm.sh
-
-
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
   "https://github.com/submariner-io/submariner/issues/240"
   # Workaround:
   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
+  #sed "s/4800/4801/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
 
 
   BUG "External IP cannot be assigned on current ec2-resources.tf" \
@@ -1577,14 +1566,15 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
 
-  echo "# Running 'prep_for_subm.sh' script to apply Terraform 'ec2-resources.tf'"
-  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}"
+
+  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
 
   BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
   "No workaround yet (it will probably fail later when searching external IP)" \
   "https://github.com/submariner-io/submariner/issues/240"
   # Workaound:
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" || :
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   #
