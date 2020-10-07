@@ -1255,7 +1255,7 @@ function destroy_aws_cluster_a() {
   # $AWS_DNS_ALIAS1
   # $AWS_DNS_ALIAS2
   "
-  
+
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
   # chmod +x delete_aws_dns_alias_zones.sh
   # ./delete_aws_dns_alias_zones.sh "${CLUSTER_A_NAME}"
@@ -2089,8 +2089,9 @@ function test_ha_status() {
   "https://github.com/submariner-io/submariner/issues/759"
 
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status:\s*connected"
-  watch_and_retry "$cmd" 3m "$regex"
+  local regex="Status Message:\s*connected"
+  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
+  watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
   # echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
