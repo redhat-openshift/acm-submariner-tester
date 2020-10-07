@@ -25,8 +25,13 @@
 # https://docs.google.com/forms/d/e/1FAIpQLScxbNCO1fNFeIeFUghlCSr9uqVZncYwYmgSR2CLNIQv5AUTaw/viewform #
 # - OpenShift on OpenStack (using PSI) Mojo page:                                                     #
 # https://mojo.redhat.com/docs/DOC-1207953                                                            #
+# - Make sure your user is included in the Rover group with the same OSP project name:                #
+# https://rover.redhat.com/groups/group/{your-rover-group-name}                                       #
 # - Login to Openstack Admin with your kerberos credentials (and your company domain.com):            #
 # https://rhos-d.infra.prod.upshift.rdu2.redhat.com/dashboard/project/                                #
+# - Support email: psi-openstack-users@redhat.com                                                     #
+# - Support IRC: #psi , #ops-escalation                                                               #
+# - Support Google-Chat: exd-infra-escalation                                                         #
 #                                                                                                     #
 # (2) Get access to AWS account.                                                                      #
 # - To get it, please fill AWS request form:                                                          #
@@ -656,8 +661,10 @@ function setup_workspace() {
   # # CD to main working directory
   # cd ${WORKDIR}
 
-  # Installing if $config_golang = yes/y
+  # Installing GoLang with Anaconda if $config_golang = yes/y
   if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
+    install_anaconda "${WORKDIR}"
+
     install_local_golang "${WORKDIR}"
 
     # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
@@ -672,8 +679,11 @@ function setup_workspace() {
   fi
 
   # Installing if $config_aws_cli = yes/y
-  [[ ! "$config_aws_cli" =~ ^(y|yes)$ ]] || ( configure_aws_access \
-  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}")
+  if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
+    PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    configure_aws_access \
+    "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+  fi
 
   # Set Polarion credentials if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
@@ -741,6 +751,8 @@ function build_ocpup_tool_latest() {
   PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
   trap_commands;
 
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+
   # TODO: Need to fix ocpup alias
 
   cd ${WORKDIR}
@@ -761,9 +773,7 @@ function build_ocpup_tool_latest() {
   # go build -mod vendor # Saves binary in current directory
 
   # Check OCPUP command
-    # sudo ln -sf ocpup /usr/local/bin/ocpup
-  which ocpup
-    # ~/go/bin/ocpup
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -792,7 +802,7 @@ function build_submariner_e2e_latest() {
   PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
   trap_commands;
 
-  verify_golang
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   # Delete old Submariner directory
     # rm -rf $GOPATH/src/github.com/submariner-io/submariner
@@ -839,7 +849,7 @@ function build_operator_latest() {  # [DEPRECATED]
   PROMPT "Building latest Submariner-Operator code and SubCTL tool"
   trap_commands;
 
-  verify_golang
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   # Install Docker
   # install_local_docker "${WORKDIR}"
@@ -997,7 +1007,7 @@ function test_subctl_command() {
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ (Subctl version: $subctl_version)}"
 
-  which subctl
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
   subctl --help
 
@@ -1005,9 +1015,9 @@ function test_subctl_command() {
 
 # ------------------------------------------
 
-function create_aws_cluster_a() {
-### Create AWS cluster A (public) with OCP installer ###
-  PROMPT "Creating AWS cluster A (public) with OCP installer"
+function prepare_install_aws_cluster_a() {
+### Prepare installation files for AWS cluster A (public) ###
+  PROMPT "Preparing installation files for AWS cluster A (public)"
   trap_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
@@ -1018,27 +1028,40 @@ function create_aws_cluster_a() {
     FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
   fi
 
+  # To manually create new OCP install-config.yaml:
+  # ./openshift-install create install-config --dir user-cluster-a
+  #
+  # $ cluster_name=user-cluster-a
+  # $ mkdir ${cluster_name}
+  # $ cd ${cluster_name}
+  # $ ../openshift-install create install-config
+
+    # ? SSH Public Key ~/.ssh/id_rsa.pub
+    # ? Platform aws
+    # ? Region us-east-1
+    # ? Base Domain devcluster.openshift.com
+    # ? cluster Name user-cluster-a
+    # ? Pull Secret
+
   mkdir -p "${CLUSTER_A_DIR}"
   local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
   cp -f "${CLUSTER_A_YAML}" "$ocp_install_yaml"
   chmod 777 "$ocp_install_yaml"
 
-  update_config_aws_cluster_a "$ocp_install_yaml"
+  echo "# Update the OCP installer configuration (YAML) of AWS cluster A"
 
-  # OR to create new OCP install-config.yaml:
-      # ./openshift-install create install-config --dir user-cluster-a
-      #
-      # $ cluster_name=user-cluster-a
-      # $ mkdir ${cluster_name}
-      # $ cd ${cluster_name}
-      # $ ../openshift-install create install-config
+  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
 
-        # ? SSH Public Key ~/.ssh/id_rsa.pub
-        # ? Platform aws
-        # ? Region us-east-1
-        # ? Base Domain devcluster.openshift.com
-        # ? cluster Name user-cluster-a
-        # ? Pull Secret
+  # TODO: change more {keys : values} in $ocp_install_yaml, with external variables file
+
+}
+
+# ------------------------------------------
+
+function create_aws_cluster_a() {
+### Create AWS cluster A (public) with OCP installer ###
+  PROMPT "Creating AWS cluster A (public) with OCP installer"
+  trap_commands;
 
   # Run OCP installer with the user-cluster-a.yaml:
   cd ${CLUSTER_A_DIR}
@@ -1055,20 +1078,6 @@ function create_aws_cluster_a() {
 
 # ------------------------------------------
 
-function update_config_aws_cluster_a() {
-### Update the OCP installer configuration (YAML) of AWS cluster A ###
-  PROMPT "Update the OCP installer configuration (YAML) of AWS cluster A"
-  trap_commands;
-
-  local ocp_install_yaml="$1"
-
-  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
-
-  # Todo: change more key : values in $ocp_install_yaml, from variables file
-}
-
-# ------------------------------------------
-
 function create_osp_cluster_b() {
 ### Create Openstack cluster B (on-prem) with OCPUP tool ###
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
@@ -1078,19 +1087,28 @@ function create_osp_cluster_b() {
   cd "${OCPUP_DIR}"
 
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  cp -f "${CLUSTER_B_YAML}" ./
+  cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+
   ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
   ls -l "$ocpup_yml"
 
-  # Run OCPUP to Create OpenStack cluster B (on-prem)
+  local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
+  local ocpup_project_name="$(awk '/projectName:/ {print $NF}' $ocpup_yml)"
+  local ocpup_user_name="$(awk '/userName:/ {print $NF}' $ocpup_yml)"
+
+  echo -e "# Running OCPUP to create OpenStack cluster B (on-prem):
+  \n# Cluster name: $ocpup_cluster_name
+  \n# OSP Project: $ocpup_project_name
+  \n# OSP User: $ocpup_user_name"
+
   # ocpup  create clusters --debug --config "$ocpup_yml"
   ocpup  create clusters --config "$ocpup_yml" &
   pid=$!
-  tail --pid=$pid -f --retry .config/cl1/.openshift_install.log &
+  tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
   tail --pid=$pid -f /dev/null
 
   # To tail all OpenShift Installer logs (in a new session):
-    # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
+    # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
 
   # Login to the new created cluster:
   # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
@@ -1166,7 +1184,7 @@ function test_cluster_status() {
     "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
 
     echo "# Create namespace for Submariner tests: ${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # || : to ignore none-zero exit code
+    ${OC} create namespace "${TEST_NS}" || : # Ignore none-zero exit code (if namespace already exists
 
     echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS}"
     cur_context="$(${OC} config current-context)"
@@ -1224,7 +1242,20 @@ function destroy_aws_cluster_a() {
     echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
   fi
 
-  # To remove YOUR DNS record sets from Route53:
+  BUG "WARNING: OCP destroy command does not remove the previous DNS record sets from AWS Route53" \
+  "Delete previous DNS record sets from AWS Route53" \
+  "---"
+  # Workaround:
+
+  # set AWS DNS record sets to be deleted
+  AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+  AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+
+  echo -e "# Deleting AWS DNS record sets from Route53:
+  # $AWS_DNS_ALIAS1
+  # $AWS_DNS_ALIAS2
+  "
+  
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
   # chmod +x delete_aws_dns_alias_zones.sh
   # ./delete_aws_dns_alias_zones.sh "${CLUSTER_A_NAME}"
@@ -1252,23 +1283,26 @@ function destroy_osp_cluster_b() {
 
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    cp -f "${CLUSTER_B_YAML}" ./
+    cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+
     ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
     ls -l "$ocpup_yml"
+
+    local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
     # ocpup  destroy clusters --debug --config "$ocpup_yml"
     ocpup  destroy clusters --config "$ocpup_yml" & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
-    # tail --pid=$pid -f .config/cl1/.openshift_install.log && tail -f /proc/$pid/fd/1
+    # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
 
     # Wait until the background process finish
-    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/cl1/.openshift_install.log &
+    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log &
     #tail --pid=$pid -f /dev/null # wait until the background process finish
 
-    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/cl1/.openshift_install.log"
+    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
     # To tail all OpenShift Installer logs (in a new session):
-      # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/cl1/.openshift_install.log
+      # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
 
     echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_B_NAME} "
     backup_and_remove_dir ".config"
@@ -1293,16 +1327,15 @@ function clean_aws_cluster_a() {
 
   delete_submariner_namespace_and_crds;
 
-  PROMPT "Remove previous Submariner Gateway labels (if exists) on AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
-  "Make sure only 1 node has a gateway label" \
+  "Make sure one node with external IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
+
   remove_submariner_gateway_labels
 
-  BUG "Submariner gateway label cannot be removed once created" \
-  "No Resolution yet" \
-  "https://github.com/submariner-io/submariner/issues/432"
+  remove_submariner_machine_sets
 
   # Todo: Should also include globalnet network cleanup:
   #
@@ -1316,6 +1349,7 @@ function clean_aws_cluster_a() {
   #   SUBMARINER-GN-MARK
   #
   # 3 its recommended that you delete the vx-submariner interface from all the nodes.
+
 }
 
 # ------------------------------------------
@@ -1328,8 +1362,10 @@ function clean_osp_cluster_b() {
   kubconf_b;
   delete_submariner_namespace_and_crds;
 
-  PROMPT "Remove previous Submariner Gateway labels (if exists) on OSP cluster B (on-prem)"
+  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
   remove_submariner_gateway_labels
+
+  remove_submariner_machine_sets
 }
 
 # ------------------------------------------
@@ -1342,10 +1378,6 @@ function delete_submariner_namespace_and_crds() {
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   delete_namespace_and_crds "${BROKER_NAMESPACE}"
-
-  BUG "Recreating ServiceExport should update the Lighthouse DNS list" \
-  "Run cleanup for ServiceExport DNS list" \
-  "https://github.com/submariner-io/submariner/issues/641"
 
   echo "# Clean Lighthouse ServiceExport DNS list:"
 
@@ -1367,9 +1399,26 @@ EOF
 function remove_submariner_gateway_labels() {
   trap_commands;
 
-  # Remove previous submariner gateway labels from all node in the cluster:
-  ${OC} label --all node submariner.io/gateway-
+  echo "# Remove previous submariner gateway labels from all node in the cluster:"
 
+  ${OC} label --all node submariner.io/gateway-
+}
+
+# ------------------------------------------
+
+function remove_submariner_machine_sets() {
+  trap_commands;
+
+  echo "# Remove previous machineset (if it has a template with submariner gateway label)"
+
+  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' `"
+  local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
+
+  if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
+    ${OC} delete machineset $subm_machineset -n $ns
+  fi
+
+  ${OC} get machineset -A -o wide
 }
 
 # ------------------------------------------
@@ -1473,40 +1522,108 @@ function open_firewall_ports_on_the_broker_node() {
   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
   trap_commands;
 
-  # Installing Terraform
-  install_local_terraform "${WORKDIR}"
+  # # Installing Terraform
+  # install_local_terraform "${WORKDIR}"
+
+  BUG "Terraform v0.13 is not supported when using prep_for_subm.sh" \
+  "Use Terraform v0.12.2" \
+  "https://github.com/submariner-io/submariner/issues/847"
+  # Workaround:
+  install_local_terraform "${WORKDIR}" "0.12.2"
+
+  # TODO : Add to terraform 'main.tf' :
+    #   terraform {
+    #   required_version = ">= 0.12"
+    #   required_version = "< 0.13"
+    # }
+
+  local git_user="submariner-io"
+  local git_project="submariner"
+  local commit_or_branch=master # "7ffe6146081d5a7f14ea103e5f290411d3746a4a" # "master" #
+  local prep_for_subm_dir="tools/openshift/ocp-ipi-aws"
+
+  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
+
+  # echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
+  # cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
+  # cd "${CLUSTER_A_DIR}"
+
+  cd "$prep_for_subm_dir"
 
   kubconf_a;
-  cd "${CLUSTER_A_DIR}"
-
-  curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
-  chmod a+x ./prep_for_subm.sh
-
-  BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
-  "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
-  "https://github.com/submariner-io/submariner/issues/241"
-  sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
 
   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
   "https://github.com/submariner-io/submariner/issues/240"
-  [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
-  sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
+  # Workaround:
+  sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
+  #sed "s/4800/4801/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
 
-  # Run prep_for_subm script to apply ec2-resources.tf:
-  bash -x ./prep_for_subm.sh
-    # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
-    #
-    # Outputs:
-    #
-    # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
-    # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
-    # target_public_subnet = subnet-016d75737faa4b219
-    #
-    # Applying machineset changes to deploy gateway node:
-    # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
-    # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
+
+  BUG "External IP cannot be assigned on current ec2-resources.tf" \
+  "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
+  "----"
+  # Workaround:
+  sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
+
+
+  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
+
+  BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
+  "No workaround yet (it will probably fail later when searching external IP)" \
+  "https://github.com/submariner-io/submariner/issues/240"
+  # Workaound:
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
+
+  # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  #
+  # Outputs:
+  #
+  # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
+  # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
+  # target_public_subnet = subnet-016d75737faa4b219
+  #
+  # Applying machineset changes to deploy gateway node:
+  # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
+  # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
+
 }
+
+# function open_firewall_ports_on_the_broker_node() {
+# ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
+#   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
+#   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
+#   trap_commands;
+#
+#   # Installing Terraform
+#   BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
+#   "Use Terraform v0.12" \
+#   "https://github.com/submariner-io/submariner/issues/847"
+#   # Workaround:
+#   install_local_terraform "${WORKDIR}" "0.12.23"
+#
+#   kubconf_a;
+#   cd "${CLUSTER_A_DIR}"
+#
+#   curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
+#   chmod a+x ./prep_for_subm.sh
+#
+#   BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
+#   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
+#   "https://github.com/submariner-io/submariner/issues/241"
+#   sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
+#
+#   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
+#   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
+#   "https://github.com/submariner-io/submariner/issues/240"
+#   [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
+#   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
+#
+#   # Run prep_for_subm script to apply ec2-resources.tf:
+#   bash -x ./prep_for_subm.sh
+#
+# }
 
 # ------------------------------------------
 
@@ -1556,15 +1673,23 @@ function gateway_label_all_nodes_external_ip() {
 
   # Filter all node names that have external IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex of IPv4
-  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" 200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" \
+  200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
+
+  if [[ "$external_ips" = NONE ]] ; then
+    failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    ${failed_machines:+ Failed Machines: \n$failed_machines}"
+  fi
+
+  # [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
+
   echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
-
-  [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   for node in $gw_nodes; do
     # TODO: Run only If there's no Gateway label already:
@@ -1945,24 +2070,31 @@ function test_ha_status() {
   # TODO: Need to get current cluster ID
   #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-  # Checking "Gateway" resource
+  ### Checking "Gateway" resource ###
   BUG "API 'describe Gateway' does not show Gateway crashing and cable-driver failure" \
   "No workaround" \
   "https://github.com/submariner-io/submariner/issues/777"
 
-  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  local regex="Ha Status:\s*active"
+  watch_and_retry "$cmd" 3m "$regex"
 
+  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
+  # echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
-  echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
+  ### Checking "Submariner" resource ###
+  BUG "Gateway status error: No IKE SA found for cable submariner" \
+  "No workaround" \
+  "https://github.com/submariner-io/submariner/issues/759"
 
-  # Checking "Submariner" resource
+  cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
+  local regex="Status:\s*connected"
+  watch_and_retry "$cmd" 3m "$regex"
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
-
+  # echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
-
-  echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
     FATAL "Submariner HA failure occurred."
@@ -2525,7 +2657,7 @@ function test_submariner_e2e_with_subctl() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  which subctl
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
 
   BUG "No Subctl option to set -ginkgo.reportFile" \
@@ -2646,6 +2778,19 @@ function print_submariner_pod_logs() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
+  ${OC} get Machine -A || :
+
+  oc get Machine -A | awk '{
+    if (NR>1) {
+      namespace = $1
+      machine = $2
+      printf ("\n###################### Machine: %s (Namespece: %s) ######################\n", machine, namespace )
+      cmd = "oc describe Machine " machine " -n " namespace
+      printf ("\n$ %s\n\n", cmd)
+      system("oc describe Machine "$2" -n "$1)
+    }
+  }'
+
   ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
   # for pod in $(${OC} get pods -A \
@@ -2701,6 +2846,15 @@ fi
 
 cd ${SCRIPT_DIR}
 
+# Setting Cluster A and Broker config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
+export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
+export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
+export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
+
+# Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
+export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
+export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
+
 # Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
 LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
@@ -2731,16 +2885,22 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
-    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} destroy_aws_cluster_a
+      ${junit_cmd} prepare_install_aws_cluster_a
       ${junit_cmd} create_aws_cluster_a
     else
-      # Running destroy_aws_cluster_a if requested
-      [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_aws_cluster_a
+      # Running destroy_aws_cluster_a and create_aws_cluster_a separately
 
-      # Running create_aws_cluster_a if requested
-      [[ ! "$create_cluster_a" =~ ^(y|yes)$ ]] || ${junit_cmd} create_aws_cluster_a
+      if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} destroy_aws_cluster_a
+      fi
+
+      if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} prepare_install_aws_cluster_a
+        ${junit_cmd} create_aws_cluster_a
+      fi
     fi
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
@@ -2748,15 +2908,15 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running build_ocpup_tool_latest if requested
     [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
-    # Running destroy_aws_cluster_a AND create_aws_cluster_a if requested
+    # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} destroy_osp_cluster_b
       ${junit_cmd} create_osp_cluster_b
     else
-      # Running destroy_osp_cluster_b if requested
+      # Running destroy_aws_cluster_b and create_aws_cluster_b separately
+
       [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
-      # Running create_osp_cluster_b if requested
       [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
     fi
 
@@ -2903,7 +3063,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
     ### Running Ginkgo tests of Submariner repositories
 
-    verify_golang
+    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
 

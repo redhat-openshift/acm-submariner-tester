@@ -123,7 +123,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  # trap_commands
+  trap_commands
   # Command to execute and watch
   CMD="$1"
   # Optional: Number of retry attempts (default is 10)
@@ -245,22 +245,24 @@ function record_junit() {
 
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
-  # trap_commands
+  trap_commands
   install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
-  if ! conda info ; then
-    echo "# Installing Anaconda"
-    # rm -rf ${install_dir}
-    # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-    miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
-    download_file https://repo.anaconda.com/miniconda/${miniconda_installer}
-    chmod +x $miniconda_installer
-    ./$miniconda_installer -b -u -p ${install_dir}
-    conda update -y -n base -c defaults conda
-    # conda clean -y --all
-    # conda clean -a
+
+  if conda info ; then
+    # Clean previous conda packages
+    conda clean -y --all
+    # rm -rf "${install_dir}" || :
   fi
+
+  echo "# Installing Anaconda"
+  # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+  miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
+  download_file https://repo.anaconda.com/miniconda/${miniconda_installer}
+  chmod +x $miniconda_installer
+  ./$miniconda_installer -b -u -p ${install_dir}
+  conda update -y -n base -c defaults conda
 
   # Remove old conda environment dir, if it is not configured
   env_dir=$(conda env list | awk -v name="$CONDA_ENV_NAME" '$0 ~ name { print $2 }')
@@ -268,11 +270,22 @@ function install_anaconda() {
     echo "# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
     conda env remove -y -n $CONDA_ENV_NAME || :
     env_base=$(conda env list | awk '/base/ { print $NF }')
-    rm -rf "$env_base/envs/$CONDA_ENV_NAME"
+    rm -rf "$env_base/envs/$CONDA_ENV_NAME" || :
   fi
 
-  echo "# Create Conda environment \"$CONDA_ENV_NAME\" (if it does not exists already)"
+  echo "# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exists already)"
   [[ $(conda env list | grep "$CONDA_ENV_NAME") ]] || conda create -y -n $CONDA_ENV_NAME
+}
+# ------------------------------------------
+
+# Function to verify Anaconda installation
+function verify_anaconda() {
+  trap_commands
+  install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
+  miniconda_bin_dir="${install_dir}/bin"
+  [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
+  conda info
+  conda env list | grep "$CONDA_ENV_NAME"
 }
 
 # ------------------------------------------
@@ -282,23 +295,23 @@ function install_local_golang() {
   trap_commands
   echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
 
-  install_dir="${1:-.}/"
-  install_anaconda "${install_dir}"
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  verify_anaconda "${install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge go-nocgo_linux-64
+  conda install -y --update-deps -c conda-forge go-nocgo_linux-64${pkg_version:+=$pkg_version}
   conda list
 }
 
 # ------------------------------------------
-
+# Function to verify Golang is installed
 function verify_golang() {
-  # Verify Golang installed.
-  # Optional: $1 - GOBIN path
   echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
-  go version || FATAL "No Golang installation found"
+  go version
 
   # export GOROOT=/usr/local/go
   export GOROOT=$(go env GOROOT)
@@ -306,7 +319,7 @@ function verify_golang() {
   # export GOPATH=~/go
   export GOPATH=$(go env GOPATH)
 
-  # export GOBIN=$GOROOT/bin
+  # Optional: exporting $1 as GOBIN path
   export GOBIN="${1:-$GOROOT/bin}"
 
   # export PATH=$PATH:$GOROOT/bin
@@ -322,14 +335,17 @@ function verify_golang() {
 
 function install_local_terraform() {
   # Installing Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
-  # trap_commands
-  install_dir="${1:-.}/"
-  install_anaconda "${install_dir}"
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  verify_anaconda "${install_dir}"
 
   echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge terraform
+  conda install -y --update-deps -c conda-forge terraform=${pkg_version:+=$pkg_version}
   conda list
 }
 
@@ -338,28 +354,51 @@ function install_local_terraform() {
 # Docker with Anaconda is not supported in Linux yet
 function install_local_docker() {
   # Installing Docker with Anaconda (https://anaconda.org/conda-forge/docker)
-  # trap_commands
+  trap_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
   # yum install -y shadow-utils46-newxidmap
   # SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh -s -- --experimental
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
-  install_dir="${1:-.}/"
-  install_anaconda "${install_dir}"
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  verify_anaconda "${install_dir}"
 
   echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge docker
+  conda install -y --update-deps -c conda-forge docker${pkg_version:+=$pkg_version}
   conda list
+}
+
+# ------------------------------------------
+
+# Function to download particular file or directory from particular Github commit or branch
+function download_github_file_or_dir() {
+  trap_commands
+
+  local git_user="$1"
+  local git_project="$2"
+  local commit_or_branch="${3:-master}" # default is master branch
+  local dir_or_file="$4" # default is whole project tree
+
+  archive_url="https://github.com/${git_user}/${git_project}/archive/${commit_or_branch}.tar.gz"
+
+  echo -e "\n# Downloading from Github project: ${git_user}/${git_project} \
+  ${commit_or_branch:+\n# Commit ID: $commit_or_branch} \
+  \n# Directory: ${dir_or_file:-Whole project tree} \n"
+
+  wget -O - ${archive_url} | tar xz --strip=1 "${git_project}-${commit_or_branch}/${dir_or_file}"
+
 }
 
 # ------------------------------------------
 
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
-  # trap_commands
+  trap_commands
   # $1 => $source_file (download link)
   source_file="$1"
 
@@ -377,7 +416,7 @@ function download_file() {
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       rm -rf "$target_file"
-      if [[ $(which wget) ]] ; then
+      if [[ -x "$(command -v wget)" ]] ; then
         target_dir=$(dirname -- "$target_file")
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
         source_file=$(basename -- "$source_file")
@@ -395,7 +434,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
-  # trap_commands
+  trap_commands
   # $1 => $wildcard_name
   wildcard_name="$1"
 
@@ -494,7 +533,6 @@ function configure_aws_access() {
   install_dir="${5:-./}"
   aws_bin_dir="${6:-$HOME/.local/bin}"
 
-  PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
   download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
@@ -507,13 +545,16 @@ function configure_aws_access() {
 
   aws --version
 
-  aws configure set profile $AWS_PROFILE_NAME
-  aws configure set aws_access_key_id $AWS_KEY
-  aws configure set aws_secret_access_key $AWS_SECRET
+  (
+    # subshell to hide commands
+    aws configure set profile $AWS_PROFILE_NAME
+    aws configure set aws_access_key_id $AWS_KEY
+    aws configure set aws_secret_access_key $AWS_SECRET
 
-  aws configure set default.region $AWS_REGION
-  aws configure set output text
-  aws configure set color on
+    aws configure set default.region $AWS_REGION
+    aws configure set output text
+    aws configure set color on
+  )
 
   # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
   aws sts get-caller-identity
@@ -560,7 +601,7 @@ function export_vars_from_json() {
 
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
-  # trap_commands;
+  trap_commands;
   local hosted_zone_id="$1"
   local dns_record_set="$2"
   local tmp_file="`mktemp`_aws_records"
@@ -591,7 +632,7 @@ function delete_aws_dns_records() {
 
 # Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster
 function delete_namespace_and_crds() {
-  # trap_commands;
+  trap_commands;
   # Input $1 : Namespace to delete
   # Input $2 - Optional : All CRDs to delete, by searching for *crd_name*
   ns_name=$1
@@ -971,7 +1012,7 @@ function create_polarion_testrun_result_from_junit() {
 # ------------------------------------------
 
 function log_to_html() {
-  # trap_commands;
+  trap_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}" # full file path without extension
   html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
@@ -981,7 +1022,8 @@ function log_to_html() {
   [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
 
   # Set description div
-  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\">${description}</div></h3>"
+  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
+  </div></h3>"
 
   repo_url=https://github.com/theZiz/aha.git
   repo_branch=0.5.1
