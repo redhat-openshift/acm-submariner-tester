@@ -81,7 +81,7 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build latest Submariner E2E (test packages):       --build-e2e
+  * Build E2E tests of all Submariner repositories:    --build-e2e
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
   * Print all pods logs on failure:                    --print-logs
 
@@ -162,6 +162,7 @@ export TEMP_FILE="`mktemp`_temp"
 export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -231,7 +232,7 @@ while [[ $# -gt 0 ]]; do
     build_operator=YES
     shift ;;
   --build-e2e)
-    build_submariner_e2e=YES
+    build_submariners_e2e=YES
     shift ;;
   --destroy-cluster-a)
     destroy_cluster_a=YES
@@ -428,12 +429,12 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
-  # User input: $build_submariner_e2e - to build_submariner_e2e_latest
-  while [[ ! "$build_submariner_e2e" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull and build latest Submariner repository (E2E tests) ? ${NO_COLOR}
+  # User input: $build_submariners_e2e - to build_e2e_all_submariner_repos
+  while [[ ! "$build_submariners_e2e" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to pull and build E2E tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    build_submariner_e2e=${input:-YES}
+    build_submariners_e2e=${input:-YES}
   done
 
   # User input: $skip_install - to skip submariner deployment
@@ -499,7 +500,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
-build_submariner_e2e=${build_submariner_e2e:-NO}
+build_submariners_e2e=${build_submariners_e2e:-NO}
 get_subctl=${get_subctl:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -563,7 +564,7 @@ function show_test_plan() {
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_submariner_e2e_latest: $build_submariner_e2e
+    - build_e2e_all_submariner_repos: $build_submariners_e2e
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $install_subctl_devel
     "
@@ -799,49 +800,16 @@ function build_ocpup_tool_latest() {
 
 # ------------------------------------------
 
-function build_submariner_e2e_latest() {
+function build_e2e_all_submariner_repos() {
 ### Building latest Submariner code and tests ###
-  PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
+  PROMPT "Building latest Submariner-IO projects code, including test packages (unit-tests and E2E)"
   trap_commands;
 
   verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  # Delete old Submariner directory
-    # rm -rf $GOPATH/src/github.com/submariner-io/submariner
+  build_go_repo "https://github.com/submariner-io/submariner"
 
-  # Download Submariner with go
-    # export PATH=$PATH:$GOROOT/bin
-  GO111MODULE="off" go get -v github.com/submariner-io/submariner/... || echo "# GO Get Submariner Engine finished."
-
-  # Pull latest changes and build:
-  cd $GOPATH/src/github.com/submariner-io/submariner
-  ls
-
-  #git fetch upstream && git checkout master && git pull upstream master
-  # git fetch && git git pull --rebase
-  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-
-  # make build # Will fail if Docker is not pre-installed
-    # ...
-    # Building submariner-engine version dev
-    # ...
-    # Building submariner-route-agent version dev
-    # ...
-
-  # ./scripts/build was removed in https://github.com/submariner-io/submariner/commit/0616258f163adfc368c0abfc3c405b5effb18390
-    # ./scripts/build
-    # ...
-    # Building subctl version dev for linux/amd64
-    # ...
-
-  # Just build repo with go build
-  export GO111MODULE=on
-  go mod vendor
-  # go install -mod vendor # Compile binary and moves it to $GOBIN
-  go build -mod vendor # Saves binary in current directory
-
-  #ls -l bin/submariner-engine
-  ls -l test/e2e/
+  build_go_repo "https://github.com/submariner-io/lighthouse"
 }
 
 # ------------------------------------------
@@ -2614,6 +2582,39 @@ function test_submariner_e2e_with_go() {
 
 # ------------------------------------------
 
+function test_lighthouse_e2e_with_go() {
+# Run E2E Tests of Submariner:
+  PROMPT "Testing Lighthouse End-to-End tests with GO"
+  trap_commands;
+
+  cd $GOPATH/src/github.com/submariner-io/lighthouse
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  ${OC} config get-contexts
+    # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
+    # *         admin             user-cluster-a   admin
+    #           admin_cluster_b   user-cl1         admin
+
+  export GO111MODULE="on"
+  go env
+
+  go test -v ./test/e2e \
+  -timeout 30m \
+  -ginkgo.v -ginkgo.trace \
+  -ginkgo.randomizeAllSpecs \
+  -ginkgo.noColor \
+  -ginkgo.reportPassed \
+  -ginkgo.reportFile "$LIGHTHOUSE_JUNIT_XML" \
+  -args \
+  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
+  --submariner-namespace ${SUBM_NAMESPACE} \
+  --connection-timeout 30 --connection-attempts 3 \
+  || echo "# Warning: Test execution failure occurred"
+}
+
+# ------------------------------------------
+
 function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
@@ -2913,8 +2914,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running build_operator_latest if requested  # [DEPRECATED]
     [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    # Running build_submariner_e2e_latest if requested
-    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_e2e_latest
+    # Running build_e2e_all_submariner_repos if requested
+    [[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_e2e_all_submariner_repos
 
     # Running download_subctl_latest_release if requested
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
@@ -3040,9 +3041,13 @@ if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
 
     ### Running E2E tests from Submariner repositories (Ginkgo)
 
-    ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
-
-    ${junit_cmd} test_submariner_e2e_with_subctl
+    if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} test_submariner_e2e_with_go || BUG "Ginkgo E2E tests of Submariner repository has FAILED."
+      ${junit_cmd} test_lighthouse_e2e_with_go || BUG "Ginkgo E2E tests of Lighthouse repository has FAILED."
+    else
+      ${junit_cmd} test_submariner_e2e_with_subctl
+    fi
+    
   fi
 fi
 

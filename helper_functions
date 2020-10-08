@@ -804,6 +804,33 @@ function print_pod_logs_in_namespace() {
   done
 }
 
+# ------------------------------------------
+
+function build_go_repo() {
+### Pull and build a GO project from URL ###
+  trap_commands;
+  local repo_url="${1#*://}"
+
+  echo "# Download the repo with GO: "
+  GO111MODULE="off" go get -v $repo_url/... || echo "# GO get '$repo_url/...' might have had errors"
+
+  echo "# Pull latest changes with Git: "
+  cd $GOPATH/src/$repo_url
+
+  #git fetch upstream && git checkout master && git pull upstream master
+  # git fetch && git git pull --rebase
+  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+
+  echo "# Build the project with GO: "
+  # make build # May fail if Docker is not pre-installed
+  export GO111MODULE=on
+  go mod vendor
+  # go install -mod vendor # Compile binary and moves it to $GOBIN
+  go build -mod vendor # Saves binary in current directory
+
+  echo "# Project main directory content: "
+  ls -la
+}
 
 # ------------------------------------------
 
