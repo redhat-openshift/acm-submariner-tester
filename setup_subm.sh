@@ -643,8 +643,21 @@ function show_test_plan() {
     "
   fi
 
-  echo -e "\n\n### Global environment parameters: \n"
-  env
+  echo -e "\n\n### All environment parameters: \n"
+  # List all variables
+  compgen -v | sort | \
+  while read var_name; do
+    # Get each variable value
+    var_value="${!var_name}"
+    # If variable is not null / "key" / "secret" / "password"
+    if ! [[ -z "$var_value" || "$var_name" =~ (key|secret|password) ]] ; then
+      # Trim value (string), if it is longer than 500 char
+      (( ${#var_value} < 500 )) || var_value="${var_value:0:500}..."
+      # Print the value without non-ascii chars
+      echo -e "$var_name = $var_value" | tr -dC '[:print:]\t\n'
+    fi
+  done
+
 }
 
 
@@ -2084,6 +2097,11 @@ function test_globalnet_status_cluster_a() {
   trap_commands;
 
   kubconf_a;
+
+  BUG "Globalnet pods running only one cluster only" \
+  "No workaround yet..." \
+  "https://github.com/submariner-io/submariner/issues/866"
+
   test_globalnet_status "${CLUSTER_A_NAME}"
 }
 
@@ -2583,7 +2601,7 @@ function test_submariner_e2e_with_go() {
 # ------------------------------------------
 
 function test_lighthouse_e2e_with_go() {
-# Run E2E Tests of Submariner:
+# Run E2E Tests of Lighthouse with Ginkgo (https://github.com/submariner-io/lighthouse/issues/211)
   PROMPT "Testing Lighthouse End-to-End tests with GO"
   trap_commands;
 
@@ -3047,7 +3065,7 @@ if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
     else
       ${junit_cmd} test_submariner_e2e_with_subctl
     fi
-    
+
   fi
 fi
 
