@@ -642,6 +642,8 @@ function show_test_plan() {
     "
   fi
 
+  echo -e "\n\n### Global environment parameters: \n"
+  env
 }
 
 
@@ -1570,9 +1572,9 @@ function open_firewall_ports_on_the_broker_node() {
   echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
 
-  BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
+  BUG "Duplicate security group rule was found, when applying Terraform ec2-resources.tf more than once" \
   "No workaround yet (it will probably fail later when searching external IP)" \
-  "https://github.com/submariner-io/submariner/issues/240"
+  "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
 
@@ -1589,41 +1591,6 @@ function open_firewall_ports_on_the_broker_node() {
   # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
 
 }
-
-# function open_firewall_ports_on_the_broker_node() {
-# ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
-#   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
-#   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
-#   trap_commands;
-#
-#   # Installing Terraform
-#   BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
-#   "Use Terraform v0.12" \
-#   "https://github.com/submariner-io/submariner/issues/847"
-#   # Workaround:
-#   install_local_terraform "${WORKDIR}" "0.12.23"
-#
-#   kubconf_a;
-#   cd "${CLUSTER_A_DIR}"
-#
-#   curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
-#   chmod a+x ./prep_for_subm.sh
-#
-#   BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
-#   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
-#   "https://github.com/submariner-io/submariner/issues/241"
-#   sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
-#
-#   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
-#   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
-#   "https://github.com/submariner-io/submariner/issues/240"
-#   [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
-#   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
-#
-#   # Run prep_for_subm script to apply ec2-resources.tf:
-#   bash -x ./prep_for_subm.sh
-#
-# }
 
 # ------------------------------------------
 
@@ -2084,17 +2051,13 @@ function test_ha_status() {
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   ### Checking "Submariner" resource ###
-  BUG "Gateway status error: No IKE SA found for cable submariner" \
-  "No workaround" \
-  "https://github.com/submariner-io/submariner/issues/759"
-
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
   local regex="Status Message:\s*connected"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
   watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
-  # echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
+  # echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
