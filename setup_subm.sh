@@ -903,7 +903,7 @@ function build_operator_latest() {  # [DEPRECATED]
 function download_subctl_latest_release() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
-    download_subctl_by_tag "v[0-9]"
+    download_subctl_by_tag 'v[0-9]'
 }
 
 # ------------------------------------------
@@ -921,29 +921,31 @@ function download_subctl_by_tag() {
     trap_commands;
 
     local subctl_tag="${1:-v[0-9]}" # If not specifying a tag, it will download latest version released
+    local regex="tag/\K.*${subctl_tag}[^\"]*"
     local repo_url="https://github.com/submariner-io/submariner-operator"
-    local repo_tag="$(curl "$repo_url/tags/" | grep -Po -m 1 'tag/\K.*'${subctl_tag}'[^"]*')"
+    local repo_tag="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
     cd ${WORKDIR}
 
+    # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
     BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
     "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
     "https://github.com/submariner-io/submariner-operator/issues/473"
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
-    curl https://get.submariner.io/ | VERSION=${repo_tag} PATH="/usr/bin:$PATH" bash -x \
-    || getsubctl_status=FAILED
+    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x
+    BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
+    "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
+    "https://github.com/submariner-io/submariner-operator/issues/526"
+    # Workaround:
+    curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+
+    BUG "Missing subctl binaries GZ in https://github.com/submariner-io/submariner-operator/releases/tag/${repo_tag}" \
+    "No workaround" \
+    "https://github.com/submariner-io/submariner/issues/871"
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
-      BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
-      "Download directly with wget" \
-      "https://github.com/submariner-io/submariner-operator/issues/526"
-      # Workaround:
-
-      # repo_url="https://github.com/submariner-io/submariner-operator"
-      # repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
       releases_url="${repo_url}/releases"
       file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
@@ -992,6 +994,11 @@ function test_subctl_command() {
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
+
+  BUG "Subctl devel is tagged with old version v0.6.1_" \
+  "Ignore issue" \
+  "https://github.com/submariner-io/submariner/issues/870"
+
   subctl --help
 
 }
@@ -1896,16 +1903,6 @@ function join_submariner_current_cluster() {
   echo "# Executing join command: ${JOIN_CMD}"
   $JOIN_CMD
 
-  PROMPT "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
-  ${OC} get crds | grep submariners
-      # ...
-      # submariners.submariner.io                                   2019-11-28T14:09:56Z
-
-  # Print details of the Operator in OSP cluster B (on-prem), and in the Broker cluster:
-  ${OC} get namespace ${SUBM_NAMESPACE} -o json
-
-  ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml
-
 }
 
 
@@ -1932,13 +1929,27 @@ function test_submariner_resources_cluster_b() {
 function test_submariner_resources_status() {
 # Check submariner-engine on the Operator pod
   trap_commands;
-  cluster_name="$1"
-  # ns_name="submariner-operator"
+  local cluster_name="$1"
+  local submariner_status=UP
 
-  PROMPT "Testing Submariner Operator resources on ${cluster_name}"
+  PROMPT "Testing that Submariner CRDs and resources were created on cluster ${cluster_name}"
+  ${OC} get crds | grep submariners || submariner_status=DOWN
+      # ...
+      # submariners.submariner.io                                   2019-11-28T14:09:56Z
+
+  ${OC} get namespace ${SUBM_NAMESPACE} -o json  || submariner_status=DOWN
+
+  ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
   ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
-  || FATAL "Submariner was not installed on $cluster_name, or it's pods have crashed."
+  || submariner_status=DOWN
+  # TODO: consider checking for "Terminating" pods
+
+  if [[ "$submariner_status" = DOWN ]] ; then
+    FATAL "Submariner installation failure occurred on $cluster_name.
+    Resources/CRDs were not installed, or Submariner pods have crashed."
+  fi
+
 }
 
 
@@ -2749,7 +2760,9 @@ function print_submariner_pod_logs() {
   echo -e "\n############################## Printing Submariner logs on ${cluster_name} ##############################\n"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
+
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
   # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
