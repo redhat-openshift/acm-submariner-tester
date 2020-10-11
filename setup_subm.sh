@@ -990,7 +990,7 @@ function test_subctl_command() {
   # Get SubCTL version (from file $SUBCTL_VERSION)
   local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
 
-  PROMPT "Verifying Submariner CLI tool ${subctl_version:+ (Subctl version: $subctl_version)}"
+  PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
@@ -1810,9 +1810,7 @@ function export_service_in_lighthouse() {
   # Workaround:
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
-  echo -e "\n# Describe Lighthouse services:\n"
-
-  ${OC} describe serviceimports --all-namespaces
+  echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
 
 }
@@ -2485,23 +2483,23 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     return 1
   fi
 
-    kubconf_a
+  kubconf_a
 
-    echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
-    #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
-        # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
-        # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
-        # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
+  echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
+  #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
+      # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
+      # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
+      # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
 
-    cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
-    local regex="PING ${nginx_headless_cl_b_dns}"
-    watch_and_retry "$cmd" 3m "$regex"
-      # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
+  cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
+  local regex="PING ${nginx_headless_cl_b_dns}"
+  watch_and_retry "$cmd" 3m "$regex"
+    # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
-    echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
-    ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
+  echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
+  ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
 
-    # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+  # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
 }
 
@@ -2883,19 +2881,27 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} destroy_aws_cluster_a
+
       ${junit_cmd} prepare_install_aws_cluster_a
+
       ${junit_cmd} create_aws_cluster_a
+
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
-
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+
         ${junit_cmd} destroy_aws_cluster_a
+
       fi
 
       if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
+
         ${junit_cmd} prepare_install_aws_cluster_a
+
         ${junit_cmd} create_aws_cluster_a
+
       fi
     fi
 
@@ -2906,11 +2912,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} destroy_osp_cluster_b
+
       ${junit_cmd} create_osp_cluster_b
+
     else
       # Running destroy_aws_cluster_b and create_aws_cluster_b separately
-
       [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
       [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
@@ -2922,18 +2930,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running clean_aws_cluster_a if requested
     [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-    || ${junit_cmd} clean_aws_cluster_a
+      || ${junit_cmd} clean_aws_cluster_a
 
     # Running clean_osp_cluster_b if requested
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-    || ${junit_cmd} clean_osp_cluster_b
+      || ${junit_cmd} clean_osp_cluster_b
 
-  fi
-
-  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
-
-  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
-
+    # Running basic pre-submariner tests (only required on new/cleaned clusters)
     ${junit_cmd} install_netshoot_app_on_cluster_a
 
     ${junit_cmd} install_nginx_svc_on_cluster_b
@@ -2941,6 +2944,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} test_basic_cluster_connectivity_before_submariner
 
     ${junit_cmd} test_clusters_disconnected_before_submariner
+
+  fi
+
+
+  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
+
+  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
@@ -2969,7 +2979,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} join_submariner_cluster_a
 
     ${junit_cmd} join_submariner_cluster_b
-
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
