@@ -826,7 +826,7 @@ function build_go_repo() {
   export GO111MODULE=on
   go mod vendor
   # go install -mod vendor # Compile binary and moves it to $GOBIN
-  go build -mod vendor # Saves binary in current directory
+  go build -mod vendor || echo "# No binary to compile in $repo_url"
 
   echo "# Project main directory content: "
   ls -la

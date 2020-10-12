@@ -1405,7 +1405,7 @@ function remove_submariner_machine_sets() {
   local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
-    ${OC} delete machineset $subm_machineset -n $ns
+    ${OC} delete machineset $subm_machineset -n $ns || :
   fi
 
   ${OC} get machineset -A -o wide
