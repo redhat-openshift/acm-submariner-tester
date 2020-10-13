@@ -638,8 +638,8 @@ function show_test_plan() {
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go
-    - test_submariner_e2e_with_subctl
+    - test_submariner_e2e_with_go: $([[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
@@ -1980,7 +1980,7 @@ function test_submariner_cable_driver() {
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
-  local regex="cable.* started"
+  local regex="(cable.* started|Status:connected)"
   # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
@@ -2042,7 +2042,7 @@ function test_ha_status() {
 
   ### Checking "Submariner" resource ###
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status Message:\s*connected"
+  local regex="Status Message:\s*connect"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
   watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
 
@@ -2093,7 +2093,7 @@ function test_submariner_connection_established() {
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   # local regex="received packet"
-  local regex="Successfully installed Endpoint cable .* remote IP"
+  local regex="(Successfully installed Endpoint cable .* remote IP|Status:connected|CableName:.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2106,11 +2106,6 @@ function test_globalnet_status_cluster_a() {
   trap_commands;
 
   kubconf_a;
-
-  BUG "Globalnet pods running only one cluster only" \
-  "No workaround yet..." \
-  "https://github.com/submariner-io/submariner/issues/866"
-
   test_globalnet_status "${CLUSTER_A_NAME}"
 }
 
@@ -2139,7 +2134,7 @@ function test_globalnet_status() {
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
 
-  local regex="Allocating globalIp"
+  local regex="(Allocating globalIp|Starting submariner-globalnet)"
   watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10 || globalnet_status=DOWN
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
@@ -3001,8 +2996,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_cable_driver_cluster_b
 
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
-
     ${junit_cmd} test_ha_status_cluster_a
 
     ${junit_cmd} test_ha_status_cluster_b
@@ -3010,6 +3003,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} test_submariner_connection_cluster_a
 
     ${junit_cmd} test_submariner_connection_cluster_b
+
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} test_globalnet_status_cluster_a
@@ -3082,10 +3077,18 @@ if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
     ### Running E2E tests from Submariner repositories (Ginkgo)
 
     if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
-      ${junit_cmd} test_submariner_e2e_with_go || BUG "Ginkgo E2E tests of Submariner repository has FAILED."
-      ${junit_cmd} test_lighthouse_e2e_with_go || BUG "Ginkgo E2E tests of Lighthouse repository has FAILED."
+      ${junit_cmd} test_submariner_e2e_with_go || \
+      BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
+
+      ${junit_cmd} test_lighthouse_e2e_with_go || \
+      BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
+
     else
-      ${junit_cmd} test_submariner_e2e_with_subctl
+      ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+    fi
+
+    if [[ "$e2e_tests_status" = FAILED ]] ; then
+      FATAL "Submariner E2E Tests failure"
     fi
 
   fi
