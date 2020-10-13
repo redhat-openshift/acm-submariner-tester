@@ -676,7 +676,7 @@ function delete_namespace_and_crds() {
       ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
       curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
       kill -9 %% || :
-      ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait
+      ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait || :
     fi
   fi
 }
@@ -800,10 +800,37 @@ function print_pod_logs_in_namespace() {
       echo -e "\n### Pod $pod in Namespace $namespace ###\n"
       ${OC} -n $namespace describe pod $pod || :
       ${OC} -n $namespace get pod $pod -o yaml || :
-      ${OC} -n $namespace logs $pod --limit-bytes=1000000 || :
+      ${OC} -n $namespace logs $pod --timestamps --tail=500 || :
   done
 }
 
+# ------------------------------------------
+
+function build_go_repo() {
+### Pull and build a GO project from URL ###
+  trap_commands;
+  local repo_url="${1#*://}"
+
+  echo "# Download the repo with GO: "
+  GO111MODULE="off" go get -v $repo_url/... || echo "# GO get '$repo_url/...' might have had errors"
+
+  echo "# Pull latest changes with Git: "
+  cd $GOPATH/src/$repo_url
+
+  #git fetch upstream && git checkout master && git pull upstream master
+  # git fetch && git git pull --rebase
+  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+
+  echo "# Build the project with GO: "
+  # make build # May fail if Docker is not pre-installed
+  export GO111MODULE=on
+  go mod vendor
+  # go install -mod vendor # Compile binary and moves it to $GOBIN
+  go build -mod vendor || echo "# No binary to compile in $repo_url"
+
+  echo "# Project main directory content: "
+  ls -la
+}
 
 # ------------------------------------------
 

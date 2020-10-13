@@ -81,7 +81,7 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build latest Submariner E2E (test packages):       --build-e2e
+  * Build E2E tests of all Submariner repositories:    --build-e2e
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
   * Print all pods logs on failure:                    --print-logs
 
@@ -162,6 +162,7 @@ export TEMP_FILE="`mktemp`_temp"
 export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -231,7 +232,7 @@ while [[ $# -gt 0 ]]; do
     build_operator=YES
     shift ;;
   --build-e2e)
-    build_submariner_e2e=YES
+    build_submariners_e2e=YES
     shift ;;
   --destroy-cluster-a)
     destroy_cluster_a=YES
@@ -428,12 +429,12 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
-  # User input: $build_submariner_e2e - to build_submariner_e2e_latest
-  while [[ ! "$build_submariner_e2e" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull and build latest Submariner repository (E2E tests) ? ${NO_COLOR}
+  # User input: $build_submariners_e2e - to build_e2e_all_submariner_repos
+  while [[ ! "$build_submariners_e2e" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to pull and build E2E tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    build_submariner_e2e=${input:-YES}
+    build_submariners_e2e=${input:-YES}
   done
 
   # User input: $skip_install - to skip submariner deployment
@@ -499,7 +500,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
-build_submariner_e2e=${build_submariner_e2e:-NO}
+build_submariners_e2e=${build_submariners_e2e:-NO}
 get_subctl=${get_subctl:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -563,7 +564,7 @@ function show_test_plan() {
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_submariner_e2e_latest: $build_submariner_e2e
+    - build_e2e_all_submariner_repos: $build_submariners_e2e
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $install_subctl_devel
     "
@@ -637,10 +638,25 @@ function show_test_plan() {
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go
-    - test_submariner_e2e_with_subctl
+    - test_submariner_e2e_with_go: $([[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
+
+  echo -e "\n\n### All environment parameters: \n"
+  # List all variables
+  compgen -v | sort | \
+  while read var_name; do
+    # Get each variable value
+    var_value="${!var_name}"
+    # If variable is not null / "key" / "secret" / "password"
+    if ! [[ -z "$var_value" || "$var_name" =~ (key|secret|password) ]] ; then
+      # Trim value (string), if it is longer than 500 char
+      (( ${#var_value} < 500 )) || var_value="${var_value:0:500}..."
+      # Print the value without non-ascii chars
+      echo -e "$var_name = $var_value" | tr -dC '[:print:]\t\n'
+    fi
+  done
 
 }
 
@@ -797,49 +813,16 @@ function build_ocpup_tool_latest() {
 
 # ------------------------------------------
 
-function build_submariner_e2e_latest() {
+function build_e2e_all_submariner_repos() {
 ### Building latest Submariner code and tests ###
-  PROMPT "Building latest Submariner code, including test packages (unit-tests and E2E)"
+  PROMPT "Building latest Submariner-IO projects code, including test packages (unit-tests and E2E)"
   trap_commands;
 
   verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  # Delete old Submariner directory
-    # rm -rf $GOPATH/src/github.com/submariner-io/submariner
+  build_go_repo "https://github.com/submariner-io/submariner"
 
-  # Download Submariner with go
-    # export PATH=$PATH:$GOROOT/bin
-  GO111MODULE="off" go get -v github.com/submariner-io/submariner/... || echo "# GO Get Submariner Engine finished."
-
-  # Pull latest changes and build:
-  cd $GOPATH/src/github.com/submariner-io/submariner
-  ls
-
-  #git fetch upstream && git checkout master && git pull upstream master
-  # git fetch && git git pull --rebase
-  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-
-  # make build # Will fail if Docker is not pre-installed
-    # ...
-    # Building submariner-engine version dev
-    # ...
-    # Building submariner-route-agent version dev
-    # ...
-
-  # ./scripts/build was removed in https://github.com/submariner-io/submariner/commit/0616258f163adfc368c0abfc3c405b5effb18390
-    # ./scripts/build
-    # ...
-    # Building subctl version dev for linux/amd64
-    # ...
-
-  # Just build repo with go build
-  export GO111MODULE=on
-  go mod vendor
-  # go install -mod vendor # Compile binary and moves it to $GOBIN
-  go build -mod vendor # Saves binary in current directory
-
-  #ls -l bin/submariner-engine
-  ls -l test/e2e/
+  build_go_repo "https://github.com/submariner-io/lighthouse"
 }
 
 # ------------------------------------------
@@ -920,7 +903,7 @@ function build_operator_latest() {  # [DEPRECATED]
 function download_subctl_latest_release() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
-    download_subctl_by_tag "v[0-9]"
+    download_subctl_by_tag 'v[0-9]'
 }
 
 # ------------------------------------------
@@ -938,29 +921,31 @@ function download_subctl_by_tag() {
     trap_commands;
 
     local subctl_tag="${1:-v[0-9]}" # If not specifying a tag, it will download latest version released
+    local regex="tag/\K.*${subctl_tag}[^\"]*"
     local repo_url="https://github.com/submariner-io/submariner-operator"
-    local repo_tag="$(curl "$repo_url/tags/" | grep -Po -m 1 'tag/\K.*'${subctl_tag}'[^"]*')"
+    local repo_tag="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
     cd ${WORKDIR}
 
+    # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
     BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
     "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
     "https://github.com/submariner-io/submariner-operator/issues/473"
     # Workaround:
     PATH="/usr/bin:$PATH" which install
 
-    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x \
-    curl https://get.submariner.io/ | VERSION=${repo_tag} PATH="/usr/bin:$PATH" bash -x \
-    || getsubctl_status=FAILED
+    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x
+    BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
+    "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
+    "https://github.com/submariner-io/submariner-operator/issues/526"
+    # Workaround:
+    curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+
+    BUG "Missing subctl binaries GZ in https://github.com/submariner-io/submariner-operator/releases/tag/${repo_tag}" \
+    "No workaround" \
+    "https://github.com/submariner-io/submariner/issues/871"
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
-      BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
-      "Download directly with wget" \
-      "https://github.com/submariner-io/submariner-operator/issues/526"
-      # Workaround:
-
-      # repo_url="https://github.com/submariner-io/submariner-operator"
-      # repo_tag="$(curl "$repo_url/tags/" | grep -Eoh "tag/.*${subctl_tag}[^\"]*" -m 1)"
       releases_url="${repo_url}/releases"
       file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
@@ -1005,10 +990,15 @@ function test_subctl_command() {
   # Get SubCTL version (from file $SUBCTL_VERSION)
   local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
 
-  PROMPT "Verifying Submariner CLI tool ${subctl_version:+ (Subctl version: $subctl_version)}"
+  PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   subctl version
+
+  BUG "Subctl devel is tagged with old version v0.6.1_" \
+  "Ignore issue" \
+  "https://github.com/submariner-io/submariner/issues/870"
+
   subctl --help
 
 }
@@ -1415,7 +1405,7 @@ function remove_submariner_machine_sets() {
   local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
-    ${OC} delete machineset $subm_machineset -n $ns
+    ${OC} delete machineset $subm_machineset -n $ns || :
   fi
 
   ${OC} get machineset -A -o wide
@@ -1570,9 +1560,9 @@ function open_firewall_ports_on_the_broker_node() {
   echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
 
-  BUG "duplicate Security Group rule was found if applying Terraform ec2-resources.tf more than once" \
+  BUG "Duplicate security group rule was found, when applying Terraform ec2-resources.tf more than once" \
   "No workaround yet (it will probably fail later when searching external IP)" \
-  "https://github.com/submariner-io/submariner/issues/240"
+  "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
 
@@ -1589,41 +1579,6 @@ function open_firewall_ports_on_the_broker_node() {
   # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
 
 }
-
-# function open_firewall_ports_on_the_broker_node() {
-# ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
-#   # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
-#   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
-#   trap_commands;
-#
-#   # Installing Terraform
-#   BUG "Terraform 0.13 is not supported when using prep_for_subm.sh" \
-#   "Use Terraform v0.12" \
-#   "https://github.com/submariner-io/submariner/issues/847"
-#   # Workaround:
-#   install_local_terraform "${WORKDIR}" "0.12.23"
-#
-#   kubconf_a;
-#   cd "${CLUSTER_A_DIR}"
-#
-#   curl -LO https://github.com/submariner-io/submariner/raw/master/tools/openshift/ocp-ipi-aws/prep_for_subm.sh
-#   chmod a+x ./prep_for_subm.sh
-#
-#   BUG "prep_for_subm.sh should work silently (without manual intervention to approve terraform action)" \
-#   "Modify prep_for_subm.sh with \"terraform apply -auto-approve" \
-#   "https://github.com/submariner-io/submariner/issues/241"
-#   sed 's/terraform apply/terraform apply -auto-approve/g' -i ./prep_for_subm.sh
-#
-#   BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
-#   "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
-#   "https://github.com/submariner-io/submariner/issues/240"
-#   [[ -f ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf ]] || bash -x ./prep_for_subm.sh
-#   sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws/ocp-ipi-aws-prep/ec2-resources.tf
-#
-#   # Run prep_for_subm script to apply ec2-resources.tf:
-#   bash -x ./prep_for_subm.sh
-#
-# }
 
 # ------------------------------------------
 
@@ -1855,9 +1810,7 @@ function export_service_in_lighthouse() {
   # Workaround:
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
-  echo -e "\n# Describe Lighthouse services:\n"
-
-  ${OC} describe serviceimports --all-namespaces
+  echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
 
 }
@@ -1948,16 +1901,6 @@ function join_submariner_current_cluster() {
   echo "# Executing join command: ${JOIN_CMD}"
   $JOIN_CMD
 
-  PROMPT "Testing that Submariner CRDs created on cluster ${current_cluster_context_name}"
-  ${OC} get crds | grep submariners
-      # ...
-      # submariners.submariner.io                                   2019-11-28T14:09:56Z
-
-  # Print details of the Operator in OSP cluster B (on-prem), and in the Broker cluster:
-  ${OC} get namespace ${SUBM_NAMESPACE} -o json
-
-  ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml
-
 }
 
 
@@ -1984,13 +1927,27 @@ function test_submariner_resources_cluster_b() {
 function test_submariner_resources_status() {
 # Check submariner-engine on the Operator pod
   trap_commands;
-  cluster_name="$1"
-  # ns_name="submariner-operator"
+  local cluster_name="$1"
+  local submariner_status=UP
 
-  PROMPT "Testing Submariner Operator resources on ${cluster_name}"
+  PROMPT "Testing that Submariner CRDs and resources were created on cluster ${cluster_name}"
+  ${OC} get crds | grep submariners || submariner_status=DOWN
+      # ...
+      # submariners.submariner.io                                   2019-11-28T14:09:56Z
+
+  ${OC} get namespace ${SUBM_NAMESPACE} -o json  || submariner_status=DOWN
+
+  ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
   ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
-  || FATAL "Submariner was not installed on $cluster_name, or it's pods have crashed."
+  || submariner_status=DOWN
+  # TODO: consider checking for "Terminating" pods
+
+  if [[ "$submariner_status" = DOWN ]] ; then
+    FATAL "Submariner installation failure occurred on $cluster_name.
+    Resources/CRDs were not installed, or Submariner pods have crashed."
+  fi
+
 }
 
 
@@ -2023,7 +1980,7 @@ function test_submariner_cable_driver() {
 
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
-  local regex="cable.* started"
+  local regex="(cable.* started|Status:connected)"
   # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
@@ -2084,17 +2041,13 @@ function test_ha_status() {
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   ### Checking "Submariner" resource ###
-  BUG "Gateway status error: No IKE SA found for cable submariner" \
-  "No workaround" \
-  "https://github.com/submariner-io/submariner/issues/759"
-
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status Message:\s*connected"
+  local regex="Status Message:\s*connect"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
   watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
-  # echo "$submariner_gateway_info" |& highlight "Status:\s*connect" || submariner_status=DOWN
+  # echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
@@ -2140,7 +2093,7 @@ function test_submariner_connection_established() {
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   # local regex="received packet"
-  local regex="Successfully installed Endpoint cable .* remote IP"
+  local regex="(Successfully installed Endpoint cable .* remote IP|Status:connected|CableName:.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2181,7 +2134,7 @@ function test_globalnet_status() {
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
 
-  local regex="Allocating globalIp"
+  local regex="(Allocating globalIp|Starting submariner-globalnet)"
   watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10 || globalnet_status=DOWN
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
@@ -2525,23 +2478,23 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     return 1
   fi
 
-    kubconf_a
+  kubconf_a
 
-    echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
-    #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
-        # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
-        # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
-        # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
+  echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
+  #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
+      # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
+      # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
+      # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
 
-    cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
-    local regex="PING ${nginx_headless_cl_b_dns}"
-    watch_and_retry "$cmd" 3m "$regex"
-      # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
+  cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
+  local regex="PING ${nginx_headless_cl_b_dns}"
+  watch_and_retry "$cmd" 3m "$regex"
+    # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
-    echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
-    ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
+  echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
+  ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
 
-    # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+  # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
 }
 
@@ -2642,6 +2595,39 @@ function test_submariner_e2e_with_go() {
   -ginkgo.noColor \
   -ginkgo.reportPassed \
   -ginkgo.reportFile "$E2E_JUNIT_XML" \
+  -args \
+  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
+  --submariner-namespace ${SUBM_NAMESPACE} \
+  --connection-timeout 30 --connection-attempts 3 \
+  || echo "# Warning: Test execution failure occurred"
+}
+
+# ------------------------------------------
+
+function test_lighthouse_e2e_with_go() {
+# Run E2E Tests of Lighthouse with Ginkgo (https://github.com/submariner-io/lighthouse/issues/211)
+  PROMPT "Testing Lighthouse End-to-End tests with GO"
+  trap_commands;
+
+  cd $GOPATH/src/github.com/submariner-io/lighthouse
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  ${OC} config get-contexts
+    # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
+    # *         admin             user-cluster-a   admin
+    #           admin_cluster_b   user-cl1         admin
+
+  export GO111MODULE="on"
+  go env
+
+  go test -v ./test/e2e \
+  -timeout 30m \
+  -ginkgo.v -ginkgo.trace \
+  -ginkgo.randomizeAllSpecs \
+  -ginkgo.noColor \
+  -ginkgo.reportPassed \
+  -ginkgo.reportFile "$LIGHTHOUSE_JUNIT_XML" \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
@@ -2767,7 +2753,9 @@ function print_submariner_pod_logs() {
   echo -e "\n############################## Printing Submariner logs on ${cluster_name} ##############################\n"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
+
   ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
   # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
@@ -2888,19 +2876,27 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} destroy_aws_cluster_a
+
       ${junit_cmd} prepare_install_aws_cluster_a
+
       ${junit_cmd} create_aws_cluster_a
+
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
-
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+
         ${junit_cmd} destroy_aws_cluster_a
+
       fi
 
       if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
+
         ${junit_cmd} prepare_install_aws_cluster_a
+
         ${junit_cmd} create_aws_cluster_a
+
       fi
     fi
 
@@ -2911,11 +2907,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} destroy_osp_cluster_b
+
       ${junit_cmd} create_osp_cluster_b
+
     else
       # Running destroy_aws_cluster_b and create_aws_cluster_b separately
-
       [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
 
       [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
@@ -2927,18 +2925,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     # Running clean_aws_cluster_a if requested
     [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-    || ${junit_cmd} clean_aws_cluster_a
+      || ${junit_cmd} clean_aws_cluster_a
 
     # Running clean_osp_cluster_b if requested
     [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-    || ${junit_cmd} clean_osp_cluster_b
+      || ${junit_cmd} clean_osp_cluster_b
 
-  fi
-
-  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
-
-  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
-
+    # Running basic pre-submariner tests (only required on new/cleaned clusters)
     ${junit_cmd} install_netshoot_app_on_cluster_a
 
     ${junit_cmd} install_nginx_svc_on_cluster_b
@@ -2947,11 +2940,18 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_clusters_disconnected_before_submariner
 
+  fi
+
+
+  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
+
+  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
+
     # Running build_operator_latest if requested  # [DEPRECATED]
     [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    # Running build_submariner_e2e_latest if requested
-    [[ ! "$build_submariner_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_e2e_latest
+    # Running build_e2e_all_submariner_repos if requested
+    [[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_e2e_all_submariner_repos
 
     # Running download_subctl_latest_release if requested
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
@@ -2974,7 +2974,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} join_submariner_cluster_a
 
     ${junit_cmd} join_submariner_cluster_b
-
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
@@ -2997,8 +2996,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_cable_driver_cluster_b
 
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
-
     ${junit_cmd} test_ha_status_cluster_a
 
     ${junit_cmd} test_ha_status_cluster_b
@@ -3006,6 +3003,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} test_submariner_connection_cluster_a
 
     ${junit_cmd} test_submariner_connection_cluster_b
+
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} test_globalnet_status_cluster_a
@@ -3077,9 +3076,21 @@ if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
 
     ### Running E2E tests from Submariner repositories (Ginkgo)
 
-    ${junit_cmd} test_submariner_e2e_with_go || BUG "Submariner E2E Tests FAILED."
+    if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} test_submariner_e2e_with_go || \
+      BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
 
-    ${junit_cmd} test_submariner_e2e_with_subctl
+      ${junit_cmd} test_lighthouse_e2e_with_go || \
+      BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
+
+    else
+      ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+    fi
+
+    if [[ "$e2e_tests_status" = FAILED ]] ; then
+      FATAL "Submariner E2E Tests failure"
+    fi
+
   fi
 fi
 
