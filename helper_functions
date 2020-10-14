@@ -855,10 +855,10 @@ function create_polarion_testcases_doc_from_junit() {
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." && return 1 )
 
-    # Output file for Polarion test-cases, should be without "junit" substring in file name
-    local polarion_testcases_filepath="${junit_xml%%.*}_polarion_testcases.xml"
-    tc_xml_name="$(basename "${polarion_testcases_filepath}")"
-    polarion_testcases_filepath="$(dirname "${polarion_testcases_filepath}")/${tc_xml_name//junit}"
+    echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
+    local polarion_testcases_filepath="${junit_xml%%.*}" # Remove extension
+    polarion_testcases_filepath="${junit_xml//junit}polarion_testcases.xml" # Remove all "junit" from filepath, and add "polarion_testcases.xml"
+    polarion_testcases_filepath="$(dirname $junit_xml)/$(basename $polarion_testcases_filepath)" # Add directories path of source junit_xml
 
     echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
     grep '<testcase ' "$junit_xml" | \
@@ -942,13 +942,13 @@ function create_polarion_testrun_result_from_junit() {
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-run file: '$junit_xml' is missing." && return 1 )
 
-    # Create Polarion test run results (without "junit" substring in xml file name)
-    local polarion_testrun_filepath="${junit_xml%%.*}"
-    local tr_xml_name="$(basename "${polarion_testrun_filepath}")"
+    echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
+    local polarion_testrun_filepath="${junit_xml%%.*}" # Remove extension
+    polarion_testrun_filepath="${junit_xml//junit}polarion_testrun.xml" # Remove all "junit" from filepath, and add "polarion_testrun.xml"
+    polarion_testrun_filepath="$(dirname $junit_xml)/$(basename $polarion_testrun_filepath)" # Add directories path of source junit_xml
+
+    # Set Polarion test run title
     local polarion_testrun_title="${polarion_testrun_title:-${tr_xml_name%%.*} - $polarion_team_name Test Run}"
-
-    polarion_testrun_filepath="$(dirname "${polarion_testrun_filepath}")/${tr_xml_name//junit}_polarion_testrun.xml"
-
     echo -e "### Polarion Test-run Title: [${polarion_testrun_title}],
     \n# Polarion Test-run file [${polarion_testrun_filepath}] \n"
 
