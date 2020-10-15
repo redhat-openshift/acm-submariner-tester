@@ -579,7 +579,7 @@ function show_test_plan() {
     - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
     - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
-    - label_all_gateway_external_ip_cluster_a
+    - label_gateway_on_broker_nodes_with_external_ip
     - label_first_gateway_cluster_b
     - install_broker_aws_cluster_a
     - join_submariner_cluster_a
@@ -598,6 +598,7 @@ function show_test_plan() {
 
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
+    - test_external_ip_reset_on_broker_nodes
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
     - test_subctl_show_on_merged_kubeconfigs
@@ -940,10 +941,6 @@ function download_subctl_by_tag() {
     "https://github.com/submariner-io/submariner-operator/issues/526"
     # Workaround:
     curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
-
-    BUG "Missing subctl binaries GZ in https://github.com/submariner-io/submariner-operator/releases/tag/${repo_tag}" \
-    "No workaround" \
-    "https://github.com/submariner-io/submariner/issues/871"
 
     if [[ "$getsubctl_status" = FAILED ]] ; then
       releases_url="${repo_url}/releases"
@@ -1534,32 +1531,33 @@ function open_firewall_ports_on_the_broker_node() {
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
 
-  # echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR"
-  # cp -rf $prep_for_subm_dir/* "${CLUSTER_A_DIR}/"
-  # cd "${CLUSTER_A_DIR}"
+  # cd "$prep_for_subm_dir"
 
-  cd "$prep_for_subm_dir"
+  echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR/submariner_prep"
+  cp -rf "$prep_for_subm_dir" "$CLUSTER_A_DIR/submariner_prep"
+  cd "$CLUSTER_A_DIR/submariner_prep/"
 
   kubconf_a;
 
-  BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
-  "Modify file ec2-resources.tf, and change ports 4500 & 500 to $BROKER_NATPORT & $BROKER_IKEPORT" \
-  "https://github.com/submariner-io/submariner/issues/240"
-  # Workaround:
-  sed "s/500/$BROKER_IKEPORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
-  #sed "s/4800/4801/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
+  # BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
+  # "Modify file ec2-resources.tf, and change ports 4500 & 500 to $IPSEC_NATT_PORT & $IPSEC_IKE_PORT" \
+  # "https://github.com/submariner-io/submariner/issues/240"
+  # # Workaround:
+  # sed "s/500/$IPSEC_IKE_PORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
+  # #sed "s/4800/4801/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
+  #
+  # BUG "External IP cannot be assigned on current ec2-resources.tf" \
+  # "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
+  # "https://github.com/submariner-io/submariner/issues/882"
+  # # Workaround:
+  # sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
 
+  export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
+  export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+  export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
-  BUG "External IP cannot be assigned on current ec2-resources.tf" \
-  "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
-  "----"
-  # Workaround:
-  sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
-
-
-  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
-
+  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   BUG "Duplicate security group rule was found, when applying Terraform ec2-resources.tf more than once" \
   "No workaround yet (it will probably fail later when searching external IP)" \
   "https://github.com/submariner-io/submariner/issues/849"
@@ -1582,7 +1580,7 @@ function open_firewall_ports_on_the_broker_node() {
 
 # ------------------------------------------
 
-function label_all_gateway_external_ip_cluster_a() {
+function label_gateway_on_broker_nodes_with_external_ip() {
 ### Label a Gateway node on AWS cluster A (public) ###
   PROMPT "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
   trap_commands;
@@ -1876,7 +1874,7 @@ function join_submariner_current_cluster() {
   # JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
   JOIN_CMD="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
-  --ikeport ${BROKER_IKEPORT} --nattport ${BROKER_NATPORT}"
+  --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
     JOIN_CMD="${JOIN_CMD} --version libreswan-git"
@@ -1950,6 +1948,50 @@ function test_submariner_resources_status() {
 
 }
 
+# ------------------------------------------
+
+function test_external_ip_reset_on_broker_nodes() {
+# Check that submariner tunnel works if broker nodes external ips (on gateways) is changed
+  PROMPT "Testing Submariner after external IPs reset on Broker gateway"
+  trap_commands;
+
+  aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
+
+  kubconf_a;
+
+  local prep_for_subm_script="$CLUSTER_A_DIR/submariner_prep/prep_for_subm.sh"
+
+  ls -l "$prep_for_subm_script" || FATAL "'$prep_for_subm_script' is required to add external IPs to Broker nodes"
+
+  # Get all nodes that their external ip is NOT <none> : Those shall be the Gateway nodes
+  # gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
+
+  external_ips=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk 'NR>1 && $7!="<none>" {print $7}')
+
+  echo "# Removing external IPs from all worker nodes: $external_ips"
+
+  # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{
+  #   if (NR > 1) {
+  #     node = $1
+  #     external_ip = $7
+  #     if (external_ip != "<none>") {
+  #       printf ("Removing external IP [%s] from Node [%s]\n", external_ip, node)
+  #       cmd = "aws ec2 disassociate-address --public-ip 198.51.100.0" machine " -n " namespace
+  #       printf ("\n$ %s\n\n", cmd)
+  #       system("oc describe Machine "$2" -n "$1)
+  #     }
+  #   }
+  # }'
+
+  for eip in $external_ips; do
+    aws ec2 disassociate-address --public-ip $eip
+  done
+
+  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  cd "$CLUSTER_A_DIR/submariner_prep"
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
+
+}
 
 # ------------------------------------------
 
@@ -2963,7 +3005,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} open_firewall_ports_on_the_broker_node
 
-    ${junit_cmd} label_all_gateway_external_ip_cluster_a
+    ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
     ${junit_cmd} label_first_gateway_cluster_b
 
@@ -2991,6 +3033,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} test_submariner_resources_cluster_a
 
     ${junit_cmd} test_submariner_resources_cluster_b
+
+    ${junit_cmd} test_external_ip_reset_on_broker_nodes
 
     ${junit_cmd} test_cable_driver_cluster_a
 
