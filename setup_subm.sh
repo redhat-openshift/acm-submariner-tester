@@ -598,7 +598,7 @@ function show_test_plan() {
 
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
-    - test_external_ip_reset_on_broker_nodes
+    - test_disaster_recovery_of_gateway_nodes
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
     - test_subctl_show_on_merged_kubeconfigs
@@ -1416,7 +1416,7 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS}
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   if [[ -n $TEST_NS ]] ; then
     # ${OC} delete --timeout=30s namespace "${TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
@@ -1465,7 +1465,7 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
-  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS}
+  ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
   ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
@@ -1532,25 +1532,16 @@ function open_firewall_ports_on_the_broker_node() {
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
 
   # cd "$prep_for_subm_dir"
+  BUG "'prep_for_subm.sh' ignores local yamls and always download from master" \
+  "Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') into 'submariner_prep' under OCP install dir" \
+  "https://github.com/submariner-io/submariner/issues/880"
+  # Workaround:
 
   echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR/submariner_prep"
   cp -rf "$prep_for_subm_dir" "$CLUSTER_A_DIR/submariner_prep"
   cd "$CLUSTER_A_DIR/submariner_prep/"
 
   kubconf_a;
-
-  # BUG "prep_for_subm.sh should accept custom ports for the gateway nodes" \
-  # "Modify file ec2-resources.tf, and change ports 4500 & 500 to $IPSEC_NATT_PORT & $IPSEC_IKE_PORT" \
-  # "https://github.com/submariner-io/submariner/issues/240"
-  # # Workaround:
-  # sed "s/500/$IPSEC_IKE_PORT/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
-  # #sed "s/4800/4801/g" -i ./ocp-ipi-aws-prep/ec2-resources.tf
-  #
-  # BUG "External IP cannot be assigned on current ec2-resources.tf" \
-  # "Modify ec2-resources.tf to have 'instanceType: m4.large'" \
-  # "https://github.com/submariner-io/submariner/issues/882"
-  # # Workaround:
-  # sed 's/instanceType: .*/instanceType: m4.large/g' -i ./ocp-ipi-aws-prep/templates/machine-set.yaml
 
   export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
   export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
@@ -1727,8 +1718,10 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
-   || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
+  if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
+     || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
+  fi
 }
 
 # ------------------------------------------
@@ -1950,46 +1943,22 @@ function test_submariner_resources_status() {
 
 # ------------------------------------------
 
-function test_external_ip_reset_on_broker_nodes() {
+function test_disaster_recovery_of_gateway_nodes() {
 # Check that submariner tunnel works if broker nodes external ips (on gateways) is changed
-  PROMPT "Testing Submariner after external IPs reset on Broker gateway"
+  PROMPT "Testing disaster recovery after VM reset of Submariner-Gateway, with new External IPs"
   trap_commands;
 
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
-  kubconf_a;
+  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" --output text --query "Reservations[*].Instances[*].InstanceId")"
 
-  local prep_for_subm_script="$CLUSTER_A_DIR/submariner_prep/prep_for_subm.sh"
+  cmd="aws ec2 stop-instances --instance-ids $gateway_aws_instance_ids"
+  regex="CURRENTSTATE.*stopped"
+  watch_and_retry "$cmd" 3m "$regex"
 
-  ls -l "$prep_for_subm_script" || FATAL "'$prep_for_subm_script' is required to add external IPs to Broker nodes"
-
-  # Get all nodes that their external ip is NOT <none> : Those shall be the Gateway nodes
-  # gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
-
-  external_ips=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk 'NR>1 && $7!="<none>" {print $7}')
-
-  echo "# Removing external IPs from all worker nodes: $external_ips"
-
-  # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{
-  #   if (NR > 1) {
-  #     node = $1
-  #     external_ip = $7
-  #     if (external_ip != "<none>") {
-  #       printf ("Removing external IP [%s] from Node [%s]\n", external_ip, node)
-  #       cmd = "aws ec2 disassociate-address --public-ip 198.51.100.0" machine " -n " namespace
-  #       printf ("\n$ %s\n\n", cmd)
-  #       system("oc describe Machine "$2" -n "$1)
-  #     }
-  #   }
-  # }'
-
-  for eip in $external_ips; do
-    aws ec2 disassociate-address --public-ip $eip
-  done
-
-  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
-  cd "$CLUSTER_A_DIR/submariner_prep"
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
+  cmd="aws ec2 start-instances --instance-ids $gateway_aws_instance_ids"
+  regex="CURRENTSTATE.*running"
+  watch_and_retry "$cmd" 3m "$regex"
 
 }
 
@@ -2429,7 +2398,7 @@ function install_new_netshoot_cluster_a() {
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
-  ${OC} delete pod ${NEW_NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS}
+  ${OC} delete pod ${NEW_NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   ${OC} run ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot \
   --pod-running-timeout=5m --restart=Never -- sleep 5m
@@ -3034,7 +3003,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
     ${junit_cmd} test_submariner_resources_cluster_b
 
-    ${junit_cmd} test_external_ip_reset_on_broker_nodes
+    ${junit_cmd} test_disaster_recovery_of_gateway_nodes
 
     ${junit_cmd} test_cable_driver_cluster_a
 

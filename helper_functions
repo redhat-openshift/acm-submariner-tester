@@ -124,13 +124,14 @@ function trap_function_on_error() {
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
   trap_commands
-  # Command to execute and watch
+
+  # Param 1: Command to execute and watch
   CMD="$1"
-  # Optional: Number of retry attempts (default is 10)
-  # If adding s/m to the number, it will be timeout in seconds/minutes
-  RETRY="${2:-10}"
-  # Optional: Pattern to search, otherwise expect $CMD exit 0
+  # Param 2 (Optional): Number of retry attempts (default is 10)
+  RETRY="${2:-10}" # If adding s/m to the number, it will be timeout in seconds/minutes
+  # Param 3 (Optional): Pattern to search, otherwise expect $CMD exit 0
   REGEX="$3"
+
   # Max timeout for the whole watch process (default is 10 minutes)
   TIMEOUT=10m
 
