@@ -1576,6 +1576,10 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   PROMPT "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
   trap_commands;
 
+  BUG "Submariner-gw machine failure: Configuration not supported" \
+  "No Workaround yet..." \
+  "https://github.com/submariner-io/submariner/issues/885"
+
   kubconf_a;
   # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
   gateway_label_all_nodes_external_ip
@@ -2252,11 +2256,6 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
 
     if ! ${OC} exec ${CURL_CMD} ; then
-      BUG "Submariner without Globalnet - IP is not reachable between clusters" \
-      "No Workaround yet..." \
-      "https://github.com/submariner-io/submariner/issues/779
-      https://github.com/submariner-io/submariner/issues/784"
-
       FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
       \n Maybe you installed clusters with overlapping CIDRs ?"
     fi
