@@ -1316,8 +1316,8 @@ function clean_aws_cluster_a() {
 
   PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
 
-  BUG "If one of the gateway nodes does not have external ip, submariner will fail to connect later" \
-  "Make sure one node with external IP has a gateway label" \
+  BUG "If one of the gateway nodes does not have External-IP, submariner will fail to connect later" \
+  "Make sure one node with External-IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
   remove_submariner_gateway_labels
@@ -1550,7 +1550,7 @@ function open_firewall_ports_on_the_broker_node() {
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
   echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   BUG "Duplicate security group rule was found, when applying Terraform ec2-resources.tf more than once" \
-  "No workaround yet (it will probably fail later when searching external IP)" \
+  "No workaround yet (it will probably fail later when searching External-IP)" \
   "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
@@ -1573,7 +1573,7 @@ function open_firewall_ports_on_the_broker_node() {
 
 function label_gateway_on_broker_nodes_with_external_ip() {
 ### Label a Gateway node on AWS cluster A (public) ###
-  PROMPT "Adding Gateway label to all worker nodes with an external ip on AWS cluster A (public)"
+  PROMPT "Adding Gateway label to all worker nodes with an External-IP on AWS cluster A (public)"
   trap_commands;
 
   BUG "Submariner-gw machine failure: Configuration not supported" \
@@ -1616,10 +1616,10 @@ function gateway_label_first_worker_node() {
 }
 
 function gateway_label_all_nodes_external_ip() {
-### Adding submariner gateway label to all worker nodes with an external IP ###
+### Adding submariner gateway label to all worker nodes with an External-IP ###
   trap_commands;
 
-  # Filter all node names that have external IP (column 7 is not none), and ignore header fields
+  # Filter all node names that have External-IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex of IPv4
   watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" \
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
@@ -1630,13 +1630,13 @@ function gateway_label_all_nodes_external_ip() {
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
 
-  # [[ -n "$gw_nodes" ]] || FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script)."
+  # [[ -n "$gw_nodes" ]] || FATAL "External-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
 
-  echo "# Adding submariner gateway label to all worker nodes with an external IP: $gw_nodes"
+  echo "# Adding submariner gateway label to all worker nodes with an External-IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
   for node in $gw_nodes; do
@@ -1838,7 +1838,7 @@ function join_submariner_cluster_b() {
 function join_submariner_current_cluster() {
 # Join Submariner member - of current cluster kubeconfig
   trap_commands;
-  current_cluster_context_name="$1"
+  local cluster_name="$1"
 
   cd ${WORKDIR}
 
@@ -1893,7 +1893,7 @@ function join_submariner_current_cluster() {
   echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability"
   JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
 
-  echo "# Executing join command: ${JOIN_CMD}"
+  echo "# Executing join command on cluster $cluster_name: ${JOIN_CMD}"
   $JOIN_CMD
 
 }
@@ -1948,21 +1948,60 @@ function test_submariner_resources_status() {
 # ------------------------------------------
 
 function test_disaster_recovery_of_gateway_nodes() {
-# Check that submariner tunnel works if broker nodes external ips (on gateways) is changed
-  PROMPT "Testing disaster recovery after VM reset of Submariner-Gateway, with new External IPs"
+# Check that submariner tunnel works if broker nodes External-IPs (on gateways) is changed
+  PROMPT "Testing Disaster Recovery: Reboot Submariner-Gateway VM, to verify re-allocation of public (external) IP"
   trap_commands;
 
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
+  kubconf_a;
+
+  local public_ip=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}')
+  echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
+  verify_gateway_public_ip "$public_ip"
+
+  echo "# Get all AWS VMs that were assigned as 'submariner-gw'"
   gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" --output text --query "Reservations[*].Instances[*].InstanceId")"
 
+  echo "# Stopping all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
   cmd="aws ec2 stop-instances --instance-ids $gateway_aws_instance_ids"
   regex="CURRENTSTATE.*stopped"
   watch_and_retry "$cmd" 3m "$regex"
 
+  echo "# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
   cmd="aws ec2 start-instances --instance-ids $gateway_aws_instance_ids"
   regex="CURRENTSTATE.*running"
   watch_and_retry "$cmd" 3m "$regex"
+
+  echo "# Watching Submariner Engine pod - It should create new Gateway:"
+
+  submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
+  regex="All controllers stopped or exited"
+  # Watch submariner-engine pod logs for 200 (10 X 20) seconds
+  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
+
+  public_ip=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}')
+  echo "# After VM reboot - Gateway public (external) IP should be: $public_ip"
+  verify_gateway_public_ip "$public_ip"
+
+}
+
+# ------------------------------------------
+
+function verify_gateway_public_ip() {
+# sub-function for test_disaster_recovery_of_gateway_nodes
+  trap_commands;
+
+  local public_ip="$1"
+
+  # Show worker node EXTERNAL-IP
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide |& highlight "EXTERNAL-IP"
+
+  # Show Submariner Gateway public_ip
+  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  local regex="public_ip:\s*${public_ip}"
+  # Attempt cmd for 3 minutes (grepping for 'Local Endpoint:' and print 12 lines afterwards), looking for Public IP
+  watch_and_retry "$cmd | grep -C 12 'Local Endpoint:'" 3m "$regex"
 
 }
 
@@ -1996,7 +2035,7 @@ function test_submariner_cable_driver() {
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
   local regex="(cable.* started|Status:connected)"
-  # Watch submariner-engine pod logs for 2 minutes (10 X 20 seconds)
+  # Watch submariner-engine pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
@@ -2107,8 +2146,8 @@ function test_submariner_connection_established() {
   echo "# Tailing logs in Submariner-Engine pod [$submariner_engine_pod] to verify connection between clusters"
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
-  # local regex="received packet"
   local regex="(Successfully installed Endpoint cable .* remote IP|Status:connected|CableName:.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
+  # Watch submariner-engine pod logs for 400 (20 X 20) seconds
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
@@ -2150,6 +2189,7 @@ function test_globalnet_status() {
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
 
   local regex="(Allocating globalIp|Starting submariner-globalnet)"
+  # Watch globalnet pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$globalnet_pod" "${SUBM_NAMESPACE}" "$regex" 10 || globalnet_status=DOWN
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod], to see if Endpoints were removed (due to Submariner Gateway restarts)"
@@ -2194,6 +2234,7 @@ function test_lighthouse_status() {
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   local regex="agent .* started"
+  # Watch lighthouse pod logs for 100 (5 X 20) seconds
   watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
@@ -2822,7 +2863,7 @@ function print_submariner_pod_logs() {
 
 # Function to debug this script
 function FAIL_DEBUG() {
-  find ${CLUSTER_A_DIR} -name "*.log" | xargs cat
+  find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
   FAIL_HERE
 }
 
@@ -3059,9 +3100,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       # Test the new netshoot and headless nginx service discovery
 
-      ${junit_cmd} export_nginx_headless_namespace_cluster_b || :
+      ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
-      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace || :
+      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
 
       ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
     fi
