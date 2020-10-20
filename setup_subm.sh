@@ -2522,30 +2522,38 @@ function test_clusters_connected_headless_service_on_new_namespace() {
   To the HEADLESS Nginx service on cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+
     BUG "HEADLESS Service is not supported with GlobalNet" \
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
-    # No workaround yet
-    return 1
+    # No workaround yet - skipping test
+    return
+
+  else
+
+    kubconf_a
+
+    echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
+    #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
+        # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
+        # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
+        # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
+
+    BUG "It may fail resolving Headless service host, that was previously exported (when redeploying Submariner)" \
+    "No workaround yet" \
+    "https://github.com/submariner-io/submariner/issues/872"
+
+    cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
+    local regex="PING ${nginx_headless_cl_b_dns}"
+    watch_and_retry "$cmd" 3m "$regex"
+      # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
+
+    echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
+    ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
+
+    # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+
   fi
-
-  kubconf_a
-
-  echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
-  #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
-      # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
-      # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
-      # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
-
-  cmd="${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- ping -c 1 $nginx_headless_cl_b_dns"
-  local regex="PING ${nginx_headless_cl_b_dns}"
-  watch_and_retry "$cmd" 3m "$regex"
-    # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
-
-  echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
-  ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
-
-  # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
 }
 
