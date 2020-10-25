@@ -578,7 +578,7 @@ function show_test_plan() {
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
-    - configure_aws_ports_for_submariner_broker ((\"prep_for_subm.sh\")
+    - configure_aws_ports_for_submariner_broker (\"prep_for_subm.sh\")
     - label_gateway_on_broker_nodes_with_external_ip
     - label_first_gateway_cluster_b
     - install_broker_aws_cluster_a
@@ -737,6 +737,8 @@ function download_ocp_installer() {
   ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${OCP_VERSION}/"
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+
+  [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [$OCP_VERSION] from $ocp_url"
 
   echo "# Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
