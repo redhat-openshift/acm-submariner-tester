@@ -1090,8 +1090,7 @@ function create_osp_cluster_b() {
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
 
-  # ocpup  create clusters --debug --config "$ocpup_yml"
-  ocpup  create clusters --config "$ocpup_yml" &
+  ocpup  create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
   pid=$!
   tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
   tail --pid=$pid -f /dev/null
@@ -1279,8 +1278,7 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    # ocpup  destroy clusters --debug --config "$ocpup_yml"
-    ocpup  destroy clusters --config "$ocpup_yml" & # running on the background (with timeout)
+    ocpup  destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
     # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
 
@@ -1750,14 +1748,6 @@ function export_nginx_headless_namespace_cluster_b() {
   PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
   trap_commands;
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    BUG "HEADLESS Service is not supported with GlobalNet" \
-     "No workaround yet - Skip the whole test" \
-    "https://github.com/submariner-io/lighthouse/issues/273"
-    # No workaround yet
-    return 1
-  fi
-
   kubconf_b;
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
@@ -1936,7 +1926,12 @@ function test_submariner_resources_status() {
 
   ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error") \
+  || BUG "Globalnet pod might have terminated after deployment" \
+  "No workaround, ignore ERROR state (Globalnet pod will be restarted)" \
+  "https://github.com/submariner-io/submariner/issues/903"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "CrashLoopBackOff|No resources found") \
   || submariner_status=DOWN
   # TODO: consider checking for "Terminating" pods
 
@@ -1963,17 +1958,24 @@ function test_disaster_recovery_of_gateway_nodes() {
   verify_gateway_public_ip "$public_ip"
 
   echo "# Get all AWS VMs that were assigned as 'submariner-gw'"
-  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" --output text --query "Reservations[*].Instances[*].InstanceId")"
+  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" \
+   --output text --query "Reservations[*].Instances[*].InstanceId")"
 
-  echo "# Stopping all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws ec2 stop-instances --instance-ids $gateway_aws_instance_ids"
-  regex="CURRENTSTATE.*stopped"
-  watch_and_retry "$cmd" 3m "$regex"
+  echo -e "\n# Stopping all AWS VMs of 'submariner-gw': [${gateway_aws_instance_ids}]"
+  cmd="aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "stopped" || aws_reboot=FAILED
 
-  echo "# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws ec2 start-instances --instance-ids $gateway_aws_instance_ids"
-  regex="CURRENTSTATE.*running"
-  watch_and_retry "$cmd" 3m "$regex"
+  cat "$TEMP_FILE"
+
+  echo -e "\n# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
+  cmd="aws ${DEBUG_FLAG} ec2 start-instances --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "running" || aws_reboot=FAILED
+
+  cat "$TEMP_FILE"
+
+  if [[ "$aws_reboot" = FAILED ]] ; then
+      FATAL "AWS-CLI reboot VM command has failed"
+  fi
 
   echo "# Watching Submariner Engine pod - It should create new Gateway:"
 
@@ -2000,10 +2002,10 @@ function verify_gateway_public_ip() {
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide |& highlight "EXTERNAL-IP"
 
   # Show Submariner Gateway public_ip
-  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE} | grep -C 12 'Local Endpoint:'"
   local regex="public_ip:\s*${public_ip}"
   # Attempt cmd for 3 minutes (grepping for 'Local Endpoint:' and print 12 lines afterwards), looking for Public IP
-  watch_and_retry "$cmd | grep -C 12 'Local Endpoint:'" 3m "$regex"
+  watch_and_retry "$cmd" 3m "$regex"
 
 }
 
@@ -2739,31 +2741,33 @@ function create_all_test_results_in_polarion() {
 
   local polarion_rc=0
 
-  # Upload junit results of SHELL tests
-  #create_and_upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  # Upload SYSTEM tests to Polarion
+  echo "# Upload Junit results of SYSTEM (Shell) tests to Polarion:"
   upload_junit_xml_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" || polarion_rc=1
 
-  if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
-    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-    "https://github.com/submariner-io/shipyard/issues/48"
-    # Workaround:
-    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
 
-    # Upload junit results of PKG tests
-    upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
-  fi
+  # Upload E2E tests to Polarion
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+    echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
+
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
     "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
     "https://github.com/submariner-io/shipyard/issues/48"
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    # Upload junit results of E2E tests
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
   fi
+
+  # Upload UNIT tests to Polarion (skipping, not really required)
+
+  # if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
+  #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
+  #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
+  #
+  #   upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
+  # fi
 
   return $polarion_rc
 }
@@ -2889,6 +2893,7 @@ if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # To trap inside functions
   # set -T # might have issues with kubectl/oc commands
   export OC="${OC} -v=6" # verbose for oc commands
+  export DEBUG_FLAG="--debug" # verbose for oc commands
 else
   # Disable (empty) trap_commands function
   trap_commands() { :; }
@@ -3110,11 +3115,19 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       # Test the new netshoot and headless nginx service discovery
 
-      ${junit_cmd} export_nginx_headless_namespace_cluster_b
+      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+          BUG "HEADLESS Service is not supported with GlobalNet" \
+           "No workaround yet - Skip the whole test" \
+          "https://github.com/submariner-io/lighthouse/issues/273"
+          # No workaround yet
+      else
+        ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
-      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+        ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+
+        ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+      fi
     fi
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE

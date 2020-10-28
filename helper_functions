@@ -891,7 +891,7 @@ function create_polarion_testcases_doc_from_junit() {
               <custom-field id=\"caseposneg\" content=\"positive\" />
               <custom-field id=\"legacytest\" content=\"true\" />
               <custom-field id=\"caseautomation\" content=\"automated\" />
-              <custom-field id=\"automation_script\" content=\"$(realpath -s ${BASH_SOURCE[$i+1]})\" />
+              <custom-field id=\"automation_script\" content=\"$(hostname -d) : $(realpath -s ${BASH_SOURCE[$i+1]})\" />
             </custom-fields>
         </testcase>
         " >> "$polarion_testcases_file"
