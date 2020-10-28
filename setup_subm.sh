@@ -1965,13 +1965,13 @@ function test_disaster_recovery_of_gateway_nodes() {
   echo "# Get all AWS VMs that were assigned as 'submariner-gw'"
   gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" --output text --query "Reservations[*].Instances[*].InstanceId")"
 
-  echo "# Stopping all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws ec2 stop-instances --instance-ids $gateway_aws_instance_ids"
+  echo "# Stopping all AWS VMs of 'submariner-gw': [${gateway_aws_instance_ids}]"
+  cmd="aws --debug ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids"
   regex="CURRENTSTATE.*stopped"
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws ec2 start-instances --instance-ids $gateway_aws_instance_ids"
+  cmd="aws --debug ec2 start-instances --instance-ids $gateway_aws_instance_ids"
   regex="CURRENTSTATE.*running"
   watch_and_retry "$cmd" 3m "$regex"
 
@@ -2739,31 +2739,33 @@ function create_all_test_results_in_polarion() {
 
   local polarion_rc=0
 
-  # Upload junit results of SHELL tests
-  #create_and_upload_junit_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" "$POLARION_PROJECT_ID" "$POLARION_SUBM_TESTRUN_ID" "$POLARION_TEAM_NAME" || polarion_rc=1
+  # Upload SYSTEM tests to Polarion
+  echo "# Upload Junit results of SYSTEM (Shell) tests to Polarion:"
   upload_junit_xml_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" || polarion_rc=1
 
-  if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
-    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-    "https://github.com/submariner-io/shipyard/issues/48"
-    # Workaround:
-    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
 
-    # Upload junit results of PKG tests
-    upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
-  fi
+  # Upload E2E tests to Polarion
 
   if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+    echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
+
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
     "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
     "https://github.com/submariner-io/shipyard/issues/48"
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    # Upload junit results of E2E tests
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
   fi
+
+  # Upload UNIT tests to Polarion (skipping, not really required)
+
+  # if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
+  #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
+  #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
+  #
+  #   upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
+  # fi
 
   return $polarion_rc
 }

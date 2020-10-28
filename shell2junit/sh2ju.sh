@@ -28,7 +28,14 @@
 ###     - Configure Jenkins to parse junit files from the generated folder
 ###
 
+# set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
+set +e
+
+# set +x - To avoid printing commands in debug mode
 set +x
+
+export exitCode
+trap 'exit $exitCode' INT EXIT ERR HUP # TERM  # Always exit with the real return code of the evaluated command
 
 asserts=00; errors=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
@@ -162,13 +169,13 @@ EOF
   # then swapping them back again so that the streams are written correctly for the invoking process
   ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
 
-  evErr="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
+  exitCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
-  echo "+++ exit code: ${evErr}"        # | tee -a ${outf}
+  echo "+++ exit code: ${exitCode}"        # | tee -a ${outf}
 
-  # set +e - To not break the calling script, if juLog has internal error (e.g. in SED)
-  set +e
+  # # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
+  # set +e
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536
@@ -180,7 +187,7 @@ EOF
   rm -f "${errf}"
 
   # set the appropriate error, based in the exit code and the regex
-  [[ ${evErr} != 0 ]] && err=1 || err=0
+  [[ ${exitCode} != 0 ]] && err=1 || err=0
   if [ ${err} = 0 ] && [ -n "${ereg:-}" ]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
       [[ -n "${H}" ]] && err=1
