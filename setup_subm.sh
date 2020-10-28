@@ -1090,8 +1090,7 @@ function create_osp_cluster_b() {
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
 
-  # ocpup  create clusters --debug --config "$ocpup_yml"
-  ocpup  create clusters --config "$ocpup_yml" &
+  ocpup  create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
   pid=$!
   tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
   tail --pid=$pid -f /dev/null
@@ -1279,8 +1278,7 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    # ocpup  destroy clusters --debug --config "$ocpup_yml"
-    ocpup  destroy clusters --config "$ocpup_yml" & # running on the background (with timeout)
+    ocpup  destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" & # running on the background (with timeout)
     pid=$! # while the background process runs, tail its log
     # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
 
@@ -1963,17 +1961,24 @@ function test_disaster_recovery_of_gateway_nodes() {
   verify_gateway_public_ip "$public_ip"
 
   echo "# Get all AWS VMs that were assigned as 'submariner-gw'"
-  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" --output text --query "Reservations[*].Instances[*].InstanceId")"
+  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" \
+   --output text --query "Reservations[*].Instances[*].InstanceId")"
 
-  echo "# Stopping all AWS VMs of 'submariner-gw': [${gateway_aws_instance_ids}]"
-  cmd="aws --debug ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids"
-  regex="CURRENTSTATE.*stopped"
-  watch_and_retry "$cmd" 3m "$regex"
+  echo -e "\n# Stopping all AWS VMs of 'submariner-gw': [${gateway_aws_instance_ids}]"
+  cmd="aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "stopped" || aws_reboot=FAILED
 
-  echo "# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws --debug ec2 start-instances --instance-ids $gateway_aws_instance_ids"
-  regex="CURRENTSTATE.*running"
-  watch_and_retry "$cmd" 3m "$regex"
+  cat "$TEMP_FILE"
+
+  echo -e "\n# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
+  cmd="aws ${DEBUG_FLAG} ec2 start-instances --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "running" || aws_reboot=FAILED
+
+  cat "$TEMP_FILE"
+
+  if [[ "$aws_reboot" = FAILED ]] ; then
+      FATAL "AWS-CLI reboot VM command has failed"
+  fi
 
   echo "# Watching Submariner Engine pod - It should create new Gateway:"
 
@@ -2000,10 +2005,10 @@ function verify_gateway_public_ip() {
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide |& highlight "EXTERNAL-IP"
 
   # Show Submariner Gateway public_ip
-  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE} | grep -C 12 'Local Endpoint:'"
   local regex="public_ip:\s*${public_ip}"
   # Attempt cmd for 3 minutes (grepping for 'Local Endpoint:' and print 12 lines afterwards), looking for Public IP
-  watch_and_retry "$cmd | grep -C 12 'Local Endpoint:'" 3m "$regex"
+  watch_and_retry "$cmd" 3m "$regex"
 
 }
 
@@ -2891,6 +2896,7 @@ if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # To trap inside functions
   # set -T # might have issues with kubectl/oc commands
   export OC="${OC} -v=6" # verbose for oc commands
+  export DEBUG_FLAG="--debug" # verbose for oc commands
 else
   # Disable (empty) trap_commands function
   trap_commands() { :; }

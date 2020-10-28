@@ -34,8 +34,8 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-export exitCode
-trap 'exit $exitCode' INT EXIT ERR HUP # TERM  # Always exit with the real return code of the evaluated command
+export exitCode=0
+trap 'exit $exitCode' EXIT ERR # HUP INT TERM  # Always exit with the real return code of the evaluated command
 
 asserts=00; errors=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
@@ -174,17 +174,17 @@ EOF
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${exitCode}"        # | tee -a ${outf}
 
-  # # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
-  # set +e
+  # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
+  set +e
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536
 
   # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
   outMsg="$(printPlainTextFile "$outf")"
-  rm -f "${outf}"
+  rm -f ${outf} || :
   errMsg="$(printPlainTextFile "$errf")"
-  rm -f "${errf}"
+  rm -f ${errf} || :
 
   # set the appropriate error, based in the exit code and the regex
   [[ ${exitCode} != 0 ]] && err=1 || err=0
