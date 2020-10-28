@@ -1748,14 +1748,6 @@ function export_nginx_headless_namespace_cluster_b() {
   PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
   trap_commands;
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-    BUG "HEADLESS Service is not supported with GlobalNet" \
-     "No workaround yet - Skip the whole test" \
-    "https://github.com/submariner-io/lighthouse/issues/273"
-    # No workaround yet
-    return 1
-  fi
-
   kubconf_b;
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
@@ -1934,7 +1926,12 @@ function test_submariner_resources_status() {
 
   ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error") \
+  || BUG "Globalnet pod might have terminated after deployment" \
+  "No workaround, ignore ERROR state (Globalnet pod will be restarted)" \
+  "https://github.com/submariner-io/submariner/issues/903"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "CrashLoopBackOff|No resources found") \
   || submariner_status=DOWN
   # TODO: consider checking for "Terminating" pods
 
@@ -3118,11 +3115,19 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       # Test the new netshoot and headless nginx service discovery
 
-      ${junit_cmd} export_nginx_headless_namespace_cluster_b
+      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+          BUG "HEADLESS Service is not supported with GlobalNet" \
+           "No workaround yet - Skip the whole test" \
+          "https://github.com/submariner-io/lighthouse/issues/273"
+          # No workaround yet
+      else
+        ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
-      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+        ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+
+        ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+      fi
     fi
 
     echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
