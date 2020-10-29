@@ -1957,24 +1957,30 @@ function test_disaster_recovery_of_gateway_nodes() {
   echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
   verify_gateway_public_ip "$public_ip"
 
-  echo "# Get all AWS VMs that were assigned as 'submariner-gw'"
-  gateway_aws_instance_ids="$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-*" \
-   --output text --query "Reservations[*].Instances[*].InstanceId")"
+  echo "# Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
+  gateway_aws_instance_ids="$(aws ec2 describe-instances \
+  --filters Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-* Name=instance-state-name,Values=running \
+  --output text --query Reservations[*].Instances[*].InstanceId \
+  | tr '\r\n' ' ')"
 
-  echo -e "\n# Stopping all AWS VMs of 'submariner-gw': [${gateway_aws_instance_ids}]"
-  cmd="aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
-  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "stopped" || aws_reboot=FAILED
+  [[ -n "$gateway_aws_instance_ids" ]] || FATAL "No running VM instances of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
+
+  echo -e "\n# Stopping all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [${gateway_aws_instance_ids}]"
+  aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids || :
+  cmd="aws ec2 describe-instances --instance-ids $gateway_aws_instance_ids --output text &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 3m "stopped" || :
 
   cat "$TEMP_FILE"
 
-  echo -e "\n# Starting all AWS VMs of 'submariner-gw': [$gateway_aws_instance_ids]"
-  cmd="aws ${DEBUG_FLAG} ec2 start-instances --instance-ids $gateway_aws_instance_ids &> '$TEMP_FILE'"
-  watch_and_retry "$cmd ; grep 'CURRENTSTATE' $TEMP_FILE" 3m "running" || aws_reboot=FAILED
+  echo -e "\n# Starting all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [$gateway_aws_instance_ids]"
+  aws ${DEBUG_FLAG} ec2 start-instances --instance-ids $gateway_aws_instance_ids || :
+  cmd="aws ec2 describe-instances --instance-ids $gateway_aws_instance_ids --output text &> '$TEMP_FILE'"
+  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 3m "running" || aws_reboot=FAILED
 
   cat "$TEMP_FILE"
 
   if [[ "$aws_reboot" = FAILED ]] ; then
-      FATAL "AWS-CLI reboot VM command has failed"
+      FATAL "AWS-CLI reboot VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME has failed"
   fi
 
   echo "# Watching Submariner Engine pod - It should create new Gateway:"
