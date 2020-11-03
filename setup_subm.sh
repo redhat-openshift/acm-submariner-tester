@@ -1303,7 +1303,7 @@ function destroy_osp_cluster_b() {
 
 function clean_aws_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
-  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
+  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
   trap_commands;
   kubconf_a;
 
@@ -1313,6 +1313,7 @@ function clean_aws_cluster_a() {
   https://github.com/submariner-io/submariner-website/issues/272"
 
   delete_submariner_namespace_and_crds;
+  delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
 
@@ -1321,7 +1322,6 @@ function clean_aws_cluster_a() {
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
   remove_submariner_gateway_labels
-
   remove_submariner_machine_sets
 
   # Todo: Should also include globalnet network cleanup:
@@ -1343,15 +1343,16 @@ function clean_aws_cluster_a() {
 
 function clean_osp_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
-  PROMPT "Cleaning previous Submariner (Namespace objects, OLM, CRDs, ServiceExports) on OSP cluster B (on-prem)"
+  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, ServiceExports) on OSP cluster B (on-prem)"
   trap_commands;
 
   kubconf_b;
   delete_submariner_namespace_and_crds;
+  delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
-  remove_submariner_gateway_labels
 
+  remove_submariner_gateway_labels
   remove_submariner_machine_sets
 }
 
@@ -1378,6 +1379,17 @@ function delete_submariner_namespace_and_crds() {
   spec:
     servers: []
 EOF
+
+}
+
+# ------------------------------------------
+
+function delete_e2e_namespaces() {
+### Delete previous Submariner E2E namespaces from current cluster ###
+  trap_commands;
+
+  # Delete all "e2e-tests" namespaces
+  oc delete ns $(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests) || echo "All 'e2e-tests' namespaces already deleted"
 
 }
 
@@ -1991,7 +2003,7 @@ function test_disaster_recovery_of_gateway_nodes() {
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
 
   public_ip=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}')
-  echo "# After VM reboot - Gateway public (external) IP should be: $public_ip"
+  echo -e "\n\n# After VM reboot - Gateway public (external) IP should be: $public_ip \n"
   verify_gateway_public_ip "$public_ip"
 
 }
@@ -2996,12 +3008,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ### Cleanup Submariner from all clusters ###
 
     # Running clean_aws_cluster_a if requested
-    [[ ! "$clean_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] \
-      || ${junit_cmd} clean_aws_cluster_a
+    if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} clean_aws_cluster_a
+    fi
 
     # Running clean_osp_cluster_b if requested
-    [[ ! "$clean_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] \
-      || ${junit_cmd} clean_osp_cluster_b
+    if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} clean_osp_cluster_b
+    fi
 
     # Running basic pre-submariner tests (only required on new/cleaned clusters)
     ${junit_cmd} install_netshoot_app_on_cluster_a
@@ -3159,6 +3173,7 @@ if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
     ### Running E2E tests from Submariner repositories (Ginkgo)
 
     if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_submariner_e2e_with_go || \
       BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
 
