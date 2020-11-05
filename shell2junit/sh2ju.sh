@@ -35,7 +35,7 @@ set +e
 set +x
 
 export exitCode=0
-trap 'exit $exitCode' EXIT ERR # HUP INT TERM  # Always exit with the real return code of the evaluated command
+trap 'eval exit $exitCode' EXIT # ERR HUP INT TERM  # Always exit with the real return code of the evaluated command
 
 asserts=00; errors=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"

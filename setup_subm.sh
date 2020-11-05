@@ -1210,9 +1210,9 @@ function destroy_aws_cluster_a() {
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
-      BUG "WARNING: OCP destroy timeout exceeded - loop state while searching for hosted zone." \
-      "Force exist OCP destroy process, or use OCP version 4.5" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=1817201" )
+      BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
+      "Force exist OCP destroy process" \
+      "Please submit a new bug for OCP installer (in Bugzilla)" )
     fi
     # cd ..
 
