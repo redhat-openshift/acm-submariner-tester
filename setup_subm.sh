@@ -1348,6 +1348,12 @@ function clean_osp_cluster_b() {
 
   kubconf_b;
   delete_submariner_namespace_and_crds;
+
+  BUG "Low disk-space on OCP cluster that was running for few weeks" \
+  "Delete old E2E namespaces" \
+  "https://github.com/submariner-io/submariner-website/issues/341
+  https://github.com/submariner-io/shipyard/issues/355"
+
   delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
@@ -1478,6 +1484,11 @@ function test_basic_cluster_connectivity_before_submariner() {
   echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
+
+
+  BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
+  "No workaround" \
+  "https://github.com/submariner-io/submariner/issues/929"
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
   ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
