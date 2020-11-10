@@ -1890,16 +1890,7 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
-  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
-    BUG "libreswan.git tagged image in quay.io cannot be used with the new domain 'clusterset' for Lighthouse" \
-    "export MULTI_CLUSTER_DOMAIN='supercluster.local', for backward compatibility" \
-    "https://github.com/submariner-io/submariner-operator/issues/651"
-    # Workaround:
-    export MULTI_CLUSTER_DOMAIN='supercluster.local'
-
-  elif [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
+  if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
