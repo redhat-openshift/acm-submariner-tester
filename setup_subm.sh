@@ -691,7 +691,7 @@ function setup_workspace() {
 
     if [[ -e ${GOBIN} ]] ; then
       echo "# Re-exporting global variables"
-      export OC="${GOBIN}/oc"
+      export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
   fi
 
@@ -1394,8 +1394,11 @@ function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
 
-  # Delete all "e2e-tests" namespaces
-  oc delete ns $(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests) || echo "All 'e2e-tests' namespaces already deleted"
+  local e2e_namespaces="$(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests)"
+
+  echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
+
+  oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
 
 }
 
@@ -1484,7 +1487,6 @@ function test_basic_cluster_connectivity_before_submariner() {
   echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
-
 
   BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
   "No workaround" \
@@ -2919,14 +2921,21 @@ function FAIL_DEBUG() {
 
 ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
 if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
-  # To trap inside functions
-  # set -T # might have issues with kubectl/oc commands
-  export OC="${OC} -v=6" # verbose for oc commands
-  export DEBUG_FLAG="--debug" # verbose for oc commands
+  # Extra verbosity for oc commands:
+  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
+  export VERBOSE_FLAG="--v=6"
+
+  # Debug flag for ocpup and aws commands
+  export DEBUG_FLAG="--debug"
+
 else
+  # Default verbosity for oc commands
+  export VERBOSE_FLAG="--v=2"
+
   # Disable (empty) trap_commands function
   trap_commands() { :; }
 fi
+export OC="$OC $VERBOSE_FLAG"
 
 cd ${SCRIPT_DIR}
 
