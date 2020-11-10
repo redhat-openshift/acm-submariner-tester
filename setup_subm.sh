@@ -1315,12 +1315,13 @@ function clean_aws_cluster_a() {
   delete_submariner_namespace_and_crds;
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have External-IP, submariner will fail to connect later" \
   "Make sure one node with External-IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
+  remove_submariner_iptables_from_gw_nodes
   remove_submariner_gateway_labels
   remove_submariner_machine_sets
 
@@ -1356,8 +1357,9 @@ function clean_osp_cluster_b() {
 
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
+  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from OSP cluster B (on-prem)"
 
+  remove_submariner_iptables_from_gw_nodes
   remove_submariner_gateway_labels
   remove_submariner_machine_sets
 }
@@ -1427,6 +1429,59 @@ function remove_submariner_machine_sets() {
   fi
 
   ${OC} get machineset -A -o wide
+}
+
+# ------------------------------------------
+
+function remove_submariner_iptables_from_gw_nodes() {
+  trap_commands;
+
+  ${OC} get nodes -l "submariner.io/gateway=true" | awk 'NR>1 {print $1}' | \
+  while read NODE; do
+    echo "# Delete GlobalNet iptables from node $NODE"
+
+    ${OC} run netshoot-hostmount-$(uuidgen) --generator=run-pod/v1 --overrides='{
+    	"spec": {
+    		"hostNetwork": true,
+    		"nodeName": "'$NODE'",
+    		"containers": [{
+    			"args": [
+    				"/bin/bash", "-c",
+    			       	"iptables -t nat -F SUBMARINER-GN-EGRESS; iptables -t nat -F SUBMARINER-GN-INGRESS; iptables -t nat -F SUBMARINER-GN-MARK;"
+    			],
+    			"stdin": true,
+    			"stdinOnce": true,
+    			"terminationMessagePath": "/dev/termination-log",
+    			"terminationMessagePolicy": "File",
+    			"tty": true,
+    			"securityContext": {
+    				"allowPrivilegeEscalation": true,
+    				"privileged": true,
+    				"runAsUser": 0,
+    				"capabilities": {
+    					"add": ["ALL"]
+    				}
+    			},
+    			"name": "netshoot-hostmount",
+    			"image": "nicolaka/netshoot",
+    			"volumeMounts": [{
+    				"mountPath": "/host",
+    				"name": "host-slash",
+    				"readOnly": true
+    			}]
+    		}],
+    	        "restartPolicy": "Never",
+    		"volumes": [{
+    			"hostPath": {
+    				"path": "/",
+    				"type": ""
+    			},
+    			"name": "host-slash"
+    		}]
+    	}
+    }' --image nicolaka/netshoot -- /bin/bash
+  done
+
 }
 
 # ------------------------------------------
