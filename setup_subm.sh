@@ -69,7 +69,7 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
-  * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
+  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
@@ -268,8 +268,8 @@ while [[ $# -gt 0 ]]; do
     check_cli_args "$2"
     subm_cable_driver="$2" # libreswan / strongswan
     shift 2 ;;
-  --skip-setup)
-    skip_setup=YES
+  --skip-ocp-setup)
+    skip_ocp_setup=YES
     shift ;;
   --skip-install)
     skip_install=YES
@@ -316,15 +316,15 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 if [[ -z "$got_user_input" ]]; then
   echo "# ${disclosure}"
 
-  # User input: $skip_setup - to skip OCP clusters setup (destroy / create / clean)
-  while [[ ! "$skip_setup" =~ ^(yes|no)$ ]]; do
+  # User input: $skip_ocp_setup - to skip OCP clusters setup (destroy / create / clean)
+  while [[ ! "$skip_ocp_setup" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    skip_setup=${input:-NO}
+    skip_ocp_setup=${input:-NO}
   done
 
-  if [[ ! "$skip_setup" =~ ^(yes|y)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(yes|y)$ ]]; then
 
     # User input: $get_ocp_installer - to download_ocp_installer
     while [[ ! "$get_ocp_installer" =~ ^(yes|no)$ ]]; do
@@ -387,7 +387,7 @@ if [[ -z "$got_user_input" ]]; then
         clean_cluster_b=${input:-no}
       done
     fi
-  fi # End of skip_setup options
+  fi # End of skip_ocp_setup options
 
   # User input: $service_discovery - to deploy with --service-discovery
   while [[ ! "$service_discovery" =~ ^(yes|no)$ ]]; do
@@ -515,7 +515,7 @@ service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
-skip_setup=${skip_setup:-NO}
+skip_ocp_setup=${skip_ocp_setup:-NO}
 skip_install=${skip_install:-NO}
 skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
@@ -533,8 +533,8 @@ script_debug_mode=${script_debug_mode:-NO}
 function show_test_plan() {
   PROMPT "Input parameters and Test Plan steps"
 
-  if [[ "$skip_setup" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_setup \n"
+  if [[ "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_ocp_setup \n"
   else
     echo "### Will execute: Openshift clusters creation/cleanup before Submariner deployment:
 
@@ -1805,7 +1805,7 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
-  if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
     ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
      || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
   fi
@@ -3020,9 +3020,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # Setup and verify environment
   setup_workspace
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_setup) ###
+  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
 
-  if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}

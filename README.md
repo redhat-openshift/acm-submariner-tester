@@ -15,7 +15,7 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
-  * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
+  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
@@ -27,7 +27,7 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build latest Submariner E2E (test packages):       --build-e2e
+  * Build E2E tests of all Submariner repositories:    --build-e2e
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
   * Print all pods logs on failure:                    --print-logs
 
