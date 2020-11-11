@@ -34,9 +34,6 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-export exitCode=0
-trap 'eval exit $exitCode' EXIT # ERR HUP INT TERM  # Always exit with the real return code of the evaluated command
-
 asserts=00; errors=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
@@ -90,6 +87,9 @@ function juLogClean() {
 
 # Execute a command and record its results
 function juLog() {
+  export exitCode=0
+  trap 'eval exit $exitCode' EXIT # ERR HUP INT TERM  # Always exit with the real return code of the evaluated command
+
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
@@ -173,9 +173,6 @@ EOF
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
   echo "+++ exit code: ${exitCode}"        # | tee -a ${outf}
-
-  # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
-  set +e
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536

@@ -267,15 +267,17 @@ function install_anaconda() {
 
   # Remove old conda environment dir, if it is not configured
   env_dir=$(conda env list | awk -v name="$CONDA_ENV_NAME" '$0 ~ name { print $2 }')
+  env_base=$(conda env list | awk '/base/ { print $NF }')
+
   if [[ -z "$env_dir" ]] ; then
     echo "# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
     conda env remove -y -n $CONDA_ENV_NAME || :
-    env_base=$(conda env list | awk '/base/ { print $NF }')
+    conda env remove -y -p "$env_base/envs/$CONDA_ENV_NAME" || :
     rm -rf "$env_base/envs/$CONDA_ENV_NAME" || :
   fi
 
-  echo "# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exists already)"
-  [[ $(conda env list | grep "$CONDA_ENV_NAME") ]] || conda create -y -n $CONDA_ENV_NAME
+  echo "# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exist already)"
+  [[ -d "$env_base/envs/$CONDA_ENV_NAME" ]] || conda create -y -n $CONDA_ENV_NAME
 }
 # ------------------------------------------
 
@@ -286,7 +288,7 @@ function verify_anaconda() {
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
   conda info
-  conda env list | grep "$CONDA_ENV_NAME"
+  conda env list | grep "${install_dir}/envs/${CONDA_ENV_NAME}"
 }
 
 # ------------------------------------------
@@ -321,7 +323,7 @@ function verify_golang() {
   export GOPATH=$(go env GOPATH)
 
   # Optional: exporting $1 as GOBIN path
-  export GOBIN="${1:-$GOROOT/bin}"
+  # export GOBIN="${1:-$GOROOT/bin}"
 
   # export PATH=$PATH:$GOROOT/bin
   [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH

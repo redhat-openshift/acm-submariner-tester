@@ -684,10 +684,12 @@ function setup_workspace() {
 
     install_local_golang "${WORKDIR}"
 
-    # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
+    # Set GOBIN to local directory in ${WORKDIR}
     export GOBIN="${WORKDIR}/GOBIN"
     mkdir -p "$GOBIN"
-    verify_golang "$GOBIN"
+
+    # Verify GO installation
+    verify_golang
 
     if [[ -e ${GOBIN} ]] ; then
       echo "# Re-exporting global variables"
@@ -785,14 +787,15 @@ function build_ocpup_tool_latest() {
   #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   git fetch && git reset --hard && git checkout --theirs . && git pull
 
-  echo "# Build OCPUP and install it to $GOBIN/"
+  echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
   go mod vendor
   go install -mod vendor # Compile binary and moves it to $GOBIN
   # go build -mod vendor # Saves binary in current directory
 
-  # Check OCPUP command
+  echo "# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
+  which ocpup
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -1072,8 +1075,8 @@ function create_osp_cluster_b() {
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_commands;
 
-  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
   cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
@@ -1266,8 +1269,8 @@ function destroy_osp_cluster_b() {
   PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_commands;
 
-  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
@@ -3024,6 +3027,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
+    # Running build_ocpup_tool_latest if requested
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
+
     # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
 
@@ -3051,9 +3057,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     fi
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
@@ -3345,7 +3348,7 @@ tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
-# Exit the script with $test_status return code
+echo "# Exiting script with \$test_status return code: [$test_status]"
 exit $test_status
 
 # ------------------------------------------
