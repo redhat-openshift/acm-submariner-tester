@@ -69,7 +69,7 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
-  * Skip OCP clusters setup (destroy/create/clean):    --skip-setup
+  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
@@ -268,8 +268,8 @@ while [[ $# -gt 0 ]]; do
     check_cli_args "$2"
     subm_cable_driver="$2" # libreswan / strongswan
     shift 2 ;;
-  --skip-setup)
-    skip_setup=YES
+  --skip-ocp-setup)
+    skip_ocp_setup=YES
     shift ;;
   --skip-install)
     skip_install=YES
@@ -316,15 +316,15 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 if [[ -z "$got_user_input" ]]; then
   echo "# ${disclosure}"
 
-  # User input: $skip_setup - to skip OCP clusters setup (destroy / create / clean)
-  while [[ ! "$skip_setup" =~ ^(yes|no)$ ]]; do
+  # User input: $skip_ocp_setup - to skip OCP clusters setup (destroy / create / clean)
+  while [[ ! "$skip_ocp_setup" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    skip_setup=${input:-NO}
+    skip_ocp_setup=${input:-NO}
   done
 
-  if [[ ! "$skip_setup" =~ ^(yes|y)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(yes|y)$ ]]; then
 
     # User input: $get_ocp_installer - to download_ocp_installer
     while [[ ! "$get_ocp_installer" =~ ^(yes|no)$ ]]; do
@@ -387,7 +387,7 @@ if [[ -z "$got_user_input" ]]; then
         clean_cluster_b=${input:-no}
       done
     fi
-  fi # End of skip_setup options
+  fi # End of skip_ocp_setup options
 
   # User input: $service_discovery - to deploy with --service-discovery
   while [[ ! "$service_discovery" =~ ^(yes|no)$ ]]; do
@@ -515,7 +515,7 @@ service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
-skip_setup=${skip_setup:-NO}
+skip_ocp_setup=${skip_ocp_setup:-NO}
 skip_install=${skip_install:-NO}
 skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
@@ -533,8 +533,8 @@ script_debug_mode=${script_debug_mode:-NO}
 function show_test_plan() {
   PROMPT "Input parameters and Test Plan steps"
 
-  if [[ "$skip_setup" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_setup \n"
+  if [[ "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_ocp_setup \n"
   else
     echo "### Will execute: Openshift clusters creation/cleanup before Submariner deployment:
 
@@ -684,14 +684,16 @@ function setup_workspace() {
 
     install_local_golang "${WORKDIR}"
 
-    # verifying GO installed, and set GOBIN to local directory in ${WORKDIR}
+    # Set GOBIN to local directory in ${WORKDIR}
     export GOBIN="${WORKDIR}/GOBIN"
     mkdir -p "$GOBIN"
-    verify_golang "$GOBIN"
+
+    # Verify GO installation
+    verify_golang
 
     if [[ -e ${GOBIN} ]] ; then
       echo "# Re-exporting global variables"
-      export OC="${GOBIN}/oc"
+      export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
   fi
 
@@ -785,14 +787,15 @@ function build_ocpup_tool_latest() {
   #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   git fetch && git reset --hard && git checkout --theirs . && git pull
 
-  echo "# Build OCPUP and install it to $GOBIN/"
+  echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
   go mod vendor
   go install -mod vendor # Compile binary and moves it to $GOBIN
   # go build -mod vendor # Saves binary in current directory
 
-  # Check OCPUP command
+  echo "# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
+  which ocpup
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -1072,8 +1075,8 @@ function create_osp_cluster_b() {
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_commands;
 
-  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
   echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
   cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
@@ -1266,8 +1269,8 @@ function destroy_osp_cluster_b() {
   PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_commands;
 
-  ocpup -h || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
   cd "${OCPUP_DIR}"
+  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
   if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
     echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
@@ -1315,12 +1318,13 @@ function clean_aws_cluster_a() {
   delete_submariner_namespace_and_crds;
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from AWS cluster A (public)"
 
   BUG "If one of the gateway nodes does not have External-IP, submariner will fail to connect later" \
   "Make sure one node with External-IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
+  remove_submariner_iptables_from_gw_nodes
   remove_submariner_gateway_labels
   remove_submariner_machine_sets
 
@@ -1356,8 +1360,9 @@ function clean_osp_cluster_b() {
 
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway node's labels and MachineSets from OSP cluster B (on-prem)"
+  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from OSP cluster B (on-prem)"
 
+  remove_submariner_iptables_from_gw_nodes
   remove_submariner_gateway_labels
   remove_submariner_machine_sets
 }
@@ -1394,8 +1399,11 @@ function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
 
-  # Delete all "e2e-tests" namespaces
-  oc delete ns $(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests) || echo "All 'e2e-tests' namespaces already deleted"
+  local e2e_namespaces="$(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests)"
+
+  echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
+
+  oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
 
 }
 
@@ -1424,6 +1432,59 @@ function remove_submariner_machine_sets() {
   fi
 
   ${OC} get machineset -A -o wide
+}
+
+# ------------------------------------------
+
+function remove_submariner_iptables_from_gw_nodes() {
+  trap_commands;
+
+  ${OC} get nodes -l "submariner.io/gateway=true" | awk 'NR>1 {print $1}' | \
+  while read NODE; do
+    echo "# Delete GlobalNet iptables from node $NODE"
+
+    ${OC} run netshoot-hostmount-$(uuidgen) --generator=run-pod/v1 --overrides='{
+    	"spec": {
+    		"hostNetwork": true,
+    		"nodeName": "'$NODE'",
+    		"containers": [{
+    			"args": [
+    				"/bin/bash", "-c",
+    			       	"iptables -t nat -F SUBMARINER-GN-EGRESS; iptables -t nat -F SUBMARINER-GN-INGRESS; iptables -t nat -F SUBMARINER-GN-MARK;"
+    			],
+    			"stdin": true,
+    			"stdinOnce": true,
+    			"terminationMessagePath": "/dev/termination-log",
+    			"terminationMessagePolicy": "File",
+    			"tty": true,
+    			"securityContext": {
+    				"allowPrivilegeEscalation": true,
+    				"privileged": true,
+    				"runAsUser": 0,
+    				"capabilities": {
+    					"add": ["ALL"]
+    				}
+    			},
+    			"name": "netshoot-hostmount",
+    			"image": "nicolaka/netshoot",
+    			"volumeMounts": [{
+    				"mountPath": "/host",
+    				"name": "host-slash",
+    				"readOnly": true
+    			}]
+    		}],
+    	        "restartPolicy": "Never",
+    		"volumes": [{
+    			"hostPath": {
+    				"path": "/",
+    				"type": ""
+    			},
+    			"name": "host-slash"
+    		}]
+    	}
+    }' --image nicolaka/netshoot -- /bin/bash
+  done
+
 }
 
 # ------------------------------------------
@@ -1484,7 +1545,6 @@ function test_basic_cluster_connectivity_before_submariner() {
   echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
-
 
   BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
   "No workaround" \
@@ -1745,7 +1805,7 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
-  if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
     ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
      || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
   fi
@@ -1888,16 +1948,7 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
-  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    JOIN_CMD="${JOIN_CMD} --version libreswan-git"
-
-    BUG "libreswan.git tagged image in quay.io cannot be used with the new domain 'clusterset' for Lighthouse" \
-    "export MULTI_CLUSTER_DOMAIN='supercluster.local', for backward compatibility" \
-    "https://github.com/submariner-io/submariner-operator/issues/651"
-    # Workaround:
-    export MULTI_CLUSTER_DOMAIN='supercluster.local'
-
-  elif [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
+  if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
@@ -2919,14 +2970,21 @@ function FAIL_DEBUG() {
 
 ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
 if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
-  # To trap inside functions
-  # set -T # might have issues with kubectl/oc commands
-  export OC="${OC} -v=6" # verbose for oc commands
-  export DEBUG_FLAG="--debug" # verbose for oc commands
+  # Extra verbosity for oc commands:
+  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
+  export VERBOSE_FLAG="--v=6"
+
+  # Debug flag for ocpup and aws commands
+  export DEBUG_FLAG="--debug"
+
 else
+  # Default verbosity for oc commands
+  export VERBOSE_FLAG="--v=2"
+
   # Disable (empty) trap_commands function
   trap_commands() { :; }
 fi
+export OC="$OC $VERBOSE_FLAG"
 
 cd ${SCRIPT_DIR}
 
@@ -2962,12 +3020,15 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   # Setup and verify environment
   setup_workspace
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_setup) ###
+  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
 
-  if [[ ! "$skip_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
     # Running download_ocp_installer if requested
     [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+
+    # Running build_ocpup_tool_latest if requested
+    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
     # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
@@ -2996,9 +3057,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     fi
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
 
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
@@ -3290,7 +3348,7 @@ tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
-# Exit the script with $test_status return code
+echo "# Exiting script with \$test_status return code: [$test_status]"
 exit $test_status
 
 # ------------------------------------------
