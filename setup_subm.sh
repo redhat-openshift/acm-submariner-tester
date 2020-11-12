@@ -1318,13 +1318,14 @@ function clean_aws_cluster_a() {
   delete_submariner_namespace_and_crds;
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from AWS cluster A (public)"
+  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
 
-  BUG "If one of the gateway nodes does not have External-IP, submariner will fail to connect later" \
-  "Make sure one node with External-IP has a gateway label" \
-  "https://github.com/submariner-io/submariner-operator/issues/253"
+  # BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
+  # "Remove iptables rules from each gateway node" \
+  # "https://github.com/submariner-io/submariner/issues/929"
+  # # Workaround:
+  # remove_submariner_iptables_from_gw_nodes
 
-  remove_submariner_iptables_from_gw_nodes
   remove_submariner_gateway_labels
   remove_submariner_machine_sets
 
@@ -1360,10 +1361,20 @@ function clean_osp_cluster_b() {
 
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway Node's IPtables, Labels and MachineSets from OSP cluster B (on-prem)"
+  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
 
-  remove_submariner_iptables_from_gw_nodes
+  # BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
+  # "Remove iptables rules from each gateway node" \
+  # "https://github.com/submariner-io/submariner/issues/929"
+  # # Workaround:
+  # remove_submariner_iptables_from_gw_nodes
+
   remove_submariner_gateway_labels
+
+  BUG "Submariner-gw machine failure: Configuration not supported" \
+  "No Workaround yet..." \
+  "https://github.com/submariner-io/submariner/issues/885"
+
   remove_submariner_machine_sets
 }
 
@@ -1440,13 +1451,17 @@ function remove_submariner_iptables_from_gw_nodes() {
   trap_commands;
 
   ${OC} get nodes -l "submariner.io/gateway=true" | awk 'NR>1 {print $1}' | \
-  while read NODE; do
-    echo "# Delete GlobalNet iptables from node $NODE"
+  while read node_name; do
 
-    ${OC} run netshoot-hostmount-$(uuidgen) --generator=run-pod/v1 --overrides='{
+    local pod_name="remove-iptables-${node_name%%.*}"
+    echo "# Delete GlobalNet iptables from node $node_name (via Netshoot pod $node_name)"
+    # ${OC} run netshoot-hostmount-$(uuidgen) ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 --overrides='{
+
+    ${OC} run $pod_name ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot --attach=true --rm -i \
+    --restart=Never --pod-running-timeout=1m --request-timeout=1m --overrides='{
     	"spec": {
     		"hostNetwork": true,
-    		"nodeName": "'$NODE'",
+    		"nodeName": "'$node_name'",
     		"containers": [{
     			"args": [
     				"/bin/bash", "-c",
@@ -1465,7 +1480,7 @@ function remove_submariner_iptables_from_gw_nodes() {
     					"add": ["ALL"]
     				}
     			},
-    			"name": "netshoot-hostmount",
+    			"name": "'$pod_name'",
     			"image": "nicolaka/netshoot",
     			"volumeMounts": [{
     				"mountPath": "/host",
@@ -1473,16 +1488,17 @@ function remove_submariner_iptables_from_gw_nodes() {
     				"readOnly": true
     			}]
     		}],
-    	        "restartPolicy": "Never",
+    	  "restartPolicy": "Never",
     		"volumes": [{
     			"hostPath": {
     				"path": "/",
     				"type": ""
     			},
-    			"name": "host-slash"
+    		"name": "host-slash"
     		}]
     	}
-    }' --image nicolaka/netshoot -- /bin/bash
+    }' -- /bin/bash
+
   done
 
 }
@@ -1508,7 +1524,7 @@ function install_netshoot_app_on_cluster_a() {
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
   # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS}
   # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot ${TEST_NS:+-n $TEST_NS}
-  ${OC} run ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 -- sleep infinity
+  ${OC} run ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- sleep infinity
 
   echo "# Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS}
@@ -1545,10 +1561,6 @@ function test_basic_cluster_connectivity_before_submariner() {
   echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
-
-  BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
-  "No workaround" \
-  "https://github.com/submariner-io/submariner/issues/929"
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
   ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
@@ -1659,9 +1671,9 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   PROMPT "Adding Gateway label to all worker nodes with an External-IP on AWS cluster A (public)"
   trap_commands;
 
-  BUG "Submariner-gw machine failure: Configuration not supported" \
-  "No Workaround yet..." \
-  "https://github.com/submariner-io/submariner/issues/885"
+  BUG "If one of the gateway nodes does not have External-IP, submariner will fail to connect later" \
+  "Make sure one node with External-IP has a gateway label" \
+  "https://github.com/submariner-io/submariner-operator/issues/253"
 
   kubconf_a;
   # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
@@ -2972,19 +2984,16 @@ function FAIL_DEBUG() {
 if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # Extra verbosity for oc commands:
   # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-  export VERBOSE_FLAG="--v=6"
+  export VERBOSE_FLAG="--v=2"
+  export OC="$OC $VERBOSE_FLAG"
 
   # Debug flag for ocpup and aws commands
   export DEBUG_FLAG="--debug"
 
 else
-  # Default verbosity for oc commands
-  export VERBOSE_FLAG="--v=2"
-
-  # Disable (empty) trap_commands function
+  # Clear trap_commands function
   trap_commands() { :; }
 fi
-export OC="$OC $VERBOSE_FLAG"
 
 cd ${SCRIPT_DIR}
 
