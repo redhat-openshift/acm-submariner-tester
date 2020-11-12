@@ -87,8 +87,10 @@ function juLogClean() {
 
 # Execute a command and record its results
 function juLog() {
+
+  # In case of script error: Exit with the real return code of eVal()
   export exitCode=0
-  trap 'eval exit $exitCode' EXIT # ERR HUP INT TERM  # Always exit with the real return code of the evaluated command
+  trap 'exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
@@ -162,8 +164,8 @@ EOF
 
   echo ""                         | tee -a ${outf}
   echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
-  echo "+++ working dir: $(pwd)"           # | tee -a ${outf}
-  echo "+++ command: ${cmd}"            # | tee -a ${outf}
+  echo "+++ Working directory: $(pwd)"           # | tee -a ${outf}
+  echo "+++ Command: ${cmd}"            # | tee -a ${outf}
   ini="$(${date} +%s.%N)"
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
@@ -172,7 +174,6 @@ EOF
   exitCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
-  echo "+++ exit code: ${exitCode}"        # | tee -a ${outf}
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536
@@ -184,16 +185,16 @@ EOF
   rm -f ${errf} || :
 
   # set the appropriate error, based in the exit code and the regex
-  [[ ${exitCode} != 0 ]] && err=1 || err=0
-  if [ ${err} = 0 ] && [ -n "${ereg:-}" ]; then
+  [[ ${exitCode} != 0 ]] && isErr=1 || isErr=0
+  if [ ${isErr} = 0 ] && [ -n "${ereg:-}" ]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
-      [[ -n "${H}" ]] && err=1
+      [[ -n "${H}" ]] && isErr=1
   fi
-  [[ ${err} != 0 ]] && echo "+++ error: ${err}"        # | tee -a ${outf}
+  [[ ${isErr} != 0 ]] && echo "+++ Error: ${exitCode}"        # | tee -a ${outf}
 
   # calculate vars
   asserts=$((asserts+1))
-  errors=$((errors+err))
+  errors=$((errors+isErr))
   testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
@@ -210,7 +211,7 @@ EOF
 
   # write the junit xml report
   ## system-out or system-err tag
-  if [[ ${err} = 0 ]] ; then
+  if [[ ${isErr} = 0 ]] ; then
     output="
     <system-out><![CDATA[${outMsg}]]></system-out>
     "
@@ -254,5 +255,5 @@ EOF
 
   # set -e # set -o errexit
   set -e
-  return ${err}
+  return ${exitCode}
 }
