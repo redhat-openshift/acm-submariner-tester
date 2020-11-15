@@ -33,38 +33,35 @@ Running with pre-defined parameters (optional):
 
 - General script options:
 
-* Import additional variables from file:             --import-vars  [variables file path]
-* Record Junit Tests result (xml):                   --junit
-* Upload Junit results to polarion:                  --polarion
-* Show debug info (verbose) for commands:            -d / --debug
-* Show this help menu:                               -h / --help
+  * Import additional variables from file:             --import-vars  [variables file path]
+  * Record Junit Tests result (xml):                   --junit
+  * Upload Junit results to polarion:                  --polarion
+  * Show debug info (verbose) for commands:            -d / --debug
+  * Show this help menu:                               -h / --help
 
 
 ### Command examples:
 
-- To run interactively (user enter options):
+- To run interactively (enter options manually):
 
   `./setup_subm.sh`
 
 
-- Example with pre-defined parameters:
+- Examples with pre-defined options:
+
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-e2e --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
   * Install latest Submariner release
-  * Configure Service-Discovery and GlobalNet
+  * Configure Service-Discovery
   * Build and run latest E2E tests
   * Create Junit tests result (xml file)
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --build-e2e --install-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet --junit`
 
+  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
 
-- Installing latest Submariner (master development), and using existing AWS cluster:
-
-  `./setup_subm.sh --install-subctl-devel --clean-cluster-a --clean-cluster-b --service-discovery --globalnet`
-
-
-- Installing last Submariner release, and re-creating a new AWS cluster:
-
-  `./setup_subm.sh --build-e2e --install-subctl --reset-cluster-a --clean-cluster-b --service-discovery --globalnet`
+  * Reuse (clean) existing clusters
+  * Install latest Submariner (master development)
+  * Configure GlobalNet (for overlapping clusters CIDRs)
