@@ -1604,17 +1604,11 @@ function open_firewall_ports_on_the_broker_node() {
   # # Installing Terraform
   # install_local_terraform "${WORKDIR}"
 
-  BUG "Terraform v0.13 is not supported when using prep_for_subm.sh" \
-  "Use Terraform v0.12.2" \
+  BUG "Terraform v0.13.x is not supported when using prep_for_subm.sh" \
+  "Use Terraform v0.12.29" \
   "https://github.com/submariner-io/submariner/issues/847"
   # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.2"
-
-  # TODO : Add to terraform 'main.tf' :
-    #   terraform {
-    #   required_version = ">= 0.12"
-    #   required_version = "< 0.13"
-    # }
+  install_local_terraform "${WORKDIR}" "0.12.29"
 
   local git_user="submariner-io"
   local git_project="submariner"
@@ -1632,6 +1626,8 @@ function open_firewall_ports_on_the_broker_node() {
   echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR/submariner_prep"
   cp -rf "$prep_for_subm_dir" "$CLUSTER_A_DIR/submariner_prep"
   cd "$CLUSTER_A_DIR/submariner_prep/"
+
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
 
   kubconf_a;
 
@@ -2886,6 +2882,8 @@ function collect_submariner_info() {
     # Workaround:
     # OC="/usr/bin/oc"
     oc version || :
+
+    echo "Submariner info (subctl show all):"
 
     subctl show all || :
 
