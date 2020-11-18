@@ -30,8 +30,8 @@ Running with pre-defined parameters (optional):
 
 - Submariner test options:
 
-  * Run tests with GO (instead of subctl):             --go-tests
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
+  * Update Git and test with GO (instead of subctl):   --build-tests
   * Create Junit test results (xml):                   --junit
   * Upload Junit results to Polarion:                  --polarion
 

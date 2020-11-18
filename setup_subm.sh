@@ -84,8 +84,8 @@ Running with pre-defined parameters (optional):
 
 - Submariner test options:
 
-  * Run tests with GO (instead of subctl):             --go-tests
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
+  * Update Git and test with GO (instead of subctl):   --build-tests
   * Create Junit test results (xml):                   --junit
   * Upload Junit results to Polarion:                  --polarion
 
@@ -114,7 +114,7 @@ Running with pre-defined parameters (optional):
   * Run Submariner E2E tests (with subctl)
 
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --go-tests --junit`
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
@@ -232,8 +232,8 @@ while [[ $# -gt 0 ]]; do
   --build-operator) # [DEPRECATED]
     build_operator=YES
     shift ;;
-  --go-tests)
-    submariner_go_tests=YES
+  --build-tests)
+    build_go_tests=YES
     shift ;;
   --destroy-cluster-a)
     destroy_cluster_a=YES
@@ -430,12 +430,12 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
-  # User input: $submariner_go_tests - to build and run ginkgo tests from all submariner repos
-  while [[ ! "$submariner_go_tests" =~ ^(yes|no)$ ]]; do
+  # User input: $build_go_tests - to build and run ginkgo tests from all submariner repos
+  while [[ ! "$build_go_tests" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    submariner_go_tests=${input:-YES}
+    build_go_tests=${input:-YES}
   done
 
   # User input: $skip_install - to skip submariner deployment
@@ -501,7 +501,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
-submariner_go_tests=${submariner_go_tests:-NO}
+build_go_tests=${build_go_tests:-NO}
 get_subctl=${get_subctl:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -565,7 +565,7 @@ function show_test_plan() {
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_submariner_repos: $submariner_go_tests
+    - build_submariner_repos: $build_go_tests
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $install_subctl_devel
     "
@@ -640,8 +640,8 @@ function show_test_plan() {
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go: $([[ "$submariner_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
-    - test_submariner_e2e_with_subctl: $([[ ! "$submariner_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_go: $([[ "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
@@ -1563,8 +1563,8 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
+  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=2m --request-timeout=2m --rm -i \
+  ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 60 --verbose ${nginx_IP_cluster_b}:8080"
 }
 
 # ------------------------------------------
@@ -1807,7 +1807,7 @@ function test_broker_before_join() {
   ${OC} describe crds \
   clusters.submariner.io \
   endpoints.submariner.io \
-  serviceimports.lighthouse.submariner.io
+  serviceimports.multicluster.x-k8s.io || :
 
   # serviceexports.lighthouse.submariner.io \
   # servicediscoveries.submariner.io \
@@ -1973,6 +1973,26 @@ function join_submariner_current_cluster() {
 
 }
 
+# ------------------------------------------
+
+function test_products_versions() {
+# Show OCP clusters versions, and Submariner version
+  trap_commands;
+
+  PROMPT "Show all installed products versions"
+
+  echo "Submariner:"
+  subctl version
+
+  echo -e "\nOCP cluster A (AWS):"
+  kubconf_a;
+  ${OC} version
+
+  echo -e "\nOCP cluster B (OSP):"
+  kubconf_b;
+  ${OC} version
+
+}
 
 # ------------------------------------------
 
@@ -3138,11 +3158,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
 
-  if [[ ! "$skip_tests" =~ ^(all)$ ]]; then
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    ${junit_cmd} test_kubeconfig_osp_cluster_b
-  fi
+  ${junit_cmd} test_products_versions
 
   if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
 
@@ -3230,40 +3246,40 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     echo 2 > $TEST_STATUS_RC
   fi
 
-### Running Submariner Ginkgo tests
-if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
+  ### Running Submariner Ginkgo tests
+  if [[ ! "$skip_tests" =~ ^all$ ]]; then
 
-  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  # Running build_submariner_repos if requested
-  [[ ! "$submariner_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
+    # Running build_submariner_repos if requested
+    [[ ! "$build_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
 
-  ### Running Unit-tests in Submariner project directory (Ginkgo)
-  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]] && [[ "$submariner_go_tests" =~ ^(y|yes)$ ]]; then
-    ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
-  fi
-
-  ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
-  if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
-
-    if [[ "$submariner_go_tests" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} test_submariner_e2e_with_go || \
-      BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
-
-      ${junit_cmd} test_lighthouse_e2e_with_go || \
-      BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
-
-    else
-      ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+    ### Running Unit-tests in Submariner project directory (Ginkgo)
+    if [[ ! "$skip_tests" =~ ^pkg$ ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
+      ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
     fi
 
-    if [[ "$e2e_tests_status" = FAILED ]] ; then
-      FATAL "Submariner E2E Tests failure"
-    fi
+    ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
+    if [[ ! "$skip_tests" =~ ^e2e$ ]]; then
 
+      if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} test_submariner_e2e_with_go || \
+        BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
+
+        ${junit_cmd} test_lighthouse_e2e_with_go || \
+        BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
+
+      else
+        ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+      fi
+
+      if [[ "$e2e_tests_status" = FAILED ]] ; then
+        FATAL "Submariner E2E Tests failure"
+      fi
+
+    fi
   fi
-fi
 
 
   # If script got to here - all tests of Submariner has passed ;-)
