@@ -73,7 +73,7 @@ Running with pre-defined parameters (optional):
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
-- Submariner installation and test options:
+- Submariner installation options:
 
   * Install latest release of Submariner:              --install-subctl
   * Install development release of Submariner:         --install-subctl-devel
@@ -81,17 +81,20 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build E2E tests of all Submariner repositories:    --build-e2e
+
+- Submariner test options:
+
+  * Run tests with GO (instead of subctl):             --go-tests
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
-  * Print all pods logs on failure:                    --print-logs
+  * Create Junit test results (xml):                   --junit
+  * Upload Junit results to Polarion:                  --polarion
 
 - General script options:
 
-* Import additional variables from file:             --import-vars  [variables file path]
-* Record Junit Tests result (xml):                   --junit
-* Upload Junit results to polarion:                  --polarion
-* Show debug info (verbose) for commands:            -d / --debug
-* Show this help menu:                               -h / --help
+  * Import additional variables from file:             --import-vars  [variables file path]
+  * Print Submariner pods logs on failure:             --print-logs
+  * Show debug info (verbose) for commands:            -d / --debug
+  * Show this help menu:                               -h / --help
 
 
 ### Command examples:
@@ -103,22 +106,23 @@ Running with pre-defined parameters (optional):
 
 - Examples with pre-defined options:
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-e2e --junit`
+  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
+
+  * Reuse (clean) existing clusters
+  * Install latest Submariner release
+  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Run Submariner E2E tests (with subctl)
+
+
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --go-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner release
-  * Configure Service-Discovery
-  * Build and run latest E2E tests
-  * Create Junit tests result (xml file)
-
-
-  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
-
-  * Reuse (clean) existing clusters
   * Install latest Submariner (master development)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Configure Service-Discovery
+  * Build and run Submariner E2E and unit-tests with GO
+  * Create Junit tests result (xml files)
 
 ----------------------------------------------------------------------'
 
@@ -228,8 +232,8 @@ while [[ $# -gt 0 ]]; do
   --build-operator) # [DEPRECATED]
     build_operator=YES
     shift ;;
-  --build-e2e)
-    build_submariners_e2e=YES
+  --go-tests)
+    submariner_go_tests=YES
     shift ;;
   --destroy-cluster-a)
     destroy_cluster_a=YES
@@ -403,12 +407,12 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   # User input: $build_operator - to build_operator_latest # [DEPRECATED]
-  while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    build_operator=${input:-no}
-  done
+  # while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
+  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
+  #   Enter \"yes\", or nothing to skip: "
+  #   read -r input
+  #   build_operator=${input:-no}
+  # done
 
   # User input: $get_subctl - to download_subctl_latest_release
   while [[ ! "$get_subctl" =~ ^(yes|no)$ ]]; do
@@ -426,12 +430,12 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
-  # User input: $build_submariners_e2e - to build_e2e_all_submariner_repos
-  while [[ ! "$build_submariners_e2e" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull and build E2E tests from all Submariner repositories ? ${NO_COLOR}
+  # User input: $submariner_go_tests - to build and run ginkgo tests from all submariner repos
+  while [[ ! "$submariner_go_tests" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    build_submariners_e2e=${input:-YES}
+    submariner_go_tests=${input:-YES}
   done
 
   # User input: $skip_install - to skip submariner deployment
@@ -497,7 +501,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
-build_submariners_e2e=${build_submariners_e2e:-NO}
+submariner_go_tests=${submariner_go_tests:-NO}
 get_subctl=${get_subctl:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -561,7 +565,7 @@ function show_test_plan() {
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_e2e_all_submariner_repos: $build_submariners_e2e
+    - build_submariner_repos: $submariner_go_tests
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $install_subctl_devel
     "
@@ -636,8 +640,8 @@ function show_test_plan() {
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go: $([[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
-    - test_submariner_e2e_with_subctl: $([[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_go: $([[ "$submariner_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$submariner_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
@@ -816,7 +820,7 @@ function build_ocpup_tool_latest() {
 
 # ------------------------------------------
 
-function build_e2e_all_submariner_repos() {
+function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
   PROMPT "Building latest Submariner-IO projects code, including test packages (unit-tests and E2E)"
   trap_commands;
@@ -3107,10 +3111,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
-    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
-
-    # Running build_e2e_all_submariner_repos if requested
-    [[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_e2e_all_submariner_repos
+    # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
     # Running download_subctl_latest_release if requested
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
@@ -3229,23 +3230,23 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     echo 2 > $TEST_STATUS_RC
   fi
 
+### Running Submariner Ginkgo tests
 if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
-    ### Running Ginkgo tests of Submariner repositories
 
-    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
+  # Running build_submariner_repos if requested
+  [[ ! "$submariner_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
 
-    ### Running Unit-tests from Submariner repositories (Ginkgo)
-
+  ### Running Unit-tests in Submariner project directory (Ginkgo)
+  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]] && [[ "$submariner_go_tests" =~ ^(y|yes)$ ]]; then
     ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
   fi
 
+  ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
   if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
 
-    ### Running E2E tests from Submariner repositories (Ginkgo)
-
-    if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
+    if [[ "$submariner_go_tests" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} test_submariner_e2e_with_go || \
       BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
