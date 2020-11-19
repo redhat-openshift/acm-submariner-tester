@@ -1547,19 +1547,21 @@ function install_nginx_svc_on_cluster_b() {
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  PROMPT "Before Submariner is installed:
-  Verifying connectivity on the same cluster, from Netshoot to Nginx service"
+  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
+  echo -e "\n# Get IP of ${NGINX_CLUSTER_B} on OSP cluster B${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
+
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS}
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
+  local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
+  echo "# Install $netshoot_pod on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -3114,14 +3116,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
       ${junit_cmd} clean_osp_cluster_b
     fi
 
-    # Running basic pre-submariner tests (only required on new/cleaned clusters)
-    ${junit_cmd} install_netshoot_app_on_cluster_a
+    # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
+    if [[ ! "$skip_tests" =~ ^(all|sys)$ ]]; then
 
-    ${junit_cmd} install_nginx_svc_on_cluster_b
+      ${junit_cmd} install_netshoot_app_on_cluster_a
 
-    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+      ${junit_cmd} install_nginx_svc_on_cluster_b
 
-    ${junit_cmd} test_clusters_disconnected_before_submariner
+      ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+
+      ${junit_cmd} test_clusters_disconnected_before_submariner
+    fi
 
   fi
 
@@ -3156,7 +3161,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} join_submariner_cluster_b
   fi
 
-  ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
+  ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
 
   ${junit_cmd} test_products_versions
 
