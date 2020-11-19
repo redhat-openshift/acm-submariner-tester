@@ -277,7 +277,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --skip-tests)
     check_cli_args "$2"
-    skip_tests="$2" # sys / e2e / pkg / all
+    skip_tests="$2" # sys,e2e,pkg,all
     shift 2 ;;
   --print-logs)
     print_logs=YES
@@ -446,10 +446,10 @@ if [[ -z "$got_user_input" ]]; then
     skip_install=${input:-NO}
   done
 
-  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all
-  while [[ ! "$skip_tests" =~ ^(sys|e2e|pkg|all)$ ]]; do
+  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
+  while [[ ! "$skip_tests" =~ ^((sys|e2e|pkg|all)(,|$))+ ]]; do
     echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
-    Enter either \"sys | e2e | pkg | all\", or nothing to skip: "
+    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
     read -r input
     skip_tests=${input:-NO}
   done
@@ -592,7 +592,7 @@ function show_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  if [[ "$skip_tests" =~ ^(sys|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
   else
   echo -e "\n### Will execute: High-level (System) tests of Submariner:
@@ -626,7 +626,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^(pkg|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((pkg|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
@@ -635,7 +635,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^(e2e|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((e2e|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
@@ -2736,7 +2736,7 @@ function test_submariner_packages() {
 
   export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$PKG_JUNIT_XML"
+  go test -v ./pkg -ginkgo.v -ginkgo.reportFile "$PKG_JUNIT_XML"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2859,7 +2859,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload E2E tests to Polarion
 
-  if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+  if [[ (! "$skip_tests" =~ ^((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
     echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2873,7 +2873,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload UNIT tests to Polarion (skipping, not really required)
 
-  # if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
+  # if [[ (! "$skip_tests" =~ ^((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
   #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
@@ -3117,7 +3117,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     fi
 
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
-    if [[ ! "$skip_tests" =~ ^(all|sys)$ ]]; then
+    if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
 
       ${junit_cmd} install_netshoot_app_on_cluster_a
 
@@ -3165,7 +3165,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   ${junit_cmd} test_products_versions
 
-  if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
+  if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
 
@@ -3252,7 +3252,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   fi
 
   ### Running Submariner Ginkgo tests
-  if [[ ! "$skip_tests" =~ ^all$ ]]; then
+  if [[ ! "$skip_tests" =~ all ]]; then
 
     verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
@@ -3260,12 +3260,12 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     [[ ! "$build_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
 
     ### Running Unit-tests in Submariner project directory (Ginkgo)
-    if [[ ! "$skip_tests" =~ ^pkg$ ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
+    if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
       ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
     fi
 
     ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
-    if [[ ! "$skip_tests" =~ ^e2e$ ]]; then
+    if [[ ! "$skip_tests" =~ e2e ]]; then
 
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
 
