@@ -2936,12 +2936,15 @@ function collect_submariner_info() {
     # Workaround:
     # OC="/usr/bin/oc"
 
+    echo -e "\n############################## Openshift resources and events ##############################\n"
+
     oc config view || :
     oc status || :
     oc version || :
     oc get all || :
+    oc get events -A --sort-by='.metadata.creationTimestamp' || :
 
-    echo "Submariner info (subctl show all):"
+    echo -e "\n############################## Submariner information (subctl show all) ##############################\n"
 
     subctl show all || :
 
@@ -2989,8 +2992,6 @@ function print_submariner_pod_logs() {
       system("oc describe Machine "$2" -n "$1)
     }
   }'
-
-  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
