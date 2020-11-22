@@ -1418,7 +1418,7 @@ function delete_submariner_test_namespaces() {
 ### Delete previous Submariner test namespaces from current cluster ###
   trap_commands;
 
-  echo "# Deleting and re-creating Submariner test namespaces: '$TEST_NS' '$HEADLESS_TEST_NS'"
+  echo "# Deleting Submariner test namespaces: '$TEST_NS' '$HEADLESS_TEST_NS'"
 
   for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
     if [[ -n "$ns" ]]; then
@@ -2935,7 +2935,11 @@ function collect_submariner_info() {
     "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
     # Workaround:
     # OC="/usr/bin/oc"
+
+    oc config view || :
+    oc status || :
     oc version || :
+    oc get all || :
 
     echo "Submariner info (subctl show all):"
 
