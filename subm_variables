@@ -33,7 +33,7 @@ export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
 export NGINX_CLUSTER_B="nginx-cl-b"
 
 export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
-export NGINX_IMAGE="nginxinc/nginx-unprivileged:stable-alpine" # "twalter/openshift-nginx:stable"
+export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
 export AWS_KEY="user-aws-access-key"
