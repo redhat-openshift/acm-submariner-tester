@@ -1316,7 +1316,10 @@ function clean_aws_cluster_a() {
   "https://github.com/submariner-io/submariner-operator/issues/88
   https://github.com/submariner-io/submariner-website/issues/272"
 
-  delete_submariner_namespace_and_crds;
+  delete_submariner_namespace_and_crds
+
+  delete_submariner_test_namespaces
+
   delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
@@ -1328,6 +1331,7 @@ function clean_aws_cluster_a() {
   # remove_submariner_iptables_from_gw_nodes
 
   remove_submariner_gateway_labels
+
   remove_submariner_machine_sets
 
   # Todo: Should also include globalnet network cleanup:
@@ -1353,7 +1357,10 @@ function clean_osp_cluster_b() {
   trap_commands;
 
   kubconf_b;
-  delete_submariner_namespace_and_crds;
+
+  delete_submariner_namespace_and_crds
+
+  delete_submariner_test_namespaces
 
   BUG "Low disk-space on OCP cluster that was running for few weeks" \
   "Delete old E2E namespaces" \
@@ -1407,6 +1414,23 @@ EOF
 
 # ------------------------------------------
 
+function delete_submariner_test_namespaces() {
+### Delete previous Submariner test namespaces from current cluster ###
+  trap_commands;
+
+  echo "# Deleting and re-creating Submariner test namespaces: '$TEST_NS' '$HEADLESS_TEST_NS'"
+
+  for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
+    if [[ -n "$ns" ]]; then
+      delete_namespace_and_crds "$ns"
+      # ${OC} create namespace "$ns" || : # || : to ignore none-zero exit code
+    fi
+  done
+
+}
+
+# ------------------------------------------
+
 function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
@@ -1418,6 +1442,7 @@ function delete_e2e_namespaces() {
   oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
 
 }
+
 
 # ------------------------------------------
 
@@ -1512,13 +1537,9 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
 
-  if [[ -n $TEST_NS ]] ; then
-    # ${OC} delete --timeout=30s namespace "${TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-    delete_namespace_and_crds "${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # || : to ignore none-zero exit code
-  fi
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
@@ -1564,6 +1585,8 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
   echo "# Install $netshoot_pod on OSP cluster B, and verify connectivity on the SAME cluster, to ${nginx_IP_cluster_b}:${NGINX_PORT}"
+
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -2554,6 +2577,8 @@ function install_new_netshoot_cluster_a() {
   trap_commands;
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
+
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
 
   ${OC} delete pod ${NEW_NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 

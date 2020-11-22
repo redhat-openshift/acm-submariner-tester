@@ -699,8 +699,6 @@ function install_nginx_service() {
   target_namespace="$3" # The Namespace for Ngnix
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
-
-
   if [[ -n "$target_namespace" ]] ; then
     echo "# Create Namespace for Nginx: $target_namespace"
     # delete_namespace_and_crds "${target_namespace}"
