@@ -1902,19 +1902,27 @@ function export_service_in_lighthouse() {
   "https://github.com/submariner-io/submariner/issues/640"
   # Workaround:
   # Do not run this rollout status, but watch pod description:
-  local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+
+  #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+  # Workaround:
+  local cmd="${OC} describe serviceexports.multicluster.x-k8s.io $svc_name ${namespace:+-n $namespace}"
   #local regex='Service was successfully synced to the broker'
   local regex='Type:\s+Exported'
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Show $svc_name ServiceExport information:"
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  # ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  BUG "Error 'serviceexports.lighthouse.submariner.io not found' if using 'oc get serviceexport'" \
+  "Use 'oc get serviceexports.multicluster.x-k8s.io' instead (temporary workaround)" \
+  "https://github.com/submariner-io/submariner/issues/957"
+  # Workaround:
+  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o wide
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
   echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
