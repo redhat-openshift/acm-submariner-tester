@@ -1906,8 +1906,10 @@ function export_service_in_lighthouse() {
   #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
   # Workaround:
   local cmd="${OC} describe serviceexports.multicluster.x-k8s.io $svc_name ${namespace:+-n $namespace}"
-  #local regex='Service was successfully synced to the broker'
-  local regex='Type:\s+Exported'
+
+  # BUG:
+  # local regex='Status:\s+True'
+  local regex='Message:.*successfully synced'
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Show $svc_name ServiceExport information:"
@@ -2016,9 +2018,6 @@ function test_products_versions() {
 
   PROMPT "Show all installed products versions"
 
-  echo "Submariner:"
-  subctl version
-
   echo -e "\nOCP cluster A (AWS):"
   kubconf_a;
   ${OC} version
@@ -2026,6 +2025,9 @@ function test_products_versions() {
   echo -e "\nOCP cluster B (OSP):"
   kubconf_b;
   ${OC} version
+
+  echo "Submariner:"
+  subctl show versions
 
 }
 
@@ -2769,10 +2771,23 @@ function test_submariner_packages() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/submariner
-
-  export GO111MODULE="on"
+  pwd
+  # export GO111MODULE="on"
   go env
-  go test -v ./pkg -ginkgo.v -ginkgo.reportFile "$PKG_JUNIT_XML"
+  # go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
+  
+  go test -v -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML" -cover \
+  ./pkg/apis/submariner.io/v1 \
+  ./pkg/cable/libreswan \
+  ./pkg/cable/strongswan \
+  ./pkg/cableengine/syncer \
+  ./pkg/controllers/datastoresyncer \
+  ./pkg/controllers/tunnel \
+  ./pkg/event \
+  ./pkg/event/controller \
+  ./pkg/globalnet/controllers/ipam \
+  ./pkg/routeagent/controllers/route \
+  ./pkg/util
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
