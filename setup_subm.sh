@@ -2772,11 +2772,14 @@ function test_submariner_packages() {
 
   cd $GOPATH/src/github.com/submariner-io/submariner
   pwd
-  # export GO111MODULE="on"
+
+  export GO111MODULE="on"
+  # export CGO_ENABLED=1 # required for go test -race
+
   go env
-  # go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
-  
-  go test -v -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML" -cover \
+  # go test -v -race -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
+
+  go test -v -cover \
   ./pkg/apis/submariner.io/v1 \
   ./pkg/cable/libreswan \
   ./pkg/cable/strongswan \
@@ -2787,7 +2790,8 @@ function test_submariner_packages() {
   ./pkg/event/controller \
   ./pkg/globalnet/controllers/ipam \
   ./pkg/routeagent/controllers/route \
-  ./pkg/util
+  ./pkg/util \
+  -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2802,6 +2806,7 @@ function test_submariner_e2e_with_go() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/submariner
+  pwd
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
@@ -2814,17 +2819,18 @@ function test_submariner_e2e_with_go() {
   go env
 
   go test -v ./test/e2e \
-  -timeout 30m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed \
   -ginkgo.reportFile "$E2E_JUNIT_XML" \
+  -ginkgo.skip "\[redundancy\]" \
+  -ginkgo.timeout 120m \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Test execution failure occurred"
+  || echo "# Warning: Submariner End-to-End tests with GO failed."
 }
 
 # ------------------------------------------
@@ -2835,6 +2841,7 @@ function test_lighthouse_e2e_with_go() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/lighthouse
+  pwd
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
@@ -2847,17 +2854,18 @@ function test_lighthouse_e2e_with_go() {
   go env
 
   go test -v ./test/e2e \
-  -timeout 30m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed \
   -ginkgo.reportFile "$LIGHTHOUSE_JUNIT_XML" \
+  -ginkgo.skip "\[redundancy\]" \
+  -ginkgo.timeout 120m \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Test execution failure occurred"
+  || echo "# Warning: Lighthouse End-to-End tests with GO failed."
 }
 
 # ------------------------------------------
