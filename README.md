@@ -19,7 +19,7 @@ Running with pre-defined parameters (optional):
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
-- Submariner installation and test options:
+- Submariner installation options:
 
   * Install latest release of Submariner:              --install-subctl
   * Install development release of Submariner:         --install-subctl-devel
@@ -27,15 +27,18 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build E2E tests of all Submariner repositories:    --build-e2e
+
+- Submariner test options:
+
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
-  * Print all pods logs on failure:                    --print-logs
+  * Update Git and test with GO (instead of subctl):   --build-tests
+  * Create Junit test results (xml):                   --junit
+  * Upload Junit results to Polarion:                  --polarion
 
 - General script options:
 
   * Import additional variables from file:             --import-vars  [variables file path]
-  * Record Junit Tests result (xml):                   --junit
-  * Upload Junit results to polarion:                  --polarion
+  * Print Submariner pods logs on failure:             --print-logs
   * Show debug info (verbose) for commands:            -d / --debug
   * Show this help menu:                               -h / --help
 
@@ -49,19 +52,20 @@ Running with pre-defined parameters (optional):
 
 - Examples with pre-defined options:
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-e2e --junit`
+  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
+
+  * Reuse (clean) existing clusters
+  * Install latest Submariner release
+  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Run Submariner E2E tests (with subctl)
+
+
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --go-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner release
-  * Configure Service-Discovery
-  * Build and run latest E2E tests
-  * Create Junit tests result (xml file)
-
-
-  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
-
-  * Reuse (clean) existing clusters
   * Install latest Submariner (master development)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Configure Service-Discovery
+  * Build and run Submariner E2E and unit-tests with GO
+  * Create Junit tests result (xml files)

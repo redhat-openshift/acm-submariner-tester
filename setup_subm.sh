@@ -73,7 +73,7 @@ Running with pre-defined parameters (optional):
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
 
-- Submariner installation and test options:
+- Submariner installation options:
 
   * Install latest release of Submariner:              --install-subctl
   * Install development release of Submariner:         --install-subctl-devel
@@ -81,17 +81,20 @@ Running with pre-defined parameters (optional):
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
-  * Build E2E tests of all Submariner repositories:    --build-e2e
+
+- Submariner test options:
+
   * Skip tests execution (by type):                    --skip-tests [sys / e2e / pkg / all]
-  * Print all pods logs on failure:                    --print-logs
+  * Update Git and test with GO (instead of subctl):   --build-tests
+  * Create Junit test results (xml):                   --junit
+  * Upload Junit results to Polarion:                  --polarion
 
 - General script options:
 
-* Import additional variables from file:             --import-vars  [variables file path]
-* Record Junit Tests result (xml):                   --junit
-* Upload Junit results to polarion:                  --polarion
-* Show debug info (verbose) for commands:            -d / --debug
-* Show this help menu:                               -h / --help
+  * Import additional variables from file:             --import-vars  [variables file path]
+  * Print Submariner pods logs on failure:             --print-logs
+  * Show debug info (verbose) for commands:            -d / --debug
+  * Show this help menu:                               -h / --help
 
 
 ### Command examples:
@@ -103,22 +106,23 @@ Running with pre-defined parameters (optional):
 
 - Examples with pre-defined options:
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-e2e --junit`
+  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
+
+  * Reuse (clean) existing clusters
+  * Install latest Submariner release
+  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Run Submariner E2E tests (with subctl)
+
+
+  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner release
-  * Configure Service-Discovery
-  * Build and run latest E2E tests
-  * Create Junit tests result (xml file)
-
-
-  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
-
-  * Reuse (clean) existing clusters
   * Install latest Submariner (master development)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
+  * Configure Service-Discovery
+  * Build and run Submariner E2E and unit-tests with GO
+  * Create Junit tests result (xml files)
 
 ----------------------------------------------------------------------'
 
@@ -228,8 +232,8 @@ while [[ $# -gt 0 ]]; do
   --build-operator) # [DEPRECATED]
     build_operator=YES
     shift ;;
-  --build-e2e)
-    build_submariners_e2e=YES
+  --build-tests)
+    build_go_tests=YES
     shift ;;
   --destroy-cluster-a)
     destroy_cluster_a=YES
@@ -273,7 +277,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --skip-tests)
     check_cli_args "$2"
-    skip_tests="$2" # sys / e2e / pkg / all
+    skip_tests="$2" # sys,e2e,pkg,all
     shift 2 ;;
   --print-logs)
     print_logs=YES
@@ -403,12 +407,12 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   # User input: $build_operator - to build_operator_latest # [DEPRECATED]
-  while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    build_operator=${input:-no}
-  done
+  # while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
+  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
+  #   Enter \"yes\", or nothing to skip: "
+  #   read -r input
+  #   build_operator=${input:-no}
+  # done
 
   # User input: $get_subctl - to download_subctl_latest_release
   while [[ ! "$get_subctl" =~ ^(yes|no)$ ]]; do
@@ -426,12 +430,12 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
-  # User input: $build_submariners_e2e - to build_e2e_all_submariner_repos
-  while [[ ! "$build_submariners_e2e" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to pull and build E2E tests from all Submariner repositories ? ${NO_COLOR}
+  # User input: $build_go_tests - to build and run ginkgo tests from all submariner repos
+  while [[ ! "$build_go_tests" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    build_submariners_e2e=${input:-YES}
+    build_go_tests=${input:-YES}
   done
 
   # User input: $skip_install - to skip submariner deployment
@@ -442,10 +446,10 @@ if [[ -z "$got_user_input" ]]; then
     skip_install=${input:-NO}
   done
 
-  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all
-  while [[ ! "$skip_tests" =~ ^(sys|e2e|pkg|all)$ ]]; do
+  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
+  while [[ ! "$skip_tests" =~ ^((sys|e2e|pkg|all)(,|$))+ ]]; do
     echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
-    Enter either \"sys | e2e | pkg | all\", or nothing to skip: "
+    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
     read -r input
     skip_tests=${input:-NO}
   done
@@ -497,7 +501,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
-build_submariners_e2e=${build_submariners_e2e:-NO}
+build_go_tests=${build_go_tests:-NO}
 get_subctl=${get_subctl:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -561,7 +565,7 @@ function show_test_plan() {
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_e2e_all_submariner_repos: $build_submariners_e2e
+    - build_submariner_repos: $build_go_tests
     - download_subctl_latest_release: $get_subctl
     - download_subctl_latest_devel: $install_subctl_devel
     "
@@ -588,7 +592,7 @@ function show_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  if [[ "$skip_tests" =~ ^(sys|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
   else
   echo -e "\n### Will execute: High-level (System) tests of Submariner:
@@ -622,7 +626,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^(pkg|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((pkg|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
@@ -631,13 +635,13 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^(e2e|all)$ ]]; then
+  if [[ "$skip_tests" =~ ^((e2e|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go: $([[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
-    - test_submariner_e2e_with_subctl: $([[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_go: $([[ "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
@@ -816,7 +820,7 @@ function build_ocpup_tool_latest() {
 
 # ------------------------------------------
 
-function build_e2e_all_submariner_repos() {
+function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
   PROMPT "Building latest Submariner-IO projects code, including test packages (unit-tests and E2E)"
   trap_commands;
@@ -1312,7 +1316,10 @@ function clean_aws_cluster_a() {
   "https://github.com/submariner-io/submariner-operator/issues/88
   https://github.com/submariner-io/submariner-website/issues/272"
 
-  delete_submariner_namespace_and_crds;
+  delete_submariner_namespace_and_crds
+
+  delete_submariner_test_namespaces
+
   delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
@@ -1324,6 +1331,7 @@ function clean_aws_cluster_a() {
   # remove_submariner_iptables_from_gw_nodes
 
   remove_submariner_gateway_labels
+
   remove_submariner_machine_sets
 
   # Todo: Should also include globalnet network cleanup:
@@ -1349,7 +1357,10 @@ function clean_osp_cluster_b() {
   trap_commands;
 
   kubconf_b;
-  delete_submariner_namespace_and_crds;
+
+  delete_submariner_namespace_and_crds
+
+  delete_submariner_test_namespaces
 
   BUG "Low disk-space on OCP cluster that was running for few weeks" \
   "Delete old E2E namespaces" \
@@ -1403,6 +1414,23 @@ EOF
 
 # ------------------------------------------
 
+function delete_submariner_test_namespaces() {
+### Delete previous Submariner test namespaces from current cluster ###
+  trap_commands;
+
+  echo "# Deleting Submariner test namespaces: '$TEST_NS' '$HEADLESS_TEST_NS'"
+
+  for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
+    if [[ -n "$ns" ]]; then
+      delete_namespace_and_crds "$ns"
+      # ${OC} create namespace "$ns" || : # || : to ignore none-zero exit code
+    fi
+  done
+
+}
+
+# ------------------------------------------
+
 function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
@@ -1414,6 +1442,7 @@ function delete_e2e_namespaces() {
   oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
 
 }
+
 
 # ------------------------------------------
 
@@ -1452,9 +1481,9 @@ function remove_submariner_iptables_from_gw_nodes() {
 
     local pod_name="remove-iptables-${node_name%%.*}"
     echo "# Delete GlobalNet iptables from node $node_name (via Netshoot pod $node_name)"
-    # ${OC} run netshoot-hostmount-$(uuidgen) ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot --generator=run-pod/v1 --overrides='{
+    # ${OC} run netshoot-hostmount-$(uuidgen) ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} --generator=run-pod/v1 --overrides='{
 
-    ${OC} run $pod_name ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot --attach=true --rm -i \
+    ${OC} run $pod_name ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} --attach=true --rm -i \
     --restart=Never --pod-running-timeout=1m --request-timeout=1m --overrides='{
     	"spec": {
     		"hostNetwork": true,
@@ -1508,20 +1537,16 @@ function install_netshoot_app_on_cluster_a() {
 
   kubconf_a;
 
-  ${OC} delete pod ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
 
-  if [[ -n $TEST_NS ]] ; then
-    # ${OC} delete --timeout=30s namespace "${TEST_NS}" --ignore-not-found || : # || : to ignore none-zero exit code
-    delete_namespace_and_crds "${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # || : to ignore none-zero exit code
-  fi
+  ${OC} delete pod ${NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
   # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS}
-  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image nicolaka/netshoot ${TEST_NS:+-n $TEST_NS}
-  ${OC} run ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- sleep infinity
+  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image ${NETSHOOT_IMAGE} ${TEST_NS:+-n $TEST_NS}
+  ${OC} run ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} -- sleep infinity
 
   echo "# Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS}
@@ -1536,31 +1561,37 @@ function install_nginx_svc_on_cluster_b() {
 
   kubconf_b;
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${TEST_NS}" "--port=8080"
+  echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
+
+  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${TEST_NS}" "--port=${NGINX_PORT}"
 }
 
 # ------------------------------------------
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  PROMPT "Before Submariner is installed:
-  Verifying connectivity on the same cluster, from Netshoot to Nginx service"
+  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster"
   trap_commands;
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   kubconf_b;
-  local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
+  echo -e "\n# Get IP of ${NGINX_CLUSTER_B} on OSP cluster B${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
+
+  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS}
   nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  echo "# Install Netshoot on OSP cluster B, and verify connectivity on the SAME cluster, to $nginx_IP_cluster_b:8080"
+  local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
+  echo "# Install $netshoot_pod on OSP cluster B, and verify connectivity on the SAME cluster, to ${nginx_IP_cluster_b}:${NGINX_PORT}"
+
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=1m --request-timeout=1m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
+  ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=2m --request-timeout=2m --rm -i \
+  ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} -- /bin/bash -c "curl --max-time 60 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT}"
 }
 
 # ------------------------------------------
@@ -1588,7 +1619,7 @@ function test_clusters_disconnected_before_submariner() {
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
   ${OC} exec $netshoot_pod_cluster_a ${TEST_NS:+-n $TEST_NS} -- \
-  curl --output /dev/null --max-time 20 --verbose $nginx_IP_cluster_b:8080 \
+  curl --output /dev/null --max-time 20 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT} \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 }
@@ -1604,17 +1635,11 @@ function open_firewall_ports_on_the_broker_node() {
   # # Installing Terraform
   # install_local_terraform "${WORKDIR}"
 
-  BUG "Terraform v0.13 is not supported when using prep_for_subm.sh" \
-  "Use Terraform v0.12.2" \
+  BUG "Terraform v0.13.x is not supported when using prep_for_subm.sh" \
+  "Use Terraform v0.12.29" \
   "https://github.com/submariner-io/submariner/issues/847"
   # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.2"
-
-  # TODO : Add to terraform 'main.tf' :
-    #   terraform {
-    #   required_version = ">= 0.12"
-    #   required_version = "< 0.13"
-    # }
+  install_local_terraform "${WORKDIR}" "0.12.29"
 
   local git_user="submariner-io"
   local git_project="submariner"
@@ -1632,6 +1657,8 @@ function open_firewall_ports_on_the_broker_node() {
   echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR/submariner_prep"
   cp -rf "$prep_for_subm_dir" "$CLUSTER_A_DIR/submariner_prep"
   cd "$CLUSTER_A_DIR/submariner_prep/"
+
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
 
   kubconf_a;
 
@@ -1807,7 +1834,7 @@ function test_broker_before_join() {
   ${OC} describe crds \
   clusters.submariner.io \
   endpoints.submariner.io \
-  serviceimports.lighthouse.submariner.io
+  serviceimports.multicluster.x-k8s.io || :
 
   # serviceexports.lighthouse.submariner.io \
   # servicediscoveries.submariner.io \
@@ -1875,19 +1902,29 @@ function export_service_in_lighthouse() {
   "https://github.com/submariner-io/submariner/issues/640"
   # Workaround:
   # Do not run this rollout status, but watch pod description:
-  local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
-  #local regex='Service was successfully synced to the broker'
-  local regex='Type:\s+Exported'
+
+  #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+  # Workaround:
+  local cmd="${OC} describe serviceexports.multicluster.x-k8s.io $svc_name ${namespace:+-n $namespace}"
+
+  # BUG:
+  # local regex='Status:\s+True'
+  local regex='Message:.*successfully synced'
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Show $svc_name ServiceExport information:"
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  # ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  BUG "Error 'serviceexports.lighthouse.submariner.io not found' if using 'oc get serviceexport'" \
+  "Use 'oc get serviceexports.multicluster.x-k8s.io' instead (temporary workaround)" \
+  "https://github.com/submariner-io/submariner/issues/957"
+  # Workaround:
+  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o wide
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
   echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
@@ -1973,6 +2010,26 @@ function join_submariner_current_cluster() {
 
 }
 
+# ------------------------------------------
+
+function test_products_versions() {
+# Show OCP clusters versions, and Submariner version
+  trap_commands;
+
+  PROMPT "Show all installed products versions"
+
+  echo -e "\nOCP cluster A (AWS):"
+  kubconf_a;
+  ${OC} version
+
+  echo -e "\nOCP cluster B (OSP):"
+  kubconf_b;
+  ${OC} version
+
+  echo "Submariner:"
+  subctl show versions
+
+}
 
 # ------------------------------------------
 
@@ -2380,11 +2437,11 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on cluster B, will be identified by its IP (without --service-discovery): $nginx_IP_cluster_b:8080"
+  echo "# Nginx service on cluster B, will be identified by its IP (without --service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
     # nginx_IP_cluster_b: 100.96.43.129
 
   kubconf_a;
-  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:8080"
+  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT}"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
@@ -2419,7 +2476,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 
     msg="# Negative Test - Clusters have Overlapping CIDRs:
-    \n# Nginx internal IP (${nginx_IP_cluster_b}:8080) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
+    \n# Nginx internal IP (${nginx_IP_cluster_b}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
 
     ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FATAL "$msg") || echo -e "$msg"
   fi
@@ -2457,11 +2514,11 @@ function test_clusters_connected_overlapping_cidrs() {
 
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
-  To Nginx service on cluster B, by its Global IP: $nginx_global_ip:8080"
+  To Nginx service on cluster B, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
 
   kubconf_a;
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
-  -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:8080
+  -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:${NGINX_PORT}
 
   #TODO: validate annotation of globalIp in the node
 }
@@ -2493,8 +2550,8 @@ function test_clusters_connected_full_domain_name() {
   watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
-  echo "# Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:8080 :"
-  ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:8080"
+  echo "# Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:${NGINX_PORT} :"
+  ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:${NGINX_PORT}"
 
   # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
@@ -2514,10 +2571,10 @@ function test_clusters_cannot_connect_short_service_name() {
 
   kubconf_a
 
-  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"clusterset\")."
+  msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
-  -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
+  -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:${NGINX_PORT}" \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 }
@@ -2531,9 +2588,11 @@ function install_new_netshoot_cluster_a() {
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
   kubconf_a; # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
+  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
+
   ${OC} delete pod ${NEW_NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  ${OC} run ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image nicolaka/netshoot \
+  ${OC} run ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} \
   --pod-running-timeout=5m --restart=Never -- sleep 5m
 
   echo "# Wait up to 3 minutes for NEW Netshoot pod [${NEW_NETSHOOT_CLUSTER_A}] to be ready:"
@@ -2569,8 +2628,9 @@ function install_nginx_headless_namespace_cluster_b() {
   PROMPT "Install HEADLESS Nginx service on OSP cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
   kubconf_b;
 
-  # Headless service is created when disabling it's cluster-ip with --cluster-ip=None
-  install_nginx_service "${NGINX_CLUSTER_B}" "${HEADLESS_TEST_NS}" "--port=8080 --cluster-ip=None"
+  echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
+
+  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${HEADLESS_TEST_NS}" "--port=${NGINX_PORT} --cluster-ip=None"
 }
 
 # ------------------------------------------
@@ -2641,8 +2701,8 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     watch_and_retry "$cmd" 3m "$regex"
       # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
-    echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:8080 :"
-    ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:8080"
+    echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:${NGINX_PORT} :"
+    ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:${NGINX_PORT}"
 
     # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
 
@@ -2664,10 +2724,10 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
   kubconf_a
 
-  msg="# Negative Test - ${nginx_cl_b_short_dns}:8080 should not be reachable (FQDN without \"clusterset\")."
+  msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
-  -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:8080" \
+  -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_short_dns}:${NGINX_PORT}" \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 
@@ -2711,10 +2771,23 @@ function test_submariner_packages() {
   trap_commands;
 
   cd $GOPATH/src/github.com/submariner-io/submariner
-
-  export GO111MODULE="on"
+  pwd
+  # export GO111MODULE="on"
   go env
-  go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile "$PKG_JUNIT_XML"
+  # go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
+  
+  go test -v -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML" -cover \
+  ./pkg/apis/submariner.io/v1 \
+  ./pkg/cable/libreswan \
+  ./pkg/cable/strongswan \
+  ./pkg/cableengine/syncer \
+  ./pkg/controllers/datastoresyncer \
+  ./pkg/controllers/tunnel \
+  ./pkg/event \
+  ./pkg/event/controller \
+  ./pkg/globalnet/controllers/ipam \
+  ./pkg/routeagent/controllers/route \
+  ./pkg/util
 
     # OR with local go modules:
       # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
@@ -2837,7 +2910,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload E2E tests to Polarion
 
-  if [[ (! "$skip_tests" =~ ^(e2e|all)$) && -s "$E2E_JUNIT_XML" ]] ; then
+  if [[ (! "$skip_tests" =~ ^((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
     echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2851,7 +2924,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload UNIT tests to Polarion (skipping, not really required)
 
-  # if [[ (! "$skip_tests" =~ ^(pkg|all)$) && -s "$PKG_JUNIT_XML" ]] ; then
+  # if [[ (! "$skip_tests" =~ ^((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
   #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
@@ -2885,7 +2958,16 @@ function collect_submariner_info() {
     "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
     # Workaround:
     # OC="/usr/bin/oc"
+
+    echo -e "\n############################## Openshift resources and events ##############################\n"
+
+    oc config view || :
+    oc status || :
     oc version || :
+    oc get all || :
+    oc get events -A --sort-by='.metadata.creationTimestamp' || :
+
+    echo -e "\n############################## Submariner information (subctl show all) ##############################\n"
 
     subctl show all || :
 
@@ -2933,8 +3015,6 @@ function print_submariner_pod_logs() {
       system("oc describe Machine "$2" -n "$1)
     }
   }'
-
-  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
@@ -3092,14 +3172,17 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
       ${junit_cmd} clean_osp_cluster_b
     fi
 
-    # Running basic pre-submariner tests (only required on new/cleaned clusters)
-    ${junit_cmd} install_netshoot_app_on_cluster_a
+    # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
+    if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
 
-    ${junit_cmd} install_nginx_svc_on_cluster_b
+      ${junit_cmd} install_netshoot_app_on_cluster_a
 
-    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+      ${junit_cmd} install_nginx_svc_on_cluster_b
 
-    ${junit_cmd} test_clusters_disconnected_before_submariner
+      ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+
+      ${junit_cmd} test_clusters_disconnected_before_submariner
+    fi
 
   fi
 
@@ -3109,10 +3192,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
-    [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
-
-    # Running build_e2e_all_submariner_repos if requested
-    [[ ! "$build_submariners_e2e" =~ ^(y|yes)$ ]] || ${junit_cmd} build_e2e_all_submariner_repos
+    # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
     # Running download_subctl_latest_release if requested
     [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
@@ -3137,15 +3217,11 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     ${junit_cmd} join_submariner_cluster_b
   fi
 
-  ### Running High-level / E2E / Unit Tests (if not requested to skip_tests) ###
+  ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
 
-  if [[ ! "$skip_tests" =~ ^(all)$ ]]; then
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
+  ${junit_cmd} test_products_versions
 
-    ${junit_cmd} test_kubeconfig_osp_cluster_b
-  fi
-
-  if [[ ! "$skip_tests" =~ ^(sys|all)$ ]]; then
+  if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
 
@@ -3231,40 +3307,40 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     echo 2 > $TEST_STATUS_RC
   fi
 
-if [[ ! "$skip_tests" =~ ^(e2e|pkg|all)$ ]]; then
-    ### Running Ginkgo tests of Submariner repositories
+  ### Running Submariner Ginkgo tests
+  if [[ ! "$skip_tests" =~ all ]]; then
 
     verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  if [[ ! "$skip_tests" =~ ^(pkg|all)$ ]]; then
+    # Running build_submariner_repos if requested
+    [[ ! "$build_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
 
-    ### Running Unit-tests from Submariner repositories (Ginkgo)
-
-    ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
-  fi
-
-  if [[ ! "$skip_tests" =~ ^(e2e|all)$ ]]; then
-
-    ### Running E2E tests from Submariner repositories (Ginkgo)
-
-    if [[ "$build_submariners_e2e" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} test_submariner_e2e_with_go || \
-      BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
-
-      ${junit_cmd} test_lighthouse_e2e_with_go || \
-      BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
-
-    else
-      ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+    ### Running Unit-tests in Submariner project directory (Ginkgo)
+    if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
+      ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
     fi
 
-    if [[ "$e2e_tests_status" = FAILED ]] ; then
-      FATAL "Submariner E2E Tests failure"
-    fi
+    ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
+    if [[ ! "$skip_tests" =~ e2e ]]; then
 
+      if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} test_submariner_e2e_with_go || \
+        BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
+
+        ${junit_cmd} test_lighthouse_e2e_with_go || \
+        BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
+
+      else
+        ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
+      fi
+
+      if [[ "$e2e_tests_status" = FAILED ]] ; then
+        FATAL "Submariner E2E Tests failure"
+      fi
+
+    fi
   fi
-fi
 
 
   # If script got to here - all tests of Submariner has passed ;-)

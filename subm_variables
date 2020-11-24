@@ -32,6 +32,10 @@ export CLUSTER_B_NAME="cluster-b"
 export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
 export NGINX_CLUSTER_B="nginx-cl-b"
 
+export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
+export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
+export NGINX_PORT="8080"
+
 export AWS_KEY="user-aws-access-key"
 export AWS_SECRET="user-aws-secret-access-key"
 export AWS_PROFILE_NAME="aws-profile"
