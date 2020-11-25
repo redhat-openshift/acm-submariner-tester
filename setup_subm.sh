@@ -36,7 +36,7 @@
 # (2) Get access to AWS account.                                                                      #
 # - To get it, please fill AWS request form:                                                          #
 # https://docs.google.com/forms/d/e/1FAIpQLSeBi_walgnC4555JEHk5rw-muFUiOf2VCWa1yuEgSl0vDeyQw/viewform #
-# - To validate, login to AWS openshift-dev account via the web console:                              #
+# - Once you get approved, login to AWS openshift-dev account via the web console:                    #
 # https://{AWS Account ID}.signin.aws.amazon.com/console                                              #
 #                                                                                                     #
 # (3) Your Red Hat Openshift pull secret, found in:                                                   #
@@ -1672,7 +1672,7 @@ function open_firewall_ports_on_the_broker_node() {
   "No workaround yet (it will probably fail later when searching External-IP)" \
   "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || return 1
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   #
@@ -1730,7 +1730,7 @@ function gateway_label_first_worker_node() {
   # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || return 1
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -1745,7 +1745,7 @@ function gateway_label_all_nodes_external_ip() {
 
   if [[ "$external_ips" = NONE ]] ; then
     failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
-    FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
 
@@ -1767,7 +1767,7 @@ function gateway_label_all_nodes_external_ip() {
   #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
     # NAME                          STATUS   ROLES    AGE     VERSION
     # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || return 1
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -1834,7 +1834,7 @@ function test_broker_before_join() {
   ${OC} describe crds \
   clusters.submariner.io \
   endpoints.submariner.io \
-  serviceimports.multicluster.x-k8s.io || :
+  serviceimports.multicluster.x-k8s.io || FAILURE "Expected to find CRD 'serviceimports.multicluster.x-k8s.io'"
 
   # serviceexports.lighthouse.submariner.io \
   # servicediscoveries.submariner.io \
@@ -2191,7 +2191,7 @@ function test_submariner_cable_driver() {
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || :
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || return 1
   fi
 
 }
@@ -2447,7 +2447,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
 
     if ! ${OC} exec ${CURL_CMD} ; then
-      FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
+      FAILURE "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
       \n Maybe you installed clusters with overlapping CIDRs ?"
     fi
 
@@ -2478,7 +2478,7 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_b}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FATAL "$msg") || echo -e "$msg"
+    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
@@ -2655,7 +2655,7 @@ function test_nginx_headless_global_ip_cluster_b() {
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
   test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   # TODO: Ping to the new_nginx_global_ip
   # new_nginx_global_ip="$GLOBAL_IP"
@@ -2760,7 +2760,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  [[ "$subctl_info" != ERROR ]] || FATAL "Submariner HA failure occurred."
+  [[ "$subctl_info" != ERROR ]] || FATAL "Subctl show indicates errors"
 }
 
 # ------------------------------------------
@@ -2779,7 +2779,7 @@ function test_submariner_packages() {
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile '$PKG_JUNIT_XML'"
+    junit_params="-ginkgo.reportFile \"$PKG_JUNIT_XML\""
   fi
 
   # go test -v -cover \
@@ -2823,16 +2823,16 @@ function test_submariner_e2e_with_go() {
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report to create: $E2E_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile '$E2E_JUNIT_XML'"
+    junit_params="-ginkgo.reportFile \"$E2E_JUNIT_XML\""
   fi
 
   go test -v ./test/e2e \
+  -timeout 120m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -ginkgo.timeout 120m \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
@@ -2862,16 +2862,16 @@ function test_lighthouse_e2e_with_go() {
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report to create: $LIGHTHOUSE_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile '$LIGHTHOUSE_JUNIT_XML'"
+    junit_params="-ginkgo.reportFile \"$LIGHTHOUSE_JUNIT_XML\""
   fi
 
   go test -v ./test/e2e \
+  -timeout 120m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -ginkgo.timeout 120m \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
@@ -3290,7 +3290,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
-      ${junit_cmd} test_nginx_headless_global_ip_cluster_b || :
+      ${junit_cmd} test_nginx_headless_global_ip_cluster_b
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
