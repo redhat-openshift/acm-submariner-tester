@@ -447,7 +447,7 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
-  while [[ ! "$skip_tests" =~ ^((sys|e2e|pkg|all)(,|$))+ ]]; do
+  while [[ ! "$skip_tests" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
     echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
     Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
     read -r input
@@ -592,7 +592,7 @@ function show_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  if [[ "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
   else
   echo -e "\n### Will execute: High-level (System) tests of Submariner:
@@ -626,7 +626,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^((pkg|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((pkg|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
@@ -635,7 +635,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^((e2e|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((e2e|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
@@ -2775,26 +2775,29 @@ function test_submariner_packages() {
 
   export GO111MODULE="on"
   # export CGO_ENABLED=1 # required for go test -race
-
   go env
-  # go test -v -race -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
 
-  go test -v -cover \
-  ./pkg/apis/submariner.io/v1 \
-  ./pkg/cable/libreswan \
-  ./pkg/cable/strongswan \
-  ./pkg/cableengine/syncer \
-  ./pkg/controllers/datastoresyncer \
-  ./pkg/controllers/tunnel \
-  ./pkg/event \
-  ./pkg/event/controller \
-  ./pkg/globalnet/controllers/ipam \
-  ./pkg/routeagent/controllers/route \
-  ./pkg/util \
-  -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
+    junit_params="-ginkgo.reportFile '$PKG_JUNIT_XML'"
+  fi
 
-    # OR with local go modules:
-      # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
+  # go test -v -cover \
+  # ./pkg/apis/submariner.io/v1 \
+  # ./pkg/cable/libreswan \
+  # ./pkg/cable/strongswan \
+  # ./pkg/cableengine/syncer \
+  # ./pkg/controllers/datastoresyncer \
+  # ./pkg/controllers/tunnel \
+  # ./pkg/event \
+  # ./pkg/event/controller \
+  # ./pkg/globalnet/controllers/ipam \
+  # ./pkg/routeagent/controllers/route \
+  # ./pkg/util \
+  # -ginkgo.v -ginkgo.trace \
+  # -ginkgo.reportPassed ${junit_params}
+
+  go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params}
 
 }
 
@@ -2818,12 +2821,16 @@ function test_submariner_e2e_with_go() {
   export GO111MODULE="on"
   go env
 
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Junit report to create: $E2E_JUNIT_XML \n"
+    junit_params="-ginkgo.reportFile '$E2E_JUNIT_XML'"
+  fi
+
   go test -v ./test/e2e \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
-  -ginkgo.reportPassed \
-  -ginkgo.reportFile "$E2E_JUNIT_XML" \
+  -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -ginkgo.timeout 120m \
   -args \
@@ -2853,12 +2860,16 @@ function test_lighthouse_e2e_with_go() {
   export GO111MODULE="on"
   go env
 
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Junit report to create: $LIGHTHOUSE_JUNIT_XML \n"
+    junit_params="-ginkgo.reportFile '$LIGHTHOUSE_JUNIT_XML'"
+  fi
+
   go test -v ./test/e2e \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
-  -ginkgo.reportPassed \
-  -ginkgo.reportFile "$LIGHTHOUSE_JUNIT_XML" \
+  -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -ginkgo.timeout 120m \
   -args \
@@ -2918,7 +2929,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload E2E tests to Polarion
 
-  if [[ (! "$skip_tests" =~ ^((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
+  if [[ (! "$skip_tests" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
     echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2932,7 +2943,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload UNIT tests to Polarion (skipping, not really required)
 
-  # if [[ (! "$skip_tests" =~ ^((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
+  # if [[ (! "$skip_tests" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
   #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
@@ -3181,7 +3192,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     fi
 
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
-    if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+    if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
       ${junit_cmd} install_netshoot_app_on_cluster_a
 
@@ -3229,7 +3240,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   ${junit_cmd} test_products_versions
 
-  if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
 
