@@ -2808,46 +2808,35 @@ function test_submariner_e2e_with_go() {
   PROMPT "Testing Submariner End-to-End tests with GO"
   trap_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/submariner
-  pwd
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
-
-  ${OC} config get-contexts
-    # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
-    # *         admin             user-cluster-a   admin
-    #           admin_cluster_b   user-cl1         admin
-
-  export GO111MODULE="on"
-  go env
-
-  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Junit report to create: $E2E_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile \"$E2E_JUNIT_XML\""
-  fi
-
-  go test -v ./test/e2e \
-  -timeout 120m \
-  -ginkgo.v -ginkgo.trace \
-  -ginkgo.randomizeAllSpecs \
-  -ginkgo.noColor \
-  -ginkgo.reportPassed ${junit_params} \
-  -ginkgo.skip "\[redundancy\]" \
-  -args \
-  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
-  --submariner-namespace ${SUBM_NAMESPACE} \
-  --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Submariner End-to-End tests with GO failed."
+  test_project_e2e_with_go \
+  "$GOPATH/src/github.com/submariner-io/submariner" \
+  "$E2E_JUNIT_XML"
+  
 }
 
 # ------------------------------------------
 
 function test_lighthouse_e2e_with_go() {
-# Run E2E Tests of Lighthouse with Ginkgo (https://github.com/submariner-io/lighthouse/issues/211)
+# Run E2E Tests of Lighthouse with Ginkgo
   PROMPT "Testing Lighthouse End-to-End tests with GO"
   trap_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/lighthouse
+  test_project_e2e_with_go \
+  "$GOPATH/src/github.com/submariner-io/lighthouse" \
+  "$LIGHTHOUSE_JUNIT_XML"
+
+}
+
+# ------------------------------------------
+
+function test_project_e2e_with_go() {
+# Helper function to run E2E Tests of Submariner repo with Ginkgo
+  trap_commands;
+  local e2e_project_path="$1"
+  local junit_output_file="$2"
+  local junit_params
+
+  cd "$e2e_project_path"
   pwd
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
@@ -2861,8 +2850,8 @@ function test_lighthouse_e2e_with_go() {
   go env
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Junit report to create: $LIGHTHOUSE_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile \"$LIGHTHOUSE_JUNIT_XML\""
+    echo -e "\n# Junit report will be created at: $junit_output_file \n"
+    junit_params="-ginkgo.reportFile \"$junit_output_file\""
   fi
 
   go test -v ./test/e2e \
@@ -2876,7 +2865,7 @@ function test_lighthouse_e2e_with_go() {
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Lighthouse End-to-End tests with GO failed."
+  || BUG "End-to-End tests with GO failed in project: \n# $e2e_project_path"
 }
 
 # ------------------------------------------
