@@ -34,7 +34,7 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-asserts=00; errors=0; suiteDuration=0; content=""
+asserts=00; failures=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
 # default output directory and file
@@ -88,6 +88,9 @@ function juLogClean() {
 # Execute a command and record its results
 function juLog() {
 
+  # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
+  set +e
+
   # In case of script error: Exit with the real return code of eVal()
   export exitCode=0
   trap 'exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
@@ -97,7 +100,7 @@ function juLog() {
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
   date="$(which gdate 2>/dev/null || which date || :)"
-  asserts=00; errors=0; suiteDuration=0; content=""
+  asserts=00; failures=0; suiteDuration=0; content=""
   export testIndex=$(( testIndex+1 ))
 
   # parse arguments
@@ -185,16 +188,21 @@ EOF
   rm -f ${errf} || :
 
   # set the appropriate error, based in the exit code and the regex
-  [[ ${exitCode} != 0 ]] && isErr=1 || isErr=0
-  if [ ${isErr} = 0 ] && [ -n "${ereg:-}" ]; then
+  [[ "${exitCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
+
+  if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
-      [[ -n "${H}" ]] && isErr=1
+      [[ -n "${H}" ]] && testStatus=FAILED
+  elif [[ ${testStatus} = FAILED ]] ; then
+    echo "+++ Error: ${exitCode}"        # | tee -a ${outf}
+    failures=$((failures+1))
   fi
-  [[ ${isErr} != 0 ]] && echo "+++ Error: ${exitCode}"        # | tee -a ${outf}
+
+  # If exit code == 5 : It's counted as test failure, which is not critical.
+  [[ "${exitCode}" = 5 ]] && exitCode=0  # This will not break the execution.
 
   # calculate vars
   asserts=$((asserts+1))
-  errors=$((errors+isErr))
   testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
@@ -211,7 +219,7 @@ EOF
 
   # write the junit xml report
   ## system-out or system-err tag
-  if [[ ${isErr} = 0 ]] ; then
+  if [[ ${testStatus} = PASSED ]] ; then
     output="
     <system-out><![CDATA[${outMsg}]]></system-out>
     "
@@ -235,9 +243,9 @@ EOF
   if [[ -e "${juDIR}/${juFILE}" ]]; then
     # file exists. first update the failures count
     failCount=$(${SED} -n "s/.*testsuite.*failures=\"\([0-9]*\)\".*/\1/p" "${juDIR}/${juFILE}")
-    errors=$((failCount+errors))
-    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${errors}\"/" "${juDIR}/${juFILE}"
-    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${errors}\"/" "${juDIR}/${juFILE}"
+    failures=$((failCount+failures))
+    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${failures}\"/" "${juDIR}/${juFILE}"
+    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${failures}\"/" "${juDIR}/${juFILE}"
 
     # file exists. Need to append to it. If we remove the testsuite end tag, we can just add it in after.
     ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}" ## remove testSuite so we can add it later
@@ -250,10 +258,9 @@ EOF
 
     # Update suite summary on the first <testsuite> tag:
     sed -e "0,/<testsuite .*>/s/<testsuite .*>/\
-    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${errors}\" errors=\"${errors}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
+    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
   fi
 
-  # set -e # set -o errexit
-  set -e
+  set -e # set -e (aka as set -o errexit) to fail script on error
   return ${exitCode}
 }

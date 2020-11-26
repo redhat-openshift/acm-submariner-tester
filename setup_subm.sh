@@ -1672,7 +1672,7 @@ function open_firewall_ports_on_the_broker_node() {
   "No workaround yet (it will probably fail later when searching External-IP)" \
   "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || return 1
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || FAILURE "./prep_for_subm.sh did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   #
@@ -1730,7 +1730,7 @@ function gateway_label_first_worker_node() {
   # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || return 1
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -1767,7 +1767,7 @@ function gateway_label_all_nodes_external_ip() {
   #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
     # NAME                          STATUS   ROLES    AGE     VERSION
     # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || return 1
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -2191,7 +2191,7 @@ function test_submariner_cable_driver() {
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || return 1
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
   fi
 
 }
@@ -2246,7 +2246,7 @@ function test_ha_status() {
 
   ### Checking "Submariner" resource ###
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status:\s*connect"
+  local regex="Status:\s*connect" || submariner_status=DOWN
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
   watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
 
@@ -2647,7 +2647,7 @@ function test_nginx_headless_global_ip_cluster_b() {
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
     # No workaround yet
-    return 1
+    FAILURE "HEADLESS Service is not supported with GlobalNet"
   fi
 
   kubconf_b
@@ -2811,7 +2811,7 @@ function test_submariner_e2e_with_go() {
   test_project_e2e_with_go \
   "$GOPATH/src/github.com/submariner-io/submariner" \
   "$E2E_JUNIT_XML"
-  
+
 }
 
 # ------------------------------------------
