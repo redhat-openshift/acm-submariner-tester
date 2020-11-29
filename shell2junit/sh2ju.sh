@@ -58,9 +58,9 @@ errfile=/tmp/evErr.$$.log
 # errfile=$(mktemp /tmp/ev_err_log_XXXXXX)
 
 function eVal() {
-  (eval "$1")
+  echo 0 > "${errfile}"
   # stdout and stderr may currently be inverted (see below) so echo may write to stderr
-  echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+  (eval "set -ex; $1") || echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
 }
 
 # TODO: Use this function to clean old test results (xmls)
@@ -93,7 +93,7 @@ function juLog() {
 
   # In case of script error: Exit with the real return code of eVal()
   export exitCode=0
-  trap 'exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
+  trap 'echo "+++ Error code: $exitCode" ; exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
@@ -175,6 +175,9 @@ EOF
   ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
 
   exitCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
+
+  cat "${errfile}" || :
+
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
 
@@ -189,17 +192,14 @@ EOF
 
   # set the appropriate error, based in the exit code and the regex
   [[ "${exitCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
-
+  # echo "+++ Exit code: ${exitCode} (testStatus=$testStatus)"
   if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
       [[ -n "${H}" ]] && testStatus=FAILED
   elif [[ ${testStatus} = FAILED ]] ; then
-    echo "+++ Error: ${exitCode}"        # | tee -a ${outf}
     failures=$((failures+1))
   fi
 
-  # If exit code == 5 : It's counted as test failure, which is not critical.
-  [[ "${exitCode}" = 5 ]] && exitCode=0  # This will not break the execution.
 
   # calculate vars
   asserts=$((asserts+1))
@@ -261,6 +261,7 @@ EOF
     <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
   fi
 
-  set -e # set -e (aka as set -o errexit) to fail script on error
+  # set -e # (aka as set -o errexit) to fail script on error
+  echo "+++ Return code: ${exitCode}"
   return ${exitCode}
 }

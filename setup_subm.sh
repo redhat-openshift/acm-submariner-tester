@@ -2647,7 +2647,7 @@ function test_nginx_headless_global_ip_cluster_b() {
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
     # No workaround yet
-    FAILURE "HEADLESS Service is not supported with GlobalNet"
+    FAILURE "Mark this test as failed, but continue"
   fi
 
   kubconf_b
@@ -3052,9 +3052,16 @@ function print_submariner_pod_logs() {
 
 # ------------------------------------------
 
-# Function to debug this script
+# Functions to debug this script
+
+function PASS_DEBUG() {
+  PROMPT "PASS for DEBUG"
+  echo "PASS_HERE"
+}
+
 function FAIL_DEBUG() {
-  find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
+  PROMPT "FAIL for DEBUG"
+  # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
   FAIL_HERE
 }
 
@@ -3105,11 +3112,12 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
+  # Debug functions
+  # ${junit_cmd} PASS_DEBUG
+  # ${junit_cmd} FAIL_DEBUG
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
-
-  # Debug function
-  # ${junit_cmd} FAIL_DEBUG
 
   # Setup and verify environment
   setup_workspace
