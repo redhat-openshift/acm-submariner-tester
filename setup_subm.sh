@@ -3055,11 +3055,25 @@ function print_submariner_pod_logs() {
 # Functions to debug this script
 
 function PASS_DEBUG() {
+  trap_commands;
   PROMPT "PASS for DEBUG"
-  echo "PASS_HERE"
+
+  if [[ -n "TRUE" ]] ; then
+    BUG "A bug" \
+     "A workaround" \
+    "A link"
+
+    # Test failure
+    # FAILURE "PASS_HERE"
+    return 0
+  fi
+
+  echo "should not get here..."
+
 }
 
 function FAIL_DEBUG() {
+  trap_commands;
   PROMPT "FAIL for DEBUG"
   # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
   FAIL_HERE
@@ -3112,9 +3126,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
-  # Debug functions
+  # # Debug functions
   # ${junit_cmd} PASS_DEBUG
   # ${junit_cmd} FAIL_DEBUG
+  # ${junit_cmd} FATAL "Critical failure"
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan

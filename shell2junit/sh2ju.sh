@@ -58,9 +58,17 @@ errfile=/tmp/evErr.$$.log
 # errfile=$(mktemp /tmp/ev_err_log_XXXXXX)
 
 function eVal() {
+  # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
+  # then swapping them back again so that the streams are written correctly for the invoking process
   echo 0 > "${errfile}"
-  # stdout and stderr may currently be inverted (see below) so echo may write to stderr
-  (eval "set -e; $1") || echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+  (
+    ( # stdout and stderr may currently be inverted (see below) so echo may write to stderr
+      # echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+      ( trap 'echo $? > "${errfile}"' ERR; set -eo pipefail; $1 ) | tee -a ${outf}
+      # ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
+    ) 3>&1 1>&2 2>&3 | tee ${errf}
+  )
+
 }
 
 # TODO: Use this function to clean old test results (xmls)
@@ -92,8 +100,9 @@ function juLog() {
   set +e
 
   # In case of script error: Exit with the real return code of eVal()
-  export exitCode=0
-  trap 'echo "+++ Error code: $exitCode" ; exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
+  # export returnCode=0
+  # trap 'returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")";
+  # echo "+++ Exit code: $returnCode" ; set +e; exit $returnCode' ERR # ERR RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
@@ -170,13 +179,9 @@ EOF
   echo "+++ Working directory: $(pwd)"           # | tee -a ${outf}
   echo "+++ Command: ${cmd}"            # | tee -a ${outf}
   ini="$(${date} +%s.%N)"
-  # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
-  # then swapping them back again so that the streams are written correctly for the invoking process
-  ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
+  eVal "${cmd}"
 
-  exitCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
-
-  cat "${errfile}" || :
+  returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")"
 
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
@@ -191,15 +196,14 @@ EOF
   rm -f ${errf} || :
 
   # set the appropriate error, based in the exit code and the regex
-  [[ "${exitCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
-  # echo "+++ Exit code: ${exitCode} (testStatus=$testStatus)"
+  [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
+  # echo "+++ Exit code: ${returnCode} (testStatus=$testStatus)"
   if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
       [[ -n "${H}" ]] && testStatus=FAILED
   elif [[ ${testStatus} = FAILED ]] ; then
     failures=$((failures+1))
   fi
-
 
   # calculate vars
   asserts=$((asserts+1))
@@ -261,7 +265,8 @@ EOF
     <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
   fi
 
-  # set -e # (aka as set -o errexit) to fail script on error
-  echo "+++ Return code: ${exitCode}"
-  return ${exitCode}
+  set -e # (aka as set -o errexit) to fail script on error
+  if [[ "$returnCode" = 5 ]] ; then returnCode=0 ; fi
+  echo "+++ Return code: ${returnCode}"
+  return ${returnCode}
 }
