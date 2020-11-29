@@ -60,7 +60,7 @@ errfile=/tmp/evErr.$$.log
 function eVal() {
   echo 0 > "${errfile}"
   # stdout and stderr may currently be inverted (see below) so echo may write to stderr
-  (eval "set -ex; $1") || echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+  (eval "set -e; $1") || echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
 }
 
 # TODO: Use this function to clean old test results (xmls)

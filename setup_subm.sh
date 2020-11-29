@@ -2247,8 +2247,8 @@ function test_ha_status() {
   ### Checking "Submariner" resource ###
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
   local regex="Status:\s*connect" || submariner_status=DOWN
-  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
-  watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
+  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for Status connected
+  watch_and_retry "$cmd | grep -A 30 'Connections:'" 3m "$regex" || submariner_status=DOWN
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
   # echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
