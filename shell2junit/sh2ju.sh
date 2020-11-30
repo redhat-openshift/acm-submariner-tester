@@ -73,7 +73,7 @@ function eVal() {
 
 # TODO: Use this function to clean old test results (xmls)
 function juLogClean() {
-  echo "+++ Removing old junit reports from: ${juDIR} "
+  echo "+++ sh2ju removing old junit reports from: ${juDIR} "
   find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
 }
 
@@ -81,17 +81,13 @@ function juLogClean() {
 function printPlainTextFile() {
   local data_file="$1"
   # echo "$(tr -dC '[:print:]\t\n' < "$data_file")" > "$data_file"
-  # sed -r 's:\[[0-9;]+[mK]::g' "$data_file"
+  # ${SED} -r 's:\[[0-9;]+[mK]::g' "$data_file"
 
   while read line ; do
-    echo "$line" | tr -dC '[:print:]\t\n' | sed -r 's:\[[0-9;]+[mK]::g'
+    echo "$line" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
   done < "$data_file"
 }
 
-function juLogClean() {
-  echo "+++ Removing old junit reports from: ${juDIR} "
-  find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
-}
 
 # Execute a command and record its results
 function juLog() {
@@ -100,9 +96,9 @@ function juLog() {
   set +e
 
   # In case of script error: Exit with the real return code of eVal()
-  # export returnCode=0
+  export returnCode=0
   # trap 'returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")";
-  # echo "+++ Exit code: $returnCode" ; set +e; exit $returnCode' ERR # ERR RETURN EXIT HUP INT TERM
+  # echo "+++ sh2ju exit code: $returnCode" ; set +e; exit $returnCode' ERR # ERR RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
@@ -175,9 +171,9 @@ EOF
   :>${outf}
 
   echo ""                         | tee -a ${outf}
-  echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
-  echo "+++ Working directory: $(pwd)"           # | tee -a ${outf}
-  echo "+++ Command: ${cmd}"            # | tee -a ${outf}
+  echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
+  echo "+++ sh2ju working directory: $(pwd)"           # | tee -a ${outf}
+  echo "+++ sh2ju command: ${cmd}"            # | tee -a ${outf}
   ini="$(${date} +%s.%N)"
   eVal "${cmd}"
 
@@ -197,7 +193,7 @@ EOF
 
   # set the appropriate error, based in the exit code and the regex
   [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
-  # echo "+++ Exit code: ${returnCode} (testStatus=$testStatus)"
+  # echo "+++ sh2ju exit code: ${returnCode} (testStatus=$testStatus)"
   if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
       [[ -n "${H}" ]] && testStatus=FAILED
@@ -261,12 +257,16 @@ EOF
 EOF
 
     # Update suite summary on the first <testsuite> tag:
-    sed -e "0,/<testsuite .*>/s/<testsuite .*>/\
+    ${SED} -e "0,/<testsuite .*>/s/<testsuite .*>/\
     <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
   fi
 
+  # Set returnCode=0, if missing or equals 5
+  if [[ -n "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
+    returnCode=0
+  fi
+
   set -e # (aka as set -o errexit) to fail script on error
-  if [[ "$returnCode" = 5 ]] ; then returnCode=0 ; fi
-  echo "+++ Return code: ${returnCode}"
+  echo -e "+++ sh2ju return code: ${returnCode}\n"
   return ${returnCode}
 }
