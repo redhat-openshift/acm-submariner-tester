@@ -2779,7 +2779,7 @@ function test_submariner_packages() {
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
-    junit_params="-ginkgo.reportFile \"$PKG_JUNIT_XML\""
+    junit_params="-ginkgo.reportFile $PKG_JUNIT_XML"
   fi
 
   # go test -v -cover \
@@ -2851,7 +2851,7 @@ function test_project_e2e_with_go() {
 
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report will be created at: $junit_output_file \n"
-    junit_params="-ginkgo.reportFile \"$junit_output_file\""
+    junit_params="-ginkgo.reportFile $junit_output_file"
   fi
 
   go test -v ./test/e2e \
