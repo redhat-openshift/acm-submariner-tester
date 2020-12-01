@@ -64,7 +64,7 @@ function eVal() {
   (
     ( # stdout and stderr may currently be inverted (see below) so echo may write to stderr
       # echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
-      ( trap 'echo $? > "${errfile}"' ERR; set -eo pipefail; $1 ) | tee -a ${outf}
+      ( trap 'echo $? > "${errfile}"' ERR; set -e; $1 ) | tee -a ${outf}
       # ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
     ) 3>&1 1>&2 2>&3 | tee ${errf}
   )
@@ -262,7 +262,7 @@ EOF
   fi
 
   # Set returnCode=0, if missing or equals 5
-  if [[ -n "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
+  if [[ -z "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
     returnCode=0
   fi
 
