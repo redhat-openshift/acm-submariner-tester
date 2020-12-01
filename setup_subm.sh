@@ -3054,29 +3054,28 @@ function print_submariner_pod_logs() {
 
 # Functions to debug this script
 
-function PASS_DEBUG() {
+function DEBUG_PASS_TEST() {
   trap_commands;
   PROMPT "PASS for DEBUG"
 
   if [[ -n "TRUE" ]] ; then
-    BUG "A bug" \
+    BUG "A dummy bug" \
      "A workaround" \
     "A link"
 
-    # Test failure
-    # FAILURE "PASS_HERE"
-    return 0
+    # Test FAILURE() that should not break script
+    FAILURE "PASS_HERE"
   fi
 
   echo "should not get here..."
 
 }
 
-function FAIL_DEBUG() {
+function DEBUG_FAIL_TEST() {
   trap_commands;
   PROMPT "FAIL for DEBUG"
   # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
-  FAIL_HERE
+  return 3
 }
 
 # ------------------------------------------
@@ -3114,11 +3113,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
 # Logging main output (enclosed with parenthesis) with tee
 LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
-LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps with: ts '%H:%M:%.S' -s
+LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
 > "$LOG_FILE"
 
 # Printing output both to stdout and to $LOG_FILE with tee
-# TODO: consider adding timestemps with: ts '%H:%M:%.S' -s
+# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
 
   # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
@@ -3127,9 +3126,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
   fi
 
   # # Debug functions
-  # ${junit_cmd} PASS_DEBUG
-  # ${junit_cmd} FAIL_DEBUG
-  # ${junit_cmd} FATAL "Critical failure"
+  # ${junit_cmd} DEBUG_PASS_TEST
+  # ${junit_cmd} DEBUG_PASS_TEST
+  # ${junit_cmd} DEBUG_FAIL_TEST
+  # FATAL "Terminating script if DEBUG_FAIL_TEST() did not"
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
