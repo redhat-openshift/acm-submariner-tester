@@ -34,7 +34,7 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-asserts=00; errors=0; suiteDuration=0; content=""
+asserts=00; failures=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
 # default output directory and file
@@ -58,14 +58,22 @@ errfile=/tmp/evErr.$$.log
 # errfile=$(mktemp /tmp/ev_err_log_XXXXXX)
 
 function eVal() {
-  (eval "$1")
-  # stdout and stderr may currently be inverted (see below) so echo may write to stderr
-  echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+  # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
+  # then swapping them back again so that the streams are written correctly for the invoking process
+  echo 0 > "${errfile}"
+  (
+    ( # stdout and stderr may currently be inverted (see below) so echo may write to stderr
+      # echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
+      ( trap 'echo $? > "${errfile}"' ERR; set -eo pipefail; $1 ) | tee -a ${outf}
+      # ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
+    ) 3>&1 1>&2 2>&3 | tee ${errf}
+  )
+
 }
 
 # TODO: Use this function to clean old test results (xmls)
 function juLogClean() {
-  echo "+++ Removing old junit reports from: ${juDIR} "
+  echo "+++ sh2ju removing old junit reports from: ${juDIR} "
   find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
 }
 
@@ -73,31 +81,31 @@ function juLogClean() {
 function printPlainTextFile() {
   local data_file="$1"
   # echo "$(tr -dC '[:print:]\t\n' < "$data_file")" > "$data_file"
-  # sed -r 's:\[[0-9;]+[mK]::g' "$data_file"
+  # ${SED} -r 's:\[[0-9;]+[mK]::g' "$data_file"
 
   while read line ; do
-    echo "$line" | tr -dC '[:print:]\t\n' | sed -r 's:\[[0-9;]+[mK]::g'
+    echo "$line" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
   done < "$data_file"
 }
 
-function juLogClean() {
-  echo "+++ Removing old junit reports from: ${juDIR} "
-  find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
-}
 
 # Execute a command and record its results
 function juLog() {
 
+  # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
+  set +e
+
   # In case of script error: Exit with the real return code of eVal()
-  export exitCode=0
-  trap 'exit $(eval $exitCode)' ERR # RETURN EXIT HUP INT TERM
+  export returnCode=0
+  # trap 'returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")";
+  # echo "+++ sh2ju exit code: $returnCode" ; set +e; exit $returnCode' ERR # ERR RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
   # tmpdir="/var/tmp"
   # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
   date="$(which gdate 2>/dev/null || which date || :)"
-  asserts=00; errors=0; suiteDuration=0; content=""
+  asserts=00; failures=0; suiteDuration=0; content=""
   export testIndex=$(( testIndex+1 ))
 
   # parse arguments
@@ -163,15 +171,14 @@ EOF
   :>${outf}
 
   echo ""                         | tee -a ${outf}
-  echo "+++ Running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
-  echo "+++ Working directory: $(pwd)"           # | tee -a ${outf}
-  echo "+++ Command: ${cmd}"            # | tee -a ${outf}
+  echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
+  echo "+++ sh2ju working directory: $(pwd)"           # | tee -a ${outf}
+  echo "+++ sh2ju command: ${cmd}"            # | tee -a ${outf}
   ini="$(${date} +%s.%N)"
-  # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
-  # then swapping them back again so that the streams are written correctly for the invoking process
-  ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
+  eVal "${cmd}"
 
-  exitCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "1")"
+  returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")"
+
   rm -f "${errfile}"
   end="$(${date} +%s.%N)"
 
@@ -185,16 +192,17 @@ EOF
   rm -f ${errf} || :
 
   # set the appropriate error, based in the exit code and the regex
-  [[ ${exitCode} != 0 ]] && isErr=1 || isErr=0
-  if [ ${isErr} = 0 ] && [ -n "${ereg:-}" ]; then
+  [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
+  # echo "+++ sh2ju exit code: ${returnCode} (testStatus=$testStatus)"
+  if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
       H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
-      [[ -n "${H}" ]] && isErr=1
+      [[ -n "${H}" ]] && testStatus=FAILED
+  elif [[ ${testStatus} = FAILED ]] ; then
+    failures=$((failures+1))
   fi
-  [[ ${isErr} != 0 ]] && echo "+++ Error: ${exitCode}"        # | tee -a ${outf}
 
   # calculate vars
   asserts=$((asserts+1))
-  errors=$((errors+isErr))
   testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
@@ -211,7 +219,7 @@ EOF
 
   # write the junit xml report
   ## system-out or system-err tag
-  if [[ ${isErr} = 0 ]] ; then
+  if [[ ${testStatus} = PASSED ]] ; then
     output="
     <system-out><![CDATA[${outMsg}]]></system-out>
     "
@@ -235,9 +243,9 @@ EOF
   if [[ -e "${juDIR}/${juFILE}" ]]; then
     # file exists. first update the failures count
     failCount=$(${SED} -n "s/.*testsuite.*failures=\"\([0-9]*\)\".*/\1/p" "${juDIR}/${juFILE}")
-    errors=$((failCount+errors))
-    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${errors}\"/" "${juDIR}/${juFILE}"
-    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${errors}\"/" "${juDIR}/${juFILE}"
+    failures=$((failCount+failures))
+    ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${failures}\"/" "${juDIR}/${juFILE}"
+    ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${failures}\"/" "${juDIR}/${juFILE}"
 
     # file exists. Need to append to it. If we remove the testsuite end tag, we can just add it in after.
     ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}" ## remove testSuite so we can add it later
@@ -249,11 +257,16 @@ EOF
 EOF
 
     # Update suite summary on the first <testsuite> tag:
-    sed -e "0,/<testsuite .*>/s/<testsuite .*>/\
-    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${errors}\" errors=\"${errors}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
+    ${SED} -e "0,/<testsuite .*>/s/<testsuite .*>/\
+    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
   fi
 
-  # set -e # set -o errexit
-  set -e
-  return ${exitCode}
+  # Set returnCode=0, if missing or equals 5
+  if [[ -n "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
+    returnCode=0
+  fi
+
+  set -e # (aka as set -o errexit) to fail script on error
+  echo -e "+++ sh2ju return code: ${returnCode}\n"
+  return ${returnCode}
 }

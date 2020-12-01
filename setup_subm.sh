@@ -36,7 +36,7 @@
 # (2) Get access to AWS account.                                                                      #
 # - To get it, please fill AWS request form:                                                          #
 # https://docs.google.com/forms/d/e/1FAIpQLSeBi_walgnC4555JEHk5rw-muFUiOf2VCWa1yuEgSl0vDeyQw/viewform #
-# - To validate, login to AWS openshift-dev account via the web console:                              #
+# - Once you get approved, login to AWS openshift-dev account via the web console:                    #
 # https://{AWS Account ID}.signin.aws.amazon.com/console                                              #
 #                                                                                                     #
 # (3) Your Red Hat Openshift pull secret, found in:                                                   #
@@ -447,7 +447,7 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
-  while [[ ! "$skip_tests" =~ ^((sys|e2e|pkg|all)(,|$))+ ]]; do
+  while [[ ! "$skip_tests" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
     echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
     Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
     read -r input
@@ -592,7 +592,7 @@ function show_test_plan() {
 
   # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
 
-  if [[ "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
   else
   echo -e "\n### Will execute: High-level (System) tests of Submariner:
@@ -626,7 +626,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^((pkg|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((pkg|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
@@ -635,7 +635,7 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ^((e2e|all)(,|$))+ ]]; then
+  if [[ "$skip_tests" =~ ((e2e|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
   else
     echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
@@ -1672,7 +1672,7 @@ function open_firewall_ports_on_the_broker_node() {
   "No workaround yet (it will probably fail later when searching External-IP)" \
   "https://github.com/submariner-io/submariner/issues/849"
   # Workaound:
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || :
+  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || FAILURE "./prep_for_subm.sh did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   #
@@ -1730,7 +1730,7 @@ function gateway_label_first_worker_node() {
   # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -1745,7 +1745,7 @@ function gateway_label_all_nodes_external_ip() {
 
   if [[ "$external_ips" = NONE ]] ; then
     failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
-    FATAL "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
 
@@ -1767,7 +1767,7 @@ function gateway_label_all_nodes_external_ip() {
   #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
     # NAME                          STATUS   ROLES    AGE     VERSION
     # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || :
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
   ${OC} get nodes -l submariner.io/gateway=true
 }
 
@@ -1834,7 +1834,7 @@ function test_broker_before_join() {
   ${OC} describe crds \
   clusters.submariner.io \
   endpoints.submariner.io \
-  serviceimports.multicluster.x-k8s.io || :
+  serviceimports.multicluster.x-k8s.io || FAILURE "Expected to find CRD 'serviceimports.multicluster.x-k8s.io'"
 
   # serviceexports.lighthouse.submariner.io \
   # servicediscoveries.submariner.io \
@@ -2191,7 +2191,7 @@ function test_submariner_cable_driver() {
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
     ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || :
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
   fi
 
 }
@@ -2246,9 +2246,9 @@ function test_ha_status() {
 
   ### Checking "Submariner" resource ###
   cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status:\s*connect"
-  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 14 lines afterwards), looking for Status connected
-  watch_and_retry "$cmd | grep -A 14 'Connections:'" 3m "$regex"
+  local regex="Status:\s*connect" || submariner_status=DOWN
+  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for Status connected
+  watch_and_retry "$cmd | grep -A 30 'Connections:'" 3m "$regex" || submariner_status=DOWN
 
   submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
   # echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
@@ -2447,7 +2447,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
 
     if ! ${OC} exec ${CURL_CMD} ; then
-      FATAL "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
+      FAILURE "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
       \n Maybe you installed clusters with overlapping CIDRs ?"
     fi
 
@@ -2478,7 +2478,7 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_b}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FATAL "$msg") || echo -e "$msg"
+    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
@@ -2647,7 +2647,7 @@ function test_nginx_headless_global_ip_cluster_b() {
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
     # No workaround yet
-    return 1
+    FAILURE "Mark this test as failed, but continue"
   fi
 
   kubconf_b
@@ -2655,7 +2655,7 @@ function test_nginx_headless_global_ip_cluster_b() {
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
   test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   # TODO: Ping to the new_nginx_global_ip
   # new_nginx_global_ip="$GLOBAL_IP"
@@ -2760,7 +2760,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  [[ "$subctl_info" != ERROR ]] || FATAL "Submariner HA failure occurred."
+  [[ "$subctl_info" != ERROR ]] || FATAL "Subctl show indicates errors"
 }
 
 # ------------------------------------------
@@ -2772,25 +2772,32 @@ function test_submariner_packages() {
 
   cd $GOPATH/src/github.com/submariner-io/submariner
   pwd
-  # export GO111MODULE="on"
-  go env
-  # go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML"
-  
-  go test -v -ginkgo.v -ginkgo.trace -ginkgo.reportPassed -ginkgo.reportFile "$PKG_JUNIT_XML" -cover \
-  ./pkg/apis/submariner.io/v1 \
-  ./pkg/cable/libreswan \
-  ./pkg/cable/strongswan \
-  ./pkg/cableengine/syncer \
-  ./pkg/controllers/datastoresyncer \
-  ./pkg/controllers/tunnel \
-  ./pkg/event \
-  ./pkg/event/controller \
-  ./pkg/globalnet/controllers/ipam \
-  ./pkg/routeagent/controllers/route \
-  ./pkg/util
 
-    # OR with local go modules:
-      # GO111MODULE="on" go test -v ./pkg/... -ginkgo.v -ginkgo.reportFile junit_result.xml
+  export GO111MODULE="on"
+  # export CGO_ENABLED=1 # required for go test -race
+  go env
+
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
+    junit_params="-ginkgo.reportFile $PKG_JUNIT_XML"
+  fi
+
+  # go test -v -cover \
+  # ./pkg/apis/submariner.io/v1 \
+  # ./pkg/cable/libreswan \
+  # ./pkg/cable/strongswan \
+  # ./pkg/cableengine/syncer \
+  # ./pkg/controllers/datastoresyncer \
+  # ./pkg/controllers/tunnel \
+  # ./pkg/event \
+  # ./pkg/event/controller \
+  # ./pkg/globalnet/controllers/ipam \
+  # ./pkg/routeagent/controllers/route \
+  # ./pkg/util \
+  # -ginkgo.v -ginkgo.trace \
+  # -ginkgo.reportPassed ${junit_params}
+
+  go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params}
 
 }
 
@@ -2801,40 +2808,36 @@ function test_submariner_e2e_with_go() {
   PROMPT "Testing Submariner End-to-End tests with GO"
   trap_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/submariner
+  test_project_e2e_with_go \
+  "$GOPATH/src/github.com/submariner-io/submariner" \
+  "$E2E_JUNIT_XML"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
-
-  ${OC} config get-contexts
-    # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
-    # *         admin             user-cluster-a   admin
-    #           admin_cluster_b   user-cl1         admin
-
-  export GO111MODULE="on"
-  go env
-
-  go test -v ./test/e2e \
-  -timeout 30m \
-  -ginkgo.v -ginkgo.trace \
-  -ginkgo.randomizeAllSpecs \
-  -ginkgo.noColor \
-  -ginkgo.reportPassed \
-  -ginkgo.reportFile "$E2E_JUNIT_XML" \
-  -args \
-  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
-  --submariner-namespace ${SUBM_NAMESPACE} \
-  --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Test execution failure occurred"
 }
 
 # ------------------------------------------
 
 function test_lighthouse_e2e_with_go() {
-# Run E2E Tests of Lighthouse with Ginkgo (https://github.com/submariner-io/lighthouse/issues/211)
+# Run E2E Tests of Lighthouse with Ginkgo
   PROMPT "Testing Lighthouse End-to-End tests with GO"
   trap_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/lighthouse
+  test_project_e2e_with_go \
+  "$GOPATH/src/github.com/submariner-io/lighthouse" \
+  "$LIGHTHOUSE_JUNIT_XML"
+
+}
+
+# ------------------------------------------
+
+function test_project_e2e_with_go() {
+# Helper function to run E2E Tests of Submariner repo with Ginkgo
+  trap_commands;
+  local e2e_project_path="$1"
+  local junit_output_file="$2"
+  local junit_params
+
+  cd "$e2e_project_path"
+  pwd
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
@@ -2846,18 +2849,23 @@ function test_lighthouse_e2e_with_go() {
   export GO111MODULE="on"
   go env
 
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Junit report will be created at: $junit_output_file \n"
+    junit_params="-ginkgo.reportFile $junit_output_file"
+  fi
+
   go test -v ./test/e2e \
-  -timeout 30m \
+  -timeout 120m \
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
-  -ginkgo.reportPassed \
-  -ginkgo.reportFile "$LIGHTHOUSE_JUNIT_XML" \
+  -ginkgo.reportPassed ${junit_params} \
+  -ginkgo.skip "\[redundancy\]" \
   -args \
   --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
   --submariner-namespace ${SUBM_NAMESPACE} \
   --connection-timeout 30 --connection-attempts 3 \
-  || echo "# Warning: Test execution failure occurred"
+  || BUG "End-to-End tests with GO failed in project: \n# $e2e_project_path"
 }
 
 # ------------------------------------------
@@ -2910,7 +2918,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload E2E tests to Polarion
 
-  if [[ (! "$skip_tests" =~ ^((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
+  if [[ (! "$skip_tests" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
     echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
     BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
@@ -2924,7 +2932,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload UNIT tests to Polarion (skipping, not really required)
 
-  # if [[ (! "$skip_tests" =~ ^((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
+  # if [[ (! "$skip_tests" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
   #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
@@ -3044,9 +3052,30 @@ function print_submariner_pod_logs() {
 
 # ------------------------------------------
 
-# Function to debug this script
+# Functions to debug this script
+
+function PASS_DEBUG() {
+  trap_commands;
+  PROMPT "PASS for DEBUG"
+
+  if [[ -n "TRUE" ]] ; then
+    BUG "A bug" \
+     "A workaround" \
+    "A link"
+
+    # Test failure
+    # FAILURE "PASS_HERE"
+    return 0
+  fi
+
+  echo "should not get here..."
+
+}
+
 function FAIL_DEBUG() {
-  find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
+  trap_commands;
+  PROMPT "FAIL for DEBUG"
+  # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
   FAIL_HERE
 }
 
@@ -3097,11 +3126,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
+  # # Debug functions
+  # ${junit_cmd} PASS_DEBUG
+  # ${junit_cmd} FAIL_DEBUG
+  # ${junit_cmd} FATAL "Critical failure"
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
-
-  # Debug function
-  # ${junit_cmd} FAIL_DEBUG
 
   # Setup and verify environment
   setup_workspace
@@ -3173,7 +3204,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
     fi
 
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
-    if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+    if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
       ${junit_cmd} install_netshoot_app_on_cluster_a
 
@@ -3221,7 +3252,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
   ${junit_cmd} test_products_versions
 
-  if [[ ! "$skip_tests" =~ ^((sys|all)(,|$))+ ]]; then
+  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
 
@@ -3271,7 +3302,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestemps wi
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
-      ${junit_cmd} test_nginx_headless_global_ip_cluster_b || :
+      ${junit_cmd} test_nginx_headless_global_ip_cluster_b
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
