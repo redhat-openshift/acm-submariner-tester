@@ -3094,8 +3094,10 @@ function fatal_test_debug() {
 if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # Extra verbosity for oc commands:
   # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-  export VERBOSE_FLAG="--v=2"
-  export OC="$OC $VERBOSE_FLAG"
+
+  # temorarly disable due to OC error: attempt to decode non-Table object into a v1beta1.Table
+  # export VERBOSE_FLAG="--v=2"
+  # export OC="$OC $VERBOSE_FLAG"
 
   # Debug flag for ocpup and aws commands
   export DEBUG_FLAG="--debug"
