@@ -1382,7 +1382,6 @@ function clean_osp_cluster_b() {
   BUG "Submariner-gw machine failure: Configuration not supported" \
   "No Workaround yet..." \
   "https://github.com/submariner-io/submariner/issues/885"
-
   remove_submariner_machine_sets
 }
 
@@ -3054,9 +3053,9 @@ function print_submariner_pod_logs() {
 
 # Functions to debug this script
 
-function DEBUG_PASS_TEST() {
+function pass_test_debug() {
   trap_commands;
-  PROMPT "PASS for DEBUG"
+  PROMPT "PASS test for DEBUG"
 
   if [[ -n "TRUE" ]] ; then
     BUG "A dummy bug" \
@@ -3071,11 +3070,17 @@ function DEBUG_PASS_TEST() {
 
 }
 
-function DEBUG_FAIL_TEST() {
+function fail_test_debug() {
   trap_commands;
-  PROMPT "FAIL for DEBUG"
-  # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
+  PROMPT "FAIL test for DEBUG"
+  find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
   return 3
+}
+
+function fatal_test_debug() {
+  trap_commands;
+  PROMPT "FATAL test for DEBUG"
+  FATAL "Terminating script since fail_test_debug() did not"
 }
 
 # ------------------------------------------
@@ -3126,10 +3131,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
   fi
 
   # # Debug functions
-  # ${junit_cmd} DEBUG_PASS_TEST
-  # ${junit_cmd} DEBUG_PASS_TEST
-  # ${junit_cmd} DEBUG_FAIL_TEST
-  # FATAL "Terminating script if DEBUG_FAIL_TEST() did not"
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} fail_test_debug
+  # ${junit_cmd} fatal_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
