@@ -1382,6 +1382,7 @@ function clean_osp_cluster_b() {
   BUG "Submariner-gw machine failure: Configuration not supported" \
   "No Workaround yet..." \
   "https://github.com/submariner-io/submariner/issues/885"
+
   remove_submariner_machine_sets
 }
 
@@ -1434,11 +1435,14 @@ function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
 
-  local e2e_namespaces="$(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests)"
+  local e2e_namespaces="$(${OC} get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests | cat )"
 
-  echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
-
-  oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
+  if [[ -n "$e2e_namespaces" ]] ; then
+    echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
+    ${OC} delete --timeout=30s ns $e2e_namespaces
+  else
+    echo "No 'e2e-tests' namespaces exist to be deleted"
+  fi
 
 }
 
@@ -1450,7 +1454,7 @@ function remove_submariner_gateway_labels() {
 
   echo "# Remove previous submariner gateway labels from all node in the cluster:"
 
-  ${OC} label --all node submariner.io/gateway-
+  ${OC} label --all node submariner.io/gateway- || :
 }
 
 # ------------------------------------------
@@ -1460,14 +1464,14 @@ function remove_submariner_machine_sets() {
 
   echo "# Remove previous machineset (if it has a template with submariner gateway label)"
 
-  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' `"
+  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}'`"
   local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
     ${OC} delete machineset $subm_machineset -n $ns || :
   fi
 
-  ${OC} get machineset -A -o wide
+  ${OC} get machineset -A -o wide || :
 }
 
 # ------------------------------------------
@@ -1743,7 +1747,7 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
-    failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
     FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
@@ -3012,7 +3016,7 @@ function print_submariner_pod_logs() {
 
   ${OC} get Machine -A || :
 
-  oc get Machine -A | awk '{
+  ${OC} get Machine -A | awk '{
     if (NR>1) {
       namespace = $1
       machine = $2
@@ -3095,9 +3099,8 @@ if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # Extra verbosity for oc commands:
   # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
 
-  # temorarly disable due to OC error: attempt to decode non-Table object into a v1beta1.Table
-  # export VERBOSE_FLAG="--v=2"
-  # export OC="$OC $VERBOSE_FLAG"
+  export VERBOSE_FLAG="--v=2"
+  export OC="$OC $VERBOSE_FLAG"
 
   # Debug flag for ocpup and aws commands
   export DEBUG_FLAG="--debug"
