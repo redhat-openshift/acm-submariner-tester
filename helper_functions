@@ -183,10 +183,10 @@ function PROMPT() {
 # ------------------------------------------
 
 # Function to print FAILURE message and return 5 for the current test
-# sh2ju treats exit code 5 as non-critical failure
+# sh2ju treats exit code 5 as non-critical failure (to continue tests)
 function FAILURE() {
   local failure_msg="${1}"
-  echo -e "\n${RED}*** Failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
+  echo -e "\n${RED}*** Expected failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
   return 5
 }
 
