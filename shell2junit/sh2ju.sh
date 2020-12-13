@@ -55,18 +55,19 @@ fi
 # A wrapper for the eval method witch allows catching seg-faults and use tee
 errfile=/tmp/evErr.$$.log
 # :>${errfile}
-# errfile=$(mktemp /tmp/ev_err_log_XXXXXX)
 
 function eVal() {
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
   echo 0 > "${errfile}"
   (
-    ( # stdout and stderr may currently be inverted (see below) so echo may write to stderr
-      # echo "$?" 2>&1 | tr -d "\n" > "${errfile}"
-      ( trap 'echo $? > "${errfile}"' ERR; set -e; $1 ) | tee -a ${outf}
-      # ( (eVal "${cmd}" | tee -a ${outf}) 3>&1 1>&2 2>&3 | tee ${errf}) 3>&1 1>&2 2>&3
-    ) 3>&1 1>&2 2>&3 | tee ${errf}
+    (
+      ( trap 'RC=$? ; echo $RC > "${errfile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+        trap 'RC="$(< $errfile)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
+        set -e; $1 ;
+      ) | tee -a ${outf}
+    )
+    3>&1 1>&2 2>&3 | tee ${errf}
   )
 
 }
@@ -80,9 +81,6 @@ function juLogClean() {
 # Function to print text file without special characters and ansi colors
 function printPlainTextFile() {
   local data_file="$1"
-  # echo "$(tr -dC '[:print:]\t\n' < "$data_file")" > "$data_file"
-  # ${SED} -r 's:\[[0-9;]+[mK]::g' "$data_file"
-
   while read line ; do
     echo "$line" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
   done < "$data_file"
@@ -95,14 +93,12 @@ function juLog() {
   # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
   set +e
 
-  # In case of script error: Exit with the real return code of eVal()
+
+  # In case of script error: Exit with the last return code of eVal()
   export returnCode=0
-  # trap 'returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")";
-  # echo "+++ sh2ju exit code: $returnCode" ; set +e; exit $returnCode' ERR # ERR RETURN EXIT HUP INT TERM
+  trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
 
   errfile=/tmp/evErr.$$.log
-  # tmpdir="/var/tmp"
-  # errfile=`mktemp "$tmpdir/ev_err_log_XXXXXX"`
 
   date="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; failures=0; suiteDuration=0; content=""
@@ -165,8 +161,6 @@ EOF
   # eval the command sending output to a file
   outf=/var/tmp/ju$$.txt
   errf=/var/tmp/ju$$-err.txt
-  # outf=`mktemp "$tmpdir/ju_txt_XXXXXX"`
-  # errf=`mktemp "$tmpdir/ju_err_XXXXXX"`
 
   :>${outf}
 
@@ -174,7 +168,6 @@ EOF
   echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
   echo "+++ sh2ju working directory: $(pwd)"           # | tee -a ${outf}
   echo "+++ sh2ju command: ${cmd}"            # | tee -a ${outf}
-  ini="$(${date} +%s.%N)"
   eVal "${cmd}"
 
   returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")"
@@ -203,6 +196,7 @@ EOF
 
   # calculate vars
   asserts=$((asserts+1))
+  ini="$(${date} +%s.%N)"
   testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
@@ -263,10 +257,12 @@ EOF
 
   # Set returnCode=0, if missing or equals 5
   if [[ -z "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
+    echo "+++ sh2ju re-setting return code: [${returnCode}] => [0]"
     returnCode=0
+  else
+    echo -e "+++ sh2ju return code: ${returnCode}\n"
   fi
 
   set -e # (aka as set -o errexit) to fail script on error
-  echo -e "+++ sh2ju return code: ${returnCode}\n"
   return ${returnCode}
 }

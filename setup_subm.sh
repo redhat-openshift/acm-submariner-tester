@@ -164,6 +164,7 @@ export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
+export E2E_OUTPUT="$SCRIPT_DIR/subm_e2e_output.log"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -1379,10 +1380,6 @@ function clean_osp_cluster_b() {
 
   remove_submariner_gateway_labels
 
-  BUG "Submariner-gw machine failure: Configuration not supported" \
-  "No Workaround yet..." \
-  "https://github.com/submariner-io/submariner/issues/885"
-
   remove_submariner_machine_sets
 }
 
@@ -1435,11 +1432,14 @@ function delete_e2e_namespaces() {
 ### Delete previous Submariner E2E namespaces from current cluster ###
   trap_commands;
 
-  local e2e_namespaces="$(oc get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests)"
+  local e2e_namespaces="$(${OC} get ns -o=custom-columns=NAME:.metadata.name | grep e2e-tests | cat )"
 
-  echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
-
-  oc delete --timeout=30s ns $e2e_namespaces || echo "All 'e2e-tests' namespaces already deleted"
+  if [[ -n "$e2e_namespaces" ]] ; then
+    echo "# Deleting all 'e2e-tests' namespaces: $e2e_namespaces"
+    ${OC} delete --timeout=30s ns $e2e_namespaces
+  else
+    echo "No 'e2e-tests' namespaces exist to be deleted"
+  fi
 
 }
 
@@ -1451,7 +1451,7 @@ function remove_submariner_gateway_labels() {
 
   echo "# Remove previous submariner gateway labels from all node in the cluster:"
 
-  ${OC} label --all node submariner.io/gateway-
+  ${OC} label --all node submariner.io/gateway- || :
 }
 
 # ------------------------------------------
@@ -1461,14 +1461,14 @@ function remove_submariner_machine_sets() {
 
   echo "# Remove previous machineset (if it has a template with submariner gateway label)"
 
-  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}' `"
+  local subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}'`"
   local ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
     ${OC} delete machineset $subm_machineset -n $ns || :
   fi
 
-  ${OC} get machineset -A -o wide
+  ${OC} get machineset -A -o wide || :
 }
 
 # ------------------------------------------
@@ -1668,10 +1668,6 @@ function open_firewall_ports_on_the_broker_node() {
 
   # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
   echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
-  BUG "Duplicate security group rule was found, when applying Terraform ec2-resources.tf more than once" \
-  "No workaround yet (it will probably fail later when searching External-IP)" \
-  "https://github.com/submariner-io/submariner/issues/849"
-  # Workaound:
   bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || FAILURE "./prep_for_subm.sh did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
@@ -1744,7 +1740,7 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
-    failed_machines=$(oc get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+    failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
     FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
@@ -2875,6 +2871,9 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
 
+  # E2E output will be printed both to stdout and to subm_e2e_output.log
+  > "$E2E_OUTPUT"
+
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
@@ -2884,8 +2883,13 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
-  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
-  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
+  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
+
+  if [[ ! -s "$E2E_JUNIT_XML" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
+    FAILURE "subctl verify ended with failures, please investigate"
+  fi
+
 }
 
 # ------------------------------------------
@@ -3013,7 +3017,7 @@ function print_submariner_pod_logs() {
 
   ${OC} get Machine -A || :
 
-  oc get Machine -A | awk '{
+  ${OC} get Machine -A | awk '{
     if (NR>1) {
       namespace = $1
       machine = $2
@@ -3054,9 +3058,9 @@ function print_submariner_pod_logs() {
 
 # Functions to debug this script
 
-function DEBUG_PASS_TEST() {
+function pass_test_debug() {
   trap_commands;
-  PROMPT "PASS for DEBUG"
+  PROMPT "PASS test for DEBUG"
 
   if [[ -n "TRUE" ]] ; then
     BUG "A dummy bug" \
@@ -3071,11 +3075,17 @@ function DEBUG_PASS_TEST() {
 
 }
 
-function DEBUG_FAIL_TEST() {
+function fail_test_debug() {
   trap_commands;
-  PROMPT "FAIL for DEBUG"
-  # find ${CLUSTER_A_DIR} -name "*.log" -0 | xargs cat
+  PROMPT "FAIL test for DEBUG"
+  find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
   return 3
+}
+
+function fatal_test_debug() {
+  trap_commands;
+  PROMPT "FATAL test for DEBUG"
+  FATAL "Terminating script since fail_test_debug() did not"
 }
 
 # ------------------------------------------
@@ -3089,6 +3099,7 @@ function DEBUG_FAIL_TEST() {
 if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
   # Extra verbosity for oc commands:
   # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
+
   export VERBOSE_FLAG="--v=2"
   export OC="$OC $VERBOSE_FLAG"
 
@@ -3126,10 +3137,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
   fi
 
   # # Debug functions
-  # ${junit_cmd} DEBUG_PASS_TEST
-  # ${junit_cmd} DEBUG_PASS_TEST
-  # ${junit_cmd} DEBUG_FAIL_TEST
-  # FATAL "Terminating script if DEBUG_FAIL_TEST() did not"
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} fail_test_debug
+  # ${junit_cmd} fatal_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
@@ -3362,12 +3373,12 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
         ${junit_cmd} test_lighthouse_e2e_with_go || \
         BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
 
+        if [[ "$e2e_tests_status" = FAILED ]] ; then
+          FATAL "Submariner E2E Tests failure"
+        fi
+        
       else
-        ${junit_cmd} test_submariner_e2e_with_subctl || e2e_tests_status=FAILED
-      fi
-
-      if [[ "$e2e_tests_status" = FAILED ]] ; then
-        FATAL "Submariner E2E Tests failure"
+        ${junit_cmd} test_submariner_e2e_with_subctl
       fi
 
     fi
@@ -3446,14 +3457,25 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
 report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
+
+# Copy required file to local directory
 [[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
 [[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+[[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
+
+find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
+sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")_$(basename "{}")"' \;
+
+find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
+sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")_$(basename "{}")"' \;
+
 tar -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
  kubconf_* \
+ subm_* \
  *.xml \
- "$WORKDIR/$BROKER_INFO" \
+ *.log \
  2>/dev/null)
 
 echo -e "# Archive \"$report_archive\" now contains:"
