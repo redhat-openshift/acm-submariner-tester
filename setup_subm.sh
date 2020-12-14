@@ -1893,6 +1893,7 @@ function export_service_in_lighthouse() {
 
   # ${OC} rollout status serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
   BUG "Rollout status failed: ServiceExport is not a registered version" \
   "Skip checking for ServiceExport creation status" \
   "https://github.com/submariner-io/submariner/issues/640"
@@ -1901,7 +1902,7 @@ function export_service_in_lighthouse() {
 
   #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
   # Workaround:
-  local cmd="${OC} describe serviceexports.multicluster.x-k8s.io $svc_name ${namespace:+-n $namespace}"
+  local cmd="${OC} describe svcex $svc_name ${namespace:+-n $namespace}"
 
   # BUG:
   # local regex='Status:\s+True'
@@ -1909,18 +1910,20 @@ function export_service_in_lighthouse() {
   watch_and_retry "$cmd" 3m "$regex"
 
   echo "# Show $svc_name ServiceExport information:"
+  ${OC} get svcex $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
+
   # ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
   BUG "Error 'serviceexports.lighthouse.submariner.io not found' if using 'oc get serviceexport'" \
-  "Use 'oc get serviceexports.multicluster.x-k8s.io' instead (temporary workaround)" \
+  "Use 'oc get svcex' instead (temporary workaround)" \
   "https://github.com/submariner-io/submariner/issues/957"
   # Workaround:
-  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  ${OC} get svcex "${svc_name}" ${namespace:+ -n $namespace} -o wide
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
-  ${OC} get serviceexports.multicluster.x-k8s.io "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+  ${OC} get svcex "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
   echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
@@ -1981,11 +1984,6 @@ function join_submariner_current_cluster() {
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view
 
-  # BUG "Generate a cluster id if one is not provided" \
-  # "Pass '--clusterid ${current_cluster_context_name}' to subctl join command" \
-  # "https://github.com/submariner-io/submariner-operator/issues/539"
-
-  # JOIN_CMD="subctl join --clusterid ${current_cluster_context_name} \
   JOIN_CMD="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
@@ -1998,8 +1996,11 @@ function join_submariner_current_cluster() {
       JOIN_CMD="${JOIN_CMD} --version devel"
   fi
 
-  echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability"
+  echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
   JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
+
+  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
+  JOIN_CMD="${JOIN_CMD} --health-check"
 
   echo "# Executing join command on cluster $cluster_name: ${JOIN_CMD}"
   $JOIN_CMD
@@ -2887,7 +2888,7 @@ function test_submariner_e2e_with_subctl() {
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
 
   if [[ ! -s "$E2E_JUNIT_XML" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
-    FAILURE "subctl verify ended with failures, please investigate"
+    FATAL "subctl verify ended with failures, please investigate"
   fi
 
 }
@@ -3374,9 +3375,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
         BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
 
         if [[ "$e2e_tests_status" = FAILED ]] ; then
-          FATAL "Submariner E2E Tests failure"
+          FATAL "Submariner E2E (Ginkgo) Tests failure"
         fi
-        
+
       else
         ${junit_cmd} test_submariner_e2e_with_subctl
       fi
