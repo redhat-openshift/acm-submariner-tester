@@ -2887,8 +2887,8 @@ function test_submariner_e2e_with_subctl() {
   # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
 
-  if [[ ! -s "$E2E_JUNIT_XML" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
-    FATAL "subctl verify ended with failures, please investigate"
+  if [[ ! -s "$E2E_OUTPUT" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
+    return 1
   fi
 
 }
@@ -3374,12 +3374,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
         ${junit_cmd} test_lighthouse_e2e_with_go || \
         BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
 
-        if [[ "$e2e_tests_status" = FAILED ]] ; then
-          FATAL "Submariner E2E (Ginkgo) Tests failure"
-        fi
-
       else
-        ${junit_cmd} test_submariner_e2e_with_subctl
+        ${junit_cmd} test_submariner_e2e_with_subctl || \
+        BUG "Subctl verify has FAILED." && e2e_tests_status=FAILED
+      fi
+
+      if [[ "$e2e_tests_status" = FAILED ]] ; then
+        FATAL "Submariner E2E tests have ended with failures, please investigate."
       fi
 
     fi
