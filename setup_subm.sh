@@ -1902,28 +1902,23 @@ function export_service_in_lighthouse() {
 
   #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
   # Workaround:
-  local cmd="${OC} describe svcex $svc_name ${namespace:+-n $namespace}"
+  local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
 
   # BUG:
   # local regex='Status:\s+True'
   local regex='Message:.*successfully synced'
   watch_and_retry "$cmd" 3m "$regex"
 
-  echo "# Show $svc_name ServiceExport information:"
-  ${OC} get svcex $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
-
-  # ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
-  BUG "Error 'serviceexports.lighthouse.submariner.io not found' if using 'oc get serviceexport'" \
-  "Use 'oc get svcex' instead (temporary workaround)" \
-  "https://github.com/submariner-io/submariner/issues/957"
-  # Workaround:
-  ${OC} get svcex "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  echo "# Show $svc_name ServiceExport status is Valid:"
+  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
-  ${OC} get svcex "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
+  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
 
   echo -e "\n# Describe Lighthouse Exported Services:\n"
   ${OC} describe serviceexports --all-namespaces
@@ -2818,9 +2813,12 @@ function test_lighthouse_e2e_with_go() {
   PROMPT "Testing Lighthouse End-to-End tests with GO"
   trap_commands;
 
+  local test_params=$([[ "$globalnet" =~ ^(y|yes)$ ]] && echo "--globalnet")
+
   test_project_e2e_with_go \
   "$GOPATH/src/github.com/submariner-io/lighthouse" \
-  "$LIGHTHOUSE_JUNIT_XML"
+  "$LIGHTHOUSE_JUNIT_XML" \
+  "$test_params"
 
 }
 
@@ -2831,7 +2829,7 @@ function test_project_e2e_with_go() {
   trap_commands;
   local e2e_project_path="$1"
   local junit_output_file="$2"
-  local junit_params
+  local test_params="$3"
 
   cd "$e2e_project_path"
   pwd
@@ -2846,10 +2844,16 @@ function test_project_e2e_with_go() {
   export GO111MODULE="on"
   go env
 
+  local junit_params
   if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report will be created at: $junit_output_file \n"
     junit_params="-ginkgo.reportFile $junit_output_file"
   fi
+
+  test_params="$test_params
+  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME}
+  --submariner-namespace ${SUBM_NAMESPACE}
+  --connection-timeout 30 --connection-attempts 3"
 
   go test -v ./test/e2e \
   -timeout 120m \
@@ -2858,10 +2862,7 @@ function test_project_e2e_with_go() {
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -args \
-  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME} \
-  --submariner-namespace ${SUBM_NAMESPACE} \
-  --connection-timeout 30 --connection-attempts 3 \
+  -args $test_params \
   || BUG "End-to-End tests with GO failed in project: \n# $e2e_project_path"
 }
 
