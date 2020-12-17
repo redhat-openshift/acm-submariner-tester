@@ -726,14 +726,11 @@ function install_nginx_service() {
 
 }
 
-
-
 # ------------------------------------------
 
 # Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
 function get_running_pod_by_label() {
   # Do not trap_command, so it will not be printed as return value
-  # set -x
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
   local tmp_file="`mktemp`_pod_status"
@@ -744,8 +741,6 @@ function get_running_pod_by_label() {
 
   # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
   # Can also run with: -o jsonpath="{.items[0].metadata.name}"
-
-  # set +x
 
   #if [[ -n "$(echo $pod_status)" && -n "$(echo $pod_id)" ]] ; then
   if [[ -n "$pod_status" ]]; then
@@ -759,6 +754,21 @@ function get_running_pod_by_label() {
 
 }
 
+# ------------------------------------------
+
+# Function to return (print) the all worker node ids, that have an external ip (nothing if none)
+function get_worker_nodes_with_external_ip() {
+  # Do not trap_command, so it will not be printed as return value
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
+}
+
+# ------------------------------------------
+
+# Function to return (print) all external ips of worker nodes (nothing if none)
+function get_external_ips_of_worker_nodes() {
+  # Do not trap_command, so it will not be printed as return value
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}'
+}
 
 # ------------------------------------------
 
