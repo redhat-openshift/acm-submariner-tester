@@ -225,7 +225,7 @@ while [[ $# -gt 0 ]]; do
     get_ocpup_tool=YES
     shift ;;
   --install-subctl)
-    get_subctl=YES
+    install_subctl_release=YES
     shift ;;
   --install-subctl-devel)
     install_subctl_devel=YES
@@ -415,12 +415,12 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $get_subctl - to download_subctl_latest_release
-  while [[ ! "$get_subctl" =~ ^(yes|no)$ ]]; do
+  # User input: $install_subctl_release - to download_subctl_latest_release
+  while [[ ! "$install_subctl_release" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to get the latest release of SubCtl ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    get_subctl=${input:-no}
+    install_subctl_release=${input:-no}
   done
 
   # User input: $install_subctl_devel - to download_subctl_latest_devel
@@ -503,7 +503,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
-get_subctl=${get_subctl:-NO}
+install_subctl_release=${install_subctl_release:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -567,7 +567,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_subctl_latest_release: $get_subctl
+    - download_subctl_latest_release: $install_subctl_release
     - download_subctl_latest_devel: $install_subctl_devel
     "
 
@@ -1747,7 +1747,7 @@ function gateway_label_all_nodes_external_ip() {
 
   # [[ -n "$gw_nodes" ]] || FATAL "External-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
-  gw_nodes=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}')
+  gw_nodes=$(get_worker_nodes_with_external_ip)
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
 
@@ -1812,7 +1812,7 @@ function install_broker_aws_cluster_a() {
   echo "# Remove previous broker-info.subm (if exists)"
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
-  echo "# Executing deploy command: ${DEPLOY_CMD}"
+  echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
   $DEPLOY_CMD
 }
 
@@ -1997,7 +1997,22 @@ function join_submariner_current_cluster() {
   echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
   JOIN_CMD="${JOIN_CMD} --health-check"
 
-  echo "# Executing join command on cluster $cluster_name: ${JOIN_CMD}"
+  # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
+  if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+    PROMPT "Getting Submariner Operator Image from Red Hat"
+    # OPERATOR_CPASS_JSON="http://pkgs.devel.redhat.com/cgit/containers/submariner-operator-bundle/plain/extras/0.8.0.json?h=rhacm-2.2-rhel-8"
+    # OPERATOR_IMAGE_SHA="$(curl $OPERATOR_CPASS_JSON | grep -Pzo "submariner_operator(.|\n)*image-digest\K.*" | cut -d '"' -f 3)"
+    # OPERATOR_IMAGE_URL="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-submariner-rhel8-operator@${OPERATOR_IMAGE_SHA}"
+
+    OPERATOR_CPASS_JSON="https://jenkins-cpaas-submariner.cloud.paas.psi.redhat.com/job/rhacm-2.2-rhel-8/job/submariner-operator/job/submariner-operator/job/rhel8-container-build/lastSuccessfulBuild/artifact/build-info.json"
+
+    OPERATOR_IMAGE_URL="$(curl -s $OPERATOR_CPASS_JSON | grep -Pzo 'pull.*\s*"\K[^"]+' | head -1)"
+
+    echo -e "# Using submariner-operator image release: \n${OPERATOR_IMAGE_URL}\n"
+    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OPERATOR_IMAGE_URL}"
+  fi
+
+  echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
   $JOIN_CMD
 
 }
@@ -2085,7 +2100,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 
   kubconf_a;
 
-  local public_ip=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}')
+  local public_ip=$(get_external_ips_of_worker_nodes)
   echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
   verify_gateway_public_ip "$public_ip"
 
@@ -2122,7 +2137,7 @@ function test_disaster_recovery_of_gateway_nodes() {
   # Watch submariner-engine pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
 
-  public_ip=$(${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}')
+  public_ip=$(get_external_ips_of_worker_nodes)
   echo -e "\n\n# After VM reboot - Gateway public (external) IP should be: $public_ip \n"
   verify_gateway_public_ip "$public_ip"
 
@@ -3239,7 +3254,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
     # Running download_subctl_latest_release if requested
-    [[ ! "$get_subctl" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
+    [[ ! "$install_subctl_release" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
 
     # Running download_subctl_latest_release if requested
     [[ ! "$install_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_devel
@@ -3256,9 +3271,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     ${junit_cmd} test_broker_before_join
 
-    ${junit_cmd} join_submariner_cluster_a
-
     ${junit_cmd} join_submariner_cluster_b
+
+    ${junit_cmd} join_submariner_cluster_a
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
