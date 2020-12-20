@@ -302,25 +302,40 @@ function verify_anaconda() {
 
 # ------------------------------------------
 
-function install_local_golang() {
-  # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
+# Function to install local tool/package with Anaconda (https://github.com/conda-forge/{package name})
+function install_conda_package() {
   trap_commands
-  echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
 
-  local install_dir="${1:-.}/"
-  local pkg_version="$2"
+  local pkg_name="$1"
+  local install_dir="${2:-.}/"
+  local pkg_version="$3"
+
+  echo "# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
   verify_anaconda "${install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge go-nocgo_linux-64${pkg_version:+=$pkg_version}
+  conda install -y --update-deps -c conda-forge ${pkg_name}${pkg_version:+=$pkg_version}
   conda list
 }
 
 # ------------------------------------------
-# Function to verify Golang is installed
+
+# Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
+function install_local_golang() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "go-nocgo_linux-64" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
+# Function to verify that Golang is installed
 function verify_golang() {
   echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
   go version
@@ -345,27 +360,21 @@ function verify_golang() {
 
 # ------------------------------------------
 
+# Function to install local Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
 function install_local_terraform() {
-  # Installing Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
   trap_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
 
-  verify_anaconda "${install_dir}"
-
-  echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
-  conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge terraform=${pkg_version:+=$pkg_version}
-  conda list
+  install_conda_package "terraform" "${install_dir}" "${pkg_version}"
 }
 
 # ------------------------------------------
 
-# Docker with Anaconda is not supported in Linux yet
+# Docker with Anaconda is not supported in Linux yet - use Podman instead
+# Function to install local Docker with Anaconda (https://anaconda.org/conda-forge/docker)
 function install_local_docker() {
-  # Installing Docker with Anaconda (https://anaconda.org/conda-forge/docker)
   trap_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
@@ -376,13 +385,19 @@ function install_local_docker() {
   local install_dir="${1:-.}/"
   local pkg_version="$2"
 
-  verify_anaconda "${install_dir}"
+  install_conda_package "docker" "${install_dir}" "${pkg_version}"
+}
 
-  echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
-  conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge docker${pkg_version:+=$pkg_version}
-  conda list
+# ------------------------------------------
+
+# Function to install local Podman with Anaconda (https://anaconda.org/conda-forge/podman)
+function install_local_podman() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "podman" "${install_dir}" "${pkg_version}"
 }
 
 # ------------------------------------------
