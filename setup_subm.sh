@@ -992,7 +992,8 @@ function download_subctl_by_tag() {
 function test_subctl_command() {
   trap_commands;
   # Get SubCTL version (from file $SUBCTL_VERSION)
-  local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
+  # local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
+  local subctl_version="$(subctl version | awk '{print $3}')"
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
@@ -1927,6 +1928,90 @@ function export_service_in_lighthouse() {
 
 # ------------------------------------------
 
+function upload_submariner_registry_cluster_a() {
+  PROMPT "Uploading Submariner images to local registry of AWS cluster A"
+  trap_commands;
+
+  kubconf_a;
+  upload_submariner_images_to_local_registry "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function upload_submariner_registry_cluster_b() {
+  PROMPT "Uploading Submariner images to local registry of OSP cluster B"
+  trap_commands;
+
+  kubconf_b;
+  upload_submariner_images_to_local_registry "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function upload_submariner_images_to_local_registry() {
+# Upload Submariner images to the local OCP registry of current cluster
+  trap_commands;
+  local cluster_name="$1"
+
+  # echo "# Getting Submariner Operator Image from Red Hat"
+  # # OPERATOR_CPASS_JSON="http://pkgs.devel.redhat.com/cgit/containers/submariner-operator-bundle/plain/extras/0.8.0.json?h=rhacm-2.2-rhel-8"
+  # # OPERATOR_IMAGE_SHA="$(curl $OPERATOR_CPASS_JSON | grep -Pzo "submariner_operator(.|\n)*image-digest\K.*" | cut -d '"' -f 3)"
+  # # OPERATOR_IMAGE_URL="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-submariner-rhel8-operator@${OPERATOR_IMAGE_SHA}"
+  #
+  # OPERATOR_CPASS_JSON="https://jenkins-cpaas-submariner.cloud.paas.psi.redhat.com/job/rhacm-2.2-rhel-8/job/submariner-operator/job/submariner-operator/job/rhel8-container-build/lastSuccessfulBuild/artifact/build-info.json"
+  #
+  # OPERATOR_IMAGE_URL="$(curl -s $OPERATOR_CPASS_JSON | grep -Pzo 'pull.*\s*"\K[^"]+' | head -1)"
+  #
+  # --------
+
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+  # Get SubCTL version (from file $SUBCTL_VERSION)
+
+  install_local_podman "${WORKDIR}"
+
+  local VERSION="$(subctl version | awk '{print $3}')"
+  local NAMESPACE="${SUBM_NAMESPACE}"
+
+  # VERSION=v0.8.0
+  # NAMESPACE=submariner-operator
+  # SOURCE_SNAPSHOT_REGISTRY=registry-proxy.engineering.redhat.com/rh-osbs
+  # SOURCE_OFFICIAL_REGISTRY=registry.redhat.io/rhacm2-tech-preview
+  # LOCAL_OCP_REGISTRY=image-registry.openshift-image-registry.svc:5000
+
+  ${OC} new-project $NAMESPACE
+  ${OC} patch configs.imageregistry.operator.openshift.io/cluster --patch '{"spec":{"defaultRoute":true}}' --type=merge
+  REGISTRY_HOST=$(${OC} get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+  podman login -u $(${OC} whoami | tr -d ':') -p $(${OC} whoami -t) --tls-verify=false $REGISTRY_HOST
+
+  for img in 'submariner-gateway-rhel8' 'submariner-route-agent-rhel8' 'submariner-networkplugin-syncer-rhel8' 'lighthouse-agent-rhel8' 'lighthouse-coredns-rhel8' 'submariner-rhel8-operator'; do
+    echo "# Uploading Submariner image into $cluster_name registry: $REGISTRY_HOST/$NAMESPACE/$img:$VERSION"
+    podman image rm -f $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION $REGISTRY_HOST/$NAMESPACE/$img:$VERSION > /dev/null 2>&1
+    podman pull $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION
+    podman tag  $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION $REGISTRY_HOST/$NAMESPACE/$img:$VERSION
+    podman push $REGISTRY_HOST/$NAMESPACE/$img:$VERSION --tls-verify=false
+  done
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    name: submariner-icsp
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - $LOCAL_OCP_REGISTRY/$NAMESPACE
+      - localhost:5000/$NAMESPACE
+      source: $SOURCE_SNAPSHOT_REGISTRY
+    - mirrors:
+      - $LOCAL_OCP_REGISTRY/$NAMESPACE
+      - localhost:5000/$NAMESPACE
+      source: $SOURCE_OFFICIAL_REGISTRY
+EOF
+
+}
+
+# ------------------------------------------
+
 function join_submariner_cluster_a() {
 # Join Submariner member - AWS cluster A (public)
   PROMPT "Joining cluster A to Submariner Broker (also on cluster A)"
@@ -1999,17 +2084,18 @@ function join_submariner_current_cluster() {
 
   # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
   if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Getting Submariner Operator Image from Red Hat"
-    # OPERATOR_CPASS_JSON="http://pkgs.devel.redhat.com/cgit/containers/submariner-operator-bundle/plain/extras/0.8.0.json?h=rhacm-2.2-rhel-8"
-    # OPERATOR_IMAGE_SHA="$(curl $OPERATOR_CPASS_JSON | grep -Pzo "submariner_operator(.|\n)*image-digest\K.*" | cut -d '"' -f 3)"
-    # OPERATOR_IMAGE_URL="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-submariner-rhel8-operator@${OPERATOR_IMAGE_SHA}"
+    local subctl_version="$(subctl version | awk '{print $3}')"
+    echo -e "# Using submariner local images for release: ${subctl_version}"
 
-    OPERATOR_CPASS_JSON="https://jenkins-cpaas-submariner.cloud.paas.psi.redhat.com/job/rhacm-2.2-rhel-8/job/submariner-operator/job/submariner-operator/job/rhel8-container-build/lastSuccessfulBuild/artifact/build-info.json"
+    # JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OPERATOR_IMAGE_URL}"
 
-    OPERATOR_IMAGE_URL="$(curl -s $OPERATOR_CPASS_JSON | grep -Pzo 'pull.*\s*"\K[^"]+' | head -1)"
-
-    echo -e "# Using submariner-operator image release: \n${OPERATOR_IMAGE_URL}\n"
-    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OPERATOR_IMAGE_URL}"
+    JOIN_CMD="${JOIN_CMD} --image-override
+    submariner-operator=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-rhel8-operator:${subctl_version},
+    submariner-gateway=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-gateway-rhel8:${subctl_version},
+    submariner-route-agent=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-route-agent-rhel8:${subctl_version},
+    submariner-networkplugin-syncer=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-networkplugin-syncer-rhel8:${subctl_version},
+    lighthouse-agent=${LOCAL_OCP_REGISTRY}/submariner-operator/lighthouse-agent-rhel8:${subctl_version},
+    lighthouse-coredns=${LOCAL_OCP_REGISTRY}/submariner-operator/lighthouse-coredns-rhel8:${subctl_version}"
   fi
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
@@ -3253,11 +3339,12 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    # Running download_subctl_latest_release if requested
-    [[ ! "$install_subctl_release" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_release
-
-    # Running download_subctl_latest_release if requested
-    [[ ! "$install_subctl_devel" =~ ^(y|yes)$ ]] || ${junit_cmd} download_subctl_latest_devel
+    # Running download_subctl_latest_devel or download_subctl_latest_release
+    if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} download_subctl_latest_devel
+    elif [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} download_subctl_latest_release
+    fi
 
     ${junit_cmd} test_subctl_command
 
@@ -3271,9 +3358,16 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     ${junit_cmd} test_broker_before_join
 
-    ${junit_cmd} join_submariner_cluster_b
+    # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
+    if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} upload_submariner_registry_cluster_a
+
+      ${junit_cmd} upload_submariner_registry_cluster_b
+    fi
 
     ${junit_cmd} join_submariner_cluster_a
+
+    ${junit_cmd} join_submariner_cluster_b
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###

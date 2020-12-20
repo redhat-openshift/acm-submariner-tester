@@ -48,6 +48,10 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
+export SOURCE_SNAPSHOT_REGISTRY="${SOURCE_SNAPSHOT_REGISTRY:-registry-proxy.engineering.redhat.com/rh-osbs}"
+export SOURCE_OFFICIAL_REGISTRY="${SOURCE_OFFICIAL_REGISTRY:-registry.redhat.io/rhacm2-tech-preview}"
+export LOCAL_OCP_REGISTRY="${LOCAL_OCP_REGISTRY:-image-registry.openshift-image-registry.svc:5000}"
+
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
