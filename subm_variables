@@ -48,9 +48,18 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
-export SOURCE_SNAPSHOT_REGISTRY="${SOURCE_SNAPSHOT_REGISTRY:-registry-proxy.engineering.redhat.com/rh-osbs}"
-export SOURCE_OFFICIAL_REGISTRY="${SOURCE_OFFICIAL_REGISTRY:-registry.redhat.io/rhacm2-tech-preview}"
+export SUBM_SNAPSHOT_REGISTRY="${SUBM_SNAPSHOT_REGISTRY:-registry-proxy.engineering.redhat.com/rh-osbs}"
+export SUBM_IMG_PREFIX="${SUBM_IMG_PREFIX:-rhacm2-tech-preview}"
+export SUBM_OFFICIAL_REGISTRY="${SUBM_OFFICIAL_REGISTRY:-registry.redhat.io/rhacm2-tech-preview}"
 export LOCAL_OCP_REGISTRY="${LOCAL_OCP_REGISTRY:-image-registry.openshift-image-registry.svc:5000}"
+
+export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
+export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
+export SUBM_IMG_NETWORK="${SUBM_IMG_NETWORK:-submariner-networkplugin-syncer-rhel8}"
+export SUBM_IMG_LIGHTHOUSE="${SUBM_IMG_LIGHTHOUSE:-lighthouse-agent-rhel8}"
+export SUBM_IMG_COREDNS="${SUBM_IMG_COREDNS:-lighthouse-coredns-rhel8}"
+export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
+export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"

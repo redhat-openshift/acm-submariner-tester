@@ -680,7 +680,7 @@ function setup_workspace() {
   # # CD to main working directory
   # cd ${WORKDIR}
 
-  # Installing GoLang with Anaconda if $config_golang = yes/y
+  # Installing GoLang with Anaconda, if $config_golang = yes/y
   if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
     install_anaconda "${WORKDIR}"
 
@@ -699,11 +699,10 @@ function setup_workspace() {
     fi
   fi
 
-  # Installing if $config_aws_cli = yes/y
-  if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
-    configure_aws_access \
-    "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+  # Installing Podman with Anaconda, if $install_subctl_release = yes/y
+  if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+    echo "# Installing Podman in order to upload Submariner images to OCP clusters registries"
+    install_local_podman "${WORKDIR}"
   fi
 
   # Set Polarion credentials if $upload_to_polarion = yes/y
@@ -714,6 +713,13 @@ function setup_workspace() {
 
   # Trim trailing and leading spaces from $TEST_NS
   TEST_NS="$(echo "$TEST_NS" | xargs)"
+
+  # Installing AWS-CLI if $config_aws_cli = yes/y
+  if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
+    PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    configure_aws_access \
+    "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+  fi
 
   # # CD to previous directory
   # cd -
@@ -1444,7 +1450,6 @@ function delete_e2e_namespaces() {
 
 }
 
-
 # ------------------------------------------
 
 function remove_submariner_gateway_labels() {
@@ -1474,6 +1479,38 @@ function remove_submariner_machine_sets() {
 
 # ------------------------------------------
 
+function remove_submariner_images_from_local_registry() {
+  trap_commands;
+
+  PROMPT "Remove previous Submariner images from local Podman registry"
+
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+  # Get SubCTL version (from file $SUBCTL_VERSION)
+
+  # install_local_podman "${WORKDIR}"
+
+  local VERSION="$(subctl version | awk '{print $3}')"
+
+  for img in \
+    $SUBM_IMG_GATEWAY \
+    $SUBM_IMG_ROUTE \
+    $SUBM_IMG_NETWORK \
+    $SUBM_IMG_LIGHTHOUSE \
+    $SUBM_IMG_COREDNS \
+    $SUBM_IMG_GLOBALNET \
+    $SUBM_IMG_OPERATOR \
+    ; do
+      echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
+
+      podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
+      podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
+      podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
+  done
+}
+
+# ------------------------------------------
+
+# DEPRECATED
 function remove_submariner_iptables_from_gw_nodes() {
   trap_commands;
 
@@ -1933,7 +1970,7 @@ function upload_submariner_registry_cluster_a() {
   trap_commands;
 
   kubconf_a;
-  upload_submariner_images_to_local_registry "${CLUSTER_A_NAME}"
+  upload_submariner_images_to_cluster_registry "${CLUSTER_A_NAME}"
 }
 
 # ------------------------------------------
@@ -1943,15 +1980,15 @@ function upload_submariner_registry_cluster_b() {
   trap_commands;
 
   kubconf_b;
-  upload_submariner_images_to_local_registry "${CLUSTER_A_NAME}"
+  upload_submariner_images_to_cluster_registry "${CLUSTER_A_NAME}"
 }
 
 # ------------------------------------------
 
-function upload_submariner_images_to_local_registry() {
+function upload_submariner_images_to_cluster_registry() {
 # Upload Submariner images to the local OCP registry of current cluster
   trap_commands;
-  local cluster_name="$1"
+  local cluster_install_path="$1"
 
   # echo "# Getting Submariner Operator Image from Red Hat"
   # # OPERATOR_CPASS_JSON="http://pkgs.devel.redhat.com/cgit/containers/submariner-operator-bundle/plain/extras/0.8.0.json?h=rhacm-2.2-rhel-8"
@@ -1967,28 +2004,56 @@ function upload_submariner_images_to_local_registry() {
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
   # Get SubCTL version (from file $SUBCTL_VERSION)
 
-  install_local_podman "${WORKDIR}"
+  # install_local_podman "${WORKDIR}"
 
   local VERSION="$(subctl version | awk '{print $3}')"
-  local NAMESPACE="${SUBM_NAMESPACE}"
 
   # VERSION=v0.8.0
   # NAMESPACE=submariner-operator
-  # SOURCE_SNAPSHOT_REGISTRY=registry-proxy.engineering.redhat.com/rh-osbs
+  # SUBM_SNAPSHOT_REGISTRY=registry-proxy.engineering.redhat.com/rh-osbs
   # SOURCE_OFFICIAL_REGISTRY=registry.redhat.io/rhacm2-tech-preview
   # LOCAL_OCP_REGISTRY=image-registry.openshift-image-registry.svc:5000
 
-  ${OC} new-project $NAMESPACE
+  # Gets the token value
+  # ${OC} login -u system:admin -n default
+  # ${OC} config set-credentials system:admin
+  # TOKEN=$(${OC} get secrets -o jsonpath="{.items[?(@.metadata.annotations['kubernetes\.io/service-account\.name']=='default')].data.token}" | base64 -d) || :
+  # SERVER=$(${OC} status | awk 'FNR == 1 {print $NF}')
+
+  # kubepwd=`find $cluster_install_path -type f -name "*.log" | grep "user: kubeadmin" | awk '{print $NF}' | cut -d '"' -f 1`
+  # ${OC} login -u kubeadmin -p ${kubepwd}
+
+  ${OC} login -u kubeadmin -p $(cat $cluster_install_path/auth/kubeadmin-password | tr -d '')
+
+  # ${OC} new-project $NAMESPACE
+
   ${OC} patch configs.imageregistry.operator.openshift.io/cluster --patch '{"spec":{"defaultRoute":true}}' --type=merge
   REGISTRY_HOST=$(${OC} get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+
+  # ${OC} login --token=$TOKEN --server=$SERVER
+
   podman login -u $(${OC} whoami | tr -d ':') -p $(${OC} whoami -t) --tls-verify=false $REGISTRY_HOST
 
-  for img in 'submariner-gateway-rhel8' 'submariner-route-agent-rhel8' 'submariner-networkplugin-syncer-rhel8' 'lighthouse-agent-rhel8' 'lighthouse-coredns-rhel8' 'submariner-rhel8-operator'; do
-    echo "# Uploading Submariner image into $cluster_name registry: $REGISTRY_HOST/$NAMESPACE/$img:$VERSION"
-    podman image rm -f $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION $REGISTRY_HOST/$NAMESPACE/$img:$VERSION > /dev/null 2>&1
-    podman pull $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION
-    podman tag  $SOURCE_SNAPSHOT_REGISTRY/rhacm2-tech-preview-$img:$VERSION $REGISTRY_HOST/$NAMESPACE/$img:$VERSION
-    podman push $REGISTRY_HOST/$NAMESPACE/$img:$VERSION --tls-verify=false
+  for img in \
+  $SUBM_IMG_GATEWAY \
+  $SUBM_IMG_ROUTE \
+  $SUBM_IMG_NETWORK \
+  $SUBM_IMG_LIGHTHOUSE \
+  $SUBM_IMG_COREDNS \
+  $SUBM_IMG_GLOBALNET \
+  $SUBM_IMG_OPERATOR \
+   ; do
+    echo -e "# Uploading Submariner image into $cluster_install_path registry: $REGISTRY_HOST/$SUBM_NAMESPACE/$img:$VERSION \n"
+    # podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
+    # podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
+    # podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
+
+    # Requires to run for each cluster
+    podman image rm -f $REGISTRY_HOST/$SUBM_NAMESPACE/$img:$VERSION # > /dev/null 2>&1
+    podman tag  $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION $REGISTRY_HOST/$SUBM_NAMESPACE/$img:$VERSION
+
+    # 'podman push' requires 'podman login' in advance, in order to push images to the remote cluster
+    podman push $REGISTRY_HOST/$SUBM_NAMESPACE/$img:$VERSION --tls-verify=false
   done
 
   cat <<EOF | ${OC} apply -f -
@@ -1999,13 +2064,13 @@ function upload_submariner_images_to_local_registry() {
   spec:
     repositoryDigestMirrors:
     - mirrors:
-      - $LOCAL_OCP_REGISTRY/$NAMESPACE
-      - localhost:5000/$NAMESPACE
-      source: $SOURCE_SNAPSHOT_REGISTRY
+      - $LOCAL_OCP_REGISTRY/$SUBM_NAMESPACE
+      - localhost:5000/$SUBM_NAMESPACE
+      source: $SUBM_SNAPSHOT_REGISTRY
     - mirrors:
-      - $LOCAL_OCP_REGISTRY/$NAMESPACE
-      - localhost:5000/$NAMESPACE
-      source: $SOURCE_OFFICIAL_REGISTRY
+      - $LOCAL_OCP_REGISTRY/$SUBM_NAMESPACE
+      - localhost:5000/$SUBM_NAMESPACE
+      source: $SUBM_OFFICIAL_REGISTRY
 EOF
 
 }
@@ -2090,12 +2155,13 @@ function join_submariner_current_cluster() {
     # JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OPERATOR_IMAGE_URL}"
 
     JOIN_CMD="${JOIN_CMD} --image-override
-    submariner-operator=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-rhel8-operator:${subctl_version},
-    submariner-gateway=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-gateway-rhel8:${subctl_version},
-    submariner-route-agent=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-route-agent-rhel8:${subctl_version},
-    submariner-networkplugin-syncer=${LOCAL_OCP_REGISTRY}/submariner-operator/submariner-networkplugin-syncer-rhel8:${subctl_version},
-    lighthouse-agent=${LOCAL_OCP_REGISTRY}/submariner-operator/lighthouse-agent-rhel8:${subctl_version},
-    lighthouse-coredns=${LOCAL_OCP_REGISTRY}/submariner-operator/lighthouse-coredns-rhel8:${subctl_version}"
+    submariner-operator=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_OPERATOR}:${subctl_version},
+    submariner-gateway=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_GATEWAY}:${subctl_version},
+    submariner-route-agent=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_ROUTE}:${subctl_version},
+    submariner-networkplugin-syncer=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_NETWORK}:${subctl_version},
+    submariner-globalnet=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_GLOBALNET}:${subctl_version},
+    lighthouse-agent=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version},
+    lighthouse-coredns=${LOCAL_OCP_REGISTRY}/${SUBM_NAMESPACE}/${SUBM_IMG_COREDNS}:${subctl_version}"
   fi
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
@@ -3360,6 +3426,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
     if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} remove_submariner_images_from_local_registry
+
       ${junit_cmd} upload_submariner_registry_cluster_a
 
       ${junit_cmd} upload_submariner_registry_cluster_b
