@@ -168,12 +168,14 @@ EOF
   echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
   echo "+++ sh2ju working directory: $(pwd)"           # | tee -a ${outf}
   echo "+++ sh2ju command: ${cmd}"            # | tee -a ${outf}
+
+  testStartTime="$(${date} +%s.%N)"
+
   eVal "${cmd}"
-
   returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")"
-
   rm -f "${errfile}"
-  end="$(${date} +%s.%N)"
+
+  testEndTime="$(${date} +%s.%N)"
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536
@@ -184,7 +186,7 @@ EOF
   errMsg="$(printPlainTextFile "$errf")"
   rm -f ${errf} || :
 
-  # set the appropriate error, based in the exit code and the regex
+  # Set the appropriate error, based in the exit code and the regex
   [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
   # echo "+++ sh2ju exit code: ${returnCode} (testStatus=$testStatus)"
   if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
@@ -194,10 +196,9 @@ EOF
     failures=$((failures+1))
   fi
 
-  # calculate vars
+  # Calculate test duration and counter
   asserts=$((asserts+1))
-  ini="$(${date} +%s.%N)"
-  testDuration=$(echo "${end} ${ini}" | awk '{print $1 - $2}')
+  testDuration=$(echo "${testEndTime} ${testStartTime}" | awk '{print $1 - $2}')
   suiteDuration=$(echo "${suiteDuration} ${testDuration}" | awk '{print $1 + $2}')
 
   # Set test title with uppercase letter and spaces
