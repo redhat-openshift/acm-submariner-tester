@@ -48,10 +48,10 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
-export SUBM_SNAPSHOT_REGISTRY="${SUBM_SNAPSHOT_REGISTRY:-registry-proxy.engineering.redhat.com/rh-osbs}"
-export SUBM_IMG_PREFIX="${SUBM_IMG_PREFIX:-rhacm2-tech-preview}"
-export SUBM_OFFICIAL_REGISTRY="${SUBM_OFFICIAL_REGISTRY:-registry.redhat.io/rhacm2-tech-preview}"
-export LOCAL_OCP_REGISTRY="${LOCAL_OCP_REGISTRY:-image-registry.openshift-image-registry.svc:5000}"
+export REGISTY_SERVER="docker-server" # without " https:// "
+export REGISTY_USR="docker-user"
+export REGISTY_PWD='docer-pass' # in single quotes
+export REGISTY_EMAIL="docker-email"
 
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
