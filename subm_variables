@@ -8,7 +8,7 @@ export WORKDIR=~/submariner-install
 
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
-export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golnag
+export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
 
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
@@ -50,7 +50,7 @@ export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
 export REGISTY_SERVER="docker-server" # without " https:// "
 export REGISTY_USR="docker-user"
-export REGISTY_PWD='docer-pass' # in single quotes
+export REGISTY_PWD='docker-pass' # in single quotes
 export REGISTY_EMAIL="docker-email"
 
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"

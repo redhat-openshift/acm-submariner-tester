@@ -3607,7 +3607,7 @@ sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \;
 find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
 sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \;
 
-tar -cvzf $report_archive $(ls \
+tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$LOG_FILE" \
  kubconf_* \
