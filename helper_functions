@@ -402,6 +402,18 @@ function install_local_podman() {
 
 # ------------------------------------------
 
+# Function to install local JQ with Anaconda (https://anaconda.org/conda-forge/jq)
+function install_local_jq() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "jq" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
 # Function to download particular file or directory from particular Github commit or branch
 function download_github_file_or_dir() {
   trap_commands

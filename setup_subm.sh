@@ -705,6 +705,9 @@ function setup_workspace() {
   #   install_local_podman "${WORKDIR}"
   # fi
 
+  echo "# Installing JQ (JSON processor) with Anaconda"
+  install_local_jq "${WORKDIR}"
+
   # Set Polarion credentials if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
     local polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
@@ -1987,7 +1990,7 @@ function test_custom_images_from_registry_cluster_b() {
 
 function configure_cluster_registry() {
 ### Configure access to external docker registry
-  # Do not trap_commands
+  # DONT trap_commands
 
   # set registry variables
   local registry_server="$REGISTY_SERVER"
@@ -1997,28 +2000,33 @@ function configure_cluster_registry() {
 
   local namespace="$SUBM_NAMESPACE"
   local service_account_name="$SUBM_NAMESPACE"
+  local secret_name="${REGISTY_USR//./-}-${REGISTY_SERVER//./-}"
 
   echo "# Create $namespace namespace"
   ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
 
-  echo "# Creating $service_account_name service account in ${namespace:-default} namespace"
-  ${OC} create serviceaccount ${service_account_name} ${namespace:+-n $namespace} || echo "Service Account '${service_account_name}' already exists"
+  echo "# Creating new secret in '$namespace' namespace"
 
-  if [[ ! $(${OC} get secret gitlab-registry ${namespace:+-n $namespace}) ]] ; then
-    echo "# Creating new secret in ${namespace:-default} namespace"
-
-    ${OC} create secret docker-registry ${namespace:+-n $namespace} gitlab-registry --docker-server=${registry_server} \
-    --docker-username="${registry_usr}" --docker-password="${registry_pwd}" --docker-email=${registry_email}
-
-    echo "# Link the secret to $service_account_name service account in ${namespace:-default} namespace"
-    ${OC} secrets link $service_account_name gitlab-registry --for=pull ${namespace:+-n $namespace}
+  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
+    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
+    ${OC} delete secret $secret_name -n $namespace || :
   fi
 
-  echo "# Display 'gitlab-registry' secret:"
-  ${OC} get secret gitlab-registry ${namespace:+-n $namespace}
+  ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_server} \
+  --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
 
-  echo "# Describe '${service_account_name}' service account:"
-  ${OC} describe serviceaccount ${service_account_name} ${namespace:+-n $namespace}
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace
+
+  ### update the cluster global pull-secret
+  ${OC} patch secret/pull-secret -n openshift-config -p \
+  '{"data":{".dockerconfigjson":"'"$( \
+  ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+  | base64 --decode | jq -r -c '.auths |= . + '"$( \
+  ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+  | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+
+  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
