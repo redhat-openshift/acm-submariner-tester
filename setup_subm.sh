@@ -2108,19 +2108,24 @@ function join_submariner_current_cluster() {
     local registry_url="${REGISTY_SERVER}/${REGISTY_USR}"
     echo -e "# Using submariner custom images from ${registry_url} tagged with release: ${subctl_version}"
 
+    BUG "SubM Gateway image name should be 'submariner-gateway'" \
+    "Rename SubM Gateway image to 'submariner' " \
+    "https://github.com/submariner-io/submariner-operator/pull/941
+    https://github.com/submariner-io/submariner-operator/issues/1018"
+
     # TODO: this is a potential bug (not working):
     # JOIN_CMD="${JOIN_CMD} --image-override \
-    # 'submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}, \
-    # submariner-gateway=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}, \
+    # \"submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}, \
+    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}, \
     # submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version}, \
     # submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version}, \
     # submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version}, \
     # lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version}, \
-    # lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version}'"
+    # lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version} \""
 
     JOIN_CMD="${JOIN_CMD} \
     --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version} \
-    --image-override submariner-gateway=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version} \
+    --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version} \
     --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version} \
     --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version} \
     --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version} \
