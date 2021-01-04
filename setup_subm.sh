@@ -1947,19 +1947,97 @@ function test_custom_images_from_registry_cluster_b() {
 
 # ------------------------------------------
 
+function add_submariner_registry_mirror() {
+### Add OCP Registry mirror for Submariner
+  # DONT trap_commands
+
+  # set registry variables
+  local registry_url="$1"
+  local registry_mirror="$2"
+
+  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] ; then
+    FATAL "Expected Openshift Registry values are missing:
+    registry_url = $registry_url
+    registry_mirror = $registry_mirror"
+  fi
+
+  config_source=$(cat <<EOF | raw_to_url_encode
+  [[registry]]
+    prefix = ""
+    location = "${registry_url}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${registry_mirror}"
+      insecure = false
+EOF
+  )
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: MachineConfig
+  metadata:
+    labels:
+      machineconfiguration.openshift.io/role: worker
+    name: 99-worker-submariner-registries
+  spec:
+    config:
+      ignition:
+        version: 3.1.0
+      storage:
+        files:
+        - contents:
+            source: data:text/plain,${config_source}
+            verification: {}
+          filesystem: root
+          mode: 420
+          path: /etc/containers/registries.conf.d/submariner-registries.conf
+EOF
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: MachineConfig
+  metadata:
+    labels:
+      machineconfiguration.openshift.io/role: master
+    name: 99-master-submariner-registries
+  spec:
+    config:
+      ignition:
+        version: 3.1.0
+      storage:
+        files:
+        - contents:
+            source: data:text/plain,${config_source}
+            verification: {}
+          filesystem: root
+          mode: 420
+          path: /etc/containers/registries.conf.d/submariner-registries.conf
+EOF
+
+}
+
+# ------------------------------------------
+
 function configure_cluster_registry() {
 ### Configure access to external docker registry
   # DONT trap_commands
 
   # set registry variables
-  local registry_server="$REGISTY_SERVER"
-  local registry_usr="$REGISTY_USR"
-  local registry_pwd="$REGISTY_PWD"
-  local registry_email="$REGISTY_EMAIL"
+  local registry_url="$REGISTRY_URL"
+  local registry_mirror="$REGISTRY_MIRROR"
+  local registry_usr="$REGISTRY_USR"
+  local registry_pwd="$REGISTRY_PWD"
+  local registry_email="$REGISTRY_EMAIL"
 
   local namespace="$SUBM_NAMESPACE"
   local service_account_name="$SUBM_NAMESPACE"
-  local secret_name="${REGISTY_USR//./-}-${REGISTY_SERVER//./-}"
+  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
+
+  echo "# Add OCP Registry mirror for Submariner:"
+  add_submariner_registry_mirror "$registry_url" "${registry_mirror}/${registry_usr}"
 
   echo "# Create $namespace namespace"
   ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
@@ -1971,7 +2049,7 @@ function configure_cluster_registry() {
     ${OC} delete secret $secret_name -n $namespace || :
   fi
 
-  ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_server} \
+  ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
   --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
 
   echo "# Adding '$secret_name' secret:"
@@ -2064,7 +2142,8 @@ function join_submariner_current_cluster() {
   # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
   if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
     local subctl_version="$(subctl version | awk '{print $3}')"
-    local registry_url="${REGISTY_SERVER}/${REGISTY_USR}"
+    # local registry_url="${registry_mirror}/${registry_usr}"
+    local registry_url="${REGISTRY_URL}"
     echo -e "# Using submariner custom images from ${registry_url} tagged with release: ${subctl_version}"
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
@@ -2082,14 +2161,16 @@ function join_submariner_current_cluster() {
     # lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version}, \
     # lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version} \""
 
-    JOIN_CMD="${JOIN_CMD} \
-    --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version} \
-    --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version} \
-    --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version} \
-    --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version} \
-    --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version} \
-    --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version} \
-    --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version}"
+    # JOIN_CMD="${JOIN_CMD} \
+    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version} \
+    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version} \
+    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version} \
+    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version} \
+    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version} \
+    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version} \
+    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version}"
+
+    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}"
 
   fi
 
@@ -3061,6 +3142,8 @@ function collect_submariner_info() {
     df -h
     free -h
 
+    echo -e "\n############################## Openshift information ##############################\n"
+
     export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
     # oc version
@@ -3068,15 +3151,11 @@ function collect_submariner_info() {
     "use an older OC client, or run oc commands for each cluster separately" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
     # Workaround:
-    # OC="/usr/bin/oc"
+    OC="/usr/bin/oc"
 
-    echo -e "\n############################## Openshift resources and events ##############################\n"
-
-    oc config view || :
-    oc status || :
-    oc version || :
-    oc get all || :
-    oc get events -A --sort-by='.metadata.creationTimestamp' || :
+    ${OC} config view || :
+    ${OC} status || :
+    ${OC} version || :
 
     echo -e "\n############################## Submariner information (subctl show all) ##############################\n"
 
@@ -3087,6 +3166,7 @@ function collect_submariner_info() {
 
     kubconf_b;
     print_submariner_pod_logs "${CLUSTER_B_NAME}"
+
   ) |& tee -a $log_file
 
 }
@@ -3097,7 +3177,9 @@ function print_submariner_pod_logs() {
   trap_commands;
   local cluster_name="$1"
 
-  echo -e "\n############################## Printing Submariner logs on ${cluster_name} ##############################\n"
+  echo -e "\n################################################################################################\n"
+  echo -e "\n############################## Submariner LOGS on ${cluster_name} ##############################\n"
+  echo -e "\n################################################################################################\n"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
@@ -3150,6 +3232,11 @@ function print_submariner_pod_logs() {
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
+
+  echo -e "\n############################## ALL Openshift events on ${cluster_name} ##############################\n"
+
+  # ${OC} get all || :
+  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
 
 }
 

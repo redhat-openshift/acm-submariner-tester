@@ -414,6 +414,29 @@ function install_local_jq() {
 
 # ------------------------------------------
 
+# Function to convert raw text (e.g. yaml) to encoded url format
+function raw_to_url_encode() {
+
+  local string="$(cat < /dev/stdin)"
+  local strlen=${#string}
+  local encoded=""
+  local pos c o
+
+  for (( pos=0 ; pos<strlen ; pos++ )); do
+     c=${string:$pos:1}
+     case "$c" in
+        [-_.~a-zA-Z0-9] ) o="${c}" ;;
+        * )               printf -v o '%%%02x' "'$c"
+     esac
+     encoded+="${o}"
+  done
+
+  echo "${encoded}"
+
+}
+
+# ------------------------------------------
+
 # Function to download particular file or directory from particular Github commit or branch
 function download_github_file_or_dir() {
   trap_commands
