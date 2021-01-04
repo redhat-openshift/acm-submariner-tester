@@ -1318,7 +1318,7 @@ function destroy_osp_cluster_b() {
 
 function clean_aws_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
-  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, ServiceExports) on AWS cluster A (public)"
+  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on AWS cluster A (public)"
   trap_commands;
   kubconf_a;
 
@@ -1329,17 +1329,15 @@ function clean_aws_cluster_a() {
 
   delete_submariner_namespace_and_crds
 
+  delete_submariner_cluster_roles
+
+  delete_lighthouse_dns_list
+
   delete_submariner_test_namespaces
 
   delete_e2e_namespaces
 
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
-
-  # BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
-  # "Remove iptables rules from each gateway node" \
-  # "https://github.com/submariner-io/submariner/issues/929"
-  # # Workaround:
-  # remove_submariner_iptables_from_gw_nodes
 
   remove_submariner_gateway_labels
 
@@ -1364,12 +1362,16 @@ function clean_aws_cluster_a() {
 
 function clean_osp_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
-  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, ServiceExports) on OSP cluster B (on-prem)"
+  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
   trap_commands;
 
   kubconf_b;
 
   delete_submariner_namespace_and_crds
+
+  delete_submariner_cluster_roles
+
+  delete_lighthouse_dns_list
 
   delete_submariner_test_namespaces
 
@@ -1382,12 +1384,6 @@ function clean_osp_cluster_b() {
 
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
 
-  # BUG "Curl between pod to service on same cluster can fail, if Submariner (with globalnet) was previously installed" \
-  # "Remove iptables rules from each gateway node" \
-  # "https://github.com/submariner-io/submariner/issues/929"
-  # # Workaround:
-  # remove_submariner_iptables_from_gw_nodes
-
   remove_submariner_gateway_labels
 
   remove_submariner_machine_sets
@@ -1396,13 +1392,35 @@ function clean_osp_cluster_b() {
 # ------------------------------------------
 
 function delete_submariner_namespace_and_crds() {
-### Run cleanup of previous Submariner on current KUBECONFIG cluster ###
+### Run cleanup of previous Submariner namespace and CRDs ###
   trap_commands;
 
   delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   delete_namespace_and_crds "${BROKER_NAMESPACE}"
+
+}
+
+# ------------------------------------------
+
+function delete_submariner_cluster_roles() {
+### Run cleanup of previous Submariner ClusterRoles and ClusterRoleBindings ###
+  trap_commands;
+
+  echo "# Deleting Submariner ClusterRoles and ClusterRoleBindings"
+
+  ${OC} delete clusterrole,clusterrolebinding submariner-operator || :
+
+  ${OC} delete clusterrole,clusterrolebinding submariner-operator-globalnet || :
+
+}
+
+# ------------------------------------------
+
+function delete_lighthouse_dns_list() {
+### Run cleanup of previous Lighthouse ServiceExport DNS list ###
+  trap_commands;
 
   echo "# Clean Lighthouse ServiceExport DNS list:"
 
@@ -1509,65 +1527,6 @@ function remove_submariner_images_from_local_registry() {
       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
       podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
   done
-}
-
-# ------------------------------------------
-
-# DEPRECATED
-function remove_submariner_iptables_from_gw_nodes() {
-  trap_commands;
-
-  ${OC} get nodes -l "submariner.io/gateway=true" | awk 'NR>1 {print $1}' | \
-  while read node_name; do
-
-    local pod_name="remove-iptables-${node_name%%.*}"
-    echo "# Delete GlobalNet iptables from node $node_name (via Netshoot pod $node_name)"
-    # ${OC} run netshoot-hostmount-$(uuidgen) ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} --generator=run-pod/v1 --overrides='{
-
-    ${OC} run $pod_name ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} --attach=true --rm -i \
-    --restart=Never --pod-running-timeout=1m --request-timeout=1m --overrides='{
-    	"spec": {
-    		"hostNetwork": true,
-    		"nodeName": "'$node_name'",
-    		"containers": [{
-    			"args": [
-    				"/bin/bash", "-c",
-    			       	"iptables -t nat -F SUBMARINER-GN-EGRESS; iptables -t nat -F SUBMARINER-GN-INGRESS; iptables -t nat -F SUBMARINER-GN-MARK;"
-    			],
-    			"stdin": true,
-    			"stdinOnce": true,
-    			"terminationMessagePath": "/dev/termination-log",
-    			"terminationMessagePolicy": "File",
-    			"tty": true,
-    			"securityContext": {
-    				"allowPrivilegeEscalation": true,
-    				"privileged": true,
-    				"runAsUser": 0,
-    				"capabilities": {
-    					"add": ["ALL"]
-    				}
-    			},
-    			"name": "'$pod_name'",
-    			"image": "nicolaka/netshoot",
-    			"volumeMounts": [{
-    				"mountPath": "/host",
-    				"name": "host-slash",
-    				"readOnly": true
-    			}]
-    		}],
-    	  "restartPolicy": "Never",
-    		"volumes": [{
-    			"hostPath": {
-    				"path": "/",
-    				"type": ""
-    			},
-    		"name": "host-slash"
-    		}]
-    	}
-    }' -- /bin/bash
-
-  done
-
 }
 
 # ------------------------------------------
