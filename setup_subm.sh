@@ -2131,10 +2131,11 @@ function join_submariner_current_cluster() {
       "https://github.com/submariner-io/submariner-operator/issues/563"
       # Workaround
       JOIN_CMD="${JOIN_CMD} --version devel"
-  fi
 
-  echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
-  JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
+      # From Release 0.8.1: '--pod-debug' . Before: '--enable-pod-debugging'
+      echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
+      JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
+  fi
 
   echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
   JOIN_CMD="${JOIN_CMD} --health-check"
@@ -2172,6 +2173,11 @@ function join_submariner_current_cluster() {
 
     JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}"
 
+    BUG "Submariner join failed when using --image-override submariner-operator" \
+    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
+    # Workaround:
+    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}"
   fi
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
