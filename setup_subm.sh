@@ -2133,8 +2133,8 @@ function join_submariner_current_cluster() {
       JOIN_CMD="${JOIN_CMD} --version devel"
   fi
 
-  echo "# Adding '--enable-pod-debugging' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
-  JOIN_CMD="${JOIN_CMD} --enable-pod-debugging --ipsec-debug"
+  echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
+  JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
 
   echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
   JOIN_CMD="${JOIN_CMD} --health-check"
@@ -3177,9 +3177,11 @@ function print_submariner_pod_logs() {
   trap_commands;
   local cluster_name="$1"
 
-  echo -e "\n################################################################################################\n"
-  echo -e "\n############################## Submariner LOGS on ${cluster_name} ##############################\n"
-  echo -e "\n################################################################################################\n"
+  echo -e "
+  \n################################################################################################
+  \n#                              Submariner LOGS on ${cluster_name}                              #
+  \n################################################################################################
+  \n"
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
