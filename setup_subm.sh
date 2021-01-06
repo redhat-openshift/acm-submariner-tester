@@ -1960,18 +1960,25 @@ function test_custom_images_from_registry_cluster_b() {
 
 # ------------------------------------------
 
-function add_submariner_registry_mirror() {
-### Add OCP Registry mirror for Submariner
+function add_submariner_registry_mirror_to_ocp_node() {
+### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
   # DONT trap_commands
 
   # set registry variables
-  local registry_url="$1"
-  local registry_mirror="$2"
+  local node_type="$1" # master or worker
+  local registry_url="$2"
+  local registry_mirror="$3"
 
-  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] ; then
-    FATAL "Expected Openshift Registry values are missing:
-    registry_url = $registry_url
-    registry_mirror = $registry_mirror"
+  reg_values="
+  node_type = $node_type
+  registry_url = $registry_url
+  registry_mirror = $registry_mirror"
+
+  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
+  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
+    FATAL "Expected Openshift Registry values are missing: $reg_values"
+  else
+    echo "# Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
   fi
 
   config_source=$(cat <<EOF | raw_to_url_encode
@@ -1993,40 +2000,18 @@ EOF
   kind: MachineConfig
   metadata:
     labels:
-      machineconfiguration.openshift.io/role: worker
-    name: 99-worker-submariner-registries
+      machineconfiguration.openshift.io/role: ${node_type}
+    name: 99-${node_type}-submariner-registries
   spec:
     config:
       ignition:
-        version: 3.1.0
+        version: 2.2.0
       storage:
         files:
         - contents:
             source: data:text/plain,${config_source}
-            verification: {}
           filesystem: root
-          mode: 420
-          path: /etc/containers/registries.conf.d/submariner-registries.conf
-EOF
-
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: machineconfiguration.openshift.io/v1
-  kind: MachineConfig
-  metadata:
-    labels:
-      machineconfiguration.openshift.io/role: master
-    name: 99-master-submariner-registries
-  spec:
-    config:
-      ignition:
-        version: 3.1.0
-      storage:
-        files:
-        - contents:
-            source: data:text/plain,${config_source}
-            verification: {}
-          filesystem: root
-          mode: 420
+          mode: 0420
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
@@ -2050,7 +2035,8 @@ function configure_cluster_registry() {
   local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
 
   echo "# Add OCP Registry mirror for Submariner:"
-  add_submariner_registry_mirror "$registry_url" "${registry_mirror}/${registry_usr}"
+  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
+  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
 
   echo "# Create $namespace namespace"
   ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
