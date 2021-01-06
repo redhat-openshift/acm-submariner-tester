@@ -77,6 +77,7 @@ Running with pre-defined parameters (optional):
 
   * Install latest release of Submariner:              --install-subctl
   * Install development release of Submariner:         --install-subctl-devel
+  * Override images from a custom registry:            --registry-images
   * Skip Submariner installation:                      --skip-install
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
@@ -106,10 +107,11 @@ Running with pre-defined parameters (optional):
 
 - Examples with pre-defined options:
 
-  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --globalnet`
+  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest Submariner release
+  * Install latest Submariner devel (master development)
+  * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
@@ -119,7 +121,7 @@ Running with pre-defined parameters (optional):
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner (master development)
+  * Install latest Submariner release
   * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
@@ -230,8 +232,8 @@ while [[ $# -gt 0 ]]; do
   --install-subctl-devel)
     install_subctl_devel=YES
     shift ;;
-  --build-operator) # [DEPRECATED]
-    build_operator=YES
+  --registry-images)
+    registry_images=YES
     shift ;;
   --build-tests)
     build_go_tests=YES
@@ -431,6 +433,14 @@ if [[ -z "$got_user_input" ]]; then
     install_subctl_devel=${input:-no}
   done
 
+  # User input: $registry_images - to download_subctl_latest_devel
+  while [[ ! "$registry_images" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    registry_images=${input:-no}
+  done
+
   # User input: $build_go_tests - to build and run ginkgo tests from all submariner repos
   while [[ ! "$build_go_tests" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
@@ -501,10 +511,11 @@ fi
 get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
 get_ocpup_tool=${get_ocpup_tool:-NO}
-build_operator=${build_operator:-NO} # [DEPRECATED]
+# build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
 install_subctl_release=${install_subctl_release:-NO}
 install_subctl_devel=${install_subctl_devel:-NO}
+registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
 reset_cluster_a=${reset_cluster_a:-NO}
@@ -573,6 +584,8 @@ function show_test_plan() {
 
     echo -e "# Submariner deployment and environment setup for the tests:
 
+    - test_custom_images_from_registry_cluster_a: $registry_images
+    - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
     - install_subctl_command
@@ -2125,7 +2138,45 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
-  if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
+  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
+  JOIN_CMD="${JOIN_CMD} --health-check"
+
+  # Overriding Submariner images with custom images from registry
+  if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+
+    local subm_major_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+    local registry_url="${REGISTRY_URL}"
+
+    echo -e "# Overriding submariner images with custom images from ${registry_url} tagged with release: ${subm_major_version}"
+
+    BUG "SubM Gateway image name should be 'submariner-gateway'" \
+    "Rename SubM Gateway image to 'submariner' " \
+    "https://github.com/submariner-io/submariner-operator/pull/941
+    https://github.com/submariner-io/submariner-operator/issues/1018"
+
+    # JOIN_CMD="${JOIN_CMD} \
+    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version} \
+    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version} \
+    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subm_major_version} \
+    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subm_major_version} \
+    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subm_major_version} \
+    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subm_major_version} \
+    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subm_major_version}"
+
+    # BUG ? : this is a potential bug (not working):
+    # JOIN_CMD="${JOIN_CMD} --image-override \
+    # submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version},\
+    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}"
+
+    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version}"
+
+    BUG "Submariner join failed when using --image-override submariner-operator" \
+    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
+    # Workaround:
+    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}"
+
+  elif [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
@@ -2135,49 +2186,6 @@ function join_submariner_current_cluster() {
       # From Release 0.8.1: '--pod-debug' . Before: '--enable-pod-debugging'
       echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
       JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
-  fi
-
-  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
-  JOIN_CMD="${JOIN_CMD} --health-check"
-
-  # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
-  if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
-    local subctl_version="$(subctl version | awk '{print $3}')"
-    # local registry_url="${registry_mirror}/${registry_usr}"
-    local registry_url="${REGISTRY_URL}"
-    echo -e "# Using submariner custom images from ${registry_url} tagged with release: ${subctl_version}"
-
-    BUG "SubM Gateway image name should be 'submariner-gateway'" \
-    "Rename SubM Gateway image to 'submariner' " \
-    "https://github.com/submariner-io/submariner-operator/pull/941
-    https://github.com/submariner-io/submariner-operator/issues/1018"
-
-    # TODO: this is a potential bug (not working):
-    # JOIN_CMD="${JOIN_CMD} --image-override \
-    # \"submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}, \
-    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}, \
-    # submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version}, \
-    # submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version}, \
-    # submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version}, \
-    # lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version}, \
-    # lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version} \""
-
-    # JOIN_CMD="${JOIN_CMD} \
-    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version} \
-    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version} \
-    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subctl_version} \
-    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subctl_version} \
-    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subctl_version} \
-    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subctl_version} \
-    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subctl_version}"
-
-    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subctl_version}"
-
-    BUG "Submariner join failed when using --image-override submariner-operator" \
-    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
-    # Workaround:
-    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subctl_version}"
   fi
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
@@ -3184,17 +3192,15 @@ function print_submariner_pod_logs() {
   local cluster_name="$1"
 
   echo -e "
-  \n################################################################################################
-  \n#                              Submariner LOGS on ${cluster_name}                              #
-  \n################################################################################################
+  \n################################################################################################ \
+  \n#                             Submariner LOGS on ${cluster_name}                              # \
+  \n################################################################################################ \
   \n"
 
-  ${OC} get all -n ${SUBM_NAMESPACE} || :
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
   ${OC} describe cm -n openshift-dns || :
 
-  ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels || :
-  ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || :
   # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
 
   ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
@@ -3436,6 +3442,16 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       ${junit_cmd} download_subctl_latest_release
     fi
 
+    # Running test_custom_images_from_registry if requested - To use custom Submariner images
+    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
+
+        # ${junit_cmd} remove_submariner_images_from_local_registry
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_a
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_b
+    fi
+
     ${junit_cmd} test_subctl_command
 
     ${junit_cmd} open_firewall_ports_on_the_broker_node
@@ -3447,16 +3463,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} install_broker_aws_cluster_a
 
     ${junit_cmd} test_broker_before_join
-
-    # If installing subctl release (or release candidate) - Use submariner-operator image from redhat.com
-    if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
-
-      # ${junit_cmd} remove_submariner_images_from_local_registry
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_a
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_b
-    fi
 
     ${junit_cmd} join_submariner_cluster_a
 
@@ -3572,14 +3578,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} test_submariner_e2e_with_go || \
-        BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED
+        ( BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED )
 
         ${junit_cmd} test_lighthouse_e2e_with_go || \
-        BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED
+        ( BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED )
 
       else
         ${junit_cmd} test_submariner_e2e_with_subctl || \
-        BUG "Subctl verify has FAILED." && e2e_tests_status=FAILED
+        ( BUG "Subctl verify has FAILED." && e2e_tests_status=FAILED )
       fi
 
       if [[ "$e2e_tests_status" = FAILED ]] ; then
