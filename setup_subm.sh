@@ -100,14 +100,14 @@ Running with pre-defined parameters (optional):
 
 ### Command examples:
 
-- To run interactively (enter options manually):
+To run interactively (enter options manually):
 
-  `./setup_subm.sh`
+`./setup_subm.sh`
 
 
-- Examples with pre-defined options:
+Examples with pre-defined options:
 
-  `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
   * Install latest Submariner devel (master development)
@@ -116,7 +116,7 @@ Running with pre-defined parameters (optional):
   * Run Submariner E2E tests (with subctl)
 
 
-  `./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
@@ -665,8 +665,8 @@ function show_test_plan() {
   while read var_name; do
     # Get each variable value
     var_value="${!var_name}"
-    # If variable is not null / "key" / "secret" / "password"
-    if ! [[ -z "$var_value" || "$var_name" =~ (key|secret|password) ]] ; then
+    # If variable is not null or contains "key" / "sec"ret / "pas"sword
+    if ! [[ -z "$var_value" || "$var_name" =~ (key|sec|pas|pwd) ]] ; then
       # Trim value (string), if it is longer than 500 char
       (( ${#var_value} < 500 )) || var_value="${var_value:0:500}..."
       # Print the value without non-ascii chars
@@ -3399,6 +3399,16 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       ${junit_cmd} clean_osp_cluster_b
     fi
 
+    # Running test_custom_images_from_registry if requested - To use custom Submariner images
+    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
+
+        # ${junit_cmd} remove_submariner_images_from_local_registry
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_a
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_b
+    fi
+
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
     if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
@@ -3426,16 +3436,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       ${junit_cmd} download_subctl_latest_devel
     elif [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
       ${junit_cmd} download_subctl_latest_release
-    fi
-
-    # Running test_custom_images_from_registry if requested - To use custom Submariner images
-    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-
-        # ${junit_cmd} remove_submariner_images_from_local_registry
-
-        ${junit_cmd} test_custom_images_from_registry_cluster_a
-
-        ${junit_cmd} test_custom_images_from_registry_cluster_b
     fi
 
     ${junit_cmd} test_subctl_command
