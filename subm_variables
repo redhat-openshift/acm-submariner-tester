@@ -8,7 +8,7 @@ export WORKDIR=~/submariner-install
 
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
-export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golnag
+export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
 
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
@@ -47,6 +47,20 @@ export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
 export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
+
+export REGISTRY_URL="${REGISTRY_URL:-registry.redhat.io/rhacm2-tech-preview}"
+export REGISTRY_MIRROR="docker-server" # without " https:// "
+export REGISTRY_USR="docker-user"
+export REGISTRY_PWD='docker-pass' # in single quotes
+export REGISTRY_EMAIL="docker-email"
+
+export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
+export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
+export SUBM_IMG_NETWORK="${SUBM_IMG_NETWORK:-submariner-networkplugin-syncer-rhel8}"
+export SUBM_IMG_LIGHTHOUSE="${SUBM_IMG_LIGHTHOUSE:-lighthouse-agent-rhel8}"
+export SUBM_IMG_COREDNS="${SUBM_IMG_COREDNS:-lighthouse-coredns-rhel8}"
+export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
+export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"

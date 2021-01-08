@@ -302,25 +302,40 @@ function verify_anaconda() {
 
 # ------------------------------------------
 
-function install_local_golang() {
-  # Installing Golang with Anaconda (https://github.com/conda-forge/go-feedstock)
+# Function to install local tool/package with Anaconda (https://github.com/conda-forge/{package name})
+function install_conda_package() {
   trap_commands
-  echo "# Installing a local Golang on user \"$(whoami)\" home directory, with Anaconda"
 
-  local install_dir="${1:-.}/"
-  local pkg_version="$2"
+  local pkg_name="$1"
+  local install_dir="${2:-.}/"
+  local pkg_version="$3"
+
+  echo "# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
   verify_anaconda "${install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge go-nocgo_linux-64${pkg_version:+=$pkg_version}
+  conda install -y --update-deps -c conda-forge ${pkg_name}${pkg_version:+=$pkg_version}
   conda list
 }
 
 # ------------------------------------------
-# Function to verify Golang is installed
+
+# Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
+function install_local_golang() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "go-nocgo_linux-64" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
+# Function to verify that Golang is installed
 function verify_golang() {
   echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
   go version
@@ -345,27 +360,21 @@ function verify_golang() {
 
 # ------------------------------------------
 
+# Function to install local Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
 function install_local_terraform() {
-  # Installing Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
   trap_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
 
-  verify_anaconda "${install_dir}"
-
-  echo "# Installing a local Terraform on user \"$(whoami)\" home directory, with Anaconda"
-  conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge terraform=${pkg_version:+=$pkg_version}
-  conda list
+  install_conda_package "terraform" "${install_dir}" "${pkg_version}"
 }
 
 # ------------------------------------------
 
-# Docker with Anaconda is not supported in Linux yet
+# Docker with Anaconda is not supported in Linux yet - use Podman instead
+# Function to install local Docker with Anaconda (https://anaconda.org/conda-forge/docker)
 function install_local_docker() {
-  # Installing Docker with Anaconda (https://anaconda.org/conda-forge/docker)
   trap_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
@@ -376,13 +385,54 @@ function install_local_docker() {
   local install_dir="${1:-.}/"
   local pkg_version="$2"
 
-  verify_anaconda "${install_dir}"
+  install_conda_package "docker" "${install_dir}" "${pkg_version}"
+}
 
-  echo "# Installing a local Docker on user \"$(whoami)\" home directory, with Anaconda"
-  conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge docker${pkg_version:+=$pkg_version}
-  conda list
+# ------------------------------------------
+
+# Function to install local Podman with Anaconda (https://anaconda.org/conda-forge/podman)
+function install_local_podman() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "podman" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
+# Function to install local JQ with Anaconda (https://anaconda.org/conda-forge/jq)
+function install_local_jq() {
+  trap_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  install_conda_package "jq" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
+# Function to convert raw text (e.g. yaml) to encoded url format
+function raw_to_url_encode() {
+
+  local string="$(cat < /dev/stdin)"
+  local strlen=${#string}
+  local encoded=""
+  local pos c o
+
+  for (( pos=0 ; pos<strlen ; pos++ )); do
+     c=${string:$pos:1}
+     case "$c" in
+        [-_.~a-zA-Z0-9] ) o="${c}" ;;
+        * )               printf -v o '%%%02x' "'$c"
+     esac
+     encoded+="${o}"
+  done
+
+  echo "${encoded}"
+
 }
 
 # ------------------------------------------
@@ -701,9 +751,7 @@ function install_nginx_service() {
   trap_commands;
 
   ngnix_name="${1:-NginX}"
-  nginx_image="${2:-twalter/openshift-nginx:stable}"
-  # nginx_image="nginxinc/nginx-unprivileged:stable-alpine"
-  # nginx_image="twalter/openshift-nginx:stable"
+  nginx_image="${2:-quay.io/bitnami/nginx:latest}"
 
   target_namespace="$3" # The Namespace for Ngnix
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
@@ -728,14 +776,11 @@ function install_nginx_service() {
 
 }
 
-
-
 # ------------------------------------------
 
 # Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
 function get_running_pod_by_label() {
   # Do not trap_command, so it will not be printed as return value
-  # set -x
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
   local tmp_file="`mktemp`_pod_status"
@@ -746,8 +791,6 @@ function get_running_pod_by_label() {
 
   # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
   # Can also run with: -o jsonpath="{.items[0].metadata.name}"
-
-  # set +x
 
   #if [[ -n "$(echo $pod_status)" && -n "$(echo $pod_id)" ]] ; then
   if [[ -n "$pod_status" ]]; then
@@ -761,6 +804,21 @@ function get_running_pod_by_label() {
 
 }
 
+# ------------------------------------------
+
+# Function to return (print) the all worker node ids, that have an external ip (nothing if none)
+function get_worker_nodes_with_external_ip() {
+  # Do not trap_command, so it will not be printed as return value
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
+}
+
+# ------------------------------------------
+
+# Function to return (print) all external ips of worker nodes (nothing if none)
+function get_external_ips_of_worker_nodes() {
+  # Do not trap_command, so it will not be printed as return value
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}'
+}
 
 # ------------------------------------------
 
