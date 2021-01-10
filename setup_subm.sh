@@ -1423,9 +1423,9 @@ function delete_submariner_cluster_roles() {
 
   echo "# Deleting Submariner ClusterRoles and ClusterRoleBindings"
 
-  ${OC} delete clusterrole,clusterrolebinding submariner-operator || :
+  local roles="submariner-operator submariner-operator-globalnet submariner-lighthouse"
 
-  ${OC} delete clusterrole,clusterrolebinding submariner-operator-globalnet || :
+  ${OC} delete clusterrole,clusterrolebinding $roles || :
 
 }
 

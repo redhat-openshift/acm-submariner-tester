@@ -186,7 +186,7 @@ function PROMPT() {
 # sh2ju treats exit code 5 as non-critical failure (to continue tests)
 function FAILURE() {
   local failure_msg="${1}"
-  echo -e "\n${RED}*** Expected failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
+  echo -e "\n${RED}*** Test failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
   return 5
 }
 
@@ -799,7 +799,7 @@ function get_running_pod_by_label() {
     return 0
   else
     # exit 1
-    FATAL "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
+    FAILURE "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
   fi
 
 }
