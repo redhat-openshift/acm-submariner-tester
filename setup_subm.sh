@@ -1945,7 +1945,7 @@ function test_custom_images_from_registry_cluster_a() {
   trap_commands;
 
   kubconf_a;
-  configure_cluster_registry
+  configure_ocp_registry_and_garbage_collection
 }
 
 # ------------------------------------------
@@ -1955,7 +1955,50 @@ function test_custom_images_from_registry_cluster_b() {
   trap_commands;
 
   kubconf_b;
-  configure_cluster_registry
+  configure_ocp_registry_and_garbage_collection
+}
+
+# ------------------------------------------
+
+function set_garbage_collection_on_ocp_nodes() {
+### Helper function to set garbage collection on all cluster nodes
+  trap_commands;
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: KubeletConfig
+  metadata:
+    name: garbage-collector-kubeconfig
+  spec:
+    machineConfigPoolSelector:
+      matchLabels:
+        custom-kubelet: small-pods
+    kubeletConfig:
+      evictionSoft:
+        memory.available: "500Mi"
+        nodefs.available: "10%"
+        nodefs.inodesFree: "5%"
+        imagefs.available: "15%"
+        imagefs.inodesFree: "10%"
+      evictionSoftGracePeriod:
+        memory.available: "1m30s"
+        nodefs.available: "1m30s"
+        nodefs.inodesFree: "1m30s"
+        imagefs.available: "1m30s"
+        imagefs.inodesFree: "1m30s"
+      evictionHard:
+        memory.available: "200Mi"
+        nodefs.available: "5%"
+        nodefs.inodesFree: "4%"
+        imagefs.available: "10%"
+        imagefs.inodesFree: "5%"
+      evictionPressureTransitionPeriod: 0s
+      imageMinimumGCAge: 5m
+      imageGCHighThresholdPercent: 80
+      imageGCLowThresholdPercent: 75
+EOF
+
+  ${OC} get pods -A -o jsonpath="{..imageID}" |tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}'
 }
 
 # ------------------------------------------
@@ -2015,11 +2058,14 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
+  echo "# Wait up to 5 minutes for all ${node_type} nodes to be ready:"
+  ${OC}  wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
+
 }
 
 # ------------------------------------------
 
-function configure_cluster_registry() {
+function configure_ocp_registry_and_garbage_collection() {
 ### Configure access to external docker registry
   # DONT trap_commands
 
@@ -2037,6 +2083,9 @@ function configure_cluster_registry() {
   echo "# Add OCP Registry mirror for Submariner:"
   add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
   add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+
+  echo "# Setting garbage collection on all OCP cluster nodes"
+  set_garbage_collection_on_ocp_nodes
 
   echo "# Create $namespace namespace"
   ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
