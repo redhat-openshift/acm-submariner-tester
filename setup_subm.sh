@@ -2782,6 +2782,11 @@ function test_clusters_connected_full_domain_name() {
   watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
+  BUG "LibreSwan may fail here, but subctl may not warn on sub-connection problem" \
+   "No workaround yet, it is caused by LibreSwan bug 1081" \
+  "https://github.com/submariner-io/submariner/issues/1080"
+  # No workaround yet
+
   echo "# Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:${NGINX_PORT} :"
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:${NGINX_PORT}"
 
