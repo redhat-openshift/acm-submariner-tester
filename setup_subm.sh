@@ -570,7 +570,7 @@ function show_test_plan() {
   if [[ "$skip_install" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_install \n"
   else
-    echo "### Will execute Submariner deployment and environment preparations:
+    echo "### Will execute: Submariner deployment and environment preparations:
 
     OCP and Submariner setup and test tools:
     - config_golang: $config_golang
@@ -1926,6 +1926,9 @@ function export_service_in_lighthouse() {
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
+  echo "# Show $svc_name Service info:"
+  ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
+
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
@@ -2058,8 +2061,15 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
+  echo "# Wait for Machine Config Daemon to be rolled out:"
+  ${OC} rollout status ds -n openshift-machine-config-operator  machine-config-daemon
+
   echo "# Wait up to 5 minutes for all ${node_type} nodes to be ready:"
-  ${OC}  wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
+  ${OC} wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
+
+  echo "# Status of Machine Config Pool and all Daemon-Sets:"
+  ${OC} get machineconfigpool
+  ${OC} get ds -A
 
 }
 
@@ -2097,19 +2107,22 @@ function configure_ocp_registry_and_garbage_collection() {
     ${OC} delete secret $secret_name -n $namespace || :
   fi
 
-  ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
-  --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
+  )
 
   echo "# Adding '$secret_name' secret:"
   ${OC} describe secret $secret_name -n $namespace
 
-  ### update the cluster global pull-secret
-  ${OC} patch secret/pull-secret -n openshift-config -p \
-  '{"data":{".dockerconfigjson":"'"$( \
-  ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-  | base64 --decode | jq -r -c '.auths |= . + '"$( \
-  ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-  | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
 
   ${OC} describe secret/pull-secret -n openshift-config
 
