@@ -1118,7 +1118,7 @@ function create_osp_cluster_b() {
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
 
-  ocpup  create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
+  ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
   pid=$!
   tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
   tail --pid=$pid -f /dev/null
@@ -1238,9 +1238,10 @@ function destroy_aws_cluster_a() {
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
-      BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
-      "Force exist OCP destroy process" \
-      "Please submit a new bug for OCP installer (in Bugzilla)" )
+        BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
+        "Force exist OCP destroy process" \
+        "Please submit a new bug for OCP installer (in Bugzilla)"
+      )
     fi
     # cd ..
 
@@ -1306,15 +1307,24 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    ocpup  destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" & # running on the background (with timeout)
-    pid=$! # while the background process runs, tail its log
-    # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
+    # Running the process on the background, and save exit code in PID_EXIT file
+    local duration=20m
+    echo 1 > PID_EXIT
+    ( ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" ; echo $? > PID_EXIT ) &
+    # Save bg process pid
+    local pid=$!
 
-    # Wait until the background process finish
-    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log &
-    #tail --pid=$pid -f /dev/null # wait until the background process finish
+    # While the background process runs, tail its log, with timeout
+    timeout $duration \
+      tail -n0 --pid=$pid -F "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log" \
+      || echo $? > PID_EXIT
 
-    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
+    local pid_exit="$(< $PID_EXIT)"
+
+    if [[ $pid_exit -ne 0 ]] ; then
+      [[ $pid_exit -ne 124 ]] || kill -9 $pid
+      FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded"
+    fi
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -2146,8 +2156,14 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
+  echo "# Disable auto rebooting after a change with the machine-config-operator"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":true}}' machineconfigpool/${node_type}
+
   echo "# Wait for Machine Config Daemon to be rolled out:"
   ${OC} rollout status ds -n openshift-machine-config-operator  machine-config-daemon
+
+  echo "# Wait for Machine Config Pool to be updated:"
+  ${OC} wait machineconfigpool/${node_type} --for condition=updated
 
   echo "# Wait up to 5 minutes for all ${node_type} nodes to be ready:"
   ${OC} wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
@@ -3470,8 +3486,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       fi
     fi
 
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
-
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
 
@@ -3497,6 +3511,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       fi
     fi
+
+    # Verify clusters status
+
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
     ${junit_cmd} test_kubeconfig_osp_cluster_b
 
