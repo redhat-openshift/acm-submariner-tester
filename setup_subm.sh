@@ -1943,29 +1943,31 @@ function export_service_in_lighthouse() {
 
 # ------------------------------------------
 
-function test_custom_images_from_registry_cluster_a() {
-  PROMPT "Using custom Registry for Submariner images on AWS cluster A"
+function configure_images_prune_cluster_a() {
+  PROMPT "Configure Garbage Collection and Registry Images Prune on AWS cluster A"
   trap_commands;
 
   kubconf_a;
-  configure_ocp_registry_and_garbage_collection
+  configure_ocp_garbage_collection_and_images_prune
 }
 
 # ------------------------------------------
 
-function test_custom_images_from_registry_cluster_b() {
-  PROMPT "Using custom Registry for Submariner images on OSP cluster B"
+function configure_images_prune_cluster_b() {
+  PROMPT "Configure Garbage Collection and Registry Images Prune on OSP cluster B"
   trap_commands;
 
   kubconf_b;
-  configure_ocp_registry_and_garbage_collection
+  configure_ocp_garbage_collection_and_images_prune
 }
 
 # ------------------------------------------
 
-function set_garbage_collection_on_ocp_nodes() {
-### Helper function to set garbage collection on all cluster nodes
+function configure_ocp_garbage_collection_and_images_prune() {
+### function to set garbage collection on all cluster nodes
   trap_commands;
+
+  echo "# Setting garbage collection on all OCP cluster nodes"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: machineconfiguration.openshift.io/v1
@@ -2001,7 +2003,90 @@ function set_garbage_collection_on_ocp_nodes() {
       imageGCLowThresholdPercent: 75
 EOF
 
+  echo "# Enable Image Pruner policy - to delete unused images from registry:"
+
+  ${OC} patch imagepruner.imageregistry/cluster --patch '{"spec":{"suspend":false}}' --type=merge
+    # imagepruner.imageregistry.operator.openshift.io/cluster patched
+
+  ${OC} wait imagepruner --timeout=10s --for=condition=available cluster
+    # imagepruner.imageregistry.operator.openshift.io/cluster condition met
+
+  ${OC} describe imagepruner.imageregistry.operator.openshift.io
+
+  echo "# List all images in all pods:"
   ${OC} get pods -A -o jsonpath="{..imageID}" |tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}'
+}
+
+# ------------------------------------------
+
+function test_custom_images_from_registry_cluster_a() {
+  PROMPT "Using custom Registry for Submariner images on AWS cluster A"
+  trap_commands;
+
+  kubconf_a;
+  configure_cluster_registry_and_link_service_account
+}
+
+# ------------------------------------------
+
+function test_custom_images_from_registry_cluster_b() {
+  PROMPT "Using custom Registry for Submariner images on OSP cluster B"
+  trap_commands;
+
+  kubconf_b;
+  configure_cluster_registry_and_link_service_account
+}
+
+# ------------------------------------------
+
+function configure_cluster_registry_and_link_service_account() {
+### Configure access to external docker registry
+  # DONT trap_commands
+
+  # set registry variables
+  local registry_url="$REGISTRY_URL"
+  local registry_mirror="$REGISTRY_MIRROR"
+  local registry_usr="$REGISTRY_USR"
+  local registry_pwd="$REGISTRY_PWD"
+  local registry_email="$REGISTRY_EMAIL"
+
+  local namespace="$SUBM_NAMESPACE"
+  local service_account_name="$SUBM_NAMESPACE"
+  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
+
+  echo "# Add OCP Registry mirror for Submariner:"
+  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
+  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+
+  echo "# Create $namespace namespace"
+  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
+
+  echo "# Creating new secret in '$namespace' namespace"
+
+  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
+    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
+    ${OC} delete secret $secret_name -n $namespace || :
+  fi
+
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
 }
 
 # ------------------------------------------
@@ -2070,61 +2155,6 @@ EOF
   echo "# Status of Machine Config Pool and all Daemon-Sets:"
   ${OC} get machineconfigpool
   ${OC} get ds -A
-
-}
-
-# ------------------------------------------
-
-function configure_ocp_registry_and_garbage_collection() {
-### Configure access to external docker registry
-  # DONT trap_commands
-
-  # set registry variables
-  local registry_url="$REGISTRY_URL"
-  local registry_mirror="$REGISTRY_MIRROR"
-  local registry_usr="$REGISTRY_USR"
-  local registry_pwd="$REGISTRY_PWD"
-  local registry_email="$REGISTRY_EMAIL"
-
-  local namespace="$SUBM_NAMESPACE"
-  local service_account_name="$SUBM_NAMESPACE"
-  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
-
-  echo "# Add OCP Registry mirror for Submariner:"
-  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
-  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
-
-  echo "# Setting garbage collection on all OCP cluster nodes"
-  set_garbage_collection_on_ocp_nodes
-
-  echo "# Create $namespace namespace"
-  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
-
-  echo "# Creating new secret in '$namespace' namespace"
-
-  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
-    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
-    ${OC} delete secret $secret_name -n $namespace || :
-  fi
-
-  ( # subshell to hide commands
-    ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
-  )
-
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace
-
-  ( # update the cluster global pull-secret
-    ${OC} patch secret/pull-secret -n openshift-config -p \
-    '{"data":{".dockerconfigjson":"'"$( \
-    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
-  )
-
-  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
@@ -3419,6 +3449,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} create_aws_cluster_a
 
+      ${junit_cmd} configure_images_prune_cluster_a
+
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
@@ -3433,6 +3465,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
         ${junit_cmd} create_aws_cluster_a
 
+        ${junit_cmd} configure_images_prune_cluster_a
+
       fi
     fi
 
@@ -3445,11 +3479,23 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} create_osp_cluster_b
 
-    else
-      # Running destroy_aws_cluster_b and create_aws_cluster_b separately
-      [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
+      ${junit_cmd} configure_images_prune_cluster_b
 
-      [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
+    else
+      # Running destroy_osp_cluster_b and create_osp_cluster_b separately
+      if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} destroy_osp_cluster_b
+
+      fi
+
+      if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} create_osp_cluster_b
+
+        ${junit_cmd} configure_images_prune_cluster_b
+
+      fi
     fi
 
     ${junit_cmd} test_kubeconfig_osp_cluster_b
@@ -3458,11 +3504,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # Running clean_aws_cluster_a if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} clean_aws_cluster_a
     fi
 
     # Running clean_osp_cluster_b if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} clean_osp_cluster_b
     fi
 
@@ -3487,7 +3535,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} test_clusters_disconnected_before_submariner
     fi
-
   fi
 
 
@@ -3500,9 +3547,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # Running download_subctl_latest_devel or download_subctl_latest_release
     if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} download_subctl_latest_devel
+
     elif [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} download_subctl_latest_release
+
     fi
 
     ${junit_cmd} test_subctl_command
@@ -3551,12 +3602,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_globalnet_status_cluster_a
 
       ${junit_cmd} test_globalnet_status_cluster_b
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_lighthouse_status_cluster_a
 
       ${junit_cmd} test_lighthouse_status_cluster_b
@@ -3572,6 +3625,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} install_nginx_headless_namespace_cluster_b
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
