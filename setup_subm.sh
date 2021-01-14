@@ -1307,24 +1307,38 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    # Running the process on the background, and save exit code in PID_EXIT file
-    local duration=20m
-    echo 1 > PID_EXIT
-    ( ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" ; echo $? > PID_EXIT ) &
-    # Save bg process pid
+    # # Tail process log in the background, and save pid
+    # local duration=20m
+    # local proc_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
+    # touch "$proc_log"
+    #
+    # timeout $duration tail -n0 -F "$proc_log" &
+    # local tail_pid=$!
+    #
+    # # Running the process with timeout
+    # timeout --foreground $duration ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml"
+    # local proc_exit="$?"
+    #
+    # if [[ $proc_exit -ne 0 ]] ; then
+    #   [[ $proc_exit -ne 124 ]] || kill -9 $tail_pid
+    #   FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded"
+    # fi
+
+
+    # Running the process with timeout
+    local duration=1m # 20m
+    timeout --foreground $duration ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
     local pid=$!
 
-    # While the background process runs, tail its log, with timeout
-    timeout $duration \
-      tail -n0 --pid=$pid -F "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log" \
-      || echo $? > PID_EXIT
+    # Tail process log, until pid has ended
+    local proc_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
+    touch "$proc_log"
+    tail --pid=$pid -n0 -F "$proc_log"
 
-    local pid_exit="$(< $PID_EXIT)"
-
-    if [[ $pid_exit -ne 0 ]] ; then
-      [[ $pid_exit -ne 124 ]] || kill -9 $pid
-      FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded"
-    fi
+    # Check the exit code of pid
+    wait $pid || proc_exit="$?"
+    [[ "$proc_exit" = 0 ]] || \
+    FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded (Error $proc_exit)"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
