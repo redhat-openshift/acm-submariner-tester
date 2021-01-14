@@ -197,8 +197,8 @@ function FATAL() {
   echo -e "\n${RED}*** Fatal error occurred *** \n $failure_msg ${NO_COLOR}" >&2
   # kill -s TERM $$
   # kill -s TERM $BASHPID
-  kill -s EXIT $PPID
-  exit 127
+  # kill -s EXIT $PPID
+  return 127
 }
 
 # ------------------------------------------

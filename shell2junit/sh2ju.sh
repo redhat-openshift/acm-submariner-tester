@@ -53,17 +53,17 @@ else
 fi
 
 # A wrapper for the eval method witch allows catching seg-faults and use tee
-errfile=/tmp/evErr.$$.log
-# :>${errfile}
+rcFile=/tmp/eval_rc.$$.log
+# :>${rcFile}
 
 function eVal() {
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
-  echo 0 > "${errfile}"
+  echo 0 > "${rcFile}"
   (
     (
-      ( trap 'RC=$? ; echo $RC > "${errfile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
-        trap 'RC="$(< $errfile)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
+      ( trap 'RC=$? ; echo $RC > "${rcFile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+        trap 'RC="$(< $rcFile)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
         set -e; $1 ;
       ) | tee -a ${outf}
     )
@@ -98,7 +98,7 @@ function juLog() {
   export returnCode=0
   trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
 
-  errfile=/tmp/evErr.$$.log
+  rcFile=/tmp/eval_rc.$$.log
 
   date="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; failures=0; suiteDuration=0; content=""
@@ -172,8 +172,8 @@ EOF
   testStartTime="$(${date} +%s.%N)"
 
   eVal "${cmd}"
-  returnCode="$([[ -s "$errfile" ]] && cat "$errfile" || echo "0")"
-  rm -f "${errfile}"
+  returnCode="$([[ -s "$rcFile" ]] && cat "$rcFile" || echo "0")"
+  rm -f "${rcFile}"
 
   testEndTime="$(${date} +%s.%N)"
 
@@ -266,4 +266,5 @@ EOF
 
   set -e # (aka as set -o errexit) to fail script on error
   return ${returnCode}
+
 }

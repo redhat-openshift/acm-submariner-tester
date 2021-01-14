@@ -3377,7 +3377,8 @@ function pass_test_debug() {
 function fail_test_debug() {
   trap_commands;
   PROMPT "FAIL test for DEBUG"
-  find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
+  echo "Should not get here if calling after FATAL"
+  # find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
   return 3
 }
 
@@ -3437,8 +3438,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
   # # Debug functions
   # ${junit_cmd} pass_test_debug
   # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} fail_test_debug
   # ${junit_cmd} fatal_test_debug
+  # ${junit_cmd} fail_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
