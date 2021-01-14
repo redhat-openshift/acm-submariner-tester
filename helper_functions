@@ -169,6 +169,39 @@ EOF
 
 # ------------------------------------------
 
+# function to run command with timeout, and tail log in parallel
+function run_and_tail() {
+  trap_commands
+
+  # Param 1: Command to execute
+  local cmd="$1"
+  # Param 2: Log file to tail
+  local log_to_tail="$2"
+  # Param 3: timeout duration (default 1 hour)
+  local duration="${3:-1h}"
+
+  echo -e "# Running command as background process: $cmd
+  \n# Timeout duration: $duration
+  \n# Tailing log file: $log_to_tail"
+
+  # Running the process with timeout - in the background, and store its PID
+  timeout --foreground $duration $cmd &
+  local pid=$!
+
+  # Tail the log, until command has ended or timed-out
+  touch "$log_to_tail"
+  tail --pid=$pid -n0 -F "$log_to_tail"
+
+  # Check the exit code of the command PID
+  wait $pid || proc_exit="$?"
+  [[ "$proc_exit" = 0 ]] || \
+  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
+
+  return $proc_exit
+}
+
+# ------------------------------------------
+
 # Function to print current time and a message
 function PROMPT() {
   message="$1"

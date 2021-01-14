@@ -1118,10 +1118,15 @@ function create_osp_cluster_b() {
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
 
-  ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
-  pid=$!
-  tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
-  tail --pid=$pid -f /dev/null
+  # ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
+  # pid=$!
+  # tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
+  # tail --pid=$pid -f /dev/null
+
+  local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
+  local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
+
+  run_and_tail "$ocp_cmd" "$ocp_log" 1h || FATAL "OCP create cluster B did not complete as expected"
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1307,38 +1312,10 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    # # Tail process log in the background, and save pid
-    # local duration=20m
-    # local proc_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
-    # touch "$proc_log"
-    #
-    # timeout $duration tail -n0 -F "$proc_log" &
-    # local tail_pid=$!
-    #
-    # # Running the process with timeout
-    # timeout --foreground $duration ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml"
-    # local proc_exit="$?"
-    #
-    # if [[ $proc_exit -ne 0 ]] ; then
-    #   [[ $proc_exit -ne 124 ]] || kill -9 $tail_pid
-    #   FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded"
-    # fi
+    local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
+    local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
-
-    # Running the process with timeout
-    local duration=1m # 20m
-    timeout --foreground $duration ocpup destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
-    local pid=$!
-
-    # Tail process log, until pid has ended
-    local proc_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
-    touch "$proc_log"
-    tail --pid=$pid -n0 -F "$proc_log"
-
-    # Check the exit code of pid
-    wait $pid || proc_exit="$?"
-    [[ "$proc_exit" = 0 ]] || \
-    FATAL "OCP destroy cluster did not complete as expected, or $duration timeout exceeded (Error $proc_exit)"
+    run_and_tail "$ocp_cmd" "$ocp_log" 20m || FATAL "OCP destroy cluster B did not complete as expected"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1447,7 +1424,7 @@ function delete_submariner_cluster_roles() {
 
   echo "# Deleting Submariner ClusterRoles and ClusterRoleBindings"
 
-  local roles="submariner-operator submariner-operator-globalnet submariner-lighthouse"
+  local roles="submariner-operator submariner-operator-globalnet submariner-lighthouse submariner-networkplugin-syncer"
 
   ${OC} delete clusterrole,clusterrolebinding $roles || :
 
@@ -2182,7 +2159,8 @@ EOF
   echo "# Wait up to 5 minutes for all ${node_type} nodes to be ready:"
   ${OC} wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
 
-  echo "# Status of Machine Config Pool and all Daemon-Sets:"
+  echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
+  ${OC} get nodes
   ${OC} get machineconfigpool
   ${OC} get ds -A
 
