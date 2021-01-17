@@ -1195,24 +1195,8 @@ function test_cluster_status() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
-  # Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was previously set)
-  if [[ $TEST_NS ]] ; then
-    echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak"
-    cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
-
-    BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
-    "Set the default namespace to \"${TEST_NS}\"" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-
-    echo "# Create namespace for Submariner tests: ${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # Ignore none-zero exit code (if namespace already exists
-
-    echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS}"
-    cur_context="$(${OC} config current-context)"
-    ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS}"
-  else
-    export TEST_NS=default
-  fi
+  cur_context="$(${OC} config current-context)"
+  ${OC} config set "contexts.${cur_context}.namespace" "default"
 
   ${OC} config view
   ${OC} status || FATAL "Openshift cluster is not installed, or not accessible with: ${KUBECONFIG}"
@@ -1466,6 +1450,10 @@ function delete_submariner_test_namespaces() {
     fi
   done
 
+  echo "# Unset Submariner test namespaces from kubeconfig current context"
+  local cur_context="$(${OC} config current-context)"
+  ${OC} config unset "contexts.${cur_context}.namespace"
+
 }
 
 # ------------------------------------------
@@ -1541,6 +1529,57 @@ function remove_submariner_images_from_local_registry() {
       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
       podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
   done
+}
+
+# ------------------------------------------
+
+function set_default_namespace_for_submariner_tests_on_cluster_a() {
+  PROMPT "Install Netshoot application on AWS cluster A (public)"
+  trap_commands;
+
+  kubconf_a;
+  create_namespace_for_submariner_tests
+
+}
+
+# ------------------------------------------
+
+function set_default_namespace_for_submariner_tests_on_cluster_b() {
+  PROMPT "Install Netshoot application on OSP cluster B (public)"
+  trap_commands;
+
+  kubconf_b;
+  create_namespace_for_submariner_tests
+
+}
+
+# ------------------------------------------
+
+function create_namespace_for_submariner_tests() {
+  trap_commands;
+
+  echo "# Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was set in variables file)"
+  if [[ -z "$TEST_NS" ]] ; then
+    export TEST_NS=default
+  else
+    echo "# Using the 'default' namespace for Submariner tests"
+    return
+  fi
+
+  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
+
+  BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+
+  echo "# Create namespace for Submariner tests: ${TEST_NS}"
+  ${OC} create namespace "${TEST_NS}" || echo "# '${TEST_NS}' namespace already exists, please ignore message"
+
+  echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS}"
+  cur_context="$(${OC} config current-context)"
+  ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS}"
+
 }
 
 # ------------------------------------------
@@ -1754,8 +1793,9 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
+    ${OC} get Machine -A -o wide
     failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
-    FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    FATAL "EXTERNAL-IP was not created yet. Please check if \"prep_for_subm.sh\" script had errors.
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
 
@@ -2162,7 +2202,7 @@ EOF
   echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
   ${OC} get nodes
   ${OC} get machineconfigpool
-  ${OC} get ds -A
+  ${OC} get daemonsets -A
 
 }
 
@@ -3267,10 +3307,10 @@ function collect_submariner_info() {
     subctl show all || :
 
     kubconf_a;
-    print_submariner_pod_logs "${CLUSTER_A_NAME}"
+    print_resources_and_pod_logs "${CLUSTER_A_NAME}"
 
     kubconf_b;
-    print_submariner_pod_logs "${CLUSTER_B_NAME}"
+    print_resources_and_pod_logs "${CLUSTER_B_NAME}"
 
   ) |& tee -a $log_file
 
@@ -3278,30 +3318,19 @@ function collect_submariner_info() {
 
 # ------------------------------------------
 
-function print_submariner_pod_logs() {
+function print_resources_and_pod_logs() {
   trap_commands;
   local cluster_name="$1"
 
   echo -e "
   \n################################################################################################ \
-  \n#                             Submariner LOGS on ${cluster_name}                              # \
+  \n#                             Openshift Nodes on ${cluster_name}                              # \
   \n################################################################################################ \
   \n"
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
-  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
-  ${OC} describe cm -n openshift-dns || :
+  ${OC} get nodes || :
 
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Machine -A || :
+  ${OC} get machineconfigpool || :
 
   ${OC} get Machine -A | awk '{
     if (NR>1) {
@@ -3314,6 +3343,30 @@ function print_submariner_pod_logs() {
     }
   }'
 
+  ${OC} get daemonsets -A || :
+
+  echo -e "
+  \n################################################################################################ \
+  \n#                             Submariner Resources on ${cluster_name}                         # \
+  \n################################################################################################ \
+  \n"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
+
+  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe cm -n openshift-dns || :
+
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
   # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
@@ -3321,6 +3374,12 @@ function print_submariner_pod_logs() {
   #     ${OC}  -n $ns describe pod $name
   #     ${OC}  -n $namespace logs $pod
   # done
+
+  echo -e "
+  \n################################################################################################ \
+  \n#                             Submariner LOGS on ${cluster_name}                              # \
+  \n################################################################################################ \
+  \n"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -3537,6 +3596,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
     if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
+
+      ${junit_cmd} set_default_namespace_for_submariner_tests_on_cluster_a
+
+      ${junit_cmd} set_default_namespace_for_submariner_tests_on_cluster_b
 
       ${junit_cmd} install_netshoot_app_on_cluster_a
 
