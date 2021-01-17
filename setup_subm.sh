@@ -2109,10 +2109,10 @@ function configure_cluster_registry_and_link_service_account() {
     ${OC} delete secret $secret_name -n $namespace || :
   fi
 
-  ( # subshell to hide commands
+ ( # subshell to hide commands
     ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
     --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
-  )
+ )
 
   echo "# Adding '$secret_name' secret:"
   ${OC} describe secret $secret_name -n $namespace
@@ -2187,17 +2187,19 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
-  echo "# Disable auto rebooting after a change with the machine-config-operator"
-  ${OC} patch --type=merge --patch='{"spec":{"paused":true}}' machineconfigpool/${node_type}
+  echo "# Enable auto rebooting of nodes after machineconfigpool change, with the machine-config-operator:"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
 
   echo "# Wait for Machine Config Daemon to be rolled out:"
   ${OC} rollout status ds -n openshift-machine-config-operator  machine-config-daemon
 
-  echo "# Wait for Machine Config Pool to be updated:"
-  ${OC} wait machineconfigpool/${node_type} --for condition=updated
+  local wait_time=15m
 
-  echo "# Wait up to 5 minutes for all ${node_type} nodes to be ready:"
-  ${OC} wait --timeout=5m --for=condition=ready node -l node-role.kubernetes.io/${node_type}
+  echo "# Wait up to $wait_time for all ${node_type} Machine Config Pool to be updated:"
+  ${OC} wait --timeout=$wait_time machineconfigpool/${node_type} --for condition=updated
+
+  echo "# Wait up to $wait_time for all ${node_type} Nodes to be ready:"
+  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type}
 
   echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
   ${OC} get nodes
