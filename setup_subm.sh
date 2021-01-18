@@ -167,6 +167,7 @@ export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
 export E2E_OUTPUT="$SCRIPT_DIR/subm_e2e_output.log"
+> "$E2E_OUTPUT"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -204,7 +205,7 @@ export POLARION_REPORTS="$SCRIPT_DIR/polarion.reports"
 ####################################################################################
 
 check_cli_args() {
-  [[ -n "$1" ]] || { echo "# Missing arguments. Please see Help with: -h" ; exit 1 ; }
+  [[ -n "$1" ]] || ( echo "# Missing arguments. Please see Help with: -h" && exit 1 )
 }
 
 POSITIONAL=()
@@ -1226,11 +1227,11 @@ function destroy_aws_cluster_a() {
     if [[ -f "${CLUSTER_A_DIR}/metadata.json" ]] ; then
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
-      { [[ $? -eq 124 ]] && \
+      ( [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
         "Force exist OCP destroy process" \
         "Please submit a new bug for OCP installer (in Bugzilla)"
-      }
+      )
     fi
     # cd ..
 
@@ -3201,7 +3202,11 @@ function test_project_e2e_with_go() {
   --submariner-namespace ${SUBM_NAMESPACE}
   --connection-timeout 30 --connection-attempts 3"
 
-  local e2e_rc
+  local msg="# Running End-to-End tests with GO in project: \n# $e2e_project_path
+  \n# Ginkgo test parameters: $test_params"
+
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_OUTPUT file."
+  echo -e "$msg" >> "$E2E_OUTPUT"
 
   go test -v ./test/e2e \
   -timeout 120m \
@@ -3210,13 +3215,7 @@ function test_project_e2e_with_go() {
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -args $test_params \
-  || e2e_rc=$?
-
-  if [[ -n "$e2e_rc" ]] ; then
-    echo -e "# End-to-End tests with GO failed within project: \n# $e2e_project_path"
-    return $e2e_rc
-  fi
+  -args $test_params | tee -a "$E2E_OUTPUT"
 
 }
 
@@ -3227,9 +3226,6 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
 
-  # E2E output will be printed both to stdout and to subm_e2e_output.log
-  > "$E2E_OUTPUT"
-
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
@@ -3239,12 +3235,9 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
+  echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_OUTPUT"
   # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
-
-  if [[ ! -s "$E2E_OUTPUT" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
-    return 1
-  fi
 
 }
 
@@ -3459,9 +3452,13 @@ function pass_test_debug() {
 function fail_test_debug() {
   trap_commands;
   PROMPT "FAIL test for DEBUG"
-  echo "Should not get here if calling after FATAL"
+  echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
   # find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
-  return 3
+
+  local TEST=1
+  if [[ -n "$TEST" ]] ; then
+    return 1
+  fi
 }
 
 function fatal_test_debug() {
@@ -3520,8 +3517,9 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
   # # Debug functions
   # ${junit_cmd} pass_test_debug
   # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} fail_test_debug || rc=$?
+  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
   # ${junit_cmd} fatal_test_debug
-  # ${junit_cmd} fail_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
@@ -3607,12 +3605,18 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} clean_aws_cluster_a
+
+      ${junit_cmd} configure_images_prune_cluster_a
+
     fi
 
     # Running clean_osp_cluster_b if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} clean_osp_cluster_b
+
+      ${junit_cmd} configure_images_prune_cluster_b
+
     fi
 
     # Running test_custom_images_from_registry if requested - To use custom Submariner images
@@ -3781,29 +3785,45 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     ### Running Unit-tests in Submariner project directory (Ginkgo)
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
-      ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+      ${junit_cmd} test_submariner_packages # || ginkgo_tests_status=FAILED
+
+      if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+        ginkgo_tests_status=FAILED
+        BUG "Submariner Unit-Tests FAILED."
+      fi
+
     fi
 
     ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
     if [[ ! "$skip_tests" =~ e2e ]]; then
 
-      export e2e_tests_status=
-
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} test_submariner_e2e_with_go || \
-        { BUG "Ginkgo E2E tests of Submariner repository has FAILED." ; e2e_tests_status=FAILED ; }
+        ${junit_cmd} test_submariner_e2e_with_go
 
-        ${junit_cmd} test_lighthouse_e2e_with_go || \
-        { BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." ; e2e_tests_status=FAILED ; }
+        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+          ginkgo_tests_status=FAILED
+          BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
+        fi
+
+        ${junit_cmd} test_lighthouse_e2e_with_go
+
+        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+          ginkgo_tests_status=FAILED
+          BUG "Submariner End-to-End Ginkgo tests have FAILED"
+        fi
 
       else
-        ${junit_cmd} test_submariner_e2e_with_subctl || \
-        { BUG "Subctl verify has FAILED." ; e2e_tests_status=FAILED ; }
+        ${junit_cmd} test_submariner_e2e_with_subctl
+
+        if tail -n 5 "$E2E_OUTPUT" | grep "E2E failed" ; then
+          ginkgo_tests_status=FAILED
+          BUG "SubCtl End-to-End tests have FAILED"
+        fi
       fi
 
-      if [[ "$e2e_tests_status" = FAILED ]] ; then
-        FATAL "Submariner E2E tests have ended with failures, please investigate."
+      if [[ "$ginkgo_tests_status" = FAILED ]] ; then
+        FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
       fi
 
     fi
