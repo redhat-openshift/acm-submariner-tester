@@ -204,7 +204,7 @@ export POLARION_REPORTS="$SCRIPT_DIR/polarion.reports"
 ####################################################################################
 
 check_cli_args() {
-  [[ -n "$1" ]] || ( echo "# Missing arguments. Please see Help with: -h" && exit 1 )
+  [[ -n "$1" ]] || { echo "# Missing arguments. Please see Help with: -h" ; exit 1 ; }
 }
 
 POSITIONAL=()
@@ -1226,11 +1226,11 @@ function destroy_aws_cluster_a() {
     if [[ -f "${CLUSTER_A_DIR}/metadata.json" ]] ; then
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
-      ( [[ $? -eq 124 ]] && \
+      { [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
         "Force exist OCP destroy process" \
         "Please submit a new bug for OCP installer (in Bugzilla)"
-      )
+      }
     fi
     # cd ..
 
@@ -3201,6 +3201,8 @@ function test_project_e2e_with_go() {
   --submariner-namespace ${SUBM_NAMESPACE}
   --connection-timeout 30 --connection-attempts 3"
 
+  local e2e_rc
+
   go test -v ./test/e2e \
   -timeout 120m \
   -ginkgo.v -ginkgo.trace \
@@ -3209,7 +3211,13 @@ function test_project_e2e_with_go() {
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -args $test_params \
-  || BUG "End-to-End tests with GO failed in project: \n# $e2e_project_path"
+  || e2e_rc=$?
+
+  if [[ -n "$e2e_rc" ]] ; then
+    echo -e "# End-to-End tests with GO failed within project: \n# $e2e_project_path"
+    return $e2e_rc
+  fi
+
 }
 
 # ------------------------------------------
@@ -3231,7 +3239,7 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
-  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
+  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
 
   if [[ ! -s "$E2E_OUTPUT" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
@@ -3779,17 +3787,19 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
     if [[ ! "$skip_tests" =~ e2e ]]; then
 
+      export e2e_tests_status=
+
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} test_submariner_e2e_with_go || \
-        ( BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED )
+        { BUG "Ginkgo E2E tests of Submariner repository has FAILED." ; e2e_tests_status=FAILED ; }
 
         ${junit_cmd} test_lighthouse_e2e_with_go || \
-        ( BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED )
+        { BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." ; e2e_tests_status=FAILED ; }
 
       else
         ${junit_cmd} test_submariner_e2e_with_subctl || \
-        ( BUG "Subctl verify has FAILED." && e2e_tests_status=FAILED )
+        { BUG "Subctl verify has FAILED." ; e2e_tests_status=FAILED ; }
       fi
 
       if [[ "$e2e_tests_status" = FAILED ]] ; then
