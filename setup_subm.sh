@@ -167,6 +167,7 @@ export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
 export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
 export E2E_OUTPUT="$SCRIPT_DIR/subm_e2e_output.log"
+> "$E2E_OUTPUT"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -570,7 +571,7 @@ function show_test_plan() {
   if [[ "$skip_install" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_install \n"
   else
-    echo "### Will execute Submariner deployment and environment preparations:
+    echo "### Will execute: Submariner deployment and environment preparations:
 
     OCP and Submariner setup and test tools:
     - config_golang: $config_golang
@@ -1118,10 +1119,15 @@ function create_osp_cluster_b() {
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
 
-  ocpup  create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
-  pid=$!
-  tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
-  tail --pid=$pid -f /dev/null
+  # ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
+  # pid=$!
+  # tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
+  # tail --pid=$pid -f /dev/null
+
+  local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
+  local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
+
+  run_and_tail "$ocp_cmd" "$ocp_log" 1h || FATAL "OCP create cluster B did not complete as expected"
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1190,24 +1196,8 @@ function test_cluster_status() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
 
-  # Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was previously set)
-  if [[ $TEST_NS ]] ; then
-    echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak"
-    cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
-
-    BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
-    "Set the default namespace to \"${TEST_NS}\"" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
-
-    echo "# Create namespace for Submariner tests: ${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || : # Ignore none-zero exit code (if namespace already exists
-
-    echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS}"
-    cur_context="$(${OC} config current-context)"
-    ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS}"
-  else
-    export TEST_NS=default
-  fi
+  cur_context="$(${OC} config current-context)"
+  ${OC} config set "contexts.${cur_context}.namespace" "default"
 
   ${OC} config view
   ${OC} status || FATAL "Openshift cluster is not installed, or not accessible with: ${KUBECONFIG}"
@@ -1238,9 +1228,10 @@ function destroy_aws_cluster_a() {
       echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
       ( [[ $? -eq 124 ]] && \
-      BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
-      "Force exist OCP destroy process" \
-      "Please submit a new bug for OCP installer (in Bugzilla)" )
+        BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
+        "Force exist OCP destroy process" \
+        "Please submit a new bug for OCP installer (in Bugzilla)"
+      )
     fi
     # cd ..
 
@@ -1306,15 +1297,10 @@ function destroy_osp_cluster_b() {
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
-    ocpup  destroy clusters ${DEBUG_FLAG} --config "$ocpup_yml" & # running on the background (with timeout)
-    pid=$! # while the background process runs, tail its log
-    # tail --pid=$pid -f .config/${ocpup_cluster_name}/.openshift_install.log && tail -f /proc/$pid/fd/1
+    local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
+    local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
-    # Wait until the background process finish
-    #tail --pid=$pid -f --retry ${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log &
-    #tail --pid=$pid -f /dev/null # wait until the background process finish
-
-    timeout --foreground 20m tail --pid=$pid -f --retry "${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
+    run_and_tail "$ocp_cmd" "$ocp_log" 20m || FATAL "OCP destroy cluster B did not complete as expected"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1423,9 +1409,9 @@ function delete_submariner_cluster_roles() {
 
   echo "# Deleting Submariner ClusterRoles and ClusterRoleBindings"
 
-  ${OC} delete clusterrole,clusterrolebinding submariner-operator || :
+  local roles="submariner-operator submariner-operator-globalnet submariner-lighthouse submariner-networkplugin-syncer"
 
-  ${OC} delete clusterrole,clusterrolebinding submariner-operator-globalnet || :
+  ${OC} delete clusterrole,clusterrolebinding $roles || :
 
 }
 
@@ -1464,6 +1450,10 @@ function delete_submariner_test_namespaces() {
       # ${OC} create namespace "$ns" || : # || : to ignore none-zero exit code
     fi
   done
+
+  echo "# Unset Submariner test namespaces from kubeconfig current context"
+  local cur_context="$(${OC} config current-context)"
+  ${OC} config unset "contexts.${cur_context}.namespace"
 
 }
 
@@ -1540,6 +1530,55 @@ function remove_submariner_images_from_local_registry() {
       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
       podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
   done
+}
+
+# ------------------------------------------
+
+function configure_namespace_for_submariner_tests_on_cluster_a() {
+  PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on AWS cluster A (public)"
+  trap_commands;
+
+  kubconf_a;
+  configure_namespace_for_submariner_tests
+
+}
+
+# ------------------------------------------
+
+function configure_namespace_for_submariner_tests_on_cluster_b() {
+  PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on OSP cluster B (public)"
+  trap_commands;
+
+  kubconf_b;
+  configure_namespace_for_submariner_tests
+
+}
+
+# ------------------------------------------
+
+function configure_namespace_for_submariner_tests() {
+  trap_commands;
+
+  echo "# Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was set in variables file)"
+  if [[ -z "$TEST_NS" ]] ; then
+    export TEST_NS=default
+    echo "# Create namespace for Submariner tests: ${TEST_NS}"
+    ${OC} create namespace "${TEST_NS}" || echo "# '${TEST_NS}' namespace already exists, please ignore message"
+  else
+    echo "# Using the 'default' namespace for Submariner tests"
+  fi
+
+  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
+
+  BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
+  "Set the default namespace to \"${TEST_NS}\"" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
+  # Workaround:
+  echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS:-default}"
+  cur_context="$(${OC} config current-context)"
+  ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS:-default}"
+
 }
 
 # ------------------------------------------
@@ -1753,8 +1792,9 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
+    ${OC} get Machine -A -o wide
     failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
-    FAILURE "EXTERNAL-IP was not created yet (by \"prep_for_subm.sh\" script).
+    FATAL "EXTERNAL-IP was not created yet. Please check if \"prep_for_subm.sh\" script had errors.
     ${failed_machines:+ Failed Machines: \n$failed_machines}"
   fi
 
@@ -1926,6 +1966,9 @@ function export_service_in_lighthouse() {
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
+  echo "# Show $svc_name Service info:"
+  ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
+
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use '-o yaml' instead" \
   "https://github.com/submariner-io/submariner/issues/739"
@@ -1940,12 +1983,88 @@ function export_service_in_lighthouse() {
 
 # ------------------------------------------
 
+function configure_images_prune_cluster_a() {
+  PROMPT "Configure Garbage Collection and Registry Images Prune on AWS cluster A"
+  trap_commands;
+
+  kubconf_a;
+  configure_ocp_garbage_collection_and_images_prune
+}
+
+# ------------------------------------------
+
+function configure_images_prune_cluster_b() {
+  PROMPT "Configure Garbage Collection and Registry Images Prune on OSP cluster B"
+  trap_commands;
+
+  kubconf_b;
+  configure_ocp_garbage_collection_and_images_prune
+}
+
+# ------------------------------------------
+
+function configure_ocp_garbage_collection_and_images_prune() {
+### function to set garbage collection on all cluster nodes
+  trap_commands;
+
+  echo "# Setting garbage collection on all OCP cluster nodes"
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: KubeletConfig
+  metadata:
+    name: garbage-collector-kubeconfig
+  spec:
+    machineConfigPoolSelector:
+      matchLabels:
+        custom-kubelet: small-pods
+    kubeletConfig:
+      evictionSoft:
+        memory.available: "500Mi"
+        nodefs.available: "10%"
+        nodefs.inodesFree: "5%"
+        imagefs.available: "15%"
+        imagefs.inodesFree: "10%"
+      evictionSoftGracePeriod:
+        memory.available: "1m30s"
+        nodefs.available: "1m30s"
+        nodefs.inodesFree: "1m30s"
+        imagefs.available: "1m30s"
+        imagefs.inodesFree: "1m30s"
+      evictionHard:
+        memory.available: "200Mi"
+        nodefs.available: "5%"
+        nodefs.inodesFree: "4%"
+        imagefs.available: "10%"
+        imagefs.inodesFree: "5%"
+      evictionPressureTransitionPeriod: 0s
+      imageMinimumGCAge: 5m
+      imageGCHighThresholdPercent: 80
+      imageGCLowThresholdPercent: 75
+EOF
+
+  echo "# Enable Image Pruner policy - to delete unused images from registry:"
+
+  ${OC} patch imagepruner.imageregistry/cluster --patch '{"spec":{"suspend":false}}' --type=merge
+    # imagepruner.imageregistry.operator.openshift.io/cluster patched
+
+  ${OC} wait imagepruner --timeout=10s --for=condition=available cluster
+    # imagepruner.imageregistry.operator.openshift.io/cluster condition met
+
+  ${OC} describe imagepruner.imageregistry.operator.openshift.io
+
+  echo "# List all images in all pods:"
+  ${OC} get pods -A -o jsonpath="{..imageID}" |tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}'
+}
+
+# ------------------------------------------
+
 function test_custom_images_from_registry_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_commands;
 
   kubconf_a;
-  configure_cluster_registry
+  configure_cluster_registry_and_link_service_account
 }
 
 # ------------------------------------------
@@ -1955,7 +2074,59 @@ function test_custom_images_from_registry_cluster_b() {
   trap_commands;
 
   kubconf_b;
-  configure_cluster_registry
+  configure_cluster_registry_and_link_service_account
+}
+
+# ------------------------------------------
+
+function configure_cluster_registry_and_link_service_account() {
+### Configure access to external docker registry
+  # DONT trap_commands
+
+  # set registry variables
+  local registry_url="$REGISTRY_URL"
+  local registry_mirror="$REGISTRY_MIRROR"
+  local registry_usr="$REGISTRY_USR"
+  local registry_pwd="$REGISTRY_PWD"
+  local registry_email="$REGISTRY_EMAIL"
+
+  local namespace="$SUBM_NAMESPACE"
+  local service_account_name="$SUBM_NAMESPACE"
+  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
+
+  echo "# Add OCP Registry mirror for Submariner:"
+  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
+  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+
+  echo "# Create $namespace namespace"
+  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
+
+  echo "# Creating new secret in '$namespace' namespace"
+
+  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
+    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
+    ${OC} delete secret $secret_name -n $namespace || :
+  fi
+
+ ( # subshell to hide commands
+    ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
+ )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
 }
 
 # ------------------------------------------
@@ -1995,6 +2166,29 @@ function add_submariner_registry_mirror_to_ocp_node() {
 EOF
   )
 
+  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+  echo "# Checking API ignition version for OCP version: $ocp_version"
+
+  case $ocp_version in
+  4.[0-5].*)
+    ignition_version="2.2.0"
+    ;;
+  4.6.*)
+    ignition_version="3.1.0"
+    ;;
+  4.7.*)
+    ignition_version="3.2.0"
+    ;;
+  4.[8-9].*)
+    ignition_version="3.2.0"
+    ;;
+  *)
+    ignition_version="3.2.0"
+    ;;
+  esac
+
+  echo "# Updating Registry in ${node_type} Machine configuration, by OCP API Ignition version: $ignition_version"
+
   cat <<EOF | ${OC} apply -f -
   apiVersion: machineconfiguration.openshift.io/v1
   kind: MachineConfig
@@ -2005,7 +2199,7 @@ EOF
   spec:
     config:
       ignition:
-        version: 2.2.0
+        version: ${ignition_version}
       storage:
         files:
         - contents:
@@ -2015,54 +2209,24 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
-}
+  echo "# Enable auto rebooting of nodes after machineconfigpool change, with the machine-config-operator:"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
 
-# ------------------------------------------
+  echo "# Wait for Machine Config Daemon to be rolled out:"
+  ${OC} rollout status ds -n openshift-machine-config-operator  machine-config-daemon
 
-function configure_cluster_registry() {
-### Configure access to external docker registry
-  # DONT trap_commands
+  local wait_time=15m
 
-  # set registry variables
-  local registry_url="$REGISTRY_URL"
-  local registry_mirror="$REGISTRY_MIRROR"
-  local registry_usr="$REGISTRY_USR"
-  local registry_pwd="$REGISTRY_PWD"
-  local registry_email="$REGISTRY_EMAIL"
+  echo "# Wait up to $wait_time for all ${node_type} Machine Config Pool to be updated:"
+  ${OC} wait --timeout=$wait_time machineconfigpool/${node_type} --for condition=updated || : # It might fail, but continue anyway
 
-  local namespace="$SUBM_NAMESPACE"
-  local service_account_name="$SUBM_NAMESPACE"
-  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
+  echo "# Wait up to $wait_time for all ${node_type} Nodes to be ready:"
+  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type}
 
-  echo "# Add OCP Registry mirror for Submariner:"
-  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
-  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
-
-  echo "# Create $namespace namespace"
-  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
-
-  echo "# Creating new secret in '$namespace' namespace"
-
-  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
-    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
-    ${OC} delete secret $secret_name -n $namespace || :
-  fi
-
-  ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
-  --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
-
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace
-
-  ### update the cluster global pull-secret
-  ${OC} patch secret/pull-secret -n openshift-config -p \
-  '{"data":{".dockerconfigjson":"'"$( \
-  ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-  | base64 --decode | jq -r -c '.auths |= . + '"$( \
-  ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-  | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
-
-  ${OC} describe secret/pull-secret -n openshift-config
+  echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
+  ${OC} get nodes
+  ${OC} get machineconfigpool
+  ${OC} get daemonsets -A
 
 }
 
@@ -2720,6 +2884,11 @@ function test_clusters_connected_full_domain_name() {
   watch_and_retry "$cmd" 3m "$regex"
     # PING netshoot-cl-a-new.test-submariner-new.svc.clusterset.local (169.254.59.89)
 
+  BUG "LibreSwan may fail here, but subctl may not warn on sub-connection problem" \
+   "No workaround yet, it is caused by LibreSwan bug 1081" \
+  "https://github.com/submariner-io/submariner/issues/1080"
+  # No workaround yet
+
   echo "# Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:${NGINX_PORT} :"
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:${NGINX_PORT}"
 
@@ -3033,6 +3202,12 @@ function test_project_e2e_with_go() {
   --submariner-namespace ${SUBM_NAMESPACE}
   --connection-timeout 30 --connection-attempts 3"
 
+  local msg="# Running End-to-End tests with GO in project: \n# $e2e_project_path
+  \n# Ginkgo test parameters: $test_params"
+
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_OUTPUT file."
+  echo -e "$msg" >> "$E2E_OUTPUT"
+
   go test -v ./test/e2e \
   -timeout 120m \
   -ginkgo.v -ginkgo.trace \
@@ -3040,8 +3215,8 @@ function test_project_e2e_with_go() {
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -args $test_params \
-  || BUG "End-to-End tests with GO failed in project: \n# $e2e_project_path"
+  -args $test_params | tee -a "$E2E_OUTPUT"
+
 }
 
 # ------------------------------------------
@@ -3050,9 +3225,6 @@ function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_commands;
-
-  # E2E output will be printed both to stdout and to subm_e2e_output.log
-  > "$E2E_OUTPUT"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
@@ -3063,12 +3235,9 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
-  # subctl verify --enable-disruptive --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
+  echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_OUTPUT"
+  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
   subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
-
-  if [[ ! -s "$E2E_OUTPUT" ]] || grep "E2E failed" "$E2E_OUTPUT" ; then
-    return 1
-  fi
 
 }
 
@@ -3162,10 +3331,10 @@ function collect_submariner_info() {
     subctl show all || :
 
     kubconf_a;
-    print_submariner_pod_logs "${CLUSTER_A_NAME}"
+    print_resources_and_pod_logs "${CLUSTER_A_NAME}"
 
     kubconf_b;
-    print_submariner_pod_logs "${CLUSTER_B_NAME}"
+    print_resources_and_pod_logs "${CLUSTER_B_NAME}"
 
   ) |& tee -a $log_file
 
@@ -3173,30 +3342,19 @@ function collect_submariner_info() {
 
 # ------------------------------------------
 
-function print_submariner_pod_logs() {
+function print_resources_and_pod_logs() {
   trap_commands;
   local cluster_name="$1"
 
   echo -e "
   \n################################################################################################ \
-  \n#                             Submariner LOGS on ${cluster_name}                              # \
+  \n#                             Openshift Nodes on ${cluster_name}                              # \
   \n################################################################################################ \
   \n"
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
-  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
-  ${OC} describe cm -n openshift-dns || :
+  ${OC} get nodes || :
 
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Machine -A || :
+  ${OC} get machineconfigpool || :
 
   ${OC} get Machine -A | awk '{
     if (NR>1) {
@@ -3209,6 +3367,30 @@ function print_submariner_pod_logs() {
     }
   }'
 
+  ${OC} get daemonsets -A || :
+
+  echo -e "
+  \n################################################################################################ \
+  \n#                             Submariner Resources on ${cluster_name}                         # \
+  \n################################################################################################ \
+  \n"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
+
+  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe cm -n openshift-dns || :
+
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
   # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
@@ -3216,6 +3398,12 @@ function print_submariner_pod_logs() {
   #     ${OC}  -n $ns describe pod $name
   #     ${OC}  -n $namespace logs $pod
   # done
+
+  echo -e "
+  \n################################################################################################ \
+  \n#                             Submariner LOGS on ${cluster_name}                              # \
+  \n################################################################################################ \
+  \n"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -3264,8 +3452,13 @@ function pass_test_debug() {
 function fail_test_debug() {
   trap_commands;
   PROMPT "FAIL test for DEBUG"
-  find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
-  return 3
+  echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
+  # find ${CLUSTER_A_DIR} -name "*.log" -print0 | xargs -0 cat
+
+  local TEST=1
+  if [[ -n "$TEST" ]] ; then
+    return 1
+  fi
 }
 
 function fatal_test_debug() {
@@ -3324,7 +3517,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
   # # Debug functions
   # ${junit_cmd} pass_test_debug
   # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} fail_test_debug
+  # ${junit_cmd} fail_test_debug || rc=$?
+  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
   # ${junit_cmd} fatal_test_debug
 
   # Print planned steps according to CLI/User inputs
@@ -3352,6 +3546,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} create_aws_cluster_a
 
+      ${junit_cmd} configure_images_prune_cluster_a
+
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
@@ -3366,10 +3562,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
         ${junit_cmd} create_aws_cluster_a
 
+        ${junit_cmd} configure_images_prune_cluster_a
+
       fi
     fi
-
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
@@ -3378,12 +3574,28 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} create_osp_cluster_b
 
-    else
-      # Running destroy_aws_cluster_b and create_aws_cluster_b separately
-      [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} destroy_osp_cluster_b
+      ${junit_cmd} configure_images_prune_cluster_b
 
-      [[ ! "$create_cluster_b" =~ ^(y|yes)$ ]] || ${junit_cmd} create_osp_cluster_b
+    else
+      # Running destroy_osp_cluster_b and create_osp_cluster_b separately
+      if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} destroy_osp_cluster_b
+
+      fi
+
+      if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} create_osp_cluster_b
+
+        ${junit_cmd} configure_images_prune_cluster_b
+
+      fi
     fi
+
+    # Verify clusters status
+
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
 
     ${junit_cmd} test_kubeconfig_osp_cluster_b
 
@@ -3391,12 +3603,20 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # Running clean_aws_cluster_a if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} clean_aws_cluster_a
+
+      ${junit_cmd} configure_images_prune_cluster_a
+
     fi
 
     # Running clean_osp_cluster_b if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} clean_osp_cluster_b
+
+      ${junit_cmd} configure_images_prune_cluster_b
+
     fi
 
     # Running test_custom_images_from_registry if requested - To use custom Submariner images
@@ -3412,6 +3632,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
     if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
+      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+
+      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_b
+
       ${junit_cmd} install_netshoot_app_on_cluster_a
 
       ${junit_cmd} install_nginx_svc_on_cluster_b
@@ -3420,7 +3644,6 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       ${junit_cmd} test_clusters_disconnected_before_submariner
     fi
-
   fi
 
 
@@ -3433,9 +3656,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     # Running download_subctl_latest_devel or download_subctl_latest_release
     if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} download_subctl_latest_devel
+
     elif [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} download_subctl_latest_release
+
     fi
 
     ${junit_cmd} test_subctl_command
@@ -3484,12 +3711,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_globalnet_status_cluster_a
 
       ${junit_cmd} test_globalnet_status_cluster_b
     fi
 
     if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_lighthouse_status_cluster_a
 
       ${junit_cmd} test_lighthouse_status_cluster_b
@@ -3505,6 +3734,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} install_nginx_headless_namespace_cluster_b
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+
       ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
@@ -3555,7 +3785,13 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     ### Running Unit-tests in Submariner project directory (Ginkgo)
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
-      ${junit_cmd} test_submariner_packages || BUG "Submariner Unit-Tests FAILED."
+      ${junit_cmd} test_submariner_packages # || ginkgo_tests_status=FAILED
+
+      if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+        ginkgo_tests_status=FAILED
+        BUG "Submariner Unit-Tests FAILED."
+      fi
+
     fi
 
     ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
@@ -3563,19 +3799,31 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} test_submariner_e2e_with_go || \
-        ( BUG "Ginkgo E2E tests of Submariner repository has FAILED." && e2e_tests_status=FAILED )
+        ${junit_cmd} test_submariner_e2e_with_go
 
-        ${junit_cmd} test_lighthouse_e2e_with_go || \
-        ( BUG "Ginkgo E2E tests of Lighthouse repository has FAILED." && e2e_tests_status=FAILED )
+        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+          ginkgo_tests_status=FAILED
+          BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
+        fi
+
+        ${junit_cmd} test_lighthouse_e2e_with_go
+
+        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+          ginkgo_tests_status=FAILED
+          BUG "Submariner End-to-End Ginkgo tests have FAILED"
+        fi
 
       else
-        ${junit_cmd} test_submariner_e2e_with_subctl || \
-        ( BUG "Subctl verify has FAILED." && e2e_tests_status=FAILED )
+        ${junit_cmd} test_submariner_e2e_with_subctl
+
+        if tail -n 5 "$E2E_OUTPUT" | grep "E2E failed" ; then
+          ginkgo_tests_status=FAILED
+          BUG "SubCtl End-to-End tests have FAILED"
+        fi
       fi
 
-      if [[ "$e2e_tests_status" = FAILED ]] ; then
-        FATAL "Submariner E2E tests have ended with failures, please investigate."
+      if [[ "$ginkgo_tests_status" = FAILED ]] ; then
+        FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
       fi
 
     fi

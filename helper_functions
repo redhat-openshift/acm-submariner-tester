@@ -154,7 +154,6 @@ function watch_and_retry() {
   # To use timeout - must run command as an external script
   timeout $TIMEOUT bash <<EOF \
   || ( [[ $? -eq 124 ]] && echo "# Timeout of $TIMEOUT has exceeded." && return 1 )
-    trap_commands ;
     COUNT=0 ;
     until $CMD || [[ \$COUNT -eq $RETRY ]] ; do
       printf "\$(( COUNT++ ))... " ;
@@ -166,6 +165,39 @@ function watch_and_retry() {
     fi ;
     exit 0 ;
 EOF
+}
+
+# ------------------------------------------
+
+# function to run command with timeout, and tail log in parallel
+function run_and_tail() {
+  trap_commands
+
+  # Param 1: Command to execute
+  local cmd="$1"
+  # Param 2: Log file to tail
+  local log_to_tail="$2"
+  # Param 3: timeout duration (default 1 hour)
+  local duration="${3:-1h}"
+
+  echo -e "# Running command as background process: $cmd
+  \n# Timeout duration: $duration
+  \n# Tailing log file: $log_to_tail"
+
+  # Running the process with timeout - in the background, and store its PID
+  timeout --foreground $duration $cmd &
+  local pid=$!
+
+  # Tail the log, until command has ended or timed-out
+  touch "$log_to_tail"
+  tail --pid=$pid -n0 -F "$log_to_tail"
+
+  # Check the exit code of the command PID
+  wait $pid || proc_exit="$?"
+  [[ "$proc_exit" = 0 ]] || \
+  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
+
+  return $proc_exit
 }
 
 # ------------------------------------------
@@ -186,7 +218,7 @@ function PROMPT() {
 # sh2ju treats exit code 5 as non-critical failure (to continue tests)
 function FAILURE() {
   local failure_msg="${1}"
-  echo -e "\n${RED}*** Expected failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
+  echo -e "\n${RED}*** Test failure occurred *** \n $failure_msg ${NO_COLOR}" >&2
   return 5
 }
 
@@ -198,8 +230,8 @@ function FATAL() {
   echo -e "\n${RED}*** Fatal error occurred *** \n $failure_msg ${NO_COLOR}" >&2
   # kill -s TERM $$
   # kill -s TERM $BASHPID
-  kill -s EXIT $PPID
-  exit 127
+  # kill -s EXIT $PPID
+  return 127
 }
 
 # ------------------------------------------
@@ -256,7 +288,8 @@ function record_junit() {
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
   trap_commands
-  install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
+  work_dir="$(echo "${1:-.}" | tr -s /)" # Remove redundant slashes
+  install_dir="${work_dir}/miniconda"
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
@@ -269,9 +302,9 @@ function install_anaconda() {
   echo "# Installing Anaconda"
   # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
-  download_file https://repo.anaconda.com/miniconda/${miniconda_installer}
-  chmod +x $miniconda_installer
-  ./$miniconda_installer -b -u -p ${install_dir}
+  download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
+  chmod +x "${work_dir}/${miniconda_installer}"
+  ${work_dir}/${miniconda_installer} -b -u -p ${install_dir}
   conda update -y -n base -c defaults conda
 
   # Remove old conda environment dir, if it is not configured
@@ -799,7 +832,7 @@ function get_running_pod_by_label() {
     return 0
   else
     # exit 1
-    FATAL "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
+    FAILURE "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
   fi
 
 }
