@@ -42,6 +42,14 @@ export AWS_ZONE_ID="aws-zone-id"
 export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
+export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
+export OS_USERNAME="openstack-user"
+export OS_PASSWORD="openstack-pass"
+export OS_USER_DOMAIN_NAME="openstack.domain"
+export OS_PROJECT_NAME="openstack-project"
+export OS_PROJECT_DOMAIN_ID="openstack-project-id"
+export OS_REGION_NAME="openstack-region"
+
 export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
 export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
 export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
@@ -49,7 +57,7 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
 export REGISTRY_URL="${REGISTRY_URL:-registry.redhat.io/rhacm2-tech-preview}"
-export REGISTRY_MIRROR="docker-server" # without " https:// "
+export REGISTRY_SERVER="docker-server" # without " https:// "
 export REGISTRY_USR="docker-user"
 export REGISTRY_PWD='docker-pass' # in single quotes
 export REGISTRY_EMAIL="docker-email"

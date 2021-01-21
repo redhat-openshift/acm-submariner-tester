@@ -594,7 +594,8 @@ function show_test_plan() {
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
-    - configure_aws_ports_for_submariner_broker (\"prep_for_subm.sh\")
+    - open_firewall_ports_on_the_broker_node (\"prep_for_subm.sh\")
+    - open_firewall_ports_on_openstack_cluster_b (\"configure_osp.sh\")
     - label_gateway_on_broker_nodes_with_external_ip
     - label_first_gateway_cluster_b
     - install_broker_aws_cluster_a
@@ -713,11 +714,13 @@ function setup_workspace() {
     fi
   fi
 
-  # # Installing Podman with Anaconda, if $install_subctl_release = yes/y
-  # if [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
-  #   echo "# Installing Podman in order to upload Submariner images to OCP clusters registries"
-  #   install_local_podman "${WORKDIR}"
-  # fi
+  # # Installing Terraform
+  # install_local_terraform "${WORKDIR}"
+  BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
+  "Use Terraform v0.12.12" \
+  "https://github.com/submariner-io/submariner/issues/847"
+  # Workaround:
+  install_local_terraform "${WORKDIR}" "0.12.12"
 
   echo "# Installing JQ (JSON processor) with Anaconda"
   install_local_jq "${WORKDIR}"
@@ -731,11 +734,22 @@ function setup_workspace() {
   # Trim trailing and leading spaces from $TEST_NS
   TEST_NS="$(echo "$TEST_NS" | xargs)"
 
+  # echo "# Exporting OSP variables"
+  # export TF_VAR_OS_AUTH_URL="$OS_AUTH_URL"
+  # export TF_VAR_OS_USERNAME="$OS_USERNAME"
+  # export TF_VAR_OS_PASSWORD="$OS_PASSWORD"
+  # export TF_VAR_OS_USER_DOMAIN_NAME="$OS_USER_DOMAIN_NAME"
+  # export TF_VAR_OS_PROJECT_NAME="$OS_PROJECT_NAME"
+  # export TF_VAR_OS_PROJECT_DOMAIN_ID="$OS_PROJECT_ID"
+  # export TF_VAR_OS_REGION_NAME="$OS_REGION_NAME"
+
   # Installing AWS-CLI if $config_aws_cli = yes/y
   if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    echo "# Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    (
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+    )
   fi
 
   # # CD to previous directory
@@ -1684,31 +1698,29 @@ function open_firewall_ports_on_the_broker_node() {
   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
   trap_commands;
 
-  # # Installing Terraform
-  # install_local_terraform "${WORKDIR}"
-
-  BUG "Terraform v0.13.x is not supported when using prep_for_subm.sh" \
-  "Use Terraform v0.12.29" \
-  "https://github.com/submariner-io/submariner/issues/847"
-  # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.29"
+  command -v terraform || FATAL "Terraform is required in order to run 'prep_for_subm.sh'"
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch=master # "7ffe6146081d5a7f14ea103e5f290411d3746a4a" # "master" #
-  local prep_for_subm_dir="tools/openshift/ocp-ipi-aws"
+  local commit_or_branch=master
+  local github_dir="tools/openshift/ocp-ipi-aws"
+  local cluster_path="$CLUSTER_A_DIR"
+  local target_path="${cluster_path}/${github_dir}"
+  local terraform_script="prep_for_subm.sh"
 
-  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "$prep_for_subm_dir"
+  mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
 
-  # cd "$prep_for_subm_dir"
-  BUG "'prep_for_subm.sh' ignores local yamls and always download from master" \
-  "Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') into 'submariner_prep' under OCP install dir" \
+  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
+
+  BUG "'${terraform_script}' ignores local yamls and always download from master" \
+  "Copy '${github_dir}' directory (including '${terraform_script}') into OCP install dir" \
   "https://github.com/submariner-io/submariner/issues/880"
   # Workaround:
 
-  echo "# Copy 'ocp-ipi-aws' directory (including 'prep_for_subm.sh') to $CLUSTER_A_DIR/submariner_prep"
-  cp -rf "$prep_for_subm_dir" "$CLUSTER_A_DIR/submariner_prep"
-  cd "$CLUSTER_A_DIR/submariner_prep/"
+  echo "# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
+  mkdir -p "${target_path}"
+  cp -rf "${github_dir}"/* "${target_path}"
+  cd "${target_path}/"
 
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
 
@@ -1718,9 +1730,9 @@ function open_firewall_ports_on_the_broker_node() {
   export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
   export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
-  # bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve
-  echo "# Running 'prep_for_subm.sh ${CLUSTER_A_DIR} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
-  bash -x ./prep_for_subm.sh "${CLUSTER_A_DIR}" -auto-approve || FAILURE "./prep_for_subm.sh did not complete successfully"
+  echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  # bash -x ...
+  ./${terraform_script} "${cluster_path}" -auto-approve || FATAL "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   #
@@ -1733,6 +1745,57 @@ function open_firewall_ports_on_the_broker_node() {
   # Applying machineset changes to deploy gateway node:
   # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
   # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
+
+}
+
+# ------------------------------------------
+
+function open_firewall_ports_on_openstack_cluster_b() {
+### Open AWS Firewall ports on the gateway node with terraform (configure_osp.sh) ###
+  # Readme: https://github.com/sridhargaddam/configure-osp-for-subm
+  PROMPT "Running \"configure_osp.sh\" - to open Firewall ports on all nodes in OSP cluster B (on-prem)"
+  trap_commands;
+
+  command -v terraform || FATAL "Terraform is required in order to run 'configure_osp.sh'"
+
+  local git_user="manosnoam"
+  local git_project="configure-osp-for-subm"
+  local commit_or_branch="main"
+  local github_dir="osp-scripts"
+  local cluster_path="$CLUSTER_B_DIR"
+  local target_path="${cluster_path}/${github_dir}"
+  local terraform_script="configure_osp.sh"
+
+  mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
+
+  # Temporary, until merged to upstream
+  # download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
+  download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" # "${github_dir}"
+
+  # echo "# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
+  # mkdir -p "${target_path}"
+  # cp -rf "${github_dir}"/* "${target_path}"
+  # cd "${target_path}/"
+
+  echo "# Copy '${git_project}_scripts' directory (including '${terraform_script}') to ${target_path}_scripts"
+  mkdir -p "${target_path}_scripts"
+  cp -rf * "${target_path}_scripts"
+  cd "${target_path}_scripts/"
+  ### Temporary end
+
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+
+  kubconf_b;
+
+  export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
+  export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+
+  echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply open OSP required ports:"
+
+  chmod a+x ./${terraform_script}
+  # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
+  # bash -x ...
+  ./${terraform_script} "${cluster_path}" -auto-approve || FATAL "./${terraform_script} did not complete successfully"
 
 }
 
@@ -3668,6 +3731,8 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} test_subctl_command
 
     ${junit_cmd} open_firewall_ports_on_the_broker_node
+
+    ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
     ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
