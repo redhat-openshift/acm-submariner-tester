@@ -2585,12 +2585,6 @@ function test_submariner_cable_driver() {
   # Watch submariner-engine pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
-  if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
-    echo "# Verify StrongSwan URI: "
-    ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
-  fi
-
 }
 
 # ------------------------------------------
@@ -2657,7 +2651,6 @@ function test_ha_status() {
 
 }
 
-
 # ------------------------------------------
 
 function test_submariner_connection_cluster_a() {
@@ -2700,6 +2693,54 @@ function test_submariner_connection_established() {
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
 }
 
+
+# ------------------------------------------
+
+function test_ipsec_status_cluster_a() {
+  trap_commands;
+
+  kubconf_a;
+  test_ipsec_status "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_ipsec_status_cluster_b() {
+  trap_commands;
+
+  kubconf_b;
+  test_ipsec_status "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_ipsec_status() {
+# Check submariner cable driver
+  trap_commands;
+  cluster_name="$1"
+
+  PROMPT "Testing IPSec Status of the Active Gateway in ${cluster_name}"
+
+  local active_gateway_node=$(subctl show gateways | awk '/active/ {print $1}')
+  local active_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o wide | awk -v gw_node="$active_gateway_node" '$0 ~ gw_node { print $1 }')
+  # submariner-gateway-r288v
+  > "$TEMP_FILE"
+
+  echo "# Verify IPSec status on Active Gateway Node (${active_gateway_node}), in Pod (${active_gateway_pod}):"
+  ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
+
+  local loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
+  local active_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1`"
+
+  [[ "$active_con" = "$loaded_con" ]] || FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
+
+  if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
+    echo "# Verify StrongSwan URI: "
+    ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
+    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
+  fi
+
+}
 
 # ------------------------------------------
 
@@ -2782,7 +2823,7 @@ function test_lighthouse_status() {
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   local regex="agent .* started"
   # Watch lighthouse pod logs for 100 (5 X 20) seconds
-  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5
+  watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || FAILURE "Lighthouse status is not as expected"
 
   # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
 }
@@ -3772,6 +3813,10 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     ${junit_cmd} test_submariner_connection_cluster_a
 
     ${junit_cmd} test_submariner_connection_cluster_b
+
+    ${junit_cmd} test_ipsec_status_cluster_a
+
+    ${junit_cmd} test_ipsec_status_cluster_b
 
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
