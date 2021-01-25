@@ -965,8 +965,16 @@ function download_subctl_by_tag() {
   ### Download SubCtl - Submariner installer ###
     trap_commands;
 
-    local subctl_tag="${1:-v[0-9]}" # If not specifying a tag, it will download latest version released
-    local regex="tag/\K.*${subctl_tag}[^\"]*"
+    # Optional param: $1 => SubCtl version by tag to download
+    # If not specifying a tag - it will download latest version released
+    local subctl_tag="${1:-[0-9]}"
+
+    # If the tag begins with a number - add "v" to the number tag
+    if [[ "$subctl_tag" =~ ^[0-9] ]]; then
+      subctl_tag="v${subctl_tag}"
+    fi
+
+    local regex="tag/.*\K${subctl_tag}[^\"]*"
     local repo_url="https://github.com/submariner-io/submariner-operator"
     local repo_tag="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
