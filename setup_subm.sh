@@ -956,7 +956,7 @@ function download_subctl_latest_release() {
 function download_subctl_latest_devel() {
   ### Download SubCtl - Submariner installer - Latest DEVEL release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"master\" branch)"
-    download_subctl_by_tag "devel"
+    download_subctl_by_tag "subctl-devel"
   }
 
 # ------------------------------------------
@@ -966,7 +966,7 @@ function download_subctl_by_tag() {
     trap_commands;
 
     # Optional param: $1 => SubCtl version by tag to download
-    # If not specifying a tag - it will download latest version released
+    # If not specifying a tag - it will download latest version released (not latest subctl-devel)
     local subctl_tag="${1:-[0-9]}"
 
     # If the tag begins with a number - add "v" to the number tag
