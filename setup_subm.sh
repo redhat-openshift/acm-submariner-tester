@@ -2621,7 +2621,7 @@ function test_ha_status() {
   cluster_name="$1"
   local submariner_status=UP
 
-  PROMPT "Check HA status and IPSEC tunnel of Submariner and Gateway resources on ${cluster_name}"
+  PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
 
   ${OC} describe cm -n openshift-dns || submariner_status=DOWN
 
@@ -2740,7 +2740,13 @@ function test_ipsec_status() {
   local loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
   local active_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1`"
 
-  [[ "$active_con" = "$loaded_con" ]] || FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
+  if [[ ! "$active_con" = "$loaded_con" ]] ; then
+    BUG "Not all Submariner IPsec connections were established" \
+     "No workaround yet, it is caused by LibreSwan bug 1081" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1920408"
+    # No workaround yet
+    FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
+  fi
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
