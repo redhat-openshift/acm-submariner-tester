@@ -2418,8 +2418,6 @@ function join_submariner_current_cluster() {
 
 function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
-  trap_commands;
-
   PROMPT "Show all installed products versions"
 
   echo -e "\nOCP cluster A (AWS):"
@@ -2654,6 +2652,10 @@ function test_ha_status() {
   echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
+    BUG "Submariner-operator might loop on error in controller_submariner: failed to update the Submariner status " \
+    "No workaround" \
+    "https://github.com/submariner-io/submariner-operator/issues/1047"
+
     FATAL "Submariner HA failure occurred."
   fi
 
