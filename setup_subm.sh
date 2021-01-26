@@ -1624,7 +1624,7 @@ function install_netshoot_app_on_cluster_a() {
 
   echo "# Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS}
-  ${OC} describe pod  ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS}
+  ${OC} describe pod ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS}
 }
 
 # ------------------------------------------
@@ -2689,14 +2689,14 @@ function test_submariner_connection_established() {
   # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
   submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
 
-  ${OC} describe pod $submariner_engine_pod -n ${SUBM_NAMESPACE} || submariner_status=DOWN
-
   echo "# Tailing logs in Submariner-Engine pod [$submariner_engine_pod] to verify connection between clusters"
   # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   local regex="(Successfully installed Endpoint cable .* remote IP|Status:connected|CableName:.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
   # Watch submariner-engine pod logs for 400 (20 X 20) seconds
   watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
+
+  ${OC} describe pod $submariner_engine_pod -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
 }
