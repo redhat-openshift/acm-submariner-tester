@@ -23,19 +23,7 @@ shopt -s nocasematch # Case-insensitive match for string evaluations
 
 set -o allexport # To export each function when it is declared, to be used on external bash processes
 
-# Functions #
-
-function print_cmd_location() {
-  new_location="[$0] [${PWD##*/}]" && \
-  if [[ "$new_location" != "$current_location" ]]; then
-    export current_location="$new_location"
-    echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
-  fi
-  # Add PS1 prompt (and trim trailing and leading spaces)
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' | xargs)
-  prompt="${prompt:+"$prompt "}${1}"
-  echo -e "${CYAN}${prompt}${NO_COLOR}"
-}
+### Functions ###
 
 # ------------------------------------------
 
@@ -82,26 +70,33 @@ function highlight()
 
 # ------------------------------------------
 
-# function debug_cmd_with_pipe() {
-#   eval "$1"
-# }
+function print_cmd_location() {
+  new_location="[$0] [${PWD##*/}]" && \
+  if [[ "$new_location" != "$current_location" ]]; then
+    export current_location="$new_location"
+    echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
+  fi
+  # Add PS1 prompt (and trim trailing and leading spaces)
+  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
+  prompt="${prompt:+"$prompt "}${1}"
+  echo -e "${CYAN}${prompt}${NO_COLOR}"
+}
+
+# ------------------------------------------
 
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
-     cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" )" || :
-     cmd_eval="$(eval "echo -e \"$cmd_escaped\"" )" || :
-     if [[ -n $cmd_eval ]] ; then
-       if [[ "$cmd_escaped" =~ \$\(.+\) ]] ; then
-         cmd_to_print="${cmd_escaped}\n${cmd_eval}"
-       else
-         cmd_to_print="${cmd_eval}"
-       fi
-     else
-       cmd_to_print="${cmd_escaped}"
-     fi
-     print_cmd_location "$cmd_to_print" || :
+     cmd_eval="$BASH_COMMAND"
+     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{*\w+\}*" 2>/dev/null || : )"
+     for str_key in $var_list ; do
+        key=$(echo $str_key | tr -d "\${}")
+        value="${!key}"
+        cmd_eval="${cmd_eval/$str_key//$value}"
+      done
+
+      print_cmd_location "$cmd_eval" 2>/dev/null || :
    fi
   ' DEBUG
 }
