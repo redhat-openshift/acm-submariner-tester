@@ -2368,6 +2368,20 @@ function join_submariner_current_cluster() {
     local registry_url="${REGISTRY_URL}"
     local subm_major_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
 
+    # If the subm_major_version does not begin with a number - set it to the latest release
+    if [[ ! "$subm_major_version" =~ ^v[0-9] ]]; then
+
+      BUG "Subctl-devel version does not include major version" \
+      "Set the mojor version as the latest released Submariner version (e.g. v0.8.0)" \
+      "https://github.com/submariner-io/shipyard/issues/424"
+
+      # Workaround
+      local subctl_tag="v[0-9]"
+      local regex="tag/.*\K${subctl_tag}[^\"]*"
+      local repo_url="https://github.com/submariner-io/submariner-operator"
+      subm_major_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+    fi
+
     echo -e "# Overriding submariner images with custom images from ${registry_url} tagged with release: ${subm_major_version}"
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
