@@ -42,7 +42,7 @@ function print_cmd_location() {
 # Function to search and highlight rexexp in file (or pipe content)
 function highlight()
 {
-  #trap_commands
+  #trap_to_debug_commands
   pattern="$1"
   file_input="$2"
 
@@ -87,7 +87,7 @@ function highlight()
 # }
 
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
-function trap_commands() {
+function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
      cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" )" || :
@@ -106,8 +106,8 @@ function trap_commands() {
   ' DEBUG
 }
 
-# export -f trap_commands
-# trap_commands
+# export -f trap_to_debug_commands
+# trap_to_debug_commands
 
 # ------------------------------------------
 
@@ -123,7 +123,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  trap_commands
+  trap_to_debug_commands
 
   # Param 1: Command to execute and watch
   CMD="$1"
@@ -171,7 +171,7 @@ EOF
 
 # function to run command with timeout, and tail log in parallel
 function run_and_tail() {
-  trap_commands
+  trap_to_debug_commands
 
   # Param 1: Command to execute
   local cmd="$1"
@@ -287,7 +287,7 @@ function record_junit() {
 
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
-  trap_commands
+  trap_to_debug_commands
   work_dir="$(echo "${1:-.}" | tr -s /)" # Remove redundant slashes
   install_dir="${work_dir}/miniconda"
   miniconda_bin_dir="${install_dir}/bin"
@@ -325,7 +325,7 @@ function install_anaconda() {
 
 # Function to verify Anaconda installation
 function verify_anaconda() {
-  trap_commands
+  trap_to_debug_commands
   install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
@@ -337,7 +337,7 @@ function verify_anaconda() {
 
 # Function to install local tool/package with Anaconda (https://github.com/conda-forge/{package name})
 function install_conda_package() {
-  trap_commands
+  trap_to_debug_commands
 
   local pkg_name="$1"
   local install_dir="${2:-.}/"
@@ -358,7 +358,7 @@ function install_conda_package() {
 
 # Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
 function install_local_golang() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -395,7 +395,7 @@ function verify_golang() {
 
 # Function to install local Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
 function install_local_terraform() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -408,7 +408,7 @@ function install_local_terraform() {
 # Docker with Anaconda is not supported in Linux yet - use Podman instead
 # Function to install local Docker with Anaconda (https://anaconda.org/conda-forge/docker)
 function install_local_docker() {
-  trap_commands
+  trap_to_debug_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
   # yum install -y shadow-utils46-newxidmap
@@ -425,7 +425,7 @@ function install_local_docker() {
 
 # Function to install local Podman with Anaconda (https://anaconda.org/conda-forge/podman)
 function install_local_podman() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -437,7 +437,7 @@ function install_local_podman() {
 
 # Function to install local JQ with Anaconda (https://anaconda.org/conda-forge/jq)
 function install_local_jq() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -472,7 +472,7 @@ function raw_to_url_encode() {
 
 # Function to download particular file or directory from particular Github commit or branch
 function download_github_file_or_dir() {
-  trap_commands
+  trap_to_debug_commands
 
   local git_user="$1"
   local git_project="$2"
@@ -493,7 +493,7 @@ function download_github_file_or_dir() {
 
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
-  trap_commands
+  trap_to_debug_commands
   # $1 => $source_file (download link)
   source_file="$1"
 
@@ -529,7 +529,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
-  trap_commands
+  trap_to_debug_commands
   # Input $1 : $wildcard_name
   wildcard_name="$1"
 
@@ -553,7 +553,7 @@ function delete_old_files_or_dirs() {
 
 # Function to move non-empty directory to an existing directory
 function backup_and_remove_dir() {
-  trap_commands
+  trap_to_debug_commands
   # Input $1 : $src_dir
   src_dir="$1"
 
@@ -696,7 +696,7 @@ function export_vars_from_json() {
 
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
-  trap_commands;
+  trap_to_debug_commands;
   local hosted_zone_id="$1"
   local dns_record_set="$2"
   local tmp_file="`mktemp`_aws_records"
@@ -727,7 +727,7 @@ function delete_aws_dns_records() {
 
 # Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster
 function delete_namespace_and_crds() {
-  trap_commands;
+  trap_to_debug_commands;
   # Input $1 : Namespace to delete
   # Input $2 (Optional) : All CRDs to delete, by searching for *crd_name*
   ns_name=$1
@@ -781,7 +781,7 @@ function delete_namespace_and_crds() {
 
 # Function to install and expose Nginx service on the current KUBECONFIG cluster
 function install_nginx_service() {
-  trap_commands;
+  trap_to_debug_commands;
 
   ngnix_name="${1:-NginX}"
   nginx_image="${2:-quay.io/bitnami/nginx:latest}"
@@ -857,7 +857,7 @@ function get_external_ips_of_worker_nodes() {
 
 # Function to tail pod logs for N times, after each interval
 function watch_pod_logs() {
-  trap_commands;
+  trap_to_debug_commands;
 
   local pod_to_watch="$1"
   local namespace="$2"
@@ -913,7 +913,7 @@ function print_pod_logs_in_namespace() {
 
 function build_go_repo() {
 ### Pull and build a GO project from URL ###
-  trap_commands;
+  trap_to_debug_commands;
   local repo_url="${1#*://}"
 
   echo "# Download the repo with GO: "
@@ -941,7 +941,7 @@ function build_go_repo() {
 
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
-    trap_commands;
+    trap_to_debug_commands;
 
     # Input (5 params) :
 
@@ -1028,7 +1028,7 @@ function create_polarion_testcases_doc_from_junit() {
 
 # Function to create Polarion test run (xml) from Junit
 function create_polarion_testrun_result_from_junit() {
-    trap_commands;
+    trap_to_debug_commands;
 
     # Input (6 params) :
 
@@ -1144,7 +1144,7 @@ function create_polarion_testrun_result_from_junit() {
 # ------------------------------------------
 
 function log_to_html() {
-  trap_commands;
+  trap_to_debug_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}" # full file path without extension
   html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
