@@ -1734,8 +1734,14 @@ function open_firewall_ports_on_the_broker_node() {
 
   kubconf_a;
 
-  export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
-  export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+  BUG "Using the same IPSEC port numbers multiple times in one project, may be blocked on firewall" \
+  "Make sure to use different IPSEC_NATT_PORT and IPSEC_IKE_PORT across clusters on same project" \
+  "https://github.com/submariner-io/submariner-operator/issues/1047"
+  # Workaround:
+  # Do not use the same IPSEC port numbers multiple times in one project
+  # export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
+  # export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+
   export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
   echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
@@ -1795,8 +1801,8 @@ function open_firewall_ports_on_openstack_cluster_b() {
 
   kubconf_b;
 
-  export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
-  export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+  # export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
+  # export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
 
   echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply open OSP required ports:"
 
@@ -2359,9 +2365,6 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
-  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
-  JOIN_CMD="${JOIN_CMD} --health-check"
-
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
@@ -2411,17 +2414,24 @@ function join_submariner_current_cluster() {
     # Workaround:
     JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}"
 
-  elif [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
+  else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
       "Add '--version devel' to JOIN_CMD" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
       # Workaround
       JOIN_CMD="${JOIN_CMD} --version devel"
-
-      # From Release 0.8.1: '--pod-debug' . Before: '--enable-pod-debugging'
-      echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
-      JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
   fi
+
+  PROMPT "Enable Health Check and IPSec traceability on cluster $cluster_name"
+
+  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
+  JOIN_CMD="${JOIN_CMD} --health-check"
+
+  # From Subctl 0.8.1: '--pod-debug' . Before: '--enable-pod-debugging'
+  # if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
+  echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
+  JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
+  # fi
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
   $JOIN_CMD

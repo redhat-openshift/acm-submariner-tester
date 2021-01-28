@@ -50,8 +50,9 @@ export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
 
-export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
-export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
+# Do not use the same IPSEC port numbers multiple times in one project
+export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}
+export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-500}
 export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"

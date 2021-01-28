@@ -89,11 +89,11 @@ function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
      cmd_eval="$BASH_COMMAND"
-     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{*\w+\}*" 2>/dev/null || : )"
+     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{?\w+\}?" 2>/dev/null || : )"
      for str_key in $var_list ; do
         key=$(echo $str_key | tr -d "\${}")
         value="${!key}"
-        cmd_eval="${cmd_eval/$str_key//$value}"
+        cmd_eval="${cmd_eval//$str_key/$value}"
       done
 
       print_cmd_location "$cmd_eval" 2>/dev/null || :
