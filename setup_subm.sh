@@ -2161,11 +2161,11 @@ function configure_cluster_registry_and_link_service_account() {
   trap - DEBUG # DONT trap_to_debug_commands
 
   # set registry variables
-  local registry_url="$REGISTRY_URL"
-  local registry_mirror="$REGISTRY_MIRROR"
-  local registry_usr="$REGISTRY_USR"
-  local registry_pwd="$REGISTRY_PWD"
-  local registry_email="$REGISTRY_EMAIL"
+  local registry_url=$REGISTRY_URL
+  local registry_mirror=$REGISTRY_MIRROR
+  local registry_usr=$REGISTRY_USR
+  local registry_pwd=$REGISTRY_PWD
+  local registry_email=$REGISTRY_EMAIL
 
   local namespace="$SUBM_NAMESPACE"
   local service_account_name="$SUBM_NAMESPACE"
