@@ -961,6 +961,19 @@ function download_subctl_latest_devel() {
 
 # ------------------------------------------
 
+function get_latest_subctl_version_tag() {
+  ### Print the tag of latest subctl version released ###
+
+  local subctl_tag="v[0-9]"
+  local regex="tag/.*\K${subctl_tag}[^\"]*"
+  local repo_url="https://github.com/submariner-io/submariner-operator"
+  subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+
+  echo $subm_release_version
+}
+
+# ------------------------------------------
+
 function download_subctl_by_tag() {
   ### Download SubCtl - Submariner installer ###
     trap_to_debug_commands;
@@ -980,34 +993,22 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
-    BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
-    "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
-    "https://github.com/submariner-io/submariner-operator/issues/473"
-    # Workaround:
-    PATH="/usr/bin:$PATH" which install
+    # Download SubCtl from custom registry, if requested
+    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-    #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x
-    BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
-    "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
-    "https://github.com/submariner-io/submariner-operator/issues/526"
-    # Workaround:
-    curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+      echo "# Downloading SubCtl from custom url: $SUBCTL_CUSTOM_URL"
 
-    if [[ "$getsubctl_status" = FAILED ]] ; then
-      releases_url="${repo_url}/releases"
-      file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+      local subm_release_version="$(get_latest_subctl_version_tag)"
 
-      download_file "${releases_url}/${file_path}"
+      # Temporarily, the version can only include numbers and dots
+      subm_release_version=${subm_release_version//[^0-9.]/}
 
-      file_name=$(basename -- "$file_path")
-      tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
+      local subctl_binary_url="${SUBCTL_CUSTOM_URL}/${subm_release_version}/subctl"
 
-      # Rename last extracted file to subctl
-      extracted_file="$(ls -1 -tu subctl* | head -1)"
-
-      [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
-      chmod +x subctl
+      ( # subshell to hide commands
+        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $REGISTRY_PWD" "$subctl_binary_url" --output subctl -w "%{http_code}")
+        [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
+      )
 
       echo "# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
@@ -1017,6 +1018,48 @@ function download_subctl_by_tag() {
       echo "# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
       /usr/bin/install ./subctl ~/.local/bin/subctl
+
+    else
+      echo "# Downloading SubCtl from upstream URL: $releases_url"
+      # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
+      BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
+      "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
+      "https://github.com/submariner-io/submariner-operator/issues/473"
+      # Workaround:
+      PATH="/usr/bin:$PATH" which install
+
+      #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x
+      BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
+      "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
+      "https://github.com/submariner-io/submariner-operator/issues/526"
+      # Workaround:
+      curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
+
+      if [[ "$getsubctl_status" = FAILED ]] ; then
+        releases_url="${repo_url}/releases"
+        file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+
+        download_file "${releases_url}/${file_path}"
+
+        file_name=$(basename -- "$file_path")
+        tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
+
+        # Rename last extracted file to subctl
+        extracted_file="$(ls -1 -tu subctl* | head -1)"
+
+        [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+        chmod +x subctl
+
+        echo "# Install subctl into ${GOBIN}:"
+        mkdir -p $GOBIN
+        # cp -f ./subctl $GOBIN/
+        /usr/bin/install ./subctl $GOBIN/subctl
+
+        echo "# Install subctl into user HOME bin:"
+        # cp -f ./subctl ~/.local/bin/
+        /usr/bin/install ./subctl ~/.local/bin/subctl
+      fi
+
     fi
 
     echo "# Copy subctl from user HOME bin into ${GOBIN}:"
@@ -2369,23 +2412,24 @@ function join_submariner_current_cluster() {
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
     local registry_url="${REGISTRY_URL}"
-    local subm_major_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+    local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
 
-    # If the subm_major_version does not begin with a number - set it to the latest release
-    if [[ ! "$subm_major_version" =~ ^v[0-9] ]]; then
+    # If the subm_release_version does not begin with a number - set it to the latest release
+    if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
 
-      BUG "Subctl-devel version does not include major version" \
-      "Set the mojor version as the latest released Submariner version (e.g. v0.8.0)" \
+      BUG "Subctl-devel version does not include release number" \
+      "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
       "https://github.com/submariner-io/shipyard/issues/424"
 
       # Workaround
-      local subctl_tag="v[0-9]"
-      local regex="tag/.*\K${subctl_tag}[^\"]*"
-      local repo_url="https://github.com/submariner-io/submariner-operator"
-      subm_major_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+      # local subctl_tag="v[0-9]"
+      # local regex="tag/.*\K${subctl_tag}[^\"]*"
+      # local repo_url="https://github.com/submariner-io/submariner-operator"
+      # subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+      subm_release_version="$(get_latest_subctl_version_tag)"
     fi
 
-    echo -e "# Overriding submariner images with custom images from ${registry_url} tagged with release: ${subm_major_version}"
+    echo -e "# Overriding submariner images with custom images from ${registry_url} tagged with release: ${subm_release_version}"
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
     "Rename SubM Gateway image to 'submariner' " \
@@ -2393,26 +2437,26 @@ function join_submariner_current_cluster() {
     https://github.com/submariner-io/submariner-operator/issues/1018"
 
     # JOIN_CMD="${JOIN_CMD} \
-    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version} \
-    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version} \
-    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subm_major_version} \
-    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subm_major_version} \
-    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subm_major_version} \
-    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subm_major_version} \
-    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subm_major_version}"
+    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version} \
+    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
+    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subm_release_version} \
+    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
+    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subm_release_version} \
+    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
+    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subm_release_version}"
 
     # BUG ? : this is a potential bug (not working):
     # JOIN_CMD="${JOIN_CMD} --image-override \
-    # submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version},\
-    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}"
+    # submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version},\
+    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
 
-    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_major_version}"
+    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
     BUG "Submariner join failed when using --image-override submariner-operator" \
-    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}" \
+    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
     # Workaround:
-    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_major_version}"
+    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
 
   else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
@@ -2427,11 +2471,17 @@ function join_submariner_current_cluster() {
   echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
   JOIN_CMD="${JOIN_CMD} --health-check"
 
-  # From Subctl 0.8.1: '--pod-debug' . Before: '--enable-pod-debugging'
-  # if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]]; then
   echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
-  JOIN_CMD="${JOIN_CMD} --pod-debug --ipsec-debug"
-  # fi
+
+  if [[ "$subm_release_version" =~ 0\.8\.0 ]] ; then
+    # For Subctl 0.8.0: '--enable-pod-debugging'
+    JOIN_CMD="${JOIN_CMD} --enable-pod-debugging"
+  else
+    # For Subctl > 0.8.0: '--pod-debug'
+    JOIN_CMD="${JOIN_CMD} --pod-debug"
+  fi
+
+  JOIN_CMD="${JOIN_CMD} --ipsec-debug"
 
   echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
   $JOIN_CMD
