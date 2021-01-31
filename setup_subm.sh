@@ -2494,17 +2494,22 @@ function test_submariner_resources_status() {
 
   ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error") \
-  || BUG "Globalnet pod might have terminated after deployment" \
-  "No workaround, ignore ERROR state (Globalnet pod will be restarted)" \
-  "https://github.com/submariner-io/submariner/issues/903"
-
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "CrashLoopBackOff|No resources found") \
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
   || submariner_status=DOWN
   # TODO: consider checking for "Terminating" pods
 
   if [[ "$submariner_status" = DOWN ]] ; then
-    FATAL "Submariner installation failure occurred on $cluster_name.
+    echo "### Potential Bugs ###"
+
+    BUG "Globalnet pod might have terminated after deployment" \
+    "No workaround, ignore ERROR state (Globalnet pod will be restarted)" \
+    "https://github.com/submariner-io/submariner/issues/903"
+
+    BUG "Submariner operator failed to provision the Cluster CRD" \
+    "No workaround yet" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1921824"
+
+    FAILURE "Submariner installation failure occurred on $cluster_name.
     Resources/CRDs were not installed, or Submariner pods have crashed."
   fi
 
@@ -3837,11 +3842,11 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
     ### Running High-level (System) tests of Submariner ###
 
+    ${junit_cmd} test_disaster_recovery_of_gateway_nodes
+
     ${junit_cmd} test_submariner_resources_cluster_a
 
     ${junit_cmd} test_submariner_resources_cluster_b
-
-    ${junit_cmd} test_disaster_recovery_of_gateway_nodes
 
     ${junit_cmd} test_cable_driver_cluster_a
 
