@@ -269,8 +269,8 @@ function record_junit() {
   #local output_dir=$(dirname "$0")
   local output_dir="$SCRIPT_DIR"
 
-  # Set $junit_suite from current executing script filename
-  local junit_suite=$(basename "${0%.*}")
+  # Set junit_suite = directory name of current executing script
+  local junit_suite="$(basename "$SCRIPT_DIR")"
 
   echo "+++ Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
   +++ into xml output file \"${output_dir}/${output_file}\""
