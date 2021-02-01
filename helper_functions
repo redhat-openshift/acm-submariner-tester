@@ -946,11 +946,14 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_user_name="$6"
+    local polarion_component_id="$7"
+    local polarion_testcases_doc="$8"
 
     local tc_list="`mktemp`_testcases"
 
     echo -e "### Creating Polarion test-cases document for Junit results: $junit_xml
-    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    \n# Polarion project: ${polarion_project_id}
+    \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." && return 1 )
@@ -968,7 +971,7 @@ function create_polarion_testcases_doc_from_junit() {
     cat "$tc_list"
 
     echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\"?>  \n\
-    <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_team_name} Test Cases\">  \n\
+    <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_testcases_doc}\">  \n\
       <properties>  \n\
           <property name=\"lookup-method\" value=\"name\"/>  \n\
       </properties>" > "$polarion_testcases_file"
@@ -981,9 +984,8 @@ function create_polarion_testcases_doc_from_junit() {
           <title>${tc_name}</title>
             <description>${tc_name}</description>
             <custom-fields>
-              <custom-field id=\"products\" content=\"ocp\" />
-              <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
-              <custom-field id=\"casecomponent\" content=\"submariner\" />
+
+              <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
               <custom-field id=\"testtype\" content=\"functional\" />
               <custom-field id=\"caseimportance\" content=\"medium\" />
               <custom-field id=\"caselevel\" content=\"system\" />
@@ -995,7 +997,11 @@ function create_polarion_testcases_doc_from_junit() {
         </testcase>
         " >> "$polarion_testcases_file"
       done < "$tc_list"
+
       # More options:
+      #
+      # <custom-field id=\"products\" content=\"ocp\" />
+      # <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
       #
       # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
       # <linked-work-items>
