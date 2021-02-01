@@ -3548,6 +3548,36 @@ function print_resources_and_pod_logs() {
 
   echo -e "
   \n################################################################################################ \
+  \n#                             Submariner Resources on ${cluster_name}                         # \
+  \n################################################################################################ \
+  \n"
+
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
+
+  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
+  # ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
+  #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe cm -n openshift-dns || :
+
+  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+
+  # for pod in $(${OC} get pods -A \
+  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
+  #     echo "######################: Logs for Pod $pod :######################"
+  #     ${OC}  -n $ns describe pod $name
+  #     ${OC}  -n $namespace logs $pod
+  # done
+
+  echo -e "
+  \n################################################################################################ \
   \n#                             Openshift Nodes on ${cluster_name}                              # \
   \n################################################################################################ \
   \n"
@@ -3555,6 +3585,8 @@ function print_resources_and_pod_logs() {
   ${OC} get nodes || :
 
   ${OC} get machineconfigpool || :
+
+  ${OC} get daemonsets -A || :
 
   ${OC} get Machine -A | awk '{
     if (NR>1) {
@@ -3566,38 +3598,6 @@ function print_resources_and_pod_logs() {
       system("oc describe Machine "$2" -n "$1)
     }
   }'
-
-  ${OC} get daemonsets -A || :
-
-  echo -e "
-  \n################################################################################################ \
-  \n#                             Submariner Resources on ${cluster_name}                         # \
-  \n################################################################################################ \
-  \n"
-
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels || :
-
-  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe cm -n openshift-dns || :
-
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
-
-  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
-
-  # for pod in $(${OC} get pods -A \
-  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
-  # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
-  #     echo "######################: Logs for Pod $pod :######################"
-  #     ${OC}  -n $ns describe pod $name
-  #     ${OC}  -n $namespace logs $pod
-  # done
 
   echo -e "
   \n################################################################################################ \
