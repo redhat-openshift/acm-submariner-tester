@@ -255,22 +255,19 @@ function record_junit() {
   # WARNING: Variable changes in the command will NOT be effective after record_junit returns.
   #          This is because the command runs in subshell.
 
-  # $1 => $output_file (file name without directory, to record junit results)
-  local output_file="$1"
+  # $1 => $output_file and $output_dir for junit results
+  local output_file=$(basename "$1")
+  local output_dir=$(dirname "$1")
+
+  # Set junit_suite as the base directory name of $output_dir
+  local junit_suite="$(basename "$output_dir")"
 
   # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
   shift
 
-  # $2 => $test_name (the function to run and record as junit test)
+  # Set junit test name as the called function
   local test_name="$1"
-
   local func_and_args="$@"
-
-  #local output_dir=$(dirname "$0")
-  local output_dir="$SCRIPT_DIR"
-
-  # Set junit_suite = directory name of current executing script
-  local junit_suite="$(basename "$SCRIPT_DIR")"
 
   echo "+++ Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
   +++ into xml output file \"${output_dir}/${output_file}\""
@@ -956,7 +953,7 @@ function create_polarion_testcases_doc_from_junit() {
     \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." && return 1 )
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
     local polarion_testcases_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
@@ -1018,6 +1015,11 @@ function create_polarion_testcases_doc_from_junit() {
       echo -e "\n# Polarion Xunit import log for the test-cases document:\n"
       local testcase_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
 
+      if [[ -z "$testcase_jobid" ]] || [[ "$testcase_jobid" = 0 ]] ; then
+        echo "Error importing test-cases document to Polarion"
+        exit 1
+      fi
+
       # Watch testcase-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
       local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/testcase-log?jobId=${testcase_jobid}"
       local regex='ImportTestcaseThread.+Message sent'
@@ -1046,7 +1048,7 @@ function create_polarion_testrun_result_from_junit() {
     \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-run file: '$junit_xml' is missing." && return 1 )
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
     local polarion_testrun_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
@@ -1117,7 +1119,10 @@ function create_polarion_testrun_result_from_junit() {
     echo -e "\n# Polarion Xunit import log for the test-run results:\n"
     local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
 
-    [[ -n "$xunit_jobid" ]] || FATAL "Error importing test-run results to Polarion"
+    if [[ -z "$xunit_jobid" ]] || [[ "$xunit_jobid" = 0 ]] ; then
+      echo "Error importing test-run results to Polarion"
+      exit 1
+    fi
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
     local regex='ImportXUnitThread.+Message sent'
@@ -1152,7 +1157,7 @@ function log_to_html() {
   description="$4"
 
   echo "# Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
+  [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
   # Set description div
   [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}

@@ -161,13 +161,21 @@ export DATE_TIME="$(date +%d%m%Y_%H%M)"
 # Global temp file
 export TEMP_FILE="`mktemp`_temp"
 
-# XML output files for Junit test results
-export SHELL_JUNIT_XML="$(basename "${0%.*}")_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/subm_e2e_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/subm_pkg_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/lighthouse_e2e_junit.xml"
-export E2E_OUTPUT="$SCRIPT_DIR/subm_e2e_output.log"
-> "$E2E_OUTPUT"
+# JOB_NAME is a prefix for files, which is the name of current script directory
+JOB_NAME="$(basename "$SCRIPT_DIR")"
+export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
+
+export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
+> "$E2E_LOG"
+
+# Set LOG_FILE name according to REPORT_NAME (from subm_variables)
+export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
+LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+> "$LOG_FILE"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -3405,8 +3413,8 @@ function test_project_e2e_with_go() {
   local msg="# Running End-to-End tests with GO in project: \n# $e2e_project_path
   \n# Ginkgo test parameters: $test_params"
 
-  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_OUTPUT file."
-  echo -e "$msg" >> "$E2E_OUTPUT"
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
+  echo -e "$msg" >> "$E2E_LOG"
 
   go test -v ./test/e2e \
   -timeout 120m \
@@ -3415,7 +3423,7 @@ function test_project_e2e_with_go() {
   -ginkgo.noColor \
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
-  -args $test_params | tee -a "$E2E_OUTPUT"
+  -args $test_params | tee -a "$E2E_LOG"
 
 }
 
@@ -3435,9 +3443,9 @@ function test_submariner_e2e_with_subctl() {
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
-  echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_OUTPUT"
-  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
-  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_OUTPUT"
+  echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
+  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_LOG"
+  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_LOG"
 
 }
 
@@ -3466,8 +3474,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload SYSTEM tests to Polarion
   echo "# Upload Junit results of SYSTEM (Shell) tests to Polarion:"
-  upload_junit_xml_to_polarion "$SCRIPT_DIR/$SHELL_JUNIT_XML" || polarion_rc=1
-
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" || polarion_rc=1
 
   # Upload E2E tests to Polarion
 
@@ -3699,11 +3706,6 @@ export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
 # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
 export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
 export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
-
-# Logging main output (enclosed with parenthesis) with tee
-LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
-LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-> "$LOG_FILE"
 
 # Printing output both to stdout and to $LOG_FILE with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
@@ -3993,7 +3995,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
       ${junit_cmd} test_submariner_packages # || ginkgo_tests_status=FAILED
 
-      if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+      if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
         ginkgo_tests_status=FAILED
         BUG "Submariner Unit-Tests FAILED."
       fi
@@ -4007,14 +4009,14 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
 
         ${junit_cmd} test_submariner_e2e_with_go
 
-        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+        if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
           ginkgo_tests_status=FAILED
           BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
         fi
 
         ${junit_cmd} test_lighthouse_e2e_with_go
 
-        if tail -n 5 "$E2E_OUTPUT" | grep "FAIL" ; then
+        if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
           ginkgo_tests_status=FAILED
           BUG "Submariner End-to-End Ginkgo tests have FAILED"
         fi
@@ -4022,7 +4024,7 @@ LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps wi
       else
         ${junit_cmd} test_submariner_e2e_with_subctl
 
-        if tail -n 5 "$E2E_OUTPUT" | grep "E2E failed" ; then
+        if tail -n 5 "$E2E_LOG" | grep "E2E failed" ; then
           ginkgo_tests_status=FAILED
           BUG "SubCtl End-to-End tests have FAILED"
         fi
