@@ -1008,22 +1008,8 @@ function create_polarion_testcases_doc_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_file"
 
-      echo -e "\n# Import test-cases document [$polarion_testcases_file] into ${polarion_url}/import/testcase :\n"
-      local polarion_curl_output="`mktemp`_polarion_tc"
-      curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_file} ${polarion_url}/import/testcase |& tee $polarion_curl_output
-
-      echo -e "\n# Polarion Xunit import log for the test-cases document:\n"
-      local testcase_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
-
-      if [[ -z "$testcase_jobid" ]] || [[ "$testcase_jobid" = 0 ]] ; then
-        echo "Error importing test-cases document to Polarion"
-        exit 1
-      fi
-
-      # Watch testcase-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
-      local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/testcase-log?jobId=${testcase_jobid}"
-      local regex='ImportTestcaseThread.+Message sent'
-      watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
+      # Watch testcase-log web page
+      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_file"
 }
 
 
@@ -1112,24 +1098,10 @@ function create_polarion_testrun_result_from_junit() {
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_file"
 
-    echo -e "\n# Import test-run results [$polarion_testrun_file] into [${polarion_url}/import/xunit] :\n"
-    local polarion_curl_output="`mktemp`_polarion_tr"
-    curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testrun_file} ${polarion_url}/import/xunit |& tee $polarion_curl_output
-
-    echo -e "\n# Polarion Xunit import log for the test-run results:\n"
-    local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
-
-    if [[ -z "$xunit_jobid" ]] || [[ "$xunit_jobid" = 0 ]] ; then
-      echo "Error importing test-run results to Polarion"
-      exit 1
-    fi
+    # Watch testcase-log web page
+    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
-    local regex='ImportXUnitThread.+Message sent'
-
-    # Watch xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
-    watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
-
     local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
     # Set link for all templates:
@@ -1145,6 +1117,43 @@ function create_polarion_testrun_result_from_junit() {
     \n# All test-runs by title '${polarion_testrun_title}':
     \n# ${all_titles_link}"
 
+}
+
+# ------------------------------------------
+
+# Function to watch testcase-log or xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
+function watch_polarion_job_status() {
+  trap_to_debug_commands;
+
+  # Input params:
+  local polarion_url="$1"
+  local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
+  local polarion_import_type="$3" # "xunit" or "testcase"
+  local polarion_import_file="$4" # filepath to import
+
+  echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
+
+  local polarion_log="`mktemp`_polarion_log"
+  curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_import_file} ${polarion_url}/import/${polarion_import_type} |& tee $polarion_log
+
+  local polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
+
+  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
+    echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
+    exit 1
+  fi
+
+  local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
+  echo -e "\n# Checking Polarion ${polarion_import_type} import job status at: $polarion_job_url"
+
+  local cmd="curl --config $polarion_auth_file -k $polarion_job_url | sed -r 's/&#034;|&#039;/\"/g' |& tee $polarion_log"
+  local regex='Import.+Message sent'
+  watch_and_retry "$cmd" 1m "$regex"
+
+  if tail -n 10 "$polarion_log" | grep "failed" ; then
+    echo "Importing ${polarion_import_type} to Polarion did not complete successfully" 1>&2
+    exit 1
+  fi
 }
 
 # ------------------------------------------
