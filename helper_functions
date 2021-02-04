@@ -914,8 +914,7 @@ function build_go_repo() {
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
 
-  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
+  git_reset_local_repo
 
   echo "# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
@@ -926,6 +925,26 @@ function build_go_repo() {
 
   echo "# Project main directory content: "
   ls -la
+}
+
+# ------------------------------------------
+
+# Function to fetch, reset and pull latest git repository (to be run inside local directory repo)
+function git_reset_local_repo() {
+  trap_to_debug_commands;
+
+  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  git fetch --prune --all
+  local default_branch=$(git remote show origin | awk '/HEAD branch/ { print $3 }')
+  git branch -m $default_branch
+  git branch -u origin/$default_branch
+  git reset --hard
+  git checkout --theirs .
+  git pull
+
+  echo -e "\n# Latest commits in the repository: \n"
+  git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
+
 }
 
 # ------------------------------------------

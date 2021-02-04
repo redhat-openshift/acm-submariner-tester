@@ -831,8 +831,7 @@ function build_ocpup_tool_latest() {
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
+  git_reset_local_repo
 
   echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
@@ -902,10 +901,7 @@ function build_operator_latest() {  # [DEPRECATED]
   ls
 
   # go get -v -u -t ./...
-  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
-
-  # git log --pretty=fuller
+  git_reset_local_repo
 
   echo "# Build SubCtl tool and install it in $GOBIN/"
 
