@@ -110,7 +110,7 @@ Examples with pre-defined options:
 `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest Submariner devel (master development)
+  * Install latest Submariner devel (development branch)
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
@@ -420,7 +420,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $build_operator - to build_operator_latest # [DEPRECATED]
   # while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
-  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"master\" branch) and build subctl ? ${NO_COLOR}
+  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"devel\" branch) and build subctl ? ${NO_COLOR}
   #   Enter \"yes\", or nothing to skip: "
   #   read -r input
   #   build_operator=${input:-no}
@@ -436,7 +436,7 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $install_subctl_devel - to download_subctl_latest_devel
   while [[ ! "$install_subctl_devel" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to get the latest development of SubCtl (Submariner-Operator \"master\" branch) ? ${NO_COLOR}
+    echo -e "\n${YELLOW}Do you want to get the latest development of SubCtl (Submariner-Operator \"devel\" branch) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
     install_subctl_devel=${input:-no}
@@ -832,7 +832,7 @@ function build_ocpup_tool_latest() {
     # go clean -cache -modcache -i -r
 
   #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
-  git fetch && git reset --hard && git checkout --theirs . && git pull
+  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
 
   echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
@@ -902,7 +902,9 @@ function build_operator_latest() {  # [DEPRECATED]
   ls
 
   # go get -v -u -t ./...
-  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
+
   # git log --pretty=fuller
 
   echo "# Build SubCtl tool and install it in $GOBIN/"
@@ -928,7 +930,7 @@ function build_operator_latest() {  # [DEPRECATED]
   "Use SCRIPTS_DIR from Shipyard" \
   "https://github.com/submariner-io/submariner/issues/576"
   # workaround:
-  wget -O - https://github.com/submariner-io/shipyard/archive/master.tar.gz | tar xz --strip=2 "shipyard-master/scripts/shared"
+  wget -O - https://github.com/submariner-io/shipyard/archive/devel.tar.gz | tar xz --strip=2 "shipyard-devel/scripts/shared"
   export SCRIPTS_DIR=${PWD}/shared
 
   BUG "Building subctl: compile.sh fails on bad substitution of flags" \
@@ -963,7 +965,7 @@ function download_subctl_latest_release() {
 
 function download_subctl_latest_devel() {
   ### Download SubCtl - Submariner installer - Latest DEVEL release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"master\" branch)"
+    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"devel\" branch)"
     download_subctl_by_tag "subctl-devel"
   }
 
@@ -1753,7 +1755,7 @@ function test_clusters_disconnected_before_submariner() {
 
 function open_firewall_ports_on_the_broker_node() {
 ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
-  # Readme: https://github.com/submariner-io/submariner/tree/master/tools/openshift/ocp-ipi-aws
+  # Readme: https://github.com/submariner-io/submariner/tree/devel/tools/openshift/ocp-ipi-aws
   PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
   trap_to_debug_commands;
 
@@ -1761,7 +1763,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch=master
+  local commit_or_branch=devel
   local github_dir="tools/openshift/ocp-ipi-aws"
   local cluster_path="$CLUSTER_A_DIR"
   local target_path="${cluster_path}/${github_dir}"
@@ -1771,7 +1773,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
 
-  BUG "'${terraform_script}' ignores local yamls and always download from master" \
+  BUG "'${terraform_script}' ignores local yamls and always download from devel branch" \
   "Copy '${github_dir}' directory (including '${terraform_script}') into OCP install dir" \
   "https://github.com/submariner-io/submariner/issues/880"
   # Workaround:
@@ -3503,7 +3505,7 @@ function create_all_test_results_in_polarion() {
 
 function collect_submariner_info() {
   # print submariner pods descriptions and logs
-  # Ref: https://github.com/submariner-io/shipyard/blob/master/scripts/shared/post_mortem.sh
+  # Ref: https://github.com/submariner-io/shipyard/blob/devel/scripts/shared/post_mortem.sh
 
   local log_file="${1:-subm_pods.log}"
 

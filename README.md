@@ -58,7 +58,7 @@ Examples with pre-defined options:
 `./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest Submariner devel (master development)
+  * Install latest Submariner devel (development branch)
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)

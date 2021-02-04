@@ -914,9 +914,8 @@ function build_go_repo() {
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
 
-  #git fetch upstream && git checkout master && git pull upstream master
-  # git fetch && git git pull --rebase
-  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  git remote prune origin && git fetch && git reset --hard && git checkout --theirs . && git pull
 
   echo "# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
