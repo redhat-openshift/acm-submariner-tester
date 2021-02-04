@@ -23,26 +23,14 @@ shopt -s nocasematch # Case-insensitive match for string evaluations
 
 set -o allexport # To export each function when it is declared, to be used on external bash processes
 
-# Functions #
-
-function print_cmd_location() {
-  new_location="[$0] [${PWD##*/}]" && \
-  if [[ "$new_location" != "$current_location" ]]; then
-    export current_location="$new_location"
-    echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
-  fi
-  # Add PS1 prompt (and trim trailing and leading spaces)
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\]##g' | xargs)
-  prompt="${prompt:+"$prompt "}${1}"
-  echo -e "${CYAN}${prompt}${NO_COLOR}"
-}
+### Functions ###
 
 # ------------------------------------------
 
 # Function to search and highlight rexexp in file (or pipe content)
 function highlight()
 {
-  #trap_commands
+  #trap_to_debug_commands
   pattern="$1"
   file_input="$2"
 
@@ -82,32 +70,39 @@ function highlight()
 
 # ------------------------------------------
 
-# function debug_cmd_with_pipe() {
-#   eval "$1"
-# }
+function print_cmd_location() {
+  new_location="[$0] [${PWD##*/}]" && \
+  if [[ "$new_location" != "$current_location" ]]; then
+    export current_location="$new_location"
+    echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
+  fi
+  # Add PS1 prompt (and trim trailing and leading spaces)
+  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
+  prompt="${prompt:+"$prompt "}${1}"
+  echo -e "${CYAN}${prompt}${NO_COLOR}"
+}
+
+# ------------------------------------------
 
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
-function trap_commands() {
+function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
-     cmd_escaped="$(echo -e "$BASH_COMMAND" | sed "s/\"/\\\\\"/g" )" || :
-     cmd_eval="$(eval "echo -e \"$cmd_escaped\"" )" || :
-     if [[ -n $cmd_eval ]] ; then
-       if [[ "$cmd_escaped" =~ \$\(.+\) ]] ; then
-         cmd_to_print="${cmd_escaped}\n${cmd_eval}"
-       else
-         cmd_to_print="${cmd_eval}"
-       fi
-     else
-       cmd_to_print="${cmd_escaped}"
-     fi
-     print_cmd_location "$cmd_to_print" || :
+     cmd_eval="$BASH_COMMAND"
+     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{?\w+\}?" 2>/dev/null || : )"
+     for str_key in $var_list ; do
+        key=$(echo $str_key | tr -d "\${}")
+        value="${!key}"
+        cmd_eval="${cmd_eval//$str_key/$value}"
+      done
+
+      print_cmd_location "$cmd_eval" 2>/dev/null || :
    fi
   ' DEBUG
 }
 
-# export -f trap_commands
-# trap_commands
+# export -f trap_to_debug_commands
+# trap_to_debug_commands
 
 # ------------------------------------------
 
@@ -123,7 +118,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  trap_commands
+  trap_to_debug_commands
 
   # Param 1: Command to execute and watch
   CMD="$1"
@@ -171,7 +166,7 @@ EOF
 
 # function to run command with timeout, and tail log in parallel
 function run_and_tail() {
-  trap_commands
+  trap_to_debug_commands
 
   # Param 1: Command to execute
   local cmd="$1"
@@ -260,22 +255,19 @@ function record_junit() {
   # WARNING: Variable changes in the command will NOT be effective after record_junit returns.
   #          This is because the command runs in subshell.
 
-  # $1 => $output_file (file name without directory, to record junit results)
-  local output_file="$1"
+  # $1 => $output_file and $output_dir for junit results
+  local output_file=$(basename "$1")
+  local output_dir=$(dirname "$1")
+
+  # Set junit_suite as the base directory name of $output_dir
+  local junit_suite="$(basename "$output_dir")"
 
   # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
   shift
 
-  # $2 => $test_name (the function to run and record as junit test)
+  # Set junit test name as the called function
   local test_name="$1"
-
   local func_and_args="$@"
-
-  #local output_dir=$(dirname "$0")
-  local output_dir="$SCRIPT_DIR"
-
-  # Set $junit_suite from current executing script filename
-  local junit_suite=$(basename "${0%.*}")
 
   echo "+++ Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
   +++ into xml output file \"${output_dir}/${output_file}\""
@@ -287,7 +279,7 @@ function record_junit() {
 
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
-  trap_commands
+  trap_to_debug_commands
   work_dir="$(echo "${1:-.}" | tr -s /)" # Remove redundant slashes
   install_dir="${work_dir}/miniconda"
   miniconda_bin_dir="${install_dir}/bin"
@@ -325,7 +317,7 @@ function install_anaconda() {
 
 # Function to verify Anaconda installation
 function verify_anaconda() {
-  trap_commands
+  trap_to_debug_commands
   install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
   miniconda_bin_dir="${install_dir}/bin"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
@@ -337,7 +329,7 @@ function verify_anaconda() {
 
 # Function to install local tool/package with Anaconda (https://github.com/conda-forge/{package name})
 function install_conda_package() {
-  trap_commands
+  trap_to_debug_commands
 
   local pkg_name="$1"
   local install_dir="${2:-.}/"
@@ -358,7 +350,7 @@ function install_conda_package() {
 
 # Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
 function install_local_golang() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -395,7 +387,7 @@ function verify_golang() {
 
 # Function to install local Terraform with Anaconda (https://anaconda.org/conda-forge/terraform)
 function install_local_terraform() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -408,7 +400,7 @@ function install_local_terraform() {
 # Docker with Anaconda is not supported in Linux yet - use Podman instead
 # Function to install local Docker with Anaconda (https://anaconda.org/conda-forge/docker)
 function install_local_docker() {
-  trap_commands
+  trap_to_debug_commands
   # curl -o /etc/yum.repos.d/vbatts-shadow-utils-newxidmap-epel-7.repo \
   # https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/repo/epel-7/vbatts-shadow-utils-newxidmap-epel-7.repo
   # yum install -y shadow-utils46-newxidmap
@@ -425,7 +417,7 @@ function install_local_docker() {
 
 # Function to install local Podman with Anaconda (https://anaconda.org/conda-forge/podman)
 function install_local_podman() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -437,7 +429,7 @@ function install_local_podman() {
 
 # Function to install local JQ with Anaconda (https://anaconda.org/conda-forge/jq)
 function install_local_jq() {
-  trap_commands
+  trap_to_debug_commands
 
   local install_dir="${1:-.}/"
   local pkg_version="$2"
@@ -472,7 +464,7 @@ function raw_to_url_encode() {
 
 # Function to download particular file or directory from particular Github commit or branch
 function download_github_file_or_dir() {
-  trap_commands
+  trap_to_debug_commands
 
   local git_user="$1"
   local git_project="$2"
@@ -493,7 +485,7 @@ function download_github_file_or_dir() {
 
 # Function to download file from URL, if local file doesn't exists, or has a different size on URL
 function download_file() {
-  trap_commands
+  trap_to_debug_commands
   # $1 => $source_file (download link)
   source_file="$1"
 
@@ -529,7 +521,7 @@ function download_file() {
 
 # Function to delete files/directories which were not accessed N days (no recursive search in sub directories)
 function delete_old_files_or_dirs() {
-  trap_commands
+  trap_to_debug_commands
   # Input $1 : $wildcard_name
   wildcard_name="$1"
 
@@ -553,7 +545,7 @@ function delete_old_files_or_dirs() {
 
 # Function to move non-empty directory to an existing directory
 function backup_and_remove_dir() {
-  trap_commands
+  trap_to_debug_commands
   # Input $1 : $src_dir
   src_dir="$1"
 
@@ -696,7 +688,7 @@ function export_vars_from_json() {
 
 # Function to delete an DNS record set in AWS Hosted Zone
 function delete_aws_dns_records() {
-  trap_commands;
+  trap_to_debug_commands;
   local hosted_zone_id="$1"
   local dns_record_set="$2"
   local tmp_file="`mktemp`_aws_records"
@@ -727,7 +719,7 @@ function delete_aws_dns_records() {
 
 # Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster
 function delete_namespace_and_crds() {
-  trap_commands;
+  trap_to_debug_commands;
   # Input $1 : Namespace to delete
   # Input $2 (Optional) : All CRDs to delete, by searching for *crd_name*
   ns_name=$1
@@ -781,7 +773,7 @@ function delete_namespace_and_crds() {
 
 # Function to install and expose Nginx service on the current KUBECONFIG cluster
 function install_nginx_service() {
-  trap_commands;
+  trap_to_debug_commands;
 
   ngnix_name="${1:-NginX}"
   nginx_image="${2:-quay.io/bitnami/nginx:latest}"
@@ -857,7 +849,7 @@ function get_external_ips_of_worker_nodes() {
 
 # Function to tail pod logs for N times, after each interval
 function watch_pod_logs() {
-  trap_commands;
+  trap_to_debug_commands;
 
   local pod_to_watch="$1"
   local namespace="$2"
@@ -913,7 +905,7 @@ function print_pod_logs_in_namespace() {
 
 function build_go_repo() {
 ### Pull and build a GO project from URL ###
-  trap_commands;
+  trap_to_debug_commands;
   local repo_url="${1#*://}"
 
   echo "# Download the repo with GO: "
@@ -941,7 +933,7 @@ function build_go_repo() {
 
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
-    trap_commands;
+    trap_to_debug_commands;
 
     # Input (5 params) :
 
@@ -951,14 +943,17 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_user_name="$6"
+    local polarion_component_id="$7"
+    local polarion_testcases_doc="$8"
 
     local tc_list="`mktemp`_testcases"
 
     echo -e "### Creating Polarion test-cases document for Junit results: $junit_xml
-    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    \n# Polarion project: ${polarion_project_id}
+    \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." && return 1 )
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
     local polarion_testcases_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
@@ -973,7 +968,7 @@ function create_polarion_testcases_doc_from_junit() {
     cat "$tc_list"
 
     echo -e "<?xml version=\"1.0\" encoding=\"UTF-8\"?>  \n\
-    <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_team_name} Test Cases\">  \n\
+    <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_testcases_doc}\">  \n\
       <properties>  \n\
           <property name=\"lookup-method\" value=\"name\"/>  \n\
       </properties>" > "$polarion_testcases_file"
@@ -986,9 +981,8 @@ function create_polarion_testcases_doc_from_junit() {
           <title>${tc_name}</title>
             <description>${tc_name}</description>
             <custom-fields>
-              <custom-field id=\"products\" content=\"ocp\" />
-              <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
-              <custom-field id=\"casecomponent\" content=\"submariner\" />
+
+              <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
               <custom-field id=\"testtype\" content=\"functional\" />
               <custom-field id=\"caseimportance\" content=\"medium\" />
               <custom-field id=\"caselevel\" content=\"system\" />
@@ -1000,7 +994,11 @@ function create_polarion_testcases_doc_from_junit() {
         </testcase>
         " >> "$polarion_testcases_file"
       done < "$tc_list"
+
       # More options:
+      #
+      # <custom-field id=\"products\" content=\"ocp\" />
+      # <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
       #
       # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
       # <linked-work-items>
@@ -1010,17 +1008,8 @@ function create_polarion_testcases_doc_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_file"
 
-      echo -e "\n# Import test-cases document [$polarion_testcases_file] into ${polarion_url}/import/testcase :\n"
-      local polarion_curl_output="`mktemp`_polarion_tc"
-      curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testcases_file} ${polarion_url}/import/testcase |& tee $polarion_curl_output
-
-      echo -e "\n# Polarion Xunit import log for the test-cases document:\n"
-      local testcase_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
-
-      # Watch testcase-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
-      local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/testcase-log?jobId=${testcase_jobid}"
-      local regex='ImportTestcaseThread.+Message sent'
-      watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
+      # Watch testcase-log web page
+      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_file"
 }
 
 
@@ -1028,7 +1017,7 @@ function create_polarion_testcases_doc_from_junit() {
 
 # Function to create Polarion test run (xml) from Junit
 function create_polarion_testrun_result_from_junit() {
-    trap_commands;
+    trap_to_debug_commands;
 
     # Input (6 params) :
 
@@ -1045,7 +1034,7 @@ function create_polarion_testrun_result_from_junit() {
     \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || ( echo "Failed to create Polarion test-run file: '$junit_xml' is missing." && return 1 )
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
     local polarion_testrun_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
@@ -1109,21 +1098,10 @@ function create_polarion_testrun_result_from_junit() {
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_file"
 
-    echo -e "\n# Import test-run results [$polarion_testrun_file] into [${polarion_url}/import/xunit] :\n"
-    local polarion_curl_output="`mktemp`_polarion_tr"
-    curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_testrun_file} ${polarion_url}/import/xunit |& tee $polarion_curl_output
-
-    echo -e "\n# Polarion Xunit import log for the test-run results:\n"
-    local xunit_jobid=$(awk '/job-ids/ { print $4 }' $polarion_curl_output)
-
-    [[ -n "$xunit_jobid" ]] || FATAL "Error importing test-run results to Polarion"
+    # Watch testcase-log web page
+    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
-    local regex='ImportXUnitThread.+Message sent'
-
-    # Watch xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
-    watch_and_retry "$cmd | sed -r 's/&#034;|&#039;/\"/g' " 1m "$regex"
-
     local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
     # Set link for all templates:
@@ -1143,15 +1121,52 @@ function create_polarion_testrun_result_from_junit() {
 
 # ------------------------------------------
 
+# Function to watch testcase-log or xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
+function watch_polarion_job_status() {
+  trap_to_debug_commands;
+
+  # Input params:
+  local polarion_url="$1"
+  local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
+  local polarion_import_type="$3" # "xunit" or "testcase"
+  local polarion_import_file="$4" # filepath to import
+
+  echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
+
+  local polarion_log="`mktemp`_polarion_log"
+  curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_import_file} ${polarion_url}/import/${polarion_import_type} |& tee $polarion_log
+
+  local polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
+
+  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
+    echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
+    exit 1
+  fi
+
+  local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
+  echo -e "\n# Checking Polarion ${polarion_import_type} import job status at: $polarion_job_url"
+
+  local cmd="curl --config $polarion_auth_file -k $polarion_job_url | sed -r 's/&#034;|&#039;/\"/g' |& tee $polarion_log"
+  local regex='Import.+Message sent'
+  watch_and_retry "$cmd" 1m "$regex"
+
+  if tail -n 10 "$polarion_log" | grep "failed" ; then
+    echo "Importing ${polarion_import_type} to Polarion did not complete successfully" 1>&2
+    exit 1
+  fi
+}
+
+# ------------------------------------------
+
 function log_to_html() {
-  trap_commands;
+  trap_to_debug_commands;
   log_file="$1"
   title="${2:-"${log_file%%.*}"}" # full file path without extension
   html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
   description="$4"
 
   echo "# Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || ( echo "# Error - The file does not exists, or is not accessible" && return 1 )
+  [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
   # Set description div
   [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}

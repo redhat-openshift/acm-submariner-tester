@@ -37,9 +37,6 @@ set +x
 asserts=00; failures=0; suiteDuration=0; content=""
 date="$(which gdate 2>/dev/null || which date)"
 
-# default output directory and file
-juDIR="$(pwd)/results"
-juFILE="junit.xml"
 export sortTests=""
 export testIndex=0
 
@@ -123,12 +120,15 @@ function juLog() {
     class="default"
   fi
 
-  # Set test suite title to class name with uppercase letter and spaces
-  suiteTitle=( "${class//[_.]/ }" )
+  # Set test suite title to class name with spaces (instead of ._ ), and with uppercase words
+  suiteTitle="${class//[_.]/ }"
   suiteTitle="${suiteTitle[@]^}"
 
+  # set output directory as ./results , if it was not given
+  juDIR="${juDIR:-$(pwd)/results}"
+
   # set output file name as class name, if it was not given
-  juFILE="${class}_junit.xml"
+  juFILE="${juFILE:-${class}_junit.xml}"
 
   # create output directory
   mkdir -p "${juDIR}" || exit
