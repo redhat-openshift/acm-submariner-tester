@@ -2430,10 +2430,6 @@ function join_submariner_current_cluster() {
       "https://github.com/submariner-io/shipyard/issues/424"
 
       # Workaround
-      # local subctl_tag="v[0-9]"
-      # local regex="tag/.*\K${subctl_tag}[^\"]*"
-      # local repo_url="https://github.com/submariner-io/submariner-operator"
-      # subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
       subm_release_version="$(get_latest_subctl_version_tag)"
     fi
 
@@ -4060,15 +4056,20 @@ if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
   # Redirecting output both to stdout, TEMP_FILE and LOG_FILE
   create_all_test_results_in_polarion |& tee -a "$TEMP_FILE" "$LOG_FILE" || :
 
-  echo "# Get Polarion testrun links: "
-  polarion_search_string="Polarion results published to:"
+  echo "# Add new Polarion Test run results to the Html report description: "
+  results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$TEMP_FILE" | sed -z 's/\.\n.* to:/:\n/' || :)
 
-  grep -Po "${polarion_search_string}\K.*" "$TEMP_FILE" >> "$POLARION_REPORTS" || :
-  cat "$POLARION_REPORTS"
+  if [[ -n "$results_link" ]] ; then
+    echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
+    cat "$POLARION_REPORTS"
 
-  # set REPORT_DESCRIPTION for html report
-  REPORT_DESCRIPTION="Polarion results:
-  $(< "$POLARION_REPORTS")"
+    # set REPORT_DESCRIPTION for html report
+    REPORT_DESCRIPTION="Polarion results:
+    $(< "$POLARION_REPORTS")"
+  else
+    echo "Error reading Polarion Test results link $results_link" 1>&2
+  fi
+
 fi
 
 # ------------------------------------------
