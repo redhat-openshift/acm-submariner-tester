@@ -1904,13 +1904,18 @@ function gateway_label_first_worker_node() {
   # ${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
       # NAME                          STATUS   ROLES    AGE     VERSION
       # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
-  ${OC} get nodes -l submariner.io/gateway=true
+  wait_for_all_nodes_ready
+
+  echo -e "\n# Show Submariner Gateway Nodes: \n"
+  ${OC} describe nodes -l submariner.io/gateway=true
+
 }
 
 function gateway_label_all_nodes_external_ip() {
 ### Adding submariner gateway label to all worker nodes with an External-IP ###
   trap_to_debug_commands;
+
+  ${OC} wait --timeout=3m --for=condition=ready nodes -l node-role.kubernetes.io/worker
 
   # Filter all node names that have External-IP (column 7 is not none), and ignore header fields
   # Run 200 attempts, and wait for output to include regex of IPv4
@@ -1942,8 +1947,10 @@ function gateway_label_all_nodes_external_ip() {
   #${OC} get nodes -l "submariner.io/gateway=true" |& highlight "Ready"
     # NAME                          STATUS   ROLES    AGE     VERSION
     # ip-10-0-89-164.ec2.internal   Ready    worker   5h14m   v1.14.6+c07e432da
-  ${OC} wait --timeout=3m --for=condition=ready nodes -l submariner.io/gateway=true || FAILURE "Timeout waiting for Gateway label"
-  ${OC} get nodes -l submariner.io/gateway=true
+  wait_for_all_nodes_ready
+
+  echo -e "\n# Show Submariner Gateway Nodes: \n"
+  ${OC} describe nodes -l submariner.io/gateway=true
 }
 
 # ------------------------------------------

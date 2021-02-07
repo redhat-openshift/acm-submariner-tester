@@ -831,6 +831,23 @@ function get_running_pod_by_label() {
 
 # ------------------------------------------
 
+function wait_for_all_nodes_ready() {
+### function to wait for all nodes to be ready, with optional timeout duration
+  trap_to_debug_commands;
+
+  local duration=${1:-3m} # Default is 3 minutes
+
+  ${OC} wait --timeout=$duration --for=condition=ready nodes --all || nodes_status=DOWN
+  ${OC} get nodes -o wide
+
+  if [[ "$nodes_status" = DOWN ]] ; then
+    FATAL "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
+  fi
+
+}
+
+# ------------------------------------------
+
 # Function to return (print) the all worker node ids, that have an external ip (nothing if none)
 function get_worker_nodes_with_external_ip() {
   # Do not trap_command, so it will not be printed as return value
