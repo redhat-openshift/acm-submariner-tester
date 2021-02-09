@@ -173,8 +173,9 @@ export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
 
 # Set LOG_FILE name according to REPORT_NAME (from subm_variables)
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
-LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+# LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
+# LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+LOG_FILE="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
 > "$LOG_FILE"
 
 # Common test variables
@@ -1002,17 +1003,17 @@ function download_subctl_by_tag() {
     # Download SubCtl from custom registry, if requested
     if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-      echo "# Downloading SubCtl from custom url: $SUBCTL_CUSTOM_URL"
+      echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
 
       local subm_release_version="$(get_latest_subctl_version_tag)"
 
       # Temporarily, the version can only include numbers and dots
       subm_release_version=${subm_release_version//[^0-9.]/}
 
-      local subctl_binary_url="${SUBCTL_CUSTOM_URL}/${subm_release_version}/subctl"
+      local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subm_release_version}/subctl"
 
       ( # subshell to hide commands
-        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $REGISTRY_PWD" "$subctl_binary_url" --output subctl -w "%{http_code}")
+        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
         [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
       )
 
@@ -1198,7 +1199,8 @@ function create_osp_cluster_b() {
   local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
   local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
 
-  run_and_tail "$ocp_cmd" "$ocp_log" 1h || FATAL "OCP create cluster B did not complete as expected"
+  run_and_tail "$ocp_cmd" "$ocp_log" 1h "Access the OpenShift web-console" \
+  || FATAL "OCP create cluster B did not complete as expected"
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1221,7 +1223,7 @@ function test_kubeconfig_aws_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  test_cluster_status
+  test_cluster_status "$CLUSTER_A_NAME"
   cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_a_version" > "$CLUSTER_A_VERSION"
 
@@ -1246,7 +1248,7 @@ function test_kubeconfig_osp_cluster_b() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  test_cluster_status
+  test_cluster_status "$CLUSTER_B_NAME"
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_b_version" > "$CLUSTER_B_VERSION"
 
@@ -1265,13 +1267,20 @@ function test_cluster_status() {
   # Verify that current kubeconfig cluster is up and healthy
   trap_to_debug_commands;
 
-  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration is missing: ${KUBECONFIG}"
+  local cluster_name="$1"
+  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
-  cur_context="$(${OC} config current-context)"
+  echo "# Modify KUBECONFIG context name to: ${cluster_name}"
+  sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${cluster_name}\ncurrent-context: ${cluster_name}#" -i.bak ${KUBECONFIG}
+
+  ${OC} config set "current-context" "$cluster_name"
+  local cur_context="$(${OC} config current-context)"
+
+  echo "# Set Kubeconfig current-context '$cur_context' namespace to 'default'"
   ${OC} config set "contexts.${cur_context}.namespace" "default"
 
   ${OC} config view
-  ${OC} status || FATAL "Openshift cluster is not installed, or not accessible with: ${KUBECONFIG}"
+  ${OC} status || FATAL "Openshift cluster is not installed, or kubeconfig of '$cur_context' is wrong: ${KUBECONFIG}"
   ${OC} version
   ${OC} get all
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
@@ -1371,7 +1380,7 @@ function destroy_osp_cluster_b() {
     local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
     local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
-    run_and_tail "$ocp_cmd" "$ocp_log" 20m || FATAL "OCP destroy cluster B did not complete as expected"
+    run_and_tail "$ocp_cmd" "$ocp_log" 20m || FAILURE "OCP destroy cluster B did not complete as expected"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
@@ -1574,34 +1583,34 @@ function remove_submariner_machine_sets() {
 
 # ------------------------------------------
 
-function remove_submariner_images_from_local_registry() {
-  trap_to_debug_commands;
-
-  PROMPT "Remove previous Submariner images from local Podman registry"
-
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
-  # Get SubCTL version (from file $SUBCTL_VERSION)
-
-  # install_local_podman "${WORKDIR}"
-
-  local VERSION="$(subctl version | awk '{print $3}')"
-
-  for img in \
-    $SUBM_IMG_GATEWAY \
-    $SUBM_IMG_ROUTE \
-    $SUBM_IMG_NETWORK \
-    $SUBM_IMG_LIGHTHOUSE \
-    $SUBM_IMG_COREDNS \
-    $SUBM_IMG_GLOBALNET \
-    $SUBM_IMG_OPERATOR \
-    ; do
-      echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
-
-      podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
-      podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
-      podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
-  done
-}
+# function remove_submariner_images_from_local_registry() {
+#   trap_to_debug_commands;
+#
+#   PROMPT "Remove previous Submariner images from local Podman registry"
+#
+#   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+#   # Get SubCTL version (from file $SUBCTL_VERSION)
+#
+#   # install_local_podman "${WORKDIR}"
+#
+#   local VERSION="$(subctl version | awk '{print $3}')"
+#
+#   for img in \
+#     $SUBM_IMG_GATEWAY \
+#     $SUBM_IMG_ROUTE \
+#     $SUBM_IMG_NETWORK \
+#     $SUBM_IMG_LIGHTHOUSE \
+#     $SUBM_IMG_COREDNS \
+#     $SUBM_IMG_GLOBALNET \
+#     $SUBM_IMG_OPERATOR \
+#     ; do
+#       echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
+#
+#       podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
+#       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
+#       podman image inspect $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # | jq '.[0].Config.Labels'
+#   done
+# }
 
 # ------------------------------------------
 
@@ -1858,7 +1867,7 @@ function open_firewall_ports_on_openstack_cluster_b() {
   chmod a+x ./${terraform_script}
   # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve || FATAL "./${terraform_script} did not complete successfully"
+  ./${terraform_script} "${cluster_path}" -auto-approve || FAILURE "./${terraform_script} did not complete successfully"
 
 }
 
@@ -1965,11 +1974,6 @@ function install_broker_aws_cluster_a() {
 
   if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding Service-Discovery to Submariner Deploy command"
-
-    BUG "kubecontext must be identical to broker-cluster-context, otherwise kubefedctl will fail" \
-    "Modify KUBECONFIG context name on the public cluster for the broker, and use the same name for kubecontext and broker-cluster-context" \
-    "https://github.com/submariner-io/submariner-operator/issues/193"
-    sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
 
     DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --kubecontext ${CLUSTER_A_NAME}"
     # subctl deploy-broker --kubecontext <BROKER-CONTEXT-NAME>  --kubeconfig <MERGED-KUBECONFIG> \
@@ -2197,7 +2201,10 @@ function test_custom_images_from_registry_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  configure_cluster_registry_and_link_service_account
+  configure_cluster_registry_secrets
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  configure_cluster_registry_mirror
 }
 
 # ------------------------------------------
@@ -2207,58 +2214,112 @@ function test_custom_images_from_registry_cluster_b() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  configure_cluster_registry_and_link_service_account
+  configure_cluster_registry_secrets
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  configure_cluster_registry_mirror
 }
 
 # ------------------------------------------
 
-function configure_cluster_registry_and_link_service_account() {
+function configure_cluster_registry_secrets() {
 ### Configure access to external docker registry
   trap - DEBUG # DONT trap_to_debug_commands
 
-  # set registry variables
-  local registry_url=$REGISTRY_URL
-  local registry_mirror=$REGISTRY_MIRROR
-  local registry_usr=$REGISTRY_USR
-  local registry_pwd=$REGISTRY_PWD
-  local registry_email=$REGISTRY_EMAIL
+  echo "# Configure OCP registry global secret"
 
-  local namespace="$SUBM_NAMESPACE"
-  local service_account_name="$SUBM_NAMESPACE"
-  local secret_name="${registry_usr//./-}-${registry_mirror//./-}"
+  local ocp_usr="${1:-$OCP_USR}"
+  local ocp_pwd="${2:-$OCP_PWD}"
+  local ocp_sec="${3:-http-secret}"
 
-  echo "# Add OCP Registry mirror for Submariner:"
-  add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
-  add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+  ( printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${ocp_sec}" )
 
-  echo "# Create $namespace namespace"
-  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
-
-  echo "# Creating new secret in '$namespace' namespace"
-
-  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
-    ${OC} secrets unlink $service_account_name $secret_name -n $namespace || :
-    ${OC} delete secret $secret_name -n $namespace || :
+  if [[ $(${OC} get secret $ocp_sec -n openshift-config) ]] ; then
+    ${OC} delete secret $ocp_sec -n openshift-config || :
   fi
 
- ( # subshell to hide commands
-    ${OC} create secret docker-registry -n $namespace $secret_name --docker-server=${registry_mirror} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} --docker-email=${registry_email}
- )
+  ${OC} create secret generic ${ocp_sec} --from-file=htpasswd=${ocp_sec} -n openshift-config
 
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace
+  cat <<EOF | ${OC} apply -f -
+    apiVersion: config.openshift.io/v1
+    kind: OAuth
+    metadata:
+     name: cluster
+    spec:
+     identityProviders:
+     - name: htpasswd_provider
+       mappingMethod: claim
+       type: HTPasswd
+       htpasswd:
+         fileData:
+           name: ${ocp_sec}
+EOF
 
-  ( # update the cluster global pull-secret
-    ${OC} patch secret/pull-secret -n openshift-config -p \
-    '{"data":{".dockerconfigjson":"'"$( \
-    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  ${OC} describe oauth.config.openshift.io/cluster
+
+  local cur_context=$(${OC} config current-context)
+
+  echo "# Add new user '${ocp_usr}' to cluster roles, and verify login, while saving kubeconfig current-context ($cur_context)"
+
+  # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
+
+  ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
+
+  ${OC} wait --timeout=3m --for=condition=Available clusteroperators authentication
+  ${OC} wait --timeout=3m --for='condition=Progressing=False' clusteroperators authentication
+  ${OC} wait --timeout=3m --for='condition=Degraded=False' clusteroperators authentication
+
+  (
+    local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd} && ${OC} logout"
+    # Attempt to login up to 3 minutes
+    watch_and_retry "$cmd" 3m
   )
 
-  ${OC} describe secret/pull-secret -n openshift-config
+  echo "# Restore kubeconfig current-context to $cur_context"
+  ${OC} config set "current-context" "$cur_context"
+
+  # Should be in a new test function
+  echo "# Configure OCP registry local secret"
+
+  # ocp_usr=$(${OC} whoami | tr -d ':')
+  # ocp_pwd=$(${OC} whoami -t)
+
+  local ocp_registry_url=$(${OC} registry info)
+
+  create_docker_registry_secret "$ocp_registry_url" "$ocp_usr" "$ocp_pwd" "$SUBM_NAMESPACE"
+
+}
+
+# ------------------------------------------
+
+function configure_cluster_registry_mirror() {
+### Configure a mirror server on the cluster registry
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  # set registry variables
+  # local registry_mirror=$REGISTRY_URL
+  # local registry_mirror=$REGISTRY_MIRROR
+
+  # REGISTRY_USR=$BREW_REGISTRY_AUTH_USERNAME
+  # REGISTRY_PWD=$BREW_REGISTRY_AUTH_PASSWORD
+  # secret_name="${registry_usr//./-}-${registry_mirror//./-}" # 'brew-registry'
+
+  # local namespace="$SUBM_NAMESPACE"
+  # # local service_account_name="$SUBM_NAMESPACE"
+  # local secret_name="${registry_usr}-${registry_server}"
+  # local secret_name="${secret_name//[^a-z0-9]/-}"
+
+  local ocp_registry_url=$(${OC} registry info)
+  local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
+
+  echo "# Add OCP Registry mirror for Submariner:"
+
+  create_docker_registry_secret "$REGISTRY_MIRROR" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
+
+  # add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
+  # add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+  add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}"
+  add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}"
 
 }
 
@@ -2302,25 +2363,9 @@ EOF
   local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "# Checking API ignition version for OCP version: $ocp_version"
 
-  case $ocp_version in
-  4.[0-5].*)
-    ignition_version="2.2.0"
-    ;;
-  4.6.*)
-    ignition_version="3.1.0"
-    ;;
-  4.7.*)
-    ignition_version="3.2.0"
-    ;;
-  4.[8-9].*)
-    ignition_version="3.2.0"
-    ;;
-  *)
-    ignition_version="3.2.0"
-    ;;
-  esac
+  ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
 
-  echo "# Updating Registry in ${node_type} Machine configuration, by OCP API Ignition version: $ignition_version"
+  echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: machineconfiguration.openshift.io/v1
@@ -2351,15 +2396,63 @@ EOF
   local wait_time=15m
 
   echo "# Wait up to $wait_time for all ${node_type} Machine Config Pool to be updated:"
-  ${OC} wait --timeout=$wait_time machineconfigpool/${node_type} --for condition=updated || : # It might fail, but continue anyway
+  ${OC} wait --timeout=$wait_time --for condition=updated machineconfigpool/${node_type} || : # It might fail, but continue anyway
 
   echo "# Wait up to $wait_time for all ${node_type} Nodes to be ready:"
-  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type}
+  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type} || : # It might fail, but continue anyway
 
   echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
   ${OC} get nodes
   ${OC} get machineconfigpool
   ${OC} get daemonsets -A
+
+}
+
+
+# ------------------------------------------
+
+function create_docker_registry_secret() {
+### Helper function to add new Docker registry
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  # input variables
+  local registry_server="$1"
+  local registry_usr="$2"
+  local registry_pwd="$3"
+  local namespace="$4"
+
+  local secret_name="${registry_usr}-${registry_server}"
+  local secret_name="${secret_name//[^a-z0-9]/-}"
+
+  echo -e "# Creating new docker-registry in '$namespace' namespace:
+  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+
+  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
+
+  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
+    ${OC} delete secret $secret_name -n $namespace || :
+  fi
+
+  ( # subshell to hide commands
+
+    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
@@ -2421,6 +2514,7 @@ function join_submariner_current_cluster() {
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
+  # TODO: Move to a new test
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
@@ -2438,7 +2532,23 @@ function join_submariner_current_cluster() {
       subm_release_version="$(get_latest_subctl_version_tag)"
     fi
 
-    echo -e "# Overriding submariner images with custom images from ${registry_url} tagged with release: ${subm_release_version}"
+    echo -e "# Overriding submariner images with custom images from ${registry_url} (Mirror ${REGISTRY_MIRROR}) tagged with release: ${subm_release_version}"
+
+    MIRROR_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-" # Move to variables
+
+    for img in \
+      $SUBM_IMG_GATEWAY \
+      $SUBM_IMG_ROUTE \
+      $SUBM_IMG_NETWORK \
+      $SUBM_IMG_LIGHTHOUSE \
+      $SUBM_IMG_COREDNS \
+      $SUBM_IMG_GLOBALNET \
+      $SUBM_IMG_OPERATOR \
+      ; do
+        echo -e "# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} \n"
+
+        ${OC} import-image ${SUBM_NAMESPACE}/${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
+    done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
     "Rename SubM Gateway image to 'submariner' " \
@@ -3796,16 +3906,12 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       fi
     fi
 
-    # Verify clusters status
-
-    ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-    ${junit_cmd} test_kubeconfig_osp_cluster_b
-
     ### Cleanup Submariner from all clusters ###
 
     # Running clean_aws_cluster_a if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} test_kubeconfig_aws_cluster_a
 
       ${junit_cmd} clean_aws_cluster_a
 
@@ -3816,37 +3922,51 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running clean_osp_cluster_b if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
+      ${junit_cmd} test_kubeconfig_osp_cluster_b
+
       ${junit_cmd} clean_osp_cluster_b
 
       ${junit_cmd} configure_images_prune_cluster_b
 
     fi
 
-    # Running test_custom_images_from_registry if requested - To use custom Submariner images
-    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} open_firewall_ports_on_the_broker_node
 
-        # ${junit_cmd} remove_submariner_images_from_local_registry
+    ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-        ${junit_cmd} test_custom_images_from_registry_cluster_a
+  fi ### END of OCP Clusters Setup ###
 
-        ${junit_cmd} test_custom_images_from_registry_cluster_b
-    fi
 
-    # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
-    if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
+  # Verify clusters status after OCP setup
 
-      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+  ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_b
+  ${junit_cmd} test_kubeconfig_osp_cluster_b
 
-      ${junit_cmd} install_netshoot_app_on_cluster_a
+  # Running test_custom_images_from_registry if requested - To use custom Submariner images
+  if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} install_nginx_svc_on_cluster_b
+      # ${junit_cmd} remove_submariner_images_from_local_registry
 
-      ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+      ${junit_cmd} test_custom_images_from_registry_cluster_a
 
-      ${junit_cmd} test_clusters_disconnected_before_submariner
-    fi
+      ${junit_cmd} test_custom_images_from_registry_cluster_b
+  fi
+
+  # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
+  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
+
+    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+
+    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_b
+
+    ${junit_cmd} install_netshoot_app_on_cluster_a
+
+    ${junit_cmd} install_nginx_svc_on_cluster_b
+
+    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+
+    ${junit_cmd} test_clusters_disconnected_before_submariner
   fi
 
 
@@ -3869,10 +3989,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     fi
 
     ${junit_cmd} test_subctl_command
-
-    ${junit_cmd} open_firewall_ports_on_the_broker_node
-
-    ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
     ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
@@ -4101,7 +4217,14 @@ PROMPT "$message" "$color" |& tee -a "$LOG_FILE"
 # Clean LOG_FILE from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$LOG_FILE"
 
-# Call log_to_html to create REPORT_FILE (html) from LOG_FILE
+
+### Run log_to_html() to create REPORT_FILE (html) from LOG_FILE
+
+if [[ -n "$REPORT_FILE" ]] ; then
+  echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
+  REPORT_FILE="$(basename ${REPORT_FILE// /_})"
+fi
+
 log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
 
 

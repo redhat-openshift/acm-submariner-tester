@@ -118,7 +118,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  trap_to_debug_commands
+  # trap_to_debug_commands
 
   # Param 1: Command to execute and watch
   CMD="$1"
