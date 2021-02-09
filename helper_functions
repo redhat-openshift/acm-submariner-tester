@@ -1195,10 +1195,13 @@ function watch_polarion_job_status() {
 
 function log_to_html() {
   trap_to_debug_commands;
-  log_file="$1"
-  title="${2:-"${log_file%%.*}"}" # full file path without extension
-  html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
-  description="$4"
+
+  # Input params:
+
+  local log_file="$1"
+  local title="${2:-"${log_file%%.*}"}" # html title (default is log filename)
+  local html_output="${3:-${title//[ \/]/_}.html}" # html filename to create (default is title with underscores)
+  local description="$4"
 
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
@@ -1207,9 +1210,9 @@ function log_to_html() {
   [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
   </div></h3>"
 
-  repo_url=https://github.com/theZiz/aha.git
-  repo_branch=0.5.1
-  repo_dir=$(basename $repo_url .git)
+  local repo_url=https://github.com/theZiz/aha.git
+  local repo_branch=0.5.1
+  local repo_dir=$(basename $repo_url .git)
 
   # Get AHA binary
   if [[ ! -f ./$repo_dir/aha ]]; then
