@@ -174,6 +174,8 @@ function run_and_tail() {
   local log_to_tail="$2"
   # Param 3: timeout duration (default 1 hour)
   local duration="${3:-1h}"
+  # Param 4: RegEx to find in log (if not given, return process exit code)
+  local regex="$4"
 
   echo -e "# Running command as background process: $cmd
   \n# Timeout duration: $duration
@@ -189,6 +191,13 @@ function run_and_tail() {
 
   # Check the exit code of the command PID
   wait $pid || proc_exit="$?"
+
+  if [[ -n "$regex" ]] ; then
+    grep "$regex" "$log_to_tail" || proc_exit="$?"
+    [[ "$proc_exit" = 0 ]] || \
+    echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
+  fi
+
   [[ "$proc_exit" = 0 ]] || \
   echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
 
