@@ -75,8 +75,7 @@ Running with pre-defined parameters (optional):
 
 - Submariner installation options:
 
-  * Install latest release of Submariner:              --install-subctl
-  * Install development release of Submariner:         --install-subctl-devel
+  * Install Submariner version:                        --install-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
   * Skip Submariner installation:                      --skip-install
   * Configure and test Service Discovery:              --service-discovery
@@ -107,21 +106,21 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version subctl-devel --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest Submariner devel (development branch)
+  * Install latest "subctl-devel" (tag of the development branch)
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version 0.8.1 --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner release
+  * Install Submariner 0.8.1 release
   * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
@@ -244,12 +243,11 @@ while [[ $# -gt 0 ]]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
-  --install-subctl)
-    install_subctl_release=YES
-    shift ;;
-  --install-subctl-devel)
-    install_subctl_devel=YES
-    shift ;;
+  --install-version)
+    check_cli_args "$2"
+    export SUBCTL_VERSION="$2"
+    install_subctl=YES
+    shift 2 ;;
   --registry-images)
     registry_images=YES
     shift ;;
@@ -435,23 +433,17 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_subctl_release - to download_subctl_latest_release
-  while [[ ! "$install_subctl_release" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to get the latest release of SubCtl ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    install_subctl_release=${input:-no}
-  done
+  # User input: $install_subctl and SUBCTL_VERSION - to download_subctl
+  if [[ "$install_subctl" =~ ^(yes|y)$ ]]; then
+    while [[ ! "$SUBCTL_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+      echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
+      Enter version number, or nothing to install \"subctl-devel\" version: "
+      read -r input
+      SUBCTL_VERSION=${input:-subctl-devel}
+    done
+  fi
 
-  # User input: $install_subctl_devel - to download_subctl_latest_devel
-  while [[ ! "$install_subctl_devel" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to get the latest development of SubCtl (Submariner-Operator \"devel\" branch) ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    install_subctl_devel=${input:-no}
-  done
-
-  # User input: $registry_images - to download_subctl_latest_devel
+  # User input: $registry_images - to test_custom_images_from_registry
   while [[ ! "$registry_images" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
@@ -531,8 +523,8 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
-install_subctl_release=${install_subctl_release:-NO}
-install_subctl_devel=${install_subctl_devel:-NO}
+install_subctl=${install_subctl:-NO}
+# SUBCTL_VERSION=${SUBCTL_VERSION}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -596,8 +588,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_subctl_latest_release: $install_subctl_release
-    - download_subctl_latest_devel: $install_subctl_devel
+    - download_subctl: $SUBCTL_VERSION
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -606,7 +597,7 @@ function show_test_plan() {
     - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - install_subctl_command
+    - install_subctl: $SUBCTL_VERSION
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -962,31 +953,21 @@ function build_operator_latest() {  # [DEPRECATED]
 
 # ------------------------------------------
 
-function download_subctl_latest_release() {
+function download_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl RC release"
-    download_subctl_by_tag 'v[0-9]'
-}
+    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_VERSION"
 
-# ------------------------------------------
+    if [[ "$SUBCTL_VERSION" = latest ]]; then
+      # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
+      SUBCTL_VERSION='v[0-9]'
 
-function download_subctl_latest_devel() {
-  ### Download SubCtl - Submariner installer - Latest DEVEL release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use latest SubCtl DEVEL (built from Submariner-Operator \"devel\" branch)"
-    download_subctl_by_tag "subctl-devel"
-  }
+    elif [[ "$SUBCTL_VERSION" =~ ^[0-9] ]]; then
+      # Number is considered "vNUMBER" tag
+          SUBCTL_VERSION="v${SUBCTL_VERSION}"
+    fi
 
-# ------------------------------------------
+    download_subctl_by_tag "$SUBCTL_VERSION"
 
-function get_latest_subctl_version_tag() {
-  ### Print the tag of latest subctl version released ###
-
-  local subctl_tag="v[0-9]"
-  local regex="tag/.*\K${subctl_tag}[^\"]*"
-  local repo_url="https://github.com/submariner-io/submariner-operator"
-  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
-
-  echo $subm_release_version
 }
 
 # ------------------------------------------
@@ -997,12 +978,7 @@ function download_subctl_by_tag() {
 
     # Optional param: $1 => SubCtl version by tag to download
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
-    local subctl_tag="${1:-[0-9]}"
-
-    # If the tag begins with a number - add "v" to the number tag
-    if [[ "$subctl_tag" =~ ^[0-9] ]]; then
-      subctl_tag="v${subctl_tag}"
-    fi
+    local subctl_tag="${1:-v[0-9]}"
 
     local regex="tag/.*\K${subctl_tag}[^\"]*"
     local repo_url="https://github.com/submariner-io/submariner-operator"
@@ -1094,6 +1070,19 @@ function download_subctl_by_tag() {
 
 # ------------------------------------------
 
+function get_latest_subctl_version_tag() {
+  ### Print the tag of latest subctl version released ###
+
+  local subctl_tag="v[0-9]"
+  local regex="tag/.*\K${subctl_tag}[^\"]*"
+  local repo_url="https://github.com/submariner-io/submariner-operator"
+  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+
+  echo $subm_release_version
+}
+
+# ------------------------------------------
+
 function test_subctl_command() {
   trap_to_debug_commands;
   # Get SubCTL version (from file $SUBCTL_VERSION)
@@ -1102,12 +1091,8 @@ function test_subctl_command() {
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
   subctl version
-
-  BUG "Subctl devel is tagged with old version v0.6.1_" \
-  "Ignore issue" \
-  "https://github.com/submariner-io/submariner/issues/870"
 
   subctl --help
 
@@ -1598,7 +1583,7 @@ function remove_submariner_machine_sets() {
 #
 #   PROMPT "Remove previous Submariner images from local Podman registry"
 #
-#   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+#   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
 #   # Get SubCTL version (from file $SUBCTL_VERSION)
 #
 #   # install_local_podman "${WORKDIR}"
@@ -3613,7 +3598,7 @@ function test_submariner_e2e_with_subctl() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-subctl'"
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
   subctl version
 
   BUG "No Subctl option to set -ginkgo.reportFile" \
@@ -4043,14 +4028,10 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    # Running download_subctl_latest_devel or download_subctl_latest_release
-    if [[ "$install_subctl_devel" =~ ^(y|yes)$ ]] ; then
+    # Running download_subctl
+    if [[ "$install_subctl" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_subctl_latest_devel
-
-    elif [[ "$install_subctl_release" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} download_subctl_latest_release
+      ${junit_cmd} download_subctl "$SUBCTL_VERSION"
 
     fi
 
