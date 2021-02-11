@@ -162,7 +162,7 @@ export DATE_TIME="$(date +%d%m%Y_%H%M)"
 export TEMP_FILE="`mktemp`_temp"
 
 # JOB_NAME is a prefix for files, which is the name of current script directory
-JOB_NAME="$(basename "$SCRIPT_DIR")"
+export JOB_NAME="$(basename "$SCRIPT_DIR")"
 export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
 export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
 export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
@@ -199,6 +199,14 @@ export CLUSTER_B_VERSION="$SCRIPT_DIR/cluster_b.ver"
 # File to store SubCtl version
 export SUBCTL_VERSION="$SCRIPT_DIR/subctl.ver"
 > $SUBCTL_VERSION
+
+# File to store SubCtl JOIN command for cluster A
+export SUBCTL_JOIN_CLUSTER_A="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
+> $SUBCTL_JOIN_CLUSTER_A
+
+# File to store SubCtl JOIN command for cluster B
+export SUBCTL_JOIN_CLUSTER_B="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
+> $SUBCTL_JOIN_CLUSTER_B
 
 # File to store Polarion auth
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
@@ -608,8 +616,10 @@ function show_test_plan() {
     - label_gateway_on_broker_nodes_with_external_ip
     - label_first_gateway_cluster_b
     - install_broker_aws_cluster_a
-    - join_submariner_cluster_a
-    - join_submariner_cluster_b
+    - set_join_parameters_for_cluster_a
+    - set_join_parameters_for_cluster_b
+    - run_subctl_join_on_cluster_a
+    - run_subctl_join_on_cluster_b
     $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
@@ -974,7 +984,7 @@ function get_latest_subctl_version_tag() {
   local subctl_tag="v[0-9]"
   local regex="tag/.*\K${subctl_tag}[^\"]*"
   local repo_url="https://github.com/submariner-io/submariner-operator"
-  subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
   echo $subm_release_version
 }
@@ -2269,24 +2279,26 @@ EOF
   ${OC} wait --timeout=3m --for='condition=Progressing=False' clusteroperators authentication
   ${OC} wait --timeout=3m --for='condition=Degraded=False' clusteroperators authentication
 
-  (
-    local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd} && ${OC} logout"
+  ( # subshell to hide commands
+    local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
+
+    # ocp_usr=$(${OC} whoami | tr -d ':')
+    # ocp_pwd=$(${OC} whoami -t)
+    ocp_token=$(${OC} whoami -t)
+
+    ${OC} logout
+
+    echo "# Restore kubeconfig current-context to $cur_context"
+    ${OC} config set "current-context" "$cur_context"
+
+    echo "# Configure OCP registry local secret"
+
+    local ocp_registry_url=$(${OC} registry info)
+
+    create_docker_registry_secret "$ocp_registry_url" "$ocp_usr" "$ocp_token" "$SUBM_NAMESPACE"
   )
-
-  echo "# Restore kubeconfig current-context to $cur_context"
-  ${OC} config set "current-context" "$cur_context"
-
-  # Should be in a new test function
-  echo "# Configure OCP registry local secret"
-
-  # ocp_usr=$(${OC} whoami | tr -d ':')
-  # ocp_pwd=$(${OC} whoami -t)
-
-  local ocp_registry_url=$(${OC} registry info)
-
-  create_docker_registry_secret "$ocp_registry_url" "$ocp_usr" "$ocp_pwd" "$SUBM_NAMESPACE"
 
 }
 
@@ -2316,8 +2328,8 @@ function configure_cluster_registry_mirror() {
 
   create_docker_registry_secret "$REGISTRY_MIRROR" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
 
-  # add_submariner_registry_mirror_to_ocp_node "master" "$registry_url" "${registry_mirror}/${registry_usr}"
-  # add_submariner_registry_mirror_to_ocp_node "worker" "$registry_url" "${registry_mirror}/${registry_usr}"
+  # add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
+  # add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
   add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}"
   add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}"
 
@@ -2396,15 +2408,20 @@ EOF
   local wait_time=15m
 
   echo "# Wait up to $wait_time for all ${node_type} Machine Config Pool to be updated:"
-  ${OC} wait --timeout=$wait_time --for condition=updated machineconfigpool/${node_type} || : # It might fail, but continue anyway
+  ${OC} wait --timeout=$wait_time --for condition=updated machineconfigpool/${node_type} || MACHINE_STATUS=DOWN
 
   echo "# Wait up to $wait_time for all ${node_type} Nodes to be ready:"
-  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type} || : # It might fail, but continue anyway
+  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type} || MACHINE_STATUS=DOWN
 
   echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
-  ${OC} get nodes
-  ${OC} get machineconfigpool
-  ${OC} get daemonsets -A
+  ${OC} get nodes || MACHINE_STATUS=DOWN
+  ${OC} get machineconfigpool || MACHINE_STATUS=DOWN
+  ${OC} get daemonsets -A || MACHINE_STATUS=DOWN
+
+  if [[ "$MACHINE_STATUS" = DOWN ]] ; then
+    FAILURE "Machine Configuration or Nodes status could not be retrieved, \
+    it might be related to OCP $ocp_version API call with Ignition version $ignition_version"
+  fi
 
 }
 
@@ -2441,7 +2458,7 @@ function create_docker_registry_secret() {
   )
 
   echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace
+  ${OC} describe secret $secret_name -n $namespace || :
 
   ( # update the cluster global pull-secret
     ${OC} patch secret/pull-secret -n openshift-config -p \
@@ -2458,33 +2475,101 @@ function create_docker_registry_secret() {
 
 # ------------------------------------------
 
-function join_submariner_cluster_a() {
+function set_join_parameters_for_cluster_a() {
+  PROMPT "Set parameters of SubCtl Join command for AWS cluster A (public)"
+  trap_to_debug_commands;
+
+  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_A}"
+}
+
+# ------------------------------------------
+
+function set_join_parameters_for_cluster_b() {
+  PROMPT "Set parameters of SubCtl Join command for OSP cluster B (on-prem)"
+  trap_to_debug_commands;
+
+  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_B}"
+
+}
+
+# ------------------------------------------
+
+function write_subctl_join_command() {
+# Join Submariner member - of current cluster kubeconfig
+  trap_to_debug_commands;
+  local join_cmd_file="$1"
+
+  echo -e "# Adding Broker file and IPSec ports to subctl join command"
+
+  subctl_join_cmd="subctl join \
+  ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
+  --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
+
+  echo "# Adding '--health-check' to subctl join command (to enable Gateway health check)"
+
+  subctl_join_cmd="${subctl_join_cmd} --health-check"
+
+  echo "# Adding '--pod-debug' and '--ipsec-debug' to subctl join command (for tractability)"
+
+  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+
+  # If the subm_release_version does not begin with a number - set it to the latest release
+  if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
+
+    BUG "Subctl-devel version does not include release number" \
+    "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
+    "https://github.com/submariner-io/shipyard/issues/424"
+
+    # Workaround
+    subm_release_version="$(get_latest_subctl_version_tag)"
+  fi
+
+  if [[ "$subm_release_version" =~ 0\.8\.0 ]] ; then
+    # For Subctl 0.8.0: '--enable-pod-debugging'
+    subctl_join_cmd="${subctl_join_cmd} --enable-pod-debugging"
+  else
+    # For Subctl > 0.8.0: '--pod-debug'
+    subctl_join_cmd="${subctl_join_cmd} --pod-debug"
+  fi
+
+  subctl_join_cmd="${subctl_join_cmd} --ipsec-debug"
+
+  echo "# Write the join command into a local file: $join_cmd_file"
+  echo "$subctl_join_cmd" > "$join_cmd_file"
+
+}
+
+# ------------------------------------------
+
+function run_subctl_join_on_cluster_a() {
 # Join Submariner member - AWS cluster A (public)
-  PROMPT "Joining cluster A to Submariner Broker (also on cluster A)"
+  PROMPT "Joining cluster A to Submariner Broker"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  join_submariner_current_cluster "${CLUSTER_A_NAME}"
+  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_A}"
 }
 
 # ------------------------------------------
 
-function join_submariner_cluster_b() {
+function run_subctl_join_on_cluster_b() {
 # Join Submariner member - OSP cluster B (on-prem)
-  PROMPT "Joining cluster B to Submariner Broker (on cluster A)"
+  PROMPT "Joining cluster B to Submariner Broker"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  join_submariner_current_cluster "${CLUSTER_B_NAME}"
+  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_B}"
 
 }
 
 # ------------------------------------------
 
-function join_submariner_current_cluster() {
+function run_subctl_join_cmd_from_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
-  local cluster_name="$1"
+
+  echo "# Read subctl join command from file: $1"
+  local subctl_join_cmd="$(< $1)"
 
   cd ${WORKDIR}
 
@@ -2510,15 +2595,10 @@ function join_submariner_current_cluster() {
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view
 
-  JOIN_CMD="subctl join \
-  ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
-  --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
-
   # TODO: Move to a new test
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-    local registry_url="${REGISTRY_URL}"
     local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
 
     # If the subm_release_version does not begin with a number - set it to the latest release
@@ -2532,7 +2612,7 @@ function join_submariner_current_cluster() {
       subm_release_version="$(get_latest_subctl_version_tag)"
     fi
 
-    echo -e "# Overriding submariner images with custom images from ${registry_url} (Mirror ${REGISTRY_MIRROR}) tagged with release: ${subm_release_version}"
+    echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} (Mirror ${REGISTRY_MIRROR}) tagged with release: ${subm_release_version}"
 
     MIRROR_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-" # Move to variables
 
@@ -2555,55 +2635,41 @@ function join_submariner_current_cluster() {
     "https://github.com/submariner-io/submariner-operator/pull/941
     https://github.com/submariner-io/submariner-operator/issues/1018"
 
-    # JOIN_CMD="${JOIN_CMD} \
-    # --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version} \
-    # --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
-    # --image-override submariner-route-agent=${registry_url}/${SUBM_IMG_ROUTE}:${subm_release_version} \
-    # --image-override submariner-globalnet=${registry_url}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
-    # --image-override submariner-networkplugin-syncer=${registry_url}/${SUBM_IMG_NETWORK}:${subm_release_version} \
-    # --image-override lighthouse-agent=${registry_url}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
-    # --image-override lighthouse-coredns=${registry_url}/${SUBM_IMG_COREDNS}:${subm_release_version}"
+    echo "# Adding custom images to subctl join command"
+
+    # subctl_join_cmd="${subctl_join_cmd} \
+    # --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version} \
+    # --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
+    # --image-override submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version} \
+    # --image-override submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
+    # --image-override submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version} \
+    # --image-override lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
+    # --image-override lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version}"
 
     # BUG ? : this is a potential bug (not working):
-    # JOIN_CMD="${JOIN_CMD} --image-override \
-    # submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version},\
-    # submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
+    # subctl_join_cmd="${subctl_join_cmd} --image-override \
+    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version},\
+    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
 
-    JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${registry_url}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
     BUG "Submariner join failed when using --image-override submariner-operator" \
-    "Add: --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}" \
+    "Add: --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
     # Workaround:
-    JOIN_CMD="${JOIN_CMD} --image-override submariner=${registry_url}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
 
   else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
-      "Add '--version devel' to JOIN_CMD" \
+      "Add '--version devel' to $join_cmd_file" \
       "https://github.com/submariner-io/submariner-operator/issues/563"
       # Workaround
-      JOIN_CMD="${JOIN_CMD} --version devel"
+      subctl_join_cmd="${subctl_join_cmd} --version devel"
   fi
 
-  PROMPT "Enable Health Check and IPSec traceability on cluster $cluster_name"
+  echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join_cmd}"
 
-  echo "# Adding '--health-check' to the ${JOIN_CMD}, to enable Gateway health check."
-  JOIN_CMD="${JOIN_CMD} --health-check"
-
-  echo "# Adding '--pod-debug' and '--ipsec-debug' to the ${JOIN_CMD} for tractability."
-
-  if [[ "$subm_release_version" =~ 0\.8\.0 ]] ; then
-    # For Subctl 0.8.0: '--enable-pod-debugging'
-    JOIN_CMD="${JOIN_CMD} --enable-pod-debugging"
-  else
-    # For Subctl > 0.8.0: '--pod-debug'
-    JOIN_CMD="${JOIN_CMD} --pod-debug"
-  fi
-
-  JOIN_CMD="${JOIN_CMD} --ipsec-debug"
-
-  echo "# Executing Subctl Join command on cluster $cluster_name: ${JOIN_CMD}"
-  $JOIN_CMD
+  $subctl_join_cmd
 
 }
 
@@ -3998,9 +4064,15 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} test_broker_before_join
 
-    ${junit_cmd} join_submariner_cluster_a
+    ${junit_cmd} set_join_parameters_for_cluster_a
 
-    ${junit_cmd} join_submariner_cluster_b
+    ${junit_cmd} set_join_parameters_for_cluster_b
+
+    ${junit_cmd} run_subctl_join_on_cluster_a
+
+    ${junit_cmd} run_subctl_join_on_cluster_b
+
+
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
