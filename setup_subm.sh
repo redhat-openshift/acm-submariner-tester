@@ -2438,7 +2438,7 @@ function create_docker_registry_secret() {
   local registry_pwd="$3"
   local namespace="$4"
 
-  local secret_name="${registry_usr}-${registry_server}"
+  local secret_name="${registry_server}-${registry_usr}"
   local secret_name="${secret_name//[^a-z0-9]/-}"
 
   echo -e "# Creating new docker-registry in '$namespace' namespace:

@@ -31,8 +31,9 @@ export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
 export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
-export AWS_KEY="user-aws-access-key"
-export AWS_SECRET="user-aws-secret-access-key"
+# Wrap credentials with single quotes:
+export AWS_KEY='user-aws-access-key'
+export AWS_SECRET='user-aws-secret-access-key'
 export AWS_PROFILE_NAME="aws-profile"
 export AWS_PROFILE_ID="012345678910"
 export AWS_REGION="aws-region"
@@ -42,9 +43,10 @@ export AWS_ZONE_ID="aws-zone-id"
 export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
+# Wrap credentials with single quotes:
 export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
-export OS_USERNAME="openstack-user"
-export OS_PASSWORD="openstack-pass"
+export OS_USERNAME='openstack-user'
+export OS_PASSWORD='openstack-pass'
 export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
@@ -59,14 +61,16 @@ export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
 export REGISTRY_URL="${REGISTRY_URL:-registry.redhat.io/rhacm2-tech-preview}"
 export REGISTRY_MIRROR="docker-server" # without " https:// "
-export REGISTRY_USR="docker-user"
-export REGISTRY_PWD='docker-pass' # in single quotes
+# Wrap credentials with single quotes:
+export REGISTRY_USR='docker-user'
+export REGISTRY_PWD='docker-pass'
 
-export OCP_USR="ocp_user"
-export OCP_PWD="ocp_pass"
+# Wrap credentials with single quotes:
+export OCP_USR='ocp_user'
+export OCP_PWD='ocp_pass'
 
 export SUBCTL_PRIVATE_URL="https://gitlab.com/api/v4/projects/123456/packages/generic/subctl"
-export SUBCTL_PRIVATE_TOKEN='gitlab-pass' # in single quotes
+export SUBCTL_PRIVATE_TOKEN='gitlab-pass'
 
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
@@ -80,8 +84,9 @@ export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
 export POLARION_SERVER="polarion.server.name" # without " https:// "
-export POLARION_USR="polarion-user"
-export POLARION_PWD='polarion-pass' # in single quotes
+# Wrap credentials with single quotes:
+export POLARION_USR='polarion-user'
+export POLARION_PWD='polarion-pass'
 export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
 export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
 export POLARION_TESTRUN_TEMPLATE="${POLARION_TESTRUN_TEMPLATE:-}"
