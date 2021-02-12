@@ -2509,7 +2509,7 @@ function write_subctl_join_command() {
     subm_release_version="$(get_latest_subctl_version_tag)"
   fi
 
-  if [[ "$subm_release_version" =~ 0\.8\.0 ]] ; then
+  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
     # For Subctl 0.8.0: '--enable-pod-debugging'
     subctl_join_cmd="${subctl_join_cmd} --enable-pod-debugging"
   else
