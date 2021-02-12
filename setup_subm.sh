@@ -692,7 +692,7 @@ function show_test_plan() {
 # ------------------------------------------
 
 function setup_workspace() {
-  PROMPT "Creating workspace, verifying GO-lang, and configuring AWS and Polarion access"
+  PROMPT "Configuring workspace (Golang, AWS-CLI, Terraform, Polarion) in: ${WORKDIR}"
   trap - DEBUG # DONT trap_to_debug_commands
 
   # Create WORKDIR and local BIN dir (if not yet exists)
@@ -743,15 +743,6 @@ function setup_workspace() {
 
   # Trim trailing and leading spaces from $TEST_NS
   TEST_NS="$(echo "$TEST_NS" | xargs)"
-
-  # echo "# Exporting OSP variables"
-  # export TF_VAR_OS_AUTH_URL="$OS_AUTH_URL"
-  # export TF_VAR_OS_USERNAME="$OS_USERNAME"
-  # export TF_VAR_OS_PASSWORD="$OS_PASSWORD"
-  # export TF_VAR_OS_USER_DOMAIN_NAME="$OS_USER_DOMAIN_NAME"
-  # export TF_VAR_OS_PROJECT_NAME="$OS_PROJECT_NAME"
-  # export TF_VAR_OS_PROJECT_DOMAIN_ID="$OS_PROJECT_ID"
-  # export TF_VAR_OS_REGION_NAME="$OS_REGION_NAME"
 
   # Installing AWS-CLI if $config_aws_cli = yes/y
   if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
@@ -2315,8 +2306,8 @@ function configure_cluster_registry_mirror() {
 
   # add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
   # add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
-  add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}"
-  add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}"
+  add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
+  add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
 
 }
 
