@@ -106,21 +106,21 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version subctl-devel --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version 0.8.1 --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest "subctl-devel" (tag of the development branch)
+  * Install Submariner 0.8.1 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version 0.8.1 --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version subctl-devel --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install Submariner 0.8.1 release
+  * Install "subctl-devel" (subctl development branch)
   * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
@@ -1747,7 +1747,7 @@ function test_clusters_disconnected_before_submariner() {
 function open_firewall_ports_on_the_broker_node() {
 ### Open AWS Firewall ports on the gateway node with terraform (prep_for_subm.sh) ###
   # Readme: https://github.com/submariner-io/submariner/tree/devel/tools/openshift/ocp-ipi-aws
-  PROMPT "Running \"prep_for_subm.sh\" - to open Firewall ports on the Broker node in AWS cluster A (public)"
+  PROMPT "Running \"prep_for_subm.sh\" - to add External IP and open ports on the Broker node in AWS cluster A (public)"
   trap_to_debug_commands;
 
   command -v terraform || FATAL "Terraform is required in order to run 'prep_for_subm.sh'"
@@ -1774,7 +1774,11 @@ function open_firewall_ports_on_the_broker_node() {
   cp -rf "${github_dir}"/* "${target_path}"
   cd "${target_path}/"
 
-  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+  # Fix bug in terraform version
+  # sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+
+  # Fix bug of using non-existing kubeconfig conext "admin"
+  sed -e 's/--context=admin //g' -i "${terraform_script}"
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
@@ -1918,10 +1922,12 @@ function gateway_label_all_nodes_external_ip() {
   200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
-    ${OC} get Machine -A -o wide
+    ${OC} get nodes -o wide
+
     failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
+
     FATAL "EXTERNAL-IP was not created yet. Please check if \"prep_for_subm.sh\" script had errors.
-    ${failed_machines:+ Failed Machines: \n$failed_machines}"
+    ${failed_machines:+ Failed Machines: \n$(${OC} get Machine -A -o wide)}"
   fi
 
   # [[ -n "$gw_nodes" ]] || FATAL "External-IP was not created yet (by \"prep_for_subm.sh\" script)."
@@ -2216,7 +2222,7 @@ function configure_cluster_registry_secrets() {
 
   local ocp_usr="${1:-$OCP_USR}"
   local ocp_pwd="${2:-$OCP_PWD}"
-  local ocp_sec="${3:-http-secret}"
+  local ocp_sec="${3:-http.secret}"
 
   ( printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${ocp_sec}" )
 
@@ -2603,7 +2609,7 @@ function run_subctl_join_cmd_from_file() {
       ; do
         echo -e "# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} \n"
 
-        ${OC} import-image ${SUBM_NAMESPACE}/${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
+        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
