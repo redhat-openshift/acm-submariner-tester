@@ -22,8 +22,7 @@ Running with pre-defined parameters (optional):
 
 - Submariner installation options:
 
-  * Install latest release of Submariner:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--install-subctl
-  * Install development release of Submariner: &ensp;&ensp;&ensp;&ensp;&ensp;--install-subctl-devel
+  * Install Submariner version:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--install-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--registry-images
   * Skip Submariner installation:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--skip-install
   * Configure and test Service Discovery:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--service-discovery
@@ -34,8 +33,8 @@ Running with pre-defined parameters (optional):
 - Submariner test options:
 
   * Skip tests execution (by type):&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--skip-tests [sys / e2e / pkg / all]
-  * Update Git and test with GO (instead of subctl):&ensp; --build-tests
-  * Create Junit test results (xml): &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp; --junit
+  * Update Git and test with GO (instead of subctl): &ensp;--build-tests
+  * Create Junit test results (xml):&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--junit
   * Upload Junit results to Polarion: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--polarion
 
 - General script options:
@@ -55,21 +54,21 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-subctl-devel --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version 0.8.1 --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install latest Submariner devel (development branch)
+  * Install Submariner 0.8.1 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-subctl --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version subctl-devel --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
-  * Install latest Submariner release
+  * Install "subctl-devel" (subctl development branch)
   * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
