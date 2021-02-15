@@ -747,7 +747,7 @@ function setup_workspace() {
   # Installing AWS-CLI if $config_aws_cli = yes/y
   if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
     echo "# Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
-    (
+    ( # subshell to hide commands
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
     )
@@ -1256,14 +1256,18 @@ function test_cluster_status() {
   local cluster_name="$1"
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
-  echo "# Modify KUBECONFIG context name to: ${cluster_name}"
-  sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${cluster_name}\ncurrent-context: ${cluster_name}#" -i.bak ${KUBECONFIG}
+  echo "# Modify KUBECONFIG current-context name to: ${cluster_name}"
+  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${cluster_name}\ncurrent-context: ${cluster_name}#" -i.bak ${KUBECONFIG}
+  # ${OC} config set "current-context" "$cluster_name"
+  ${OC} config use-context "${cluster_name}"
 
-  ${OC} config set "current-context" "$cluster_name"
-  local cur_context="$(${OC} config current-context)"
+  echo "# Modify KUBECONFIG context name '${cur_context}' to: ${cluster_name}"
+  local cur_context="$(${OC} config current-context)" # $cur_context should be equal to $cluster_name
+  ${OC} config rename-context "${cur_context}" "${cluster_name}"
 
-  echo "# Set Kubeconfig current-context '$cur_context' namespace to 'default'"
+  echo "# Set KUBECONFIG current-context '$cur_context' namespace to 'default'"
   ${OC} config set "contexts.${cur_context}.namespace" "default"
+
 
   ${OC} config view
   ${OC} status || FATAL "Openshift cluster is not installed, or kubeconfig of '$cur_context' is wrong: ${KUBECONFIG}"
@@ -1477,7 +1481,7 @@ function delete_submariner_cluster_roles() {
 
   local roles="submariner-operator submariner-operator-globalnet submariner-lighthouse submariner-networkplugin-syncer"
 
-  ${OC} delete clusterrole,clusterrolebinding $roles || :
+  ${OC} delete clusterrole,clusterrolebinding $roles --ignore-not-found || :
 
 }
 
@@ -2222,15 +2226,15 @@ function configure_cluster_registry_secrets() {
 
   local ocp_usr="${1:-$OCP_USR}"
   local ocp_pwd="${2:-$OCP_PWD}"
-  local ocp_sec="${3:-http.secret}"
+  local secret_filename="${3:-http.secret}"
 
-  ( printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${ocp_sec}" )
+  ( # subshell to hide commands
+    printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
+  )
 
-  if [[ $(${OC} get secret $ocp_sec -n openshift-config) ]] ; then
-    ${OC} delete secret $ocp_sec -n openshift-config || :
-  fi
+  ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
 
-  ${OC} create secret generic ${ocp_sec} --from-file=htpasswd=${ocp_sec} -n openshift-config
+  ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
 
   cat <<EOF | ${OC} apply -f -
     apiVersion: config.openshift.io/v1
@@ -2244,7 +2248,7 @@ function configure_cluster_registry_secrets() {
        type: HTPasswd
        htpasswd:
          fileData:
-           name: ${ocp_sec}
+           name: ${secret_filename}
 EOF
 
   ${OC} describe oauth.config.openshift.io/cluster
@@ -2270,17 +2274,18 @@ EOF
     # ocp_pwd=$(${OC} whoami -t)
     ocp_token=$(${OC} whoami -t)
 
-    ${OC} logout
-
-    echo "# Restore kubeconfig current-context to $cur_context"
-    ${OC} config set "current-context" "$cur_context"
-
     echo "# Configure OCP registry local secret"
 
-    local ocp_registry_url=$(${OC} registry info)
+    local ocp_registry_url=$(${OC} registry info --internal)
 
     create_docker_registry_secret "$ocp_registry_url" "$ocp_usr" "$ocp_token" "$SUBM_NAMESPACE"
+
+    ${OC} logout
   )
+
+    echo "# Restore kubeconfig current-context to $cur_context"
+    # ${OC} config set "current-context" "$cur_context"
+    ${OC} config use-context "$cur_context"
 
 }
 
@@ -2290,28 +2295,13 @@ function configure_cluster_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap - DEBUG # DONT trap_to_debug_commands
 
-  # set registry variables
-  # local registry_mirror=$REGISTRY_URL
-  # local registry_mirror=$REGISTRY_MIRROR
-
-  # REGISTRY_USR=$BREW_REGISTRY_AUTH_USERNAME
-  # REGISTRY_PWD=$BREW_REGISTRY_AUTH_PASSWORD
-  # secret_name="${registry_usr//./-}-${registry_mirror//./-}" # 'brew-registry'
-
-  # local namespace="$SUBM_NAMESPACE"
-  # # local service_account_name="$SUBM_NAMESPACE"
-  # local secret_name="${registry_usr}-${registry_server}"
-  # local secret_name="${secret_name//[^a-z0-9]/-}"
-
-  local ocp_registry_url=$(${OC} registry info)
+  local ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
   echo "# Add OCP Registry mirror for Submariner:"
 
   create_docker_registry_secret "$REGISTRY_MIRROR" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
 
-  # add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
-  # add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${registry_mirror}/${registry_usr}"
   add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
   add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
 
@@ -2416,8 +2406,8 @@ function create_docker_registry_secret() {
 
   # input variables
   local registry_server="$1"
-  local registry_usr="$2"
-  local registry_pwd="$3"
+  local registry_usr=$2
+  local registry_pwd=$3
   local namespace="$4"
 
   local secret_name="${registry_server}-${registry_usr}"
@@ -2428,15 +2418,11 @@ function create_docker_registry_secret() {
 
   ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
 
-  if [[ $(${OC} get secret $secret_name -n $namespace) ]] ; then
-    ${OC} delete secret $secret_name -n $namespace || :
-  fi
+  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
 
   ( # subshell to hide commands
-
     ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
     --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
-
   )
 
   echo "# Adding '$secret_name' secret:"
@@ -2619,27 +2605,7 @@ function run_subctl_join_cmd_from_file() {
 
     echo "# Adding custom images to subctl join command"
 
-    # subctl_join_cmd="${subctl_join_cmd} \
-    # --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version} \
-    # --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
-    # --image-override submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version} \
-    # --image-override submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
-    # --image-override submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version} \
-    # --image-override lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
-    # --image-override lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version}"
-
-    # BUG ? : this is a potential bug (not working):
-    # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version},\
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
-
     subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
-
-    BUG "Submariner join failed when using --image-override submariner-operator" \
-    "Add: --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1911265"
-    # Workaround:
-    subctl_join_cmd="${subctl_join_cmd} --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version}"
 
   else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
@@ -3448,13 +3414,15 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
-  "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
-  "https://github.com/submariner-io/submariner/issues/245"
-  sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
-  sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
+  # BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
+  # "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
+  # "https://github.com/submariner-io/submariner/issues/245"
+  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
+  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  ${OC} config get-contexts
 
   subctl show versions || subctl_info=ERROR
 
@@ -3594,6 +3562,8 @@ function test_submariner_e2e_with_subctl() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
+
+  ${OC} config get-contexts
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
   subctl version
@@ -4191,7 +4161,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       else
         ${junit_cmd} test_submariner_e2e_with_subctl
 
-        if tail -n 5 "$E2E_LOG" | grep "E2E failed" ; then
+        if tail -n 25 "$E2E_LOG" | grep "E2E failed" ; then
           ginkgo_tests_status=FAILED
           BUG "SubCtl End-to-End tests have FAILED"
         fi
