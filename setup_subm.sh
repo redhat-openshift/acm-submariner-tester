@@ -1256,21 +1256,31 @@ function test_cluster_status() {
   local cluster_name="$1"
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
-  echo "# Modify KUBECONFIG current-context name to: ${cluster_name}"
+  # echo "# Modify KUBECONFIG current-context name to: ${cluster_name}"
   # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${cluster_name}\ncurrent-context: ${cluster_name}#" -i.bak ${KUBECONFIG}
   # ${OC} config set "current-context" "$cluster_name"
-  ${OC} config use-context "${cluster_name}"
 
-  echo "# Modify KUBECONFIG context name '${cur_context}' to: ${cluster_name}"
   local cur_context="$(${OC} config current-context)" # $cur_context should be equal to $cluster_name
-  ${OC} config rename-context "${cur_context}" "${cluster_name}"
+  if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
 
-  echo "# Set KUBECONFIG current-context '$cur_context' namespace to 'default'"
-  ${OC} config set "contexts.${cur_context}.namespace" "default"
+    BUG "E2E will fail if clusters have same name (default is \"admin\")" \
+    "Modify KUBECONFIG cluster context name on both clusters to be unique" \
+    "https://github.com/submariner-io/submariner/issues/245"
 
+    BUG "E2E will fail if cluster id is not equal to cluster name" \
+    "Modify KUBECONFIG context cluster name = cluster id" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1928805"
+
+    echo "# Modify KUBECONFIG current-context '${cur_context}' to: ${cluster_name}"
+    ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
+    ${OC} config use-context "${cluster_name}"
+  fi
+
+  echo "# Set KUBECONFIG context '$cluster_name' namespace to 'default'"
+  ${OC} config set "contexts.${cluster_name}.namespace" "default"
 
   ${OC} config view
-  ${OC} status || FATAL "Openshift cluster is not installed, or kubeconfig of '$cur_context' is wrong: ${KUBECONFIG}"
+  ${OC} status || FATAL "Openshift cluster is not installed, or using bad context '$cluster_name' in kubeconfig: ${KUBECONFIG}"
   ${OC} version
   ${OC} get all
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
