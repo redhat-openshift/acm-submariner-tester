@@ -2687,7 +2687,7 @@ function test_submariner_resources_status() {
 
   ${OC} get Submariner -n ${SUBM_NAMESPACE} -o yaml || submariner_status=DOWN
 
-  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|No resources found") \
+  ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || submariner_status=DOWN
   # TODO: consider checking for "Terminating" pods
 
