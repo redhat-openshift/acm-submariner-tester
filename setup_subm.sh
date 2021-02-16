@@ -2290,7 +2290,7 @@ EOF
 
     create_docker_registry_secret "$ocp_registry_url" "$ocp_usr" "$ocp_token" "$SUBM_NAMESPACE"
 
-    ${OC} logout
+    # Do not ${OC} logout - it will cause authentication error pulling images during join command
   )
 
     echo "# Restore kubeconfig current-context to $cur_context"
@@ -4156,14 +4156,14 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} test_submariner_e2e_with_go
 
-        if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
           ginkgo_tests_status=FAILED
           BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
         fi
 
         ${junit_cmd} test_lighthouse_e2e_with_go
 
-        if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
           ginkgo_tests_status=FAILED
           BUG "Submariner End-to-End Ginkgo tests have FAILED"
         fi
@@ -4171,7 +4171,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       else
         ${junit_cmd} test_submariner_e2e_with_subctl
 
-        if tail -n 25 "$E2E_LOG" | grep "E2E failed" ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
           ginkgo_tests_status=FAILED
           BUG "SubCtl End-to-End tests have FAILED"
         fi
