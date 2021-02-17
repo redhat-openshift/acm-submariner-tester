@@ -2314,6 +2314,8 @@ function configure_cluster_registry_mirror() {
 
   add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
   add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
+  wait_for_all_machines_ready || :
+  wait_for_all_nodes_ready || :
 
 }
 
@@ -2384,29 +2386,7 @@ EOF
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
 
-  echo "# Wait for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
-  ${OC} rollout status ds -n openshift-machine-config-operator machine-config-daemon
-
-  local wait_time=15m
-
-  echo "# Wait up to $wait_time for all ${node_type} Machine Config Pool to be updated:"
-  ${OC} wait --timeout=$wait_time --for condition=updated machineconfigpool/${node_type} || MACHINE_STATUS=DOWN
-
-  echo "# Wait up to $wait_time for all ${node_type} Nodes to be ready:"
-  ${OC} wait --timeout=$wait_time --for=condition=ready node -l node-role.kubernetes.io/${node_type} || MACHINE_STATUS=DOWN
-
-  echo "# Status of Nodes, Machine Config Pool and all Daemon-Sets:"
-  ${OC} get nodes || MACHINE_STATUS=DOWN
-  ${OC} get machineconfigpool || MACHINE_STATUS=DOWN
-  ${OC} get daemonsets -A || MACHINE_STATUS=DOWN
-
-  if [[ "$MACHINE_STATUS" = DOWN ]] ; then
-    FAILURE "Machine Configuration or Nodes status could not be retrieved, \
-    it might be related to OCP $ocp_version API call with Ignition version $ignition_version"
-  fi
-
 }
-
 
 # ------------------------------------------
 

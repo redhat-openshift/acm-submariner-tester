@@ -850,7 +850,31 @@ function wait_for_all_nodes_ready() {
   ${OC} get nodes -o wide
 
   if [[ "$nodes_status" = DOWN ]] ; then
-    FATAL "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
+    FAILURE "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
+  fi
+
+}
+
+# ------------------------------------------
+
+function wait_for_all_machines_ready() {
+### function to wait for all Machine Configuration to be ready, with optional timeout duration
+  trap_to_debug_commands
+
+  local duration=${1:-15m} # Default is 3 minutes
+
+  echo "# Wait for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
+  ${OC} rollout status ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
+
+  echo "# Wait up to $duration for all Machines Config Pool to be updated:"
+  ${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all || machines_status=DOWN
+
+  echo "# Status of Machine Config Pool and all Daemon-Sets:"
+  ${OC} get machineconfigpool -o wide || machines_status=DOWN
+  ${OC} get daemonsets -A -o wide || machines_status=DOWN
+
+  if [[ "$machines_status" = DOWN ]] ; then
+    FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
   fi
 
 }
