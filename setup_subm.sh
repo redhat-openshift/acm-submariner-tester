@@ -2590,9 +2590,12 @@ function run_subctl_join_cmd_from_file() {
       subm_release_version="$(get_latest_subctl_version_tag)"
     fi
 
-    echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} (Mirror ${REGISTRY_MIRROR}) tagged with release: ${subm_release_version}"
+    # If REGISTRY_TAG_MATCH defined: extract it as required version tag (e.g. Trim last minor digit: X.Y.Z ==> X.Y)
+    [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version=$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")
 
-    MIRROR_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-" # Move to variables
+    echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
+    \n# Mirror path: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX} \
+    \n# Version tag: ${subm_release_version}"
 
     for img in \
       $SUBM_IMG_GATEWAY \
@@ -2603,7 +2606,7 @@ function run_subctl_join_cmd_from_file() {
       $SUBM_IMG_GLOBALNET \
       $SUBM_IMG_OPERATOR \
       ; do
-        echo -e "# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} \n"
+        echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} \n"
 
         ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
     done
@@ -2615,31 +2618,31 @@ function run_subctl_join_cmd_from_file() {
 
     echo "# Adding custom images to subctl join command"
 
-    # subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
-    BUG "Image path for dependent components is appended wrong with \"submariner-rhel8-operato\"" \
-    "Override all other images (not just operator image)' " \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1929345"
-    # Workaround:
-
-    # Another BUG ? : this is a potential bug - overriding with comma separated:
-    # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
-    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
-    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
-    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
-    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
-    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
-
-    subctl_join_cmd="${subctl_join_cmd} \
-    --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
-    --image-override submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version} \
-    --image-override submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version} \
-    --image-override lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
-    --image-override lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version} \
-    --image-override submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
-    --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    # BUG "Image path for dependent components is appended wrong with \"submariner-rhel8-operato\"" \
+    # "Override all other images (not just operator image)' " \
+    # "https://bugzilla.redhat.com/show_bug.cgi?id=1929345"
+    # # Workaround:
+    #
+    # # Another BUG ? : this is a potential bug - overriding with comma separated:
+    # # subctl_join_cmd="${subctl_join_cmd} --image-override \
+    # # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
+    # # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
+    # # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
+    # # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
+    # # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
+    # # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
+    # # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    #
+    # subctl_join_cmd="${subctl_join_cmd} \
+    # --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
+    # --image-override submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version} \
+    # --image-override submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version} \
+    # --image-override lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
+    # --image-override lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version} \
+    # --image-override submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
+    # --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
   else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
