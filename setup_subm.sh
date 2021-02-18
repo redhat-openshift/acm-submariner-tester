@@ -2592,7 +2592,7 @@ function run_subctl_join_cmd_from_file() {
     [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version=$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
-    \n# Mirror path: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX} \
+    \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
     \n# Version tag: ${subm_release_version}"
 
     for img in \
@@ -2604,9 +2604,9 @@ function run_subctl_join_cmd_from_file() {
       $SUBM_IMG_GLOBALNET \
       $SUBM_IMG_OPERATOR \
       ; do
-        echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} \n"
+        echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} \n"
 
-        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${MIRROR_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
+        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
