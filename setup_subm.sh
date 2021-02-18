@@ -2589,7 +2589,7 @@ function run_subctl_join_cmd_from_file() {
     fi
 
     # If REGISTRY_TAG_MATCH defined: extract it as required version tag (e.g. Trim last minor digit: X.Y.Z ==> X.Y)
-    [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version=$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")
+    # [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version="v$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")"
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
     \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
@@ -2606,7 +2606,8 @@ function run_subctl_join_cmd_from_file() {
       ; do
         echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} \n"
 
-        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
+        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} \
+        --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
@@ -3866,12 +3867,12 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
-  # Debug functions
-  ${junit_cmd} pass_test_debug
-  ${junit_cmd} pass_test_debug
-  ${junit_cmd} fail_test_debug || rc=$?
-  [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
-  ${junit_cmd} fatal_test_debug
+  # # Debug functions
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} pass_test_debug
+  # ${junit_cmd} fail_test_debug || rc=$?
+  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
+  # ${junit_cmd} fatal_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
