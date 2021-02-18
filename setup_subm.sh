@@ -3866,12 +3866,12 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     trap_function_on_error "${junit_cmd} collect_submariner_info"
   fi
 
-  # # Debug functions
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} fail_test_debug || rc=$?
-  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
-  # ${junit_cmd} fatal_test_debug
+  # Debug functions
+  ${junit_cmd} pass_test_debug
+  ${junit_cmd} pass_test_debug
+  ${junit_cmd} fail_test_debug || rc=$?
+  [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
+  ${junit_cmd} fatal_test_debug
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
