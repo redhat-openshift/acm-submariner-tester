@@ -2186,6 +2186,24 @@ function configure_ocp_garbage_collection_and_images_prune() {
       imageGCLowThresholdPercent: 75
 EOF
 
+  echo "# Setting ContainerRuntimeConfig limits on all OCP cluster nodes"
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: ContainerRuntimeConfig
+  metadata:
+   name: overlay-size
+  spec:
+   machineConfigPoolSelector:
+     matchLabels:
+       custom-crio: overlay-size
+   containerRuntimeConfig:
+     pidsLimit: 2048
+     logLevel: debug
+     overlaySize: 8G
+     log_size_max: 52428800
+EOF
+
   echo "# Enable Image Pruner policy - to delete unused images from registry:"
 
   ${OC} patch imagepruner.imageregistry/cluster --patch '{"spec":{"suspend":false}}' --type=merge
@@ -2356,8 +2374,8 @@ function add_submariner_registry_mirror_to_ocp_node() {
 EOF
   )
 
-  echo "# Pausing auto-reboot of ${node_type} when changing Machine Config Pool:"
-  ${OC} patch --type=merge --patch='{"spec":{"paused":true}}' machineconfigpool/${node_type}
+  echo "# Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
 
   local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "# Checking API ignition version for OCP version: $ocp_version"
@@ -2600,29 +2618,15 @@ function run_subctl_join_cmd_from_file() {
 
     subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
-    # BUG "Image path for dependent components is appended wrong with \"submariner-rhel8-operato\"" \
-    # "Override all other images (not just operator image)' " \
-    # "https://bugzilla.redhat.com/show_bug.cgi?id=1929345"
-    # # Workaround:
-    #
-    # # Another BUG ? : this is a potential bug - overriding with comma separated:
-    # # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
-    # # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
-    # # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
-    # # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
-    # # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
-    # # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
-    # # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
-    #
-    # subctl_join_cmd="${subctl_join_cmd} \
-    # --image-override submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version} \
-    # --image-override submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version} \
-    # --image-override submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version} \
-    # --image-override lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version} \
-    # --image-override lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version} \
-    # --image-override submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version} \
-    # --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    # BUG ? : this is a potential bug - overriding with comma separated:
+    # subctl_join_cmd="${subctl_join_cmd} --image-override \
+    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
+    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
+    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
+    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
+    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
+    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
+    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
   else
       BUG "operator image 'devel' should be the default when using subctl devel binary" \
@@ -3077,7 +3081,7 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
-function test_svc_pod_global_ip_created() {
+function test_global_ip_created_for_svc_or_pod() {
   # Check that the Service or Pod was annotated with GlobalNet IP
   # Set external variable GLOBAL_IP if there's a GlobalNet IP
   trap_to_debug_commands
@@ -3178,7 +3182,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $TEST_NS
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_B" $TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_B}${TEST_NS:+.$TEST_NS})"
   nginx_global_ip="$GLOBAL_IP"
 
@@ -3190,7 +3194,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_svc_pod_global_ip_created pod "$netshoot_pod_cluster_a" $TEST_NS
+  test_global_ip_created_for_svc_or_pod pod "$netshoot_pod_cluster_a" $TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
   netshoot_global_ip="$GLOBAL_IP"
 
@@ -3304,7 +3308,7 @@ function test_new_netshoot_global_ip_cluster_a() {
 
   # Should fail if NEW_NETSHOOT_CLUSTER_A was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_svc_pod_global_ip_created pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS
+  test_global_ip_created_for_svc_or_pod pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${NEW_NETSHOOT_CLUSTER_A}${TEST_NS:+ in $TEST_NS})"
 }
 
@@ -3343,7 +3347,7 @@ function test_nginx_headless_global_ip_cluster_b() {
 
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_svc_pod_global_ip_created svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   # TODO: Ping to the new_nginx_global_ip
@@ -4097,8 +4101,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
       ${junit_cmd} test_nginx_headless_global_ip_cluster_b
@@ -4118,10 +4120,14 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
+          ${junit_cmd} test_clusters_connected_overlapping_cidrs
+
+          # TODO: Test heasdless service with GLobalnet - when the feature of is supported
           BUG "HEADLESS Service is not supported with GlobalNet" \
            "No workaround yet - Skip the whole test" \
           "https://github.com/submariner-io/lighthouse/issues/273"
           # No workaround yet
+
       else
         ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
