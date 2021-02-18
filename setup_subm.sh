@@ -69,18 +69,18 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
-  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
+  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
 
 - Submariner installation options:
 
-  * Install Submariner version:                        --install-version [latest / x.y.z / {tag}]
+  * Download SubCtl version:                           --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
-  * Skip Submariner installation:                      --skip-install
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
-  * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan]
+  * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan DEPRECATED]
+  * Skip Submariner installation on all clusters:      --skip-install
 
 - Submariner test options:
 
@@ -106,7 +106,7 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version 0.8.1 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --subctl-version 0.8.1 --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
   * Install Submariner 0.8.1 release
@@ -115,7 +115,7 @@ Examples with pre-defined options:
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version subctl-devel --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --service-discovery --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
@@ -243,10 +243,10 @@ while [[ $# -gt 0 ]]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
-  --install-version)
+  --subctl-version)
     check_cli_args "$2"
     export SUBCTL_VERSION="$2"
-    install_subctl=YES
+    download_subctl=YES
     shift 2 ;;
   --registry-images)
     registry_images=YES
@@ -433,8 +433,8 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_subctl and SUBCTL_VERSION - to download_subctl
-  if [[ "$install_subctl" =~ ^(yes|y)$ ]]; then
+  # User input: $download_subctl and SUBCTL_VERSION - to download_and_install_subctl
+  if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
     while [[ ! "$SUBCTL_VERSION" =~ ^[0-9a-Z]+$ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"subctl-devel\" version: "
@@ -523,7 +523,7 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
-install_subctl=${install_subctl:-NO}
+download_subctl=${download_subctl:-NO}
 # SUBCTL_VERSION=${SUBCTL_VERSION}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -588,7 +588,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_subctl: $SUBCTL_VERSION
+    - download_and_install_subctl: $SUBCTL_VERSION
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -597,7 +597,7 @@ function show_test_plan() {
     - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - install_subctl: $SUBCTL_VERSION
+    - download_subctl: $SUBCTL_VERSION
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -944,7 +944,7 @@ function build_operator_latest() {  # [DEPRECATED]
 
 # ------------------------------------------
 
-function download_subctl() {
+function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_VERSION"
 
@@ -1082,7 +1082,7 @@ function test_subctl_command() {
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
 
   subctl --help
@@ -1588,7 +1588,7 @@ function remove_submariner_machine_sets() {
 #
 #   PROMPT "Remove previous Submariner images from local Podman registry"
 #
-#   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
+#   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
 #   # Get SubCTL version (from file $SUBCTL_VERSION)
 #
 #   # install_local_podman "${WORKDIR}"
@@ -3586,7 +3586,7 @@ function test_submariner_e2e_with_subctl() {
 
   ${OC} config get-contexts
 
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--install-version'"
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
 
   BUG "No Subctl option to set -ginkgo.reportFile" \
@@ -4016,10 +4016,10 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    # Running download_subctl
-    if [[ "$install_subctl" =~ ^(y|yes)$ ]] ; then
+    # Running download_and_install_subctl
+    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_subctl "$SUBCTL_VERSION"
+      ${junit_cmd} download_and_install_subctl "$SUBCTL_VERSION"
 
     fi
 
