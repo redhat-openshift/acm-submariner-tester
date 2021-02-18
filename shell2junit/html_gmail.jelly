@@ -58,7 +58,7 @@
    <tr>
     <td>Console log:</td>
     <td>
-     <a href="${rooturl}${build.url}/consoleFull">
+     <a href="${rooturl}${build.url}consoleFull">
       ${rooturl}${build.url}consoleFull
      </a>
     </td>
@@ -81,8 +81,8 @@
      <j:set var="hadChanges" value="true" />
      <j:set var="aUser" value="${cs.hudsonUser}" />
      <tr>
-      <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">
-       ${spc}Revision
+      <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
+       Revision
        <b>
         ${cs.commitId?:cs.revision?:cs.changeNumber}
        </b>
@@ -90,6 +90,7 @@
        <b>
         ${aUser!=null?aUser.displayName:cs.author.displayName}:
        </b>
+       <br />
        <b>
         (${cs.msgAnnotated})
        </b>
@@ -98,7 +99,7 @@
      <j:forEach var="p" items="${cs.affectedFiles}">
       <tr>
        <td width="10%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-        ${spc}${p.editType.name}
+        ${p.editType.name}
        </td>
        <td>
         ${p.path}
@@ -154,7 +155,7 @@
     </tr>
     <j:forEach var="m" items="${mbuilds}">
      <tr>
-      <td class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">
+      <td class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
        <b>
         ${m.key.displayName}
        </b>
@@ -194,7 +195,7 @@
     <j:forEach var="junitResult" items="${it.JUnitTestResult}">
      <j:forEach var="packageResult" items="${junitResult.getChildren()}">
       <tr>
-       <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">
+       <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
         Name: ${packageResult.getName()} Failed: ${packageResult.getFailCount()} test(s), Passed: ${packageResult.getPassCount()} test(s), Skipped: ${packageResult.getSkipCount()} test(s), Total: ${packageResult.getPassCount()+packageResult.getFailCount()+packageResult.getSkipCount()} test(s)
        </td>
       </tr>
@@ -227,7 +228,7 @@
      </td>
     </table>
     <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-     <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">
+     <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
       <b>
        Project Coverage Summary
       </b>
@@ -287,7 +288,7 @@
     <j:forEach var="element" items="${coberturaResult.childElements}">
      <j:set var="childMetrics" value="${coberturaResult.getChildMetrics(element)}" />
      <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-      <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #4040FF">
+      <td class="bg2" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
        Coverage Breakdown by ${element.displayName}
       </td>
      </table>
