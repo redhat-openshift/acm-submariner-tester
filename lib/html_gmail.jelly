@@ -82,18 +82,12 @@
      <j:set var="aUser" value="${cs.hudsonUser}" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
-       Revision
-       <b>
-        ${cs.commitId?:cs.revision?:cs.changeNumber}
-       </b>
+      <j:out value="${cs.msgAnnotated}"/>
        by
        <b>
         ${aUser!=null?aUser.displayName:cs.author.displayName}:
        </b>
        <br />
-       <b>
-        (${cs.msgAnnotated})
-       </b>
       </td>
      </tr>
      <j:forEach var="p" items="${cs.affectedFiles}">
