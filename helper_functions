@@ -16,8 +16,8 @@ export CONDA_ENV_NAME="conda-test"
 # Set SCRIPT_DIR as current absolute path where this script runs in
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
-# include shell2junit library
-source "$SCRIPT_DIR/shell2junit/sh2ju.sh"
+# include sh2ju library
+source "$SCRIPT_DIR/lib/sh2ju.sh"
 
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
