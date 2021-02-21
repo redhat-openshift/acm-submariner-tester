@@ -2606,8 +2606,11 @@ function run_subctl_join_cmd_from_file() {
       ; do
         echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} \n"
 
-        ${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} \
-        --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm
+        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} \
+        --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm"
+
+        watch_and_retry "$cmd" 3m "$img imported"
+
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
