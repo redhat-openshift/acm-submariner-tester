@@ -804,8 +804,8 @@ function install_nginx_service() {
   ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
 
-  echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  echo "# Wait 3 minutes for Ngnix service to be ready:"
+  ${OC} rollout status --timeout=3m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
 
 }
@@ -863,8 +863,8 @@ function wait_for_all_machines_ready() {
 
   local duration=${1:-15m} # Default is 3 minutes
 
-  echo "# Wait for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
-  ${OC} rollout status ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
+  echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
+  ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
 
   echo "# Wait up to $duration for all Machines Config Pool to be updated:"
   ${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all || machines_status=DOWN

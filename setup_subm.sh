@@ -2087,7 +2087,7 @@ function export_service_in_lighthouse() {
 
   echo "# Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
-  # ${OC} rollout status serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
   BUG "Rollout status failed: ServiceExport is not a registered version" \
