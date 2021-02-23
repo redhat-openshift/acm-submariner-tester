@@ -16,8 +16,8 @@ export CONDA_ENV_NAME="conda-test"
 # Set SCRIPT_DIR as current absolute path where this script runs in
 export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 
-# include shell2junit library
-source "$SCRIPT_DIR/shell2junit/sh2ju.sh"
+# include sh2ju library
+source "$SCRIPT_DIR/lib/sh2ju.sh"
 
 shopt -s nocasematch # Case-insensitive match for string evaluations
 
@@ -118,7 +118,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  trap_to_debug_commands
+  # trap_to_debug_commands
 
   # Param 1: Command to execute and watch
   CMD="$1"
@@ -174,6 +174,8 @@ function run_and_tail() {
   local log_to_tail="$2"
   # Param 3: timeout duration (default 1 hour)
   local duration="${3:-1h}"
+  # Param 4: RegEx to find in log (if not given, return process exit code)
+  local regex="$4"
 
   echo -e "# Running command as background process: $cmd
   \n# Timeout duration: $duration
@@ -189,6 +191,13 @@ function run_and_tail() {
 
   # Check the exit code of the command PID
   wait $pid || proc_exit="$?"
+
+  if [[ -n "$regex" ]] ; then
+    grep "$regex" "$log_to_tail" || proc_exit="$?"
+    [[ "$proc_exit" = 0 ]] || \
+    echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
+  fi
+
   [[ "$proc_exit" = 0 ]] || \
   echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
 
@@ -795,8 +804,8 @@ function install_nginx_service() {
   ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
 
-  echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  echo "# Wait 3 minutes for Ngnix service to be ready:"
+  ${OC} rollout status --timeout=3m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
 
 }
@@ -825,6 +834,47 @@ function get_running_pod_by_label() {
   else
     # exit 1
     FAILURE "Pod '$pod_label' is not running in '${namespace:-default}' namespace. \n $pod_status"
+  fi
+
+}
+
+# ------------------------------------------
+
+function wait_for_all_nodes_ready() {
+### function to wait for all nodes to be ready, with optional timeout duration
+  trap_to_debug_commands;
+
+  local duration=${1:-3m} # Default is 3 minutes
+
+  ${OC} wait --timeout=$duration --for=condition=ready nodes --all || nodes_status=DOWN
+  ${OC} get nodes -o wide
+
+  if [[ "$nodes_status" = DOWN ]] ; then
+    FAILURE "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
+  fi
+
+}
+
+# ------------------------------------------
+
+function wait_for_all_machines_ready() {
+### function to wait for all Machine Configuration to be ready, with optional timeout duration
+  trap_to_debug_commands
+
+  local duration=${1:-15m} # Default is 3 minutes
+
+  echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
+  ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
+
+  echo "# Wait up to $duration for all Machines Config Pool to be updated:"
+  ${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all || machines_status=DOWN
+
+  echo "# Status of Machine Config Pool and all Daemon-Sets:"
+  ${OC} get machineconfigpool -o wide || machines_status=DOWN
+  ${OC} get daemonsets -A -o wide || machines_status=DOWN
+
+  if [[ "$machines_status" = DOWN ]] ; then
+    FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
   fi
 
 }
@@ -914,9 +964,7 @@ function build_go_repo() {
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
 
-  #git fetch upstream && git checkout master && git pull upstream master
-  # git fetch && git git pull --rebase
-  git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  git_reset_local_repo
 
   echo "# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
@@ -927,6 +975,26 @@ function build_go_repo() {
 
   echo "# Project main directory content: "
   ls -la
+}
+
+# ------------------------------------------
+
+# Function to fetch, reset and pull latest git repository (to be run inside local directory repo)
+function git_reset_local_repo() {
+  trap_to_debug_commands;
+
+  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  git fetch --prune --all
+  local default_branch=$(git remote show origin | awk '/HEAD branch/ { print $3 }')
+  git branch -m $default_branch
+  git branch -u origin/$default_branch
+  git reset --hard
+  git checkout --theirs .
+  git pull
+
+  echo -e "\n# Latest commits in the repository: \n"
+  git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
+
 }
 
 # ------------------------------------------
@@ -1160,10 +1228,13 @@ function watch_polarion_job_status() {
 
 function log_to_html() {
   trap_to_debug_commands;
-  log_file="$1"
-  title="${2:-"${log_file%%.*}"}" # full file path without extension
-  html_output="${3:-${title// /_}.html}" # replace all spaces with underscores
-  description="$4"
+
+  # Input params:
+
+  local log_file="$1"
+  local title="${2:-"${log_file%%.*}"}" # html title (default is log filename)
+  local html_output="${3:-${title//[ \/]/_}.html}" # html filename to create (default is title with underscores)
+  local description="$4"
 
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
@@ -1172,9 +1243,9 @@ function log_to_html() {
   [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
   </div></h3>"
 
-  repo_url=https://github.com/theZiz/aha.git
-  repo_branch=0.5.1
-  repo_dir=$(basename $repo_url .git)
+  local repo_url=https://github.com/theZiz/aha.git
+  local repo_branch=0.5.1
+  local repo_dir=$(basename $repo_url .git)
 
   # Get AHA binary
   if [[ ! -f ./$repo_dir/aha ]]; then
