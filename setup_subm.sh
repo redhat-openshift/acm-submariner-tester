@@ -3865,6 +3865,18 @@ function test_project_e2e_with_go() {
 
 # ------------------------------------------
 
+function test_subctl_benchmarks() {
+  PROMPT "Testing subctl benchmark: latency and throughput tests"
+  trap_to_debug_commands;
+
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+
+}
+
+# ------------------------------------------
+
 function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
@@ -4495,6 +4507,13 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     echo 2 > $TEST_STATUS_FILE
   fi
 
+# Running benchmark tests
+    ${junit_cmd} test_subctl_benchmarks || subctl_benchmarks_status=FAILED 
+
+    if [[ "$subctl_benchmarks_status" = FAILED ]] ; then
+      FATAL "Submariner benchmark tests have ended with failures, please investigate."
+    fi
+
   ### Running Submariner Ginkgo tests
   if [[ ! "$skip_tests" =~ all ]]; then
 
@@ -4534,6 +4553,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
         fi
 
       else
+
         ${junit_cmd} test_submariner_e2e_with_subctl
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
