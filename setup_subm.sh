@@ -3624,14 +3624,20 @@ function create_all_test_results_in_polarion() {
   PROMPT "Upload all test results to Polarion"
   trap_to_debug_commands;
 
+  # Temp file to store Polarion output
+  local polarion_output="`mktemp`_polarion"
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
   echo "# Upload Junit results of SYSTEM (Shell) tests to Polarion:"
-  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" || polarion_rc=1
+
+  # Redirect output to stdout and to $polarion_output, in order to get polarion testrun url into report
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
+
+  add_polarion_testrun_url_to_report_description "$polarion_output"
+
 
   # Upload E2E tests to Polarion
-
   if [[ (! "$skip_tests" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
     echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
@@ -3641,7 +3647,10 @@ function create_all_test_results_in_polarion() {
     # Workaround:
     sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
 
-    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" || polarion_rc=1
+    # Redirect output to stdout and to $polarion_output, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
+
+    add_polarion_testrun_url_to_report_description "$polarion_output"
   fi
 
   # Upload UNIT tests to Polarion (skipping, not really required)
@@ -3656,6 +3665,25 @@ function create_all_test_results_in_polarion() {
   return $polarion_rc
 }
 
+
+# ------------------------------------------
+
+function add_polarion_testrun_url_to_report_description() {
+# Helper function to search polarion testrun url in input log file, to add later to the HTML report
+  trap_to_debug_commands;
+
+  local polarion_output="$1"
+
+  echo "# Add new Polarion Test run results to the Html report description: "
+  local results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_output" | sed -z 's/\.\n.* to:/:\n/' || :)
+
+  if [[ -n "$results_link" ]] ; then
+    echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
+  else
+    echo "Error reading Polarion Test results link $results_link" 1>&2
+  fi
+
+}
 
 # ------------------------------------------
 
@@ -4218,26 +4246,8 @@ cd ${SCRIPT_DIR}
 
 ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
 if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-
-  # Temp file to store Polarion output
-  > "$TEMP_FILE"
-  # Redirecting output both to stdout, TEMP_FILE and LOG_FILE
-  create_all_test_results_in_polarion |& tee -a "$TEMP_FILE" "$LOG_FILE" || :
-
-  echo "# Add new Polarion Test run results to the Html report description: "
-  results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$TEMP_FILE" | sed -z 's/\.\n.* to:/:\n/' || :)
-
-  if [[ -n "$results_link" ]] ; then
-    echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
-    cat "$POLARION_REPORTS"
-
-    # set REPORT_DESCRIPTION for html report
-    REPORT_DESCRIPTION="Polarion results:
-    $(< "$POLARION_REPORTS")"
-  else
-    echo "Error reading Polarion Test results link $results_link" 1>&2
-  fi
-
+  # Redirecting output both to stdout and LOG_FILE
+  create_all_test_results_in_polarion |& tee -a "$LOG_FILE" || :
 fi
 
 # ------------------------------------------
@@ -4270,6 +4280,14 @@ PROMPT "$message" "$color" |& tee -a "$LOG_FILE"
 if [[ -n "$REPORT_FILE" ]] ; then
   echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
   REPORT_FILE="$(basename ${REPORT_FILE// /_})"
+fi
+
+if [[ -s "$POLARION_REPORTS" ]] ; then
+  echo "# set REPORT_DESCRIPTION for html report:"
+  cat "$POLARION_REPORTS"
+
+  REPORT_DESCRIPTION="Polarion results:
+  $(< "$POLARION_REPORTS")"
 fi
 
 log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
