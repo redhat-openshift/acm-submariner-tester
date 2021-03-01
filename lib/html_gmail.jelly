@@ -29,8 +29,8 @@
     </td>
    </tr> -->
    <tr>
-    <td>Project:</td>
-    <td>${project.name}</td>
+    <td>Build:</td>
+    <td>${build.name}</td>
    </tr>
    <tr>
     <td></td>
