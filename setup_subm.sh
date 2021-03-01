@@ -245,7 +245,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --subctl-version)
     check_cli_args "$2"
-    export SUBCTL_VERSION="$2"
+    export SUBCTL_TAG="$2"
     download_subctl=YES
     shift 2 ;;
   --registry-images)
@@ -433,13 +433,13 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $download_subctl and SUBCTL_VERSION - to download_and_install_subctl
+  # User input: $download_subctl and SUBCTL_TAG - to download_and_install_subctl
   if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$SUBCTL_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+    while [[ ! "$SUBCTL_TAG" =~ ^[0-9a-Z]+$ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"subctl-devel\" version: "
       read -r input
-      SUBCTL_VERSION=${input:-subctl-devel}
+      SUBCTL_TAG=${input:-subctl-devel}
     done
   fi
 
@@ -524,7 +524,7 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
 download_subctl=${download_subctl:-NO}
-# SUBCTL_VERSION=${SUBCTL_VERSION}
+# SUBCTL_TAG=${SUBCTL_TAG}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -588,7 +588,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_and_install_subctl: $SUBCTL_VERSION
+    - download_and_install_subctl: $SUBCTL_TAG
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -597,7 +597,7 @@ function show_test_plan() {
     - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - download_subctl: $SUBCTL_VERSION
+    - download_subctl: $SUBCTL_TAG
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -946,18 +946,18 @@ function build_operator_latest() {  # [DEPRECATED]
 
 function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_VERSION"
+    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_TAG"
 
-    if [[ "$SUBCTL_VERSION" = latest ]]; then
+    if [[ "$SUBCTL_TAG" = latest ]]; then
       # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
-      SUBCTL_VERSION='v[0-9]'
+      SUBCTL_TAG='v[0-9]'
 
-    elif [[ "$SUBCTL_VERSION" =~ ^[0-9] ]]; then
+    elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
       # Number is considered "vNUMBER" tag
-          SUBCTL_VERSION="v${SUBCTL_VERSION}"
+          SUBCTL_TAG="v${SUBCTL_TAG}"
     fi
 
-    download_subctl_by_tag "$SUBCTL_VERSION"
+    download_subctl_by_tag "$SUBCTL_TAG"
 
 }
 
@@ -2632,12 +2632,12 @@ function run_subctl_join_cmd_from_file() {
     # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
     # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
 
-  else
-      BUG "operator image 'devel' should be the default when using subctl devel binary" \
-      "Add '--version devel' to $join_cmd_file" \
-      "https://github.com/submariner-io/submariner-operator/issues/563"
-      # Workaround
-      subctl_join_cmd="${subctl_join_cmd} --version devel"
+  elif [[ "$SUBCTL_TAG" =~ ^subctl-devel ]]; then
+    BUG "operator image 'devel' should be the default when using subctl devel binary" \
+    "Add '--version devel' to $join_cmd_file" \
+    "https://github.com/submariner-io/submariner-operator/issues/563"
+    # Workaround
+    subctl_join_cmd="${subctl_join_cmd} --version devel"
   fi
 
   echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join_cmd}"
@@ -4051,7 +4051,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running download_and_install_subctl
     if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_and_install_subctl "$SUBCTL_VERSION"
+      ${junit_cmd} download_and_install_subctl "$SUBCTL_TAG"
 
     fi
 
