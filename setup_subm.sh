@@ -2015,7 +2015,7 @@ function install_broker_aws_cluster_a() {
 # ------------------------------------------
 
 function test_broker_before_join() {
-  PROMPT "Verify Submariner CRDs created, but no pods were yet created"
+  PROMPT "Verify Submariner resources on the Broker cluster"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_BROKER}"
@@ -2033,9 +2033,21 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
+  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+  local regex="submariner-operator"
+  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
+    # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
+    regex="No resources found"
+
+    BUG "If subctl < 0.9 then there should not be any Submariner pods running after deploying the broker (before Join command)" \
+    "Check for \"No resources found\" in '${SUBM_NAMESPACE}'" \
+    "https://github.com/submariner-io/submariner-operator/issues/203"
+  fi
+
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
-    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
-     || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
+    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "$regex" \
+     || FATAL "Submariner Broker which was created with subctl $subm_release_version deploy command (before join) \
+      should have \"$regex\" in the Broker namespace '${SUBM_NAMESPACE}'"
   fi
 }
 
