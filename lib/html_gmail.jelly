@@ -30,7 +30,7 @@
    </tr> -->
    <tr>
     <td>Build:</td>
-    <td>${build.name}</td>
+    <td>${build.displayName}</td>
    </tr>
    <tr>
     <td></td>
