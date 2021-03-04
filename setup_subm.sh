@@ -437,9 +437,9 @@ if [[ -z "$got_user_input" ]]; then
   if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
     while [[ ! "$SUBCTL_TAG" =~ ^[0-9a-Z]+$ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
-      Enter version number, or nothing to install \"subctl-devel\" version: "
+      Enter version number, or nothing to install \"latest\" version: "
       read -r input
-      SUBCTL_TAG=${input:-subctl-devel}
+      SUBCTL_TAG=${input:-latest}
     done
   fi
 
@@ -950,11 +950,12 @@ function download_and_install_subctl() {
 
     if [[ "$SUBCTL_TAG" = latest ]]; then
       # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
-      SUBCTL_TAG='v[0-9]'
+      export SUBCTL_TAG='v[0-9]'
 
     elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
       # Number is considered "vNUMBER" tag
-          SUBCTL_TAG="v${SUBCTL_TAG}"
+      export SUBCTL_TAG="v${SUBCTL_TAG}"
+
     fi
 
     download_subctl_by_tag "$SUBCTL_TAG"
@@ -977,33 +978,33 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Download SubCtl from custom registry, if requested
-    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
-
-      echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
-
-      local subm_release_version="$(get_latest_subctl_version_tag)"
-
-      # Temporarily, the version can only include numbers and dots
-      subm_release_version=${subm_release_version//[^0-9.]/}
-
-      local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subm_release_version}/subctl"
-
-      ( # subshell to hide commands
-        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
-        [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
-      )
-
-      echo "# Install subctl into ${GOBIN}:"
-      mkdir -p $GOBIN
-      # cp -f ./subctl $GOBIN/
-      /usr/bin/install ./subctl $GOBIN/subctl
-
-      echo "# Install subctl into user HOME bin:"
-      # cp -f ./subctl ~/.local/bin/
-      /usr/bin/install ./subctl ~/.local/bin/subctl
-
-    else
+    # # Download SubCtl from custom registry, if requested
+    # if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+    #
+    #   echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
+    #
+    #   local subm_release_version="$(get_latest_subctl_version_tag)"
+    #
+    #   # Temporarily, the version can only include numbers and dots
+    #   subm_release_version=${subm_release_version//[^0-9.]/}
+    #
+    #   local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subm_release_version}/subctl"
+    #
+    #   ( # subshell to hide commands
+    #     curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
+    #     [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
+    #   )
+    #
+    #   echo "# Install subctl into ${GOBIN}:"
+    #   mkdir -p $GOBIN
+    #   # cp -f ./subctl $GOBIN/
+    #   /usr/bin/install ./subctl $GOBIN/subctl
+    #
+    #   echo "# Install subctl into user HOME bin:"
+    #   # cp -f ./subctl ~/.local/bin/
+    #   /usr/bin/install ./subctl ~/.local/bin/subctl
+    #
+    # else
       echo "# Downloading SubCtl from upstream URL: $releases_url"
       # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
@@ -1044,7 +1045,7 @@ function download_subctl_by_tag() {
         /usr/bin/install ./subctl ~/.local/bin/subctl
       fi
 
-    fi
+    # fi
 
     echo "# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
@@ -2499,18 +2500,9 @@ function write_subctl_join_command() {
 
   echo "# Adding '--pod-debug' and '--ipsec-debug' to subctl join command (for tractability)"
 
+  # Need to determine subm_release_version for the debug flag names
   local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-
-  # If the subm_release_version does not begin with a number - set it to the latest release
-  if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
-
-    BUG "Subctl-devel version does not include release number" \
-    "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
-    "https://github.com/submariner-io/shipyard/issues/424"
-
-    # Workaround
-    subm_release_version="$(get_latest_subctl_version_tag)"
-  fi
+  [[ "$subm_release_version" =~ ^v[0-9] ]] || subm_release_version="$(get_latest_subctl_version_tag)"
 
   if [[ "$subm_release_version" =~ 0\.8 ]] ; then
     # For Subctl 0.8.0: '--enable-pod-debugging'
@@ -2587,17 +2579,25 @@ function run_subctl_join_cmd_from_file() {
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-    local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+    # local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
+    #
+    # # If the subm_release_version does not begin with a number - set it to the latest release
+    # if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
+    #
+    #   BUG "Subctl-devel version does not include release number" \
+    #   "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
+    #   "https://github.com/submariner-io/shipyard/issues/424"
+    #
+    #   # Workaround
+    #   subm_release_version="$(get_latest_subctl_version_tag)"
+    # fi
 
-    # If the subm_release_version does not begin with a number - set it to the latest release
-    if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
-
-      BUG "Subctl-devel version does not include release number" \
-      "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
-      "https://github.com/submariner-io/shipyard/issues/424"
-
-      # Workaround
-      subm_release_version="$(get_latest_subctl_version_tag)"
+    # Subctl "latest" tag is the most recent tag that starts with "vNUMBER"
+    if [[ "$SUBCTL_TAG" = latest ]]; then
+      export SUBCTL_TAG="$(get_latest_subctl_version_tag)"
+    elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
+      # Version x.y.z is considered "vx.y.z" tag
+      export SUBCTL_TAG="v${SUBCTL_TAG}"
     fi
 
     # If REGISTRY_TAG_MATCH defined: extract it as required version tag (e.g. Trim last minor digit: X.Y.Z ==> X.Y)
@@ -2605,7 +2605,7 @@ function run_subctl_join_cmd_from_file() {
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
     \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-    \n# Version tag: ${subm_release_version}"
+    \n# Version tag: ${SUBCTL_TAG}"
 
     for img in \
       $SUBM_IMG_GATEWAY \
@@ -2616,13 +2616,12 @@ function run_subctl_join_cmd_from_file() {
       $SUBM_IMG_GLOBALNET \
       $SUBM_IMG_OPERATOR \
       ; do
-        echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} \n"
+        local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBCTL_TAG}"
+        echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
-        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} \
-        --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm"
+        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBCTL_TAG} --from=${img_source} --confirm"
 
-        watch_and_retry "$cmd" 3m "$img imported"
-
+        watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBCTL_TAG}"
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
@@ -2632,17 +2631,17 @@ function run_subctl_join_cmd_from_file() {
 
     echo "# Adding custom images to subctl join command"
 
-    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBCTL_TAG}"
 
     # BUG ? : this is a potential bug - overriding with comma separated:
     # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
-    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
-    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
-    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
-    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
-    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBCTL_TAG},\
+    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBCTL_TAG}, \
+    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBCTL_TAG},\
+    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBCTL_TAG},\
+    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBCTL_TAG},\
+    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBCTL_TAG},\
+    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBCTL_TAG}"
 
   elif [[ "$SUBCTL_TAG" =~ ^subctl-devel ]]; then
     BUG "operator image 'devel' should be the default when using subctl devel binary" \
