@@ -2600,8 +2600,11 @@ function run_subctl_join_cmd_from_file() {
       export SUBCTL_TAG="v${SUBCTL_TAG}"
     fi
 
-    # If REGISTRY_TAG_MATCH defined: extract it as required version tag (e.g. Trim last minor digit: X.Y.Z ==> X.Y)
-    # [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version="v$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")"
+    if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
+      echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBCTL_TAG' the regex match: $REGISTRY_TAG_MATCH"
+      export SUBCTL_TAG="v$(echo $SUBCTL_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
+      echo "# New \$SUBCTL_TAG for registry images: $SUBCTL_TAG"
+    fi
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
     \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
