@@ -978,33 +978,37 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # # Download SubCtl from custom registry, if requested
-    # if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
-    #
-    #   echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
-    #
-    #   local subm_release_version="$(get_latest_subctl_version_tag)"
-    #
-    #   # Temporarily, the version can only include numbers and dots
-    #   subm_release_version=${subm_release_version//[^0-9.]/}
-    #
-    #   local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subm_release_version}/subctl"
-    #
-    #   ( # subshell to hide commands
-    #     curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
-    #     [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
-    #   )
-    #
-    #   echo "# Install subctl into ${GOBIN}:"
-    #   mkdir -p $GOBIN
-    #   # cp -f ./subctl $GOBIN/
-    #   /usr/bin/install ./subctl $GOBIN/subctl
-    #
-    #   echo "# Install subctl into user HOME bin:"
-    #   # cp -f ./subctl ~/.local/bin/
-    #   /usr/bin/install ./subctl ~/.local/bin/subctl
-    #
-    # else
+    # Download SubCtl from custom registry, if requested
+    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+
+      echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
+
+      BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
+      "Get the latest subctl release number (without letters)"
+      # Workaround for bug:
+      if [[ ! "$subctl_tag" =~ ^v[0-9\.]+  ]]; then
+        subctl_tag="$(get_latest_subctl_version_tag)"
+      fi
+      # Temporarily, the version can only include numbers and dots, trim all other chars
+      subctl_tag=${subctl_tag//[^0-9.]/}
+
+      local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
+
+      ( # subshell to hide commands
+        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
+        [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
+      )
+
+      echo "# Install subctl into ${GOBIN}:"
+      mkdir -p $GOBIN
+      # cp -f ./subctl $GOBIN/
+      /usr/bin/install ./subctl $GOBIN/subctl
+
+      echo "# Install subctl into user HOME bin:"
+      # cp -f ./subctl ~/.local/bin/
+      /usr/bin/install ./subctl ~/.local/bin/subctl
+
+    else
       echo "# Downloading SubCtl from upstream URL: $releases_url"
       # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
@@ -1045,7 +1049,7 @@ function download_subctl_by_tag() {
         /usr/bin/install ./subctl ~/.local/bin/subctl
       fi
 
-    # fi
+    fi
 
     echo "# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
