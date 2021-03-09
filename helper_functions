@@ -1316,7 +1316,7 @@ EOF
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
 
   # Make all urls as hyperlinks
-  sed -r "s|^[^<]*(https?://[^> \t]+)[^>]*$|<a href='\1'>\1</a>|" -i $html_output
+  sed -r "s|^[^<]*(https?://[^> \t]+)([^>]*$)|<a href='\1'>\1</a>\2|" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output
