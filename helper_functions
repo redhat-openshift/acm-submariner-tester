@@ -184,24 +184,26 @@ function run_and_tail() {
   # Running the process with timeout - in the background, and store its PID
   timeout --foreground $duration $cmd &
   local pid=$!
+  local process_rc=0
 
   # Tail the log, until command has ended or timed-out
   touch "$log_to_tail"
   tail --pid=$pid -n0 -F "$log_to_tail"
 
   # Check the exit code of the command PID
-  wait $pid || proc_exit="$?"
+  wait $pid || process_rc="$?"
 
   if [[ -n "$regex" ]] ; then
-    grep "$regex" "$log_to_tail" || proc_exit="$?"
-    [[ "$proc_exit" = 0 ]] || \
+    process_rc=0
+    grep "$regex" "$log_to_tail" || process_rc="$?"
+    [[ "$process_rc" = 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
 
-  [[ "$proc_exit" = 0 ]] || \
-  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
+  [[ "$process_rc" = 0 ]] || \
+  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $process_rc)"
 
-  return $proc_exit
+  return $process_rc
 }
 
 # ------------------------------------------
