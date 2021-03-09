@@ -978,7 +978,7 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Download SubCtl from custom registry, if requested
+    # Download SubCtl from private repository (e.g. gitlab), if requested
     if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
       echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
@@ -989,8 +989,8 @@ function download_subctl_by_tag() {
       if [[ ! "$subctl_tag" =~ ^v[0-9\.]+  ]]; then
         subctl_tag="$(get_latest_subctl_version_tag)"
       fi
-      # Temporarily, the version can only include numbers and dots, trim all other chars
-      subctl_tag=${subctl_tag//[^0-9.]/}
+      # Temporarily fix for GitLab releases - the version can only include numbers and dots, trim all other chars
+      subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
 
       local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
 
