@@ -3755,7 +3755,7 @@ function print_resources_and_pod_logs() {
 
   echo -e "
   \n################################################################################################ \
-  \n#                             Submariner Resources on ${cluster_name}                         # \
+  \n#                  Submariner Gateway and Deployments on ${cluster_name}                       # \
   \n################################################################################################ \
   \n"
 
@@ -3769,7 +3769,15 @@ function print_resources_and_pod_logs() {
   ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
   #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
+  echo -e "
+  \n################################################################################################ \
+  \n#             Submariner Daemons, Replicas and configurations on ${cluster_name}               # \
+  \n################################################################################################ \
+  \n"
+
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe rs -n ${SUBM_NAMESPACE} || :
 
   ${OC} describe cm -n openshift-dns || :
 
