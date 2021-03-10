@@ -983,7 +983,7 @@ function download_subctl_by_tag() {
     [[ "$registry_images" =~ ^(y|yes)$ ]] && \
     [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
 
-      echo "# Downloading SubCtl from a private url: $SUBCTL_PRIVATE_URL"
+      echo "# Downloading SubCtl from a private repository"
 
       BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
       "Get the latest subctl release number (without letters)"
@@ -994,9 +994,11 @@ function download_subctl_by_tag() {
       # Temporarily fix for GitLab releases - the version can only include numbers and dots, trim all other chars
       subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
 
+      echo "# SubCtl download url: $SUBCTL_PRIVATE_URL/${subctl_tag}/subctl"
+
       ( # subshell to hide commands
         local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
-        local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+ PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
+        local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
 
         curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
         [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
@@ -3027,7 +3029,7 @@ function test_ipsec_status() {
   # submariner-gateway-r288v
   > "$TEMP_FILE"
 
-  echo "# Verify IPSec status on Active Gateway Node (${active_gateway_node}), in Pod (${active_gateway_pod}):"
+  echo "# Verify IPSec status on Active Node [${active_gateway_node}] Gateway Pod [${active_gateway_pod}]:"
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
 
   local loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
@@ -4073,24 +4075,23 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-  fi ### END of OCP Clusters Setup ###
+    # Running test_custom_images_from_registry if requested - To use custom Submariner images
+    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
+        # ${junit_cmd} remove_submariner_images_from_local_registry
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_a
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_b
+    fi
+
+  fi ### END of OCP Clusters Setup ###
 
   # Verify clusters status after OCP setup
 
   ${junit_cmd} test_kubeconfig_aws_cluster_a
 
   ${junit_cmd} test_kubeconfig_osp_cluster_b
-
-  # Running test_custom_images_from_registry if requested - To use custom Submariner images
-  if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-
-      # ${junit_cmd} remove_submariner_images_from_local_registry
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_a
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_b
-  fi
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
