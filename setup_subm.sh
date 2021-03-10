@@ -2599,11 +2599,11 @@ function run_subctl_join_cmd_from_file() {
     #   subm_release_version="$(get_latest_subctl_version_tag)"
     # fi
 
-    # Subctl "latest" tag is the most recent tag that starts with "vNUMBER"
-    if [[ "$SUBCTL_TAG" = latest ]]; then
+    echo "# Retrieve correct tag for Subctl version '$SUBCTL_TAG'"
+    if [[ "$SUBCTL_TAG" =~ latest|devel ]]; then
       export SUBCTL_TAG="$(get_latest_subctl_version_tag)"
     elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
-      # Version x.y.z is considered "vx.y.z" tag
+      echo "# Version ${SUBCTL_TAG} is considered as 'v${SUBCTL_TAG}' tag"
       export SUBCTL_TAG="v${SUBCTL_TAG}"
     fi
 
