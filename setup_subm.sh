@@ -978,10 +978,12 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Download SubCtl from private repository (e.g. gitlab), if requested
-    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+    # Download SubCtl from private repository (e.g. gitlab), if using --registry-images and not subctl-devel tag
+    if [[ ! "$subctl_tag" =~ devel ]] && \
+    [[ "$registry_images" =~ ^(y|yes)$ ]] && \
+    [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
 
-      echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
+      echo "# Downloading SubCtl from a private url: $SUBCTL_PRIVATE_URL"
 
       BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
       "Get the latest subctl release number (without letters)"
@@ -992,10 +994,11 @@ function download_subctl_by_tag() {
       # Temporarily fix for GitLab releases - the version can only include numbers and dots, trim all other chars
       subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
 
-      local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
-
       ( # subshell to hide commands
-        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
+        local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
+        local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+ PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
+
+        curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
         [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
       )
 
