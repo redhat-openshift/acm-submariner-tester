@@ -3524,7 +3524,8 @@ function test_submariner_packages() {
   PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_to_debug_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/submariner
+  local project_path="$GOPATH/src/github.com/submariner-io/submariner"
+  cd $project_path
   pwd
 
   export GO111MODULE="on"
@@ -3535,6 +3536,11 @@ function test_submariner_packages() {
     echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
     junit_params="-ginkgo.reportFile $PKG_JUNIT_XML"
   fi
+
+  local msg="# Running unit-tests with GO in project: \n# $project_path"
+
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
+  echo -e "$msg" >> "$E2E_LOG"
 
   # go test -v -cover \
   # ./pkg/apis/submariner.io/v1 \
@@ -3551,7 +3557,9 @@ function test_submariner_packages() {
   # -ginkgo.v -ginkgo.trace \
   # -ginkgo.reportPassed ${junit_params}
 
-  go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params}
+  go test -v -cover ./pkg/... \
+  -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params} \
+  | tee -a "$E2E_LOG"
 
 }
 
@@ -3965,7 +3973,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
   # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info"
+    trap_function_on_error collect_submariner_info
   fi
 
   # # Debug functions
