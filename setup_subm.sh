@@ -1756,7 +1756,7 @@ function test_clusters_disconnected_before_submariner() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
@@ -1882,7 +1882,7 @@ function open_firewall_ports_on_openstack_cluster_b() {
   # OR
   # Security group rule already exists.
   #
-  
+
 }
 
 # ------------------------------------------
@@ -2801,10 +2801,10 @@ function test_disaster_recovery_of_gateway_nodes() {
   local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
   if [[ "$subm_release_version" =~ 0\.8 ]] ; then
     echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label='app=submariner-engine'
+    gw_label="app=submariner-engine"
   fi
 
-  submariner_gateway_pod="`get_running_pod_by_label $gw_label $SUBM_NAMESPACE `"
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   regex="All controllers stopped or exited"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
@@ -2867,10 +2867,10 @@ function test_submariner_cable_driver() {
   local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
   if [[ "$subm_release_version" =~ 0\.8 ]] ; then
     echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label='app=submariner-engine'
+    gw_label="app=submariner-engine"
   fi
 
-  submariner_gateway_pod="`get_running_pod_by_label $gw_label $SUBM_NAMESPACE `"
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
   local regex="(cable.* started|Status:connected)"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
@@ -2979,10 +2979,10 @@ function test_submariner_connection_established() {
   local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
   if [[ "$subm_release_version" =~ 0\.8 ]] ; then
     echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label='app=submariner-engine'
+    gw_label="app=submariner-engine"
   fi
 
-  submariner_gateway_pod="`get_running_pod_by_label $gw_label $SUBM_NAMESPACE `"
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
   echo "# Tailing logs in Submariner-Gateway pod [$submariner_gateway_pod] to verify connection between clusters"
   # ${OC} logs $submariner_gateway_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
@@ -3088,7 +3088,7 @@ function test_globalnet_status() {
 
   # globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$globalnet_pod" ]] || globalnet_status=DOWN
-  globalnet_pod="`get_running_pod_by_label 'app=submariner-globalnet' $SUBM_NAMESPACE `"
+  globalnet_pod="`get_running_pod_by_label 'app=submariner-globalnet' "$SUBM_NAMESPACE" `"
 
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
@@ -3135,7 +3135,7 @@ function test_lighthouse_status() {
 
   # lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace."
-  lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' $SUBM_NAMESPACE`"
+  lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' "$SUBM_NAMESPACE" `"
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   local regex="agent .* started"
@@ -3182,7 +3182,7 @@ function test_clusters_connected_by_service_ip() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
@@ -3257,7 +3257,7 @@ function test_clusters_connected_overlapping_cidrs() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
