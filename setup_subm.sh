@@ -1818,19 +1818,13 @@ function open_firewall_ports_on_the_broker_node() {
 
   echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve || FATAL "./${terraform_script} did not complete successfully"
+  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  || FATAL "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  # OR
+  # Security group rule already exists.
   #
-  # Outputs:
-  #
-  # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
-  # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
-  # target_public_subnet = subnet-016d75737faa4b219
-  #
-  # Applying machineset changes to deploy gateway node:
-  # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
-  # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
 
 }
 
@@ -1881,8 +1875,14 @@ function open_firewall_ports_on_openstack_cluster_b() {
   chmod a+x ./${terraform_script}
   # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve || FAILURE "./${terraform_script} did not complete successfully"
+  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  || FATAL "./${terraform_script} did not complete successfully"
 
+  # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  # OR
+  # Security group rule already exists.
+  #
+  
 }
 
 # ------------------------------------------
