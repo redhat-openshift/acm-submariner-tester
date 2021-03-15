@@ -2659,12 +2659,15 @@ function test_products_versions() {
   subctl version
   subctl show versions
 
+  local regex="\s+\K(name=|url=|version=|release=).*"
   for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
-  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk -F '@' '{print $2}') ; do
+  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
   # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
     echo -e "\n### Submariner image: $img ###"
-    ${OC} describe image $img | grep -Po "\s+\K(name=|url=|version=|release=).*" || :
-    # ${OC} image info $img | grep -E "\s+(name=|url=|version=|release=)" || :
+    ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
+    img=$(echo $img | awk -F '@' '{print $2}')
+    ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
+  }
   done
 
 }
