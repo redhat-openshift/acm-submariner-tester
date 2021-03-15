@@ -2670,6 +2670,18 @@ function test_products_versions() {
   }
   done
 
+  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+    echo "# LibreSwan Version:"
+
+    local gw_label='app=submariner-gateway'
+    # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+    subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" || :`"
+
+    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+  fi
+
 }
 
 # ------------------------------------------
