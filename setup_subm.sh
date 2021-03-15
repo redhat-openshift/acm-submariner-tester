@@ -1077,7 +1077,7 @@ function get_latest_subctl_version_tag() {
   local subctl_tag="v[0-9]"
   local regex="tag/.*\K${subctl_tag}[^\"]*"
   local repo_url="https://github.com/submariner-io/submariner-operator"
-  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+  active_gateway_pod"`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
   echo $subm_release_version
 }
@@ -2043,20 +2043,13 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
   local regex="submariner-operator"
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
-    regex="No resources found"
-
-    BUG "If subctl < 0.9 then there should not be any Submariner pods running after deploying the broker (before Join command)" \
-    "Check for \"No resources found\" in '${SUBM_NAMESPACE}'" \
-    "https://github.com/submariner-io/submariner-operator/issues/203"
-  fi
+  # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
+  subctl version | grep --invert-match "v0.8" || regex="No resources found"
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
     ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "$regex" \
-     || FATAL "Submariner Broker which was created with subctl $subm_release_version deploy command (before join) \
+     || FATAL "Submariner Broker which was created with $(subctl version) deploy command (before join) \
       should have \"$regex\" in the Broker namespace '${SUBM_NAMESPACE}'"
   fi
 }
@@ -2507,21 +2500,12 @@ function write_subctl_join_command() {
 
   subctl_join_cmd="${subctl_join_cmd} --health-check"
 
-  echo "# Adding '--pod-debug' and '--ipsec-debug' to subctl join command (for tractability)"
+  local pod_debug_flag="--pod-debug"
+  # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
+  subctl version | grep --invert-match "v0.8" || pod_debug_flag="--enable-pod-debugging"
 
-  # Need to determine subm_release_version for the debug flag names
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  [[ "$subm_release_version" =~ ^v[0-9] ]] || subm_release_version="$(get_latest_subctl_version_tag)"
-
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    # For Subctl 0.8.0: '--enable-pod-debugging'
-    subctl_join_cmd="${subctl_join_cmd} --enable-pod-debugging"
-  else
-    # For Subctl > 0.8.0: '--pod-debug'
-    subctl_join_cmd="${subctl_join_cmd} --pod-debug"
-  fi
-
-  subctl_join_cmd="${subctl_join_cmd} --ipsec-debug"
+  echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
+  subctl_join_cmd="${subctl_join_cmd} ${pod_debug_flag} --ipsec-debug"
 
   echo "# Write the join command into a local file: $join_cmd_file"
   echo "$subctl_join_cmd" > "$join_cmd_file"
@@ -2587,19 +2571,6 @@ function run_subctl_join_cmd_from_file() {
   # TODO: Move to a new test
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
-
-    # local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-    #
-    # # If the subm_release_version does not begin with a number - set it to the latest release
-    # if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
-    #
-    #   BUG "Subctl-devel version does not include release number" \
-    #   "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
-    #   "https://github.com/submariner-io/shipyard/issues/424"
-    #
-    #   # Workaround
-    #   subm_release_version="$(get_latest_subctl_version_tag)"
-    # fi
 
     echo "# Retrieve correct tag for Subctl version '$SUBCTL_TAG'"
     if [[ "$SUBCTL_TAG" =~ latest|devel ]]; then
@@ -2692,7 +2663,7 @@ function test_products_versions() {
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk -F '@' '{print $2}') ; do
   # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
     echo -e "\n### Submariner image: $img ###"
-    ${OC} describe image $img | grep -Po "\s+\K(name=|url=|version=|release=).*"
+    ${OC} describe image $img | grep -Po "\s+\K(name=|url=|version=|release=).*" || :
     # ${OC} image info $img | grep -E "\s+(name=|url=|version=|release=)" || :
   done
 
@@ -2798,11 +2769,8 @@ function test_disaster_recovery_of_gateway_nodes() {
   echo "# Watching Submariner Gateway pod - It should create new Gateway:"
 
   local gw_label='app=submariner-gateway'
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label="app=submariner-engine"
-  fi
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   regex="All controllers stopped or exited"
@@ -2864,11 +2832,8 @@ function test_submariner_cable_driver() {
   # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
 
   local gw_label='app=submariner-gateway'
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label="app=submariner-engine"
-  fi
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
@@ -2976,11 +2941,8 @@ function test_submariner_connection_established() {
   # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
 
   local gw_label='app=submariner-gateway'
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label="app=submariner-engine"
-  fi
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
@@ -3027,11 +2989,8 @@ function test_ipsec_status() {
   local active_gateway_node=$(subctl show gateways | awk '/active/ {print $1}')
 
   local gw_label='app=submariner-gateway'
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label='app=submariner-engine'
-  fi
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
   local active_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o wide | awk -v gw_node="$active_gateway_node" '$0 ~ gw_node { print $1 }')
   # submariner-gateway-r288v
@@ -3053,7 +3012,7 @@ function test_ipsec_status() {
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
-    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c \
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c \
     "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
   fi
 
@@ -3876,11 +3835,8 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    echo "# For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    gw_label='app=submariner-engine'
-  fi
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
 
