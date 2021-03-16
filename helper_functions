@@ -108,10 +108,21 @@ function trap_to_debug_commands() {
 
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_function_on_error() {
-  func_to_execute="$@"
-  trap 'rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
-  ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}"; \
-  [[ "$rc" = "0" ]] || eval "$func_to_execute"' EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  func_to_eval="$@"
+
+  # If other traps already set, add them first
+  current_traps="$(trap -p EXIT | tr '\n' ' ' | cut -f2 -d \')"
+
+  trap_cmd='rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
+  ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
+  [[ -z "'"$current_traps"'" ]] || eval "'${current_traps}'" || : ;
+  [[ "$rc" = "0" ]] || eval "'$func_to_eval'"'
+
+  echo -e "\n # Trapping on script EXIT: \n${trap_cmd} \n"
+  trap "$trap_cmd" EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
+  
 }
 
 # ------------------------------------------
@@ -184,24 +195,26 @@ function run_and_tail() {
   # Running the process with timeout - in the background, and store its PID
   timeout --foreground $duration $cmd &
   local pid=$!
+  local process_rc=0
 
   # Tail the log, until command has ended or timed-out
   touch "$log_to_tail"
   tail --pid=$pid -n0 -F "$log_to_tail"
 
   # Check the exit code of the command PID
-  wait $pid || proc_exit="$?"
+  wait $pid || process_rc="$?"
 
   if [[ -n "$regex" ]] ; then
-    grep "$regex" "$log_to_tail" || proc_exit="$?"
-    [[ "$proc_exit" = 0 ]] || \
+    process_rc=0
+    grep "$regex" "$log_to_tail" || process_rc="$?"
+    [[ "$process_rc" = 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
 
-  [[ "$proc_exit" = 0 ]] || \
-  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $proc_exit)"
+  [[ "$process_rc" = 0 ]] || \
+  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $process_rc)"
 
-  return $proc_exit
+  return $process_rc
 }
 
 # ------------------------------------------
@@ -804,8 +817,8 @@ function install_nginx_service() {
   ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
 
-  echo "# Wait for Ngnix service to be ready:"
-  ${OC} rollout status deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  echo "# Wait 3 minutes for Ngnix service to be ready:"
+  ${OC} rollout status --timeout=3m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
 
 }
@@ -863,8 +876,8 @@ function wait_for_all_machines_ready() {
 
   local duration=${1:-15m} # Default is 3 minutes
 
-  echo "# Wait for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
-  ${OC} rollout status ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
+  echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
+  ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
 
   echo "# Wait up to $duration for all Machines Config Pool to be updated:"
   ${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all || machines_status=DOWN
@@ -1316,7 +1329,7 @@ EOF
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
 
   # Make all urls as hyperlinks
-  sed -r "s|^[^<]*(https?://[^> \t]+)[^>]*$|<a href='\1'>\1</a>|" -i $html_output
+  sed -r "s|(^[^<]*)(https?://[^> \t]+)([^>]*$)|\1<a href='\2'>\2</a>\3|" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output

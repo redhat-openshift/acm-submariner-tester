@@ -2,6 +2,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
+  <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
   <!-- GENERAL INFO -->
   <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
    <!--<tr>
@@ -28,8 +29,8 @@
     </td>
    </tr> -->
    <tr>
-    <td>Project:</td>
-    <td>${project.name}</td>
+    <td>Build:</td>
+    <td>${build.displayName}</td>
    </tr>
    <tr>
     <td></td>
@@ -43,14 +44,26 @@
      </a>
     </td>
    </tr>
-   <tr>
-    <td>Test statistics:</td>
-    <td>
-     <a href="${rooturl}${project.url}test_results_analyzer">
-      ${rooturl}${project.url}test_results_analyzer
-     </a>
-    </td>
-   </tr>
+   <j:if test="${it.isPluginInstalled('blueocean-display-url')}">
+     <!-- <j:set var="blueTestsUrl" value="${buildenv.get('RUN_TESTS_DISPLAY_URL')}"/> -->
+     <!-- <j:set var="blueTestsUrl" value="${it.getAction('org.jenkinsci.plugins.displayurlapi.DisplayURLProvider').get().getTestsURL(run)}" /> -->
+     <j:set var="blueTestsUrl" value="blue/organizations/jenkins/${project.fullName.replaceAll('/', '%2F')}/detail/${project.name}/${build.id}/tests"/>
+     ${logger.println("blueTestsUrl = " + rooturl + blueTestsUrl )}
+     <tr>
+       <td>Junit:</td>
+       <td>${rooturl}${blueTestsUrl}</td>
+     </tr>
+   </j:if>
+   <j:if test="${it.isPluginInstalled('test-results-analyzer')}">
+    <tr>
+     <td>Statistics:</td>
+     <td>
+      <a href="${rooturl}${project.url}test_results_analyzer">
+       ${rooturl}${project.url}test_results_analyzer
+      </a>
+     </td>
+    </tr>
+   </j:if>
    <tr>
     <td>Date of build:</td>
     <td>${it.timestampString}</td>
@@ -79,18 +92,18 @@
     </tr>
     <j:forEach var="cs" items="${changeSet}" varStatus="loop">
      <j:set var="hadChanges" value="true" />
-     <j:set var="aUser" value="${cs.hudsonUser}" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
       <j:out value="${cs.msgAnnotated}"/>
-       by
+       <!-- by
        <b>
+        <j:set var="aUser" value="${cs.hudsonUser}" />
         ${aUser!=null?aUser.displayName:cs.author.displayName}:
        </b>
-       <br />
+       <br /> -->
       </td>
      </tr>
-     <j:forEach var="p" items="${cs.affectedFiles}">
+     <!-- <j:forEach var="p" items="${cs.affectedFiles}">
       <tr>
        <td width="10%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
         ${p.editType.name}
@@ -99,7 +112,7 @@
         ${p.path}
        </td>
       </tr>
-     </j:forEach>
+     </j:forEach> -->
     </j:forEach>
     <j:if test="${!hadChanges}">
      <tr>
