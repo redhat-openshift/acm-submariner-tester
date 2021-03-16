@@ -688,7 +688,6 @@ function show_test_plan() {
 
 }
 
-
 # ------------------------------------------
 
 function setup_workspace() {
@@ -755,6 +754,23 @@ function setup_workspace() {
 
   # # CD to previous directory
   # cd -
+}
+
+# ------------------------------------------
+
+function set_trap_functions() {
+  PROMPT "Configuring trap functions on script exit"
+
+  echo "# Show products_versions when exiting the script"
+
+  trap '${junit_cmd} test_products_versions_cluster_a || : ;
+  ${junit_cmd} test_products_versions_cluster_b || :' EXIT
+
+  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+    echo "# Collect Submariner information on test failure (when using CLI option --print-logs)"
+    trap_function_on_error collect_submariner_info
+  fi
+
 }
 
 # ------------------------------------------
@@ -2646,7 +2662,7 @@ function test_products_versions_cluster_a() {
   PROMPT "Show products versions on AWS cluster A"
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  test_products_versions "${CLUSTER_B_NAME}"
+  test_products_versions "${CLUSTER_A_NAME}"
 }
 
 # ------------------------------------------
@@ -2655,7 +2671,7 @@ function test_products_versions_cluster_b() {
   PROMPT "Show products versions on OSP cluster B"
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  test_products_versions "${CLUSTER_A_NAME}"
+  test_products_versions "${CLUSTER_B_NAME}"
 }
 
 # ------------------------------------------
@@ -2670,8 +2686,8 @@ function test_products_versions() {
   ${OC} version
 
   echo -e "\n### Submariner components on ${cluster_name} ###\n"
-  subctl version
-  subctl show versions
+  # subctl version
+  subctl show versions || :
 
   local regex="\s+\K(name=|url=|version=|release=).*"
   for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
@@ -3756,10 +3772,6 @@ function collect_submariner_info() {
   local log_file="${1:-subm_pods.log}"
 
   (
-    ${junit_cmd} test_products_versions_cluster_a
-
-    ${junit_cmd} test_products_versions_cluster_b
-
     PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
     trap_to_debug_commands;
 
@@ -3899,7 +3911,7 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
-function pass_test_debug() {
+function test_debug_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
@@ -3916,7 +3928,7 @@ function pass_test_debug() {
 
 }
 
-function fail_test_debug() {
+function test_debug_fail() {
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -3928,10 +3940,10 @@ function fail_test_debug() {
   fi
 }
 
-function fatal_test_debug() {
+function test_debug_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
-  FATAL "Terminating script since fail_test_debug() did not"
+  FATAL "Terminating script since test_debug_fail() did not"
 }
 
 # ------------------------------------------
@@ -3970,24 +3982,23 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 # Printing output both to stdout and to $LOG_FILE with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
-
-  # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error collect_submariner_info
-  fi
-
-  # # Debug functions
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} fail_test_debug || rc=$?
-  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
-  # ${junit_cmd} fatal_test_debug
-
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
   # Setup and verify environment
   setup_workspace
+
+  # Set script trap functions
+  set_trap_functions
+
+  # # Debug functions
+  # ${junit_cmd} test_debug_pass
+  # ${junit_cmd} test_debug_fail
+  # rc=$?
+  # BUG "test_debug_fail - Exit code: $rc" \
+  # "If RC $rc = 5 - junit_cmd should continue execution"
+  # ${junit_cmd} test_debug_pass
+  # ${junit_cmd} test_debug_fatal
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
 
