@@ -2642,20 +2642,34 @@ function run_subctl_join_cmd_from_file() {
 
 # ------------------------------------------
 
+function test_products_versions_cluster_a() {
+  PROMPT "Show products versions on AWS cluster A"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  test_products_versions "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_b() {
+  PROMPT "Show products versions on OSP cluster B"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  test_products_versions "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
 function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
-  PROMPT "Show all installed products versions"
   trap - DEBUG # DONT trap_to_debug_commands
 
-  echo -e "\nOCP cluster A (AWS):"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  local cluster_name="$1"
+
+  echo -e "\n### Cluster ${cluster_name} ###"
   ${OC} version
 
-  echo -e "\nOCP cluster B (OSP):"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  ${OC} version
-
-  echo -e "\nSubmariner:"
+  echo -e "\n### Submariner components on ${cluster_name} ###\n"
   subctl version
   subctl show versions
 
@@ -2663,7 +2677,8 @@ function test_products_versions() {
   for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
   # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
-    echo -e "\n### Submariner image: $img ###"
+    echo -e "\n### ${cluster_name} Submariner image: ${img%@*} ###"
+    echo "id=${img}"
     ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
     img=$(echo $img | awk -F '@' '{print $2}')
     ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
@@ -2671,15 +2686,17 @@ function test_products_versions() {
   done
 
   if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-    echo "# LibreSwan Version:"
 
     local gw_label='app=submariner-gateway'
     # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
     subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
 
-    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" || :`"
-
-    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+    if [[ -n "$submariner_gateway_pod" ]] ; then
+      echo -e "\n### ${cluster_name} LibreSwan version ###"
+      ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+      echo -e "/n/n"
+    fi
   fi
 
 }
@@ -3739,6 +3756,10 @@ function collect_submariner_info() {
   local log_file="${1:-subm_pods.log}"
 
   (
+    ${junit_cmd} test_products_versions_cluster_a
+
+    ${junit_cmd} test_products_versions_cluster_b
+
     PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
     trap_to_debug_commands;
 
@@ -4133,8 +4154,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
-
-  ${junit_cmd} test_products_versions
 
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
