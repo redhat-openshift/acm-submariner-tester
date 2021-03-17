@@ -113,16 +113,16 @@ function trap_function_on_error() {
   func_to_eval="$@"
 
   # If other traps already set, add them first
-  current_traps="$(trap -p EXIT | tr '\n' ' ' | cut -f2 -d \')"
+  current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
   trap_cmd='rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
-  [[ -z "'"$current_traps"'" ]] || eval "'${current_traps}'" || : ;
-  [[ "$rc" = "0" ]] || eval "'$func_to_eval'"'
+  [[ -z "'"$current_traps"'" ]] || ('${current_traps}') || : ;
+  [[ "$rc" = "0" ]] || '$func_to_eval''
 
-  echo -e "\n # Trapping on script EXIT: \n${trap_cmd} \n"
+  echo -e "\n# Trapping on script EXIT: \n${trap_cmd} \n"
   trap "$trap_cmd" EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
-  
+
 }
 
 # ------------------------------------------

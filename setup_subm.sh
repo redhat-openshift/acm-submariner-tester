@@ -761,12 +761,13 @@ function setup_workspace() {
 function set_trap_functions() {
   PROMPT "Configuring trap functions on script exit"
 
-  echo "# Always run test_products_versions() when exiting the script"
-  trap '${junit_cmd} test_products_versions_cluster_a || : ;
+  echo "# Show products_versions when exiting the script"
+
+  trap '${junit_cmd} test_products_versions_cluster_a || : ;\
   ${junit_cmd} test_products_versions_cluster_b || :' EXIT
 
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    echo "# trap_function_on_error 'collect_submariner_info' (when using CLI option --print-logs)"
+    echo "# Collect Submariner information on test failure (when using CLI option --print-logs)"
     trap_function_on_error collect_submariner_info
   fi
 
@@ -2685,8 +2686,8 @@ function test_products_versions() {
   ${OC} version
 
   echo -e "\n### Submariner components on ${cluster_name} ###\n"
-  subctl version
-  subctl show versions
+  # subctl version
+  subctl show versions || :
 
   local regex="\s+\K(name=|url=|version=|release=).*"
   for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
@@ -3981,9 +3982,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 # Printing output both to stdout and to $LOG_FILE with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
-  # Print planned steps according to CLI/User inputs
+  # # Print planned steps according to CLI/User inputs
   # ${junit_cmd} show_test_plan
-
+  #
   # # Setup and verify environment
   # setup_workspace
 
@@ -3992,9 +3993,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
   # Debug functions
   ${junit_cmd} test_debug_pass
+  ${junit_cmd} test_debug_fail
+  rc=$?
+  BUG "test_debug_fail - Exit code: $rc" \
+  "If RC $rc = 5 - junit_cmd should continue execution"
   ${junit_cmd} test_debug_pass
-  ${junit_cmd} test_debug_fail || rc=$?
-  [[ $rc = 0 ]] || BUG "test_debug_fail - Exit code: $rc" && exit $rc
   ${junit_cmd} test_debug_fatal
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
