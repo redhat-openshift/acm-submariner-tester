@@ -1,4 +1,4 @@
-#!/bin/bash
+\n#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -769,6 +769,67 @@ function set_trap_functions() {
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
     echo "# Collect Submariner information on test failure (when using CLI option --print-logs)"
     trap_function_on_error collect_submariner_info
+  fi
+
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_a() {
+  PROMPT "Show products versions on AWS cluster A"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  test_products_versions "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_b() {
+  PROMPT "Show products versions on OSP cluster B"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  test_products_versions "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions() {
+# Show OCP clusters versions, and Submariner version
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  local cluster_name="$1"
+
+  echo -e "\n### OCP Cluster ${cluster_name} ###"
+  ${OC} version
+
+  echo -e "\n### Submariner components on ${cluster_name} ###\n"
+  # subctl version
+  subctl show versions || :
+
+  local regex="\s+\K(name=|url=|version=|release=).*"
+  for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
+  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
+  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
+    echo -e "\n### $(echo $img | sed -r 's|.*/([^@]+).*|\1|') Image on ${cluster_name} ###"
+    echo "id=${img}"
+    ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
+    img=$(echo $img | awk -F '@' '{print $2}')
+    ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
+  }
+  done
+
+  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+
+    local gw_label='app=submariner-gateway'
+    # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+    subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+    if [[ -n "$submariner_gateway_pod" ]] ; then
+      echo -e "\n### LibreSwan version on ${cluster_name} ###"
+      ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+      echo -e "\n\n"
+    fi
   fi
 
 }
@@ -2653,67 +2714,6 @@ function run_subctl_join_cmd_from_file() {
   echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join_cmd}"
 
   $subctl_join_cmd
-
-}
-
-# ------------------------------------------
-
-function test_products_versions_cluster_a() {
-  PROMPT "Show products versions on AWS cluster A"
-
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  test_products_versions "${CLUSTER_A_NAME}"
-}
-
-# ------------------------------------------
-
-function test_products_versions_cluster_b() {
-  PROMPT "Show products versions on OSP cluster B"
-
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  test_products_versions "${CLUSTER_B_NAME}"
-}
-
-# ------------------------------------------
-
-function test_products_versions() {
-# Show OCP clusters versions, and Submariner version
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  local cluster_name="$1"
-
-  echo -e "\n### Cluster ${cluster_name} ###"
-  ${OC} version
-
-  echo -e "\n### Submariner components on ${cluster_name} ###\n"
-  # subctl version
-  subctl show versions || :
-
-  local regex="\s+\K(name=|url=|version=|release=).*"
-  for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
-  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
-  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
-    echo -e "\n### ${cluster_name} Submariner image: ${img%@*} ###"
-    echo "id=${img}"
-    ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
-    img=$(echo $img | awk -F '@' '{print $2}')
-    ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
-  }
-  done
-
-  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
-
-    local gw_label='app=submariner-gateway'
-    # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
-
-    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
-    if [[ -n "$submariner_gateway_pod" ]] ; then
-      echo -e "\n### ${cluster_name} LibreSwan version ###"
-      ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-      echo -e "/n/n"
-    fi
-  fi
 
 }
 
