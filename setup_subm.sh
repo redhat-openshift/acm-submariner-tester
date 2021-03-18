@@ -245,7 +245,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --subctl-version)
     check_cli_args "$2"
-    export SUBCTL_TAG="$2"
+    export SUBM_VER_TAG="$2"
     download_subctl=YES
     shift 2 ;;
   --registry-images)
@@ -433,13 +433,13 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $download_subctl and SUBCTL_TAG - to download_and_install_subctl
+  # User input: $download_subctl and SUBM_VER_TAG - to download_and_install_subctl
   if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$SUBCTL_TAG" =~ ^[0-9a-Z]+$ ]]; do
+    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+$ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"latest\" version: "
       read -r input
-      SUBCTL_TAG=${input:-latest}
+      SUBM_VER_TAG=${input:-latest}
     done
   fi
 
@@ -524,7 +524,7 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
 download_subctl=${download_subctl:-NO}
-# SUBCTL_TAG=${SUBCTL_TAG}
+# SUBM_VER_TAG=${SUBM_VER_TAG}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -588,7 +588,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_and_install_subctl: $SUBCTL_TAG
+    - download_and_install_subctl: $SUBM_VER_TAG
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -597,7 +597,7 @@ function show_test_plan() {
     - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - download_subctl: $SUBCTL_TAG
+    - download_subctl: $SUBM_VER_TAG
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -1023,19 +1023,19 @@ function build_operator_latest() {  # [DEPRECATED]
 
 function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_TAG"
+    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    if [[ "$SUBCTL_TAG" = latest ]]; then
+    if [[ "$SUBM_VER_TAG" = latest ]]; then
       # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
-      export SUBCTL_TAG='v[0-9]'
+      export SUBM_VER_TAG='v[0-9]'
 
-    elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
+    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
       # Number is considered "vNUMBER" tag
-      export SUBCTL_TAG="v${SUBCTL_TAG}"
+      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
 
     fi
 
-    download_subctl_by_tag "$SUBCTL_TAG"
+    download_subctl_by_tag "$SUBM_VER_TAG"
 
 }
 
@@ -2649,23 +2649,23 @@ function run_subctl_join_cmd_from_file() {
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-    echo "# Retrieve correct tag for Subctl version '$SUBCTL_TAG'"
-    if [[ "$SUBCTL_TAG" =~ latest|devel ]]; then
-      export SUBCTL_TAG="$(get_latest_subctl_version_tag)"
-    elif [[ "$SUBCTL_TAG" =~ ^[0-9] ]]; then
-      echo "# Version ${SUBCTL_TAG} is considered as 'v${SUBCTL_TAG}' tag"
-      export SUBCTL_TAG="v${SUBCTL_TAG}"
+    echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
+    if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
+      export SUBM_VER_TAG="$(get_latest_subctl_version_tag)"
+    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
+      echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
+      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
     fi
 
     if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
-      echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBCTL_TAG' the regex match: $REGISTRY_TAG_MATCH"
-      export SUBCTL_TAG="v$(echo $SUBCTL_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
-      echo "# New \$SUBCTL_TAG for registry images: $SUBCTL_TAG"
+      echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBM_VER_TAG' the regex match: $REGISTRY_TAG_MATCH"
+      export SUBM_VER_TAG="v$(echo $SUBM_VER_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
+      echo "# New \$SUBM_VER_TAG for registry images: $SUBM_VER_TAG"
     fi
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
     \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-    \n# Version tag: ${SUBCTL_TAG}"
+    \n# Version tag: ${SUBM_VER_TAG}"
 
     for img in \
       $SUBM_IMG_GATEWAY \
@@ -2676,12 +2676,12 @@ function run_subctl_join_cmd_from_file() {
       $SUBM_IMG_GLOBALNET \
       $SUBM_IMG_OPERATOR \
       ; do
-        local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBCTL_TAG}"
+        local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
         echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
-        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBCTL_TAG} --from=${img_source} --confirm"
+        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
 
-        watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBCTL_TAG}"
+        watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
@@ -2691,19 +2691,19 @@ function run_subctl_join_cmd_from_file() {
 
     echo "# Adding custom images to subctl join command"
 
-    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBCTL_TAG}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
     # BUG ? : this is a potential bug - overriding with comma separated:
     # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBCTL_TAG},\
-    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBCTL_TAG}, \
-    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBCTL_TAG},\
-    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBCTL_TAG},\
-    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBCTL_TAG},\
-    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBCTL_TAG},\
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBCTL_TAG}"
+    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
+    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
+    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
+    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
+    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
+    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
+    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
-  elif [[ "$SUBCTL_TAG" =~ ^subctl-devel ]]; then
+  elif [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
     BUG "operator image 'devel' should be the default when using subctl devel binary" \
     "Add '--version devel' to $join_cmd_file" \
     "https://github.com/submariner-io/submariner-operator/issues/563"
@@ -4139,7 +4139,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running download_and_install_subctl
     if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_and_install_subctl "$SUBCTL_TAG"
+      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
 
     fi
 
