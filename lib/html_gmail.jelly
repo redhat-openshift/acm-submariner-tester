@@ -30,7 +30,7 @@
    </tr> -->
    <tr>
     <td>Build:</td>
-    <td>${build.name}</td>
+    <td>${build.displayName}</td>
    </tr>
    <tr>
     <td></td>
@@ -92,18 +92,18 @@
     </tr>
     <j:forEach var="cs" items="${changeSet}" varStatus="loop">
      <j:set var="hadChanges" value="true" />
-     <j:set var="aUser" value="${cs.hudsonUser}" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
       <j:out value="${cs.msgAnnotated}"/>
-       by
+       <!-- by
        <b>
+        <j:set var="aUser" value="${cs.hudsonUser}" />
         ${aUser!=null?aUser.displayName:cs.author.displayName}:
        </b>
-       <br />
+       <br /> -->
       </td>
      </tr>
-     <j:forEach var="p" items="${cs.affectedFiles}">
+     <!-- <j:forEach var="p" items="${cs.affectedFiles}">
       <tr>
        <td width="10%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
         ${p.editType.name}
@@ -112,7 +112,7 @@
         ${p.path}
        </td>
       </tr>
-     </j:forEach>
+     </j:forEach> -->
     </j:forEach>
     <j:if test="${!hadChanges}">
      <tr>

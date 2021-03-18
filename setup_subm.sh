@@ -1,4 +1,4 @@
-#!/bin/bash
+\n#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -245,7 +245,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --subctl-version)
     check_cli_args "$2"
-    export SUBCTL_VERSION="$2"
+    export SUBM_VER_TAG="$2"
     download_subctl=YES
     shift 2 ;;
   --registry-images)
@@ -433,13 +433,13 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $download_subctl and SUBCTL_VERSION - to download_and_install_subctl
+  # User input: $download_subctl and SUBM_VER_TAG - to download_and_install_subctl
   if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$SUBCTL_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+$ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
-      Enter version number, or nothing to install \"subctl-devel\" version: "
+      Enter version number, or nothing to install \"latest\" version: "
       read -r input
-      SUBCTL_VERSION=${input:-subctl-devel}
+      SUBM_VER_TAG=${input:-latest}
     done
   fi
 
@@ -524,7 +524,7 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
 download_subctl=${download_subctl:-NO}
-# SUBCTL_VERSION=${SUBCTL_VERSION}
+# SUBM_VER_TAG=${SUBM_VER_TAG}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -588,7 +588,7 @@ function show_test_plan() {
     - build_ocpup_tool_latest: $get_ocpup_tool
     - build_operator_latest: $build_operator # [DEPRECATED]
     - build_submariner_repos: $build_go_tests
-    - download_and_install_subctl: $SUBCTL_VERSION
+    - download_and_install_subctl: $SUBM_VER_TAG
     "
 
     echo -e "# Submariner deployment and environment setup for the tests:
@@ -597,7 +597,7 @@ function show_test_plan() {
     - test_custom_images_from_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
-    - download_subctl: $SUBCTL_VERSION
+    - download_subctl: $SUBM_VER_TAG
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b
     - test_basic_cluster_connectivity_before_submariner
@@ -688,7 +688,6 @@ function show_test_plan() {
 
 }
 
-
 # ------------------------------------------
 
 function setup_workspace() {
@@ -755,6 +754,84 @@ function setup_workspace() {
 
   # # CD to previous directory
   # cd -
+}
+
+# ------------------------------------------
+
+function set_trap_functions() {
+  PROMPT "Configuring trap functions on script exit"
+
+  echo "# Show products_versions when exiting the script"
+
+  trap '${junit_cmd} test_products_versions_cluster_a || : ;
+  ${junit_cmd} test_products_versions_cluster_b || :' EXIT
+
+  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+    echo "# Collect Submariner information on test failure (when using CLI option --print-logs)"
+    trap_function_on_error collect_submariner_info
+  fi
+
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_a() {
+  PROMPT "Show products versions on AWS cluster A"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  test_products_versions "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_b() {
+  PROMPT "Show products versions on OSP cluster B"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  test_products_versions "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions() {
+# Show OCP clusters versions, and Submariner version
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  local cluster_name="$1"
+
+  echo -e "\n### OCP Cluster ${cluster_name} ###"
+  ${OC} version
+
+  echo -e "\n### Submariner components on ${cluster_name} ###\n"
+  # subctl version
+  subctl show versions || :
+
+  local regex="\s+\K(name=|url=|version=|release=).*"
+  for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
+  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
+  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
+    echo -e "\n### $(echo $img | sed -r 's|.*/([^@]+).*|\1|') Image on ${cluster_name} ###"
+    echo "id=${img}"
+    ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
+    img=$(echo $img | awk -F '@' '{print $2}')
+    ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
+  }
+  done
+
+  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+
+    local gw_label='app=submariner-gateway'
+    # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+    subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+    if [[ -n "$submariner_gateway_pod" ]] ; then
+      echo -e "\n### LibreSwan version on ${cluster_name} ###"
+      ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+      echo -e "\n\n"
+    fi
+  fi
+
 }
 
 # ------------------------------------------
@@ -946,18 +1023,19 @@ function build_operator_latest() {  # [DEPRECATED]
 
 function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
-    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBCTL_VERSION"
+    PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    if [[ "$SUBCTL_VERSION" = latest ]]; then
+    if [[ "$SUBM_VER_TAG" = latest ]]; then
       # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
-      SUBCTL_VERSION='v[0-9]'
+      export SUBM_VER_TAG='v[0-9]'
 
-    elif [[ "$SUBCTL_VERSION" =~ ^[0-9] ]]; then
+    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
       # Number is considered "vNUMBER" tag
-          SUBCTL_VERSION="v${SUBCTL_VERSION}"
+      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
+
     fi
 
-    download_subctl_by_tag "$SUBCTL_VERSION"
+    download_subctl_by_tag "$SUBM_VER_TAG"
 
 }
 
@@ -977,20 +1055,29 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Download SubCtl from custom registry, if requested
-    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+    # Download SubCtl from private repository (e.g. gitlab), if using --registry-images and not subctl-devel tag
+    if [[ ! "$subctl_tag" =~ devel ]] && \
+    [[ "$registry_images" =~ ^(y|yes)$ ]] && \
+    [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
 
-      echo "# Downloading SubCtl from custom url: $SUBCTL_PRIVATE_URL"
+      echo "# Downloading SubCtl from a private repository"
 
-      local subm_release_version="$(get_latest_subctl_version_tag)"
+      BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
+      "Get the latest subctl release number (without letters)"
+      # Workaround for bug:
+      if [[ ! "$subctl_tag" =~ ^v[0-9\.]+  ]]; then
+        subctl_tag="$(get_latest_subctl_version_tag)"
+      fi
+      # Temporarily fix for GitLab releases - the version can only include numbers and dots, trim all other chars
+      subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
 
-      # Temporarily, the version can only include numbers and dots
-      subm_release_version=${subm_release_version//[^0-9.]/}
-
-      local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subm_release_version}/subctl"
+      echo "# SubCtl download url: $SUBCTL_PRIVATE_URL/${subctl_tag}/subctl"
 
       ( # subshell to hide commands
-        curl_response_code=$(curl -L -X GET --header "PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN" "$subctl_binary_url" --output subctl -w "%{http_code}")
+        local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
+        local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
+
+        curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
         [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
       )
 
@@ -1067,7 +1154,7 @@ function get_latest_subctl_version_tag() {
   local subctl_tag="v[0-9]"
   local regex="tag/.*\K${subctl_tag}[^\"]*"
   local repo_url="https://github.com/submariner-io/submariner-operator"
-  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+  active_gateway_pod"`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
   echo $subm_release_version
 }
@@ -1746,7 +1833,7 @@ function test_clusters_disconnected_before_submariner() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
@@ -1808,19 +1895,13 @@ function open_firewall_ports_on_the_broker_node() {
 
   echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve || FATAL "./${terraform_script} did not complete successfully"
+  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  || FATAL "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  # OR
+  # Security group rule already exists.
   #
-  # Outputs:
-  #
-  # machine_set_config_file = ~/automation/ocp-install/user-cluster-a/ocp-ipi-aws/submariner-gw-machine-set-us-east-1e.yaml
-  # submariner_security_group = user-cluster-a-8scqd-submariner-gw-sg
-  # target_public_subnet = subnet-016d75737faa4b219
-  #
-  # Applying machineset changes to deploy gateway node:
-  # oc --context=admin apply -f submariner-gw-machine-set-us-east-1e.yaml
-  # machineset.machine.openshift.io/user-cluster-a-8scqd-submariner-gw-us-east-1e created
 
 }
 
@@ -1871,7 +1952,13 @@ function open_firewall_ports_on_openstack_cluster_b() {
   chmod a+x ./${terraform_script}
   # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve || FAILURE "./${terraform_script} did not complete successfully"
+  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  || FATAL "./${terraform_script} did not complete successfully"
+
+  # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+  # OR
+  # Security group rule already exists.
+  #
 
 }
 
@@ -2015,7 +2102,7 @@ function install_broker_aws_cluster_a() {
 # ------------------------------------------
 
 function test_broker_before_join() {
-  PROMPT "Verify Submariner CRDs created, but no pods were yet created"
+  PROMPT "Verify Submariner resources on the Broker cluster"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_BROKER}"
@@ -2033,9 +2120,14 @@ function test_broker_before_join() {
   # submariners.submariner.io \
   # gateways.submariner.io \
 
+  local regex="submariner-operator"
+  # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
+  subctl version | grep --invert-match "v0.8" || regex="No resources found"
+
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
-    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "No resources found" \
-     || FATAL "Submariner Broker (deploy before join) should not create resources in namespace ${SUBM_NAMESPACE}."
+    ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "$regex" \
+     || FATAL "Submariner Broker which was created with $(subctl version) deploy command (before join) \
+      should have \"$regex\" in the Broker namespace '${SUBM_NAMESPACE}'"
   fi
 }
 
@@ -2485,30 +2577,12 @@ function write_subctl_join_command() {
 
   subctl_join_cmd="${subctl_join_cmd} --health-check"
 
-  echo "# Adding '--pod-debug' and '--ipsec-debug' to subctl join command (for tractability)"
+  local pod_debug_flag="--pod-debug"
+  # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
+  subctl version | grep --invert-match "v0.8" || pod_debug_flag="--enable-pod-debugging"
 
-  local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-
-  # If the subm_release_version does not begin with a number - set it to the latest release
-  if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
-
-    BUG "Subctl-devel version does not include release number" \
-    "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
-    "https://github.com/submariner-io/shipyard/issues/424"
-
-    # Workaround
-    subm_release_version="$(get_latest_subctl_version_tag)"
-  fi
-
-  if [[ "$subm_release_version" =~ 0\.8 ]] ; then
-    # For Subctl 0.8.0: '--enable-pod-debugging'
-    subctl_join_cmd="${subctl_join_cmd} --enable-pod-debugging"
-  else
-    # For Subctl > 0.8.0: '--pod-debug'
-    subctl_join_cmd="${subctl_join_cmd} --pod-debug"
-  fi
-
-  subctl_join_cmd="${subctl_join_cmd} --ipsec-debug"
+  echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
+  subctl_join_cmd="${subctl_join_cmd} ${pod_debug_flag} --ipsec-debug"
 
   echo "# Write the join command into a local file: $join_cmd_file"
   echo "$subctl_join_cmd" > "$join_cmd_file"
@@ -2575,25 +2649,23 @@ function run_subctl_join_cmd_from_file() {
   # Overriding Submariner images with custom images from registry
   if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
 
-    local subm_release_version="$(subctl version | awk -F '[ -]' '{print $3}')" # Removing minor version info (after '-')
-
-    # If the subm_release_version does not begin with a number - set it to the latest release
-    if [[ ! "$subm_release_version" =~ ^v[0-9] ]]; then
-
-      BUG "Subctl-devel version does not include release number" \
-      "Set the the release version as the latest released Submariner from upstream (e.g. v0.8.0)" \
-      "https://github.com/submariner-io/shipyard/issues/424"
-
-      # Workaround
-      subm_release_version="$(get_latest_subctl_version_tag)"
+    echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
+    if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
+      export SUBM_VER_TAG="$(get_latest_subctl_version_tag)"
+    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
+      echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
+      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
     fi
 
-    # If REGISTRY_TAG_MATCH defined: extract it as required version tag (e.g. Trim last minor digit: X.Y.Z ==> X.Y)
-    # [[ -z "$REGISTRY_TAG_MATCH" ]] || subm_release_version="v$(echo $subm_release_version | grep -Po "$REGISTRY_TAG_MATCH")"
+    if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
+      echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBM_VER_TAG' the regex match: $REGISTRY_TAG_MATCH"
+      export SUBM_VER_TAG="v$(echo $SUBM_VER_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
+      echo "# New \$SUBM_VER_TAG for registry images: $SUBM_VER_TAG"
+    fi
 
     echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
     \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-    \n# Version tag: ${subm_release_version}"
+    \n# Version tag: ${SUBM_VER_TAG}"
 
     for img in \
       $SUBM_IMG_GATEWAY \
@@ -2604,13 +2676,12 @@ function run_subctl_join_cmd_from_file() {
       $SUBM_IMG_GLOBALNET \
       $SUBM_IMG_OPERATOR \
       ; do
-        echo -e "\n# Importing image from a mirror OCP registry: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} \n"
+        local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
+        echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
-        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${subm_release_version} \
-        --from=${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${subm_release_version} --confirm"
+        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
 
-        watch_and_retry "$cmd" 3m "$img imported"
-
+        watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
     done
 
     BUG "SubM Gateway image name should be 'submariner-gateway'" \
@@ -2620,50 +2691,29 @@ function run_subctl_join_cmd_from_file() {
 
     echo "# Adding custom images to subctl join command"
 
-    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
     # BUG ? : this is a potential bug - overriding with comma separated:
     # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${subm_release_version},\
-    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${subm_release_version}, \
-    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${subm_release_version},\
-    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${subm_release_version},\
-    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${subm_release_version},\
-    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${subm_release_version},\
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${subm_release_version}"
+    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
+    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
+    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
+    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
+    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
+    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
+    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
-  else
-      BUG "operator image 'devel' should be the default when using subctl devel binary" \
-      "Add '--version devel' to $join_cmd_file" \
-      "https://github.com/submariner-io/submariner-operator/issues/563"
-      # Workaround
-      subctl_join_cmd="${subctl_join_cmd} --version devel"
+  elif [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
+    BUG "operator image 'devel' should be the default when using subctl devel binary" \
+    "Add '--version devel' to $join_cmd_file" \
+    "https://github.com/submariner-io/submariner-operator/issues/563"
+    # Workaround
+    subctl_join_cmd="${subctl_join_cmd} --version devel"
   fi
 
   echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join_cmd}"
 
   $subctl_join_cmd
-
-}
-
-# ------------------------------------------
-
-function test_products_versions() {
-# Show OCP clusters versions, and Submariner version
-  PROMPT "Show all installed products versions"
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  echo -e "\nOCP cluster A (AWS):"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  ${OC} version
-
-  echo -e "\nOCP cluster B (OSP):"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  ${OC} version
-
-  echo -e "\nSubmariner:"
-  subctl version
-  subctl show versions
 
 }
 
@@ -2688,7 +2738,7 @@ function test_submariner_resources_cluster_b() {
 # ------------------------------------------
 
 function test_submariner_resources_status() {
-# Check submariner-engine on the Operator pod
+# Check submariner-gateway on the Operator pod
   trap_to_debug_commands;
   local cluster_name="$1"
   local submariner_status=UP
@@ -2764,12 +2814,16 @@ function test_disaster_recovery_of_gateway_nodes() {
       FATAL "AWS-CLI reboot VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME has failed"
   fi
 
-  echo "# Watching Submariner Engine pod - It should create new Gateway:"
+  echo "# Watching Submariner Gateway pod - It should create new Gateway:"
 
-  submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   regex="All controllers stopped or exited"
-  # Watch submariner-engine pod logs for 200 (10 X 20) seconds
-  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
+  # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
+  watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
 
   public_ip=$(get_external_ips_of_worker_nodes)
   echo -e "\n\n# After VM reboot - Gateway public (external) IP should be: $public_ip \n"
@@ -2823,11 +2877,17 @@ function test_submariner_cable_driver() {
 
   PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
-  # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
+  # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
+
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+
   local regex="(cable.* started|Status:connected)"
-  # Watch submariner-engine pod logs for 200 (10 X 20) seconds
-  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 10
+  # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
+  watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 10
 
 }
 
@@ -2924,19 +2984,24 @@ function test_submariner_connection_established() {
   trap_to_debug_commands;
   cluster_name="$1"
 
-  PROMPT "Check Submariner Engine established connection on ${cluster_name}"
+  PROMPT "Check Submariner Gateway established connection on ${cluster_name}"
 
-  # local submariner_engine_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o jsonpath="{.items[0].metadata.name}")
-  submariner_engine_pod="`get_running_pod_by_label 'app=submariner-engine' $SUBM_NAMESPACE `"
+  # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
 
-  echo "# Tailing logs in Submariner-Engine pod [$submariner_engine_pod] to verify connection between clusters"
-  # ${OC} logs $submariner_engine_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+
+  echo "# Tailing logs in Submariner-Gateway pod [$submariner_gateway_pod] to verify connection between clusters"
+  # ${OC} logs $submariner_gateway_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
 
   local regex="(Successfully installed Endpoint cable .* remote IP|Status:connected|CableName:.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
-  # Watch submariner-engine pod logs for 400 (20 X 20) seconds
-  watch_pod_logs "$submariner_engine_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
+  # Watch submariner-gateway pod logs for 400 (20 X 20) seconds
+  watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 20 || submariner_status=DOWN
 
-  ${OC} describe pod $submariner_engine_pod -n ${SUBM_NAMESPACE} || submariner_status=DOWN
+  ${OC} describe pod $submariner_gateway_pod -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   [[ "$submariner_status" != DOWN ]] || FATAL "Submariner clusters are not connected."
 }
@@ -2970,11 +3035,16 @@ function test_ipsec_status() {
   PROMPT "Testing IPSec Status of the Active Gateway in ${cluster_name}"
 
   local active_gateway_node=$(subctl show gateways | awk '/active/ {print $1}')
-  local active_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-engine -o wide | awk -v gw_node="$active_gateway_node" '$0 ~ gw_node { print $1 }')
+
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+  local active_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o wide | awk -v gw_node="$active_gateway_node" '$0 ~ gw_node { print $1 }')
   # submariner-gateway-r288v
   > "$TEMP_FILE"
 
-  echo "# Verify IPSec status on Active Gateway Node (${active_gateway_node}), in Pod (${active_gateway_pod}):"
+  echo "# Verify IPSec status on Active Node [${active_gateway_node}] Gateway Pod [${active_gateway_pod}]:"
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
 
   local loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
@@ -2990,7 +3060,7 @@ function test_ipsec_status() {
 
   if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
     echo "# Verify StrongSwan URI: "
-    ${OC} exec $submariner_engine_pod -n ${SUBM_NAMESPACE} -- bash -c \
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c \
     "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
   fi
 
@@ -3025,7 +3095,7 @@ function test_globalnet_status() {
 
   # globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$globalnet_pod" ]] || globalnet_status=DOWN
-  globalnet_pod="`get_running_pod_by_label 'app=submariner-globalnet' $SUBM_NAMESPACE `"
+  globalnet_pod="`get_running_pod_by_label 'app=submariner-globalnet' "$SUBM_NAMESPACE" `"
 
 
   echo "# Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
@@ -3072,7 +3142,7 @@ function test_lighthouse_status() {
 
   # lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace."
-  lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' $SUBM_NAMESPACE`"
+  lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' "$SUBM_NAMESPACE" `"
 
   echo "# Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   local regex="agent .* started"
@@ -3119,7 +3189,7 @@ function test_clusters_connected_by_service_ip() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
@@ -3194,7 +3264,7 @@ function test_clusters_connected_overlapping_cidrs() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" $TEST_NS `"
+  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -3469,7 +3539,8 @@ function test_submariner_packages() {
   PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_to_debug_commands;
 
-  cd $GOPATH/src/github.com/submariner-io/submariner
+  local project_path="$GOPATH/src/github.com/submariner-io/submariner"
+  cd $project_path
   pwd
 
   export GO111MODULE="on"
@@ -3480,6 +3551,11 @@ function test_submariner_packages() {
     echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
     junit_params="-ginkgo.reportFile $PKG_JUNIT_XML"
   fi
+
+  local msg="# Running unit-tests with GO in project: \n# $project_path"
+
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
+  echo -e "$msg" >> "$E2E_LOG"
 
   # go test -v -cover \
   # ./pkg/apis/submariner.io/v1 \
@@ -3496,7 +3572,9 @@ function test_submariner_packages() {
   # -ginkgo.v -ginkgo.trace \
   # -ginkgo.reportPassed ${junit_params}
 
-  go test -v -cover ./pkg/... -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params}
+  go test -v -cover ./pkg/... \
+  -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params} \
+  | tee -a "$E2E_LOG"
 
 }
 
@@ -3737,7 +3815,7 @@ function print_resources_and_pod_logs() {
 
   echo -e "
   \n################################################################################################ \
-  \n#                             Submariner Resources on ${cluster_name}                         # \
+  \n#                  Submariner Gateway and Deployments on ${cluster_name}                       # \
   \n################################################################################################ \
   \n"
 
@@ -3751,14 +3829,22 @@ function print_resources_and_pod_logs() {
   ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
   #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
+  echo -e "
+  \n################################################################################################ \
+  \n#             Submariner Daemons, Replicas and configurations on ${cluster_name}               # \
+  \n################################################################################################ \
+  \n"
+
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+
+  ${OC} describe rs -n ${SUBM_NAMESPACE} || :
 
   ${OC} describe cm -n openshift-dns || :
 
   # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
 
   # for pod in $(${OC} get pods -A \
-  # -l 'name in (submariner-operator,submariner-engine,submariner-globalnet,kube-proxy)' \
+  # -l 'name in (submariner-operator,submariner-gateway,submariner-globalnet,kube-proxy)' \
   # -o jsonpath='{.items[0].metadata.namespace} {.items[0].metadata.name}' ; do
   #     echo "######################: Logs for Pod $pod :######################"
   #     ${OC}  -n $ns describe pod $name
@@ -3796,7 +3882,11 @@ function print_resources_and_pod_logs() {
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-engine"
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+
+  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-globalnet"
 
@@ -3821,7 +3911,7 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
-function pass_test_debug() {
+function test_debug_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
@@ -3838,7 +3928,7 @@ function pass_test_debug() {
 
 }
 
-function fail_test_debug() {
+function test_debug_fail() {
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -3850,10 +3940,10 @@ function fail_test_debug() {
   fi
 }
 
-function fatal_test_debug() {
+function test_debug_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
-  FATAL "Terminating script since fail_test_debug() did not"
+  FATAL "Terminating script since test_debug_fail() did not"
 }
 
 # ------------------------------------------
@@ -3892,24 +3982,23 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 # Printing output both to stdout and to $LOG_FILE with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
-
-  # trap_function_on_error "collect_submariner_info" (if passing CLI option --print-logs)
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    trap_function_on_error "${junit_cmd} collect_submariner_info"
-  fi
-
-  # # Debug functions
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} pass_test_debug
-  # ${junit_cmd} fail_test_debug || rc=$?
-  # [[ $rc = 0 ]] || BUG "fail_test_debug - Exit code: $rc" && exit $rc
-  # ${junit_cmd} fatal_test_debug
-
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
   # Setup and verify environment
   setup_workspace
+
+  # Set script trap functions
+  set_trap_functions
+
+  # # Debug functions
+  # ${junit_cmd} test_debug_pass
+  # ${junit_cmd} test_debug_fail
+  # rc=$?
+  # BUG "test_debug_fail - Exit code: $rc" \
+  # "If RC $rc = 5 - junit_cmd should continue execution"
+  # ${junit_cmd} test_debug_pass
+  # ${junit_cmd} test_debug_fatal
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
 
@@ -4005,24 +4094,23 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-  fi ### END of OCP Clusters Setup ###
+    # Running test_custom_images_from_registry if requested - To use custom Submariner images
+    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
+        # ${junit_cmd} remove_submariner_images_from_local_registry
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_a
+
+        ${junit_cmd} test_custom_images_from_registry_cluster_b
+    fi
+
+  fi ### END of OCP Clusters Setup ###
 
   # Verify clusters status after OCP setup
 
   ${junit_cmd} test_kubeconfig_aws_cluster_a
 
   ${junit_cmd} test_kubeconfig_osp_cluster_b
-
-  # Running test_custom_images_from_registry if requested - To use custom Submariner images
-  if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-
-      # ${junit_cmd} remove_submariner_images_from_local_registry
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_a
-
-      ${junit_cmd} test_custom_images_from_registry_cluster_b
-  fi
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
@@ -4051,7 +4139,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running download_and_install_subctl
     if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_and_install_subctl "$SUBCTL_VERSION"
+      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
 
     fi
 
@@ -4077,8 +4165,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
   fi
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
-
-  ${junit_cmd} test_products_versions
 
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
