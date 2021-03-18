@@ -802,15 +802,17 @@ function test_products_versions() {
   echo -e "\n### OCP Cluster ${cluster_name} ###"
   ${OC} version
 
-  echo -e "\n### Submariner components on ${cluster_name} ###\n"
-  # subctl version
+  echo -e "\n### Submariner components ###\n"
+
+  subctl version || :
+
   subctl show versions || :
 
   local regex="\s+\K(name=|url=|version=|release=).*"
   for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
   # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
-    echo -e "\n### $(echo $img | sed -r 's|.*/([^@]+).*|\1|') Image on ${cluster_name} ###"
+    echo -e "\n### $(echo $img | sed -r 's|.*/([^@]+).*|\1|') Image ###"
     echo "id=${img}"
     ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
     img=$(echo $img | awk -F '@' '{print $2}')
@@ -822,11 +824,11 @@ function test_products_versions() {
 
     local gw_label='app=submariner-gateway'
     # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+    [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
     submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
     if [[ -n "$submariner_gateway_pod" ]] ; then
-      echo -e "\n### LibreSwan version on ${cluster_name} ###"
+      echo -e "\n### LibreSwan version ###"
       ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
       echo -e "\n\n"
     fi
@@ -2122,7 +2124,7 @@ function test_broker_before_join() {
 
   local regex="submariner-operator"
   # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
-  subctl version | grep --invert-match "v0.8" || regex="No resources found"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || regex="No resources found"
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
     ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "$regex" \
@@ -2579,7 +2581,7 @@ function write_subctl_join_command() {
 
   local pod_debug_flag="--pod-debug"
   # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
-  subctl version | grep --invert-match "v0.8" || pod_debug_flag="--enable-pod-debugging"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || pod_debug_flag="--enable-pod-debugging"
 
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
   subctl_join_cmd="${subctl_join_cmd} ${pod_debug_flag} --ipsec-debug"
@@ -2818,7 +2820,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   regex="All controllers stopped or exited"
@@ -2881,7 +2883,7 @@ function test_submariner_cable_driver() {
 
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
@@ -2990,7 +2992,7 @@ function test_submariner_connection_established() {
 
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
 
@@ -3038,7 +3040,7 @@ function test_ipsec_status() {
 
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   local active_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o wide | awk -v gw_node="$active_gateway_node" '$0 ~ gw_node { print $1 }')
   # submariner-gateway-r288v
@@ -3884,7 +3886,7 @@ function print_resources_and_pod_logs() {
 
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  subctl version | grep --invert-match "v0.8" || gw_label="app=submariner-engine"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
 
