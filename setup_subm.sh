@@ -1156,7 +1156,7 @@ function get_latest_subctl_version_tag() {
   local subctl_tag="v[0-9]"
   local regex="tag/.*\K${subctl_tag}[^\"]*"
   local repo_url="https://github.com/submariner-io/submariner-operator"
-  active_gateway_pod"`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
 
   echo $subm_release_version
 }
@@ -2318,11 +2318,16 @@ function test_custom_images_from_registry_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
+  # TODO: Split this function to separated tests
+
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   configure_cluster_registry_secrets
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   configure_cluster_registry_mirror
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  delete_old_images_of_registry_mirror
 }
 
 # ------------------------------------------
@@ -2331,11 +2336,16 @@ function test_custom_images_from_registry_cluster_b() {
   PROMPT "Using custom Registry for Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
+  # TODO: Split this function to separated tests
+
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
   configure_cluster_registry_secrets
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
   configure_cluster_registry_mirror
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  delete_old_images_of_registry_mirror
 }
 
 # ------------------------------------------
@@ -2405,9 +2415,12 @@ EOF
     # Do not ${OC} logout - it will cause authentication error pulling images during join command
   )
 
-    echo "# Restore kubeconfig current-context to $cur_context"
-    # ${OC} config set "current-context" "$cur_context"
-    ${OC} config use-context "$cur_context"
+  echo "# Prune old registry images associated with Mirror url: https://${REGISTRY_MIRROR}"
+  oc adm prune images --registry-url=https://${REGISTRY_MIRROR} --force-insecure --confirm || :
+  
+  echo "# Restore kubeconfig current-context to $cur_context"
+  # ${OC} config set "current-context" "$cur_context"
+  ${OC} config use-context "$cur_context"
 
 }
 
@@ -2428,6 +2441,22 @@ function configure_cluster_registry_mirror() {
   add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
+
+}
+
+# ------------------------------------------
+
+function delete_old_images_of_registry_mirror() {
+### Configure a mirror server on the cluster registry
+  trap_to_debug_commands
+
+  ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
+    set -- $(echo $line | awk '{ print $1, $2 }')
+    local img_sha="$1"
+    local img_name="$2"
+    echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
+    ${OC} delete image $img_sha
+  done
 
 }
 
