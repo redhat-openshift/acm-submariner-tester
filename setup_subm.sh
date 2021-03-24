@@ -1,4 +1,4 @@
-\n#!/bin/bash
+subctl_join\n#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -443,7 +443,7 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $registry_images - to test_custom_images_from_registry
+  # User input: $registry_images - to configure_cluster_registry_secrets
   while [[ ! "$registry_images" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
@@ -593,8 +593,8 @@ function show_test_plan() {
 
     echo -e "# Submariner deployment and environment setup for the tests:
 
-    - test_custom_images_from_registry_cluster_a: $registry_images
-    - test_custom_images_from_registry_cluster_b: $registry_images
+    - configure_cluster_registry_secrets_cluster_a: $registry_images
+    - configure_cluster_registry_secrets_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
     - download_subctl: $SUBM_VER_TAG
@@ -1672,7 +1672,7 @@ function remove_submariner_machine_sets() {
 
 # ------------------------------------------
 
-# function remove_submariner_images_from_local_registry() {
+# function remove_submariner_images_from_local_registry_with_podman() {
 #   trap_to_debug_commands;
 #
 #   PROMPT "Remove previous Submariner images from local Podman registry"
@@ -2314,7 +2314,7 @@ EOF
 
 # ------------------------------------------
 
-function test_custom_images_from_registry_cluster_a() {
+function configure_cluster_registry_secrets_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
@@ -2326,13 +2326,11 @@ function test_custom_images_from_registry_cluster_a() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   configure_cluster_registry_mirror
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  delete_old_images_of_registry_mirror
 }
 
 # ------------------------------------------
 
-function test_custom_images_from_registry_cluster_b() {
+function configure_cluster_registry_secrets_cluster_b() {
   PROMPT "Using custom Registry for Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
@@ -2417,7 +2415,7 @@ EOF
 
   echo "# Prune old registry images associated with Mirror url: https://${REGISTRY_MIRROR}"
   oc adm prune images --registry-url=https://${REGISTRY_MIRROR} --force-insecure --confirm || :
-  
+
   echo "# Restore kubeconfig current-context to $cur_context"
   # ${OC} config set "current-context" "$cur_context"
   ${OC} config use-context "$cur_context"
@@ -2600,26 +2598,126 @@ function write_subctl_join_command() {
 
   echo -e "# Adding Broker file and IPSec ports to subctl join command"
 
-  subctl_join_cmd="subctl join \
+  subctl_join="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   echo "# Adding '--health-check' to subctl join command (to enable Gateway health check)"
 
-  subctl_join_cmd="${subctl_join_cmd} --health-check"
+  subctl_join="${subctl_join} --health-check"
 
   local pod_debug_flag="--pod-debug"
   # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || pod_debug_flag="--enable-pod-debugging"
 
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
-  subctl_join_cmd="${subctl_join_cmd} ${pod_debug_flag} --ipsec-debug"
+  subctl_join="${subctl_join} ${pod_debug_flag} --ipsec-debug"
 
-  echo "# Write the join command into a local file: $join_cmd_file"
-  echo "$subctl_join_cmd" > "$join_cmd_file"
+  if [[ ! "$registry_images" =~ ^(y|yes)$ ]] && [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
+    BUG "operator image 'devel' should be the default when using subctl devel binary" \
+    "Add '--version devel' to $join_cmd_file" \
+    "https://github.com/submariner-io/submariner-operator/issues/563"
+    # Workaround
+    subctl_join="${subctl_join} --version devel"
+  fi
+
+  echo "# Write the join parameters into the join command file: $join_cmd_file"
+  echo "$subctl_join" > "$join_cmd_file"
 
 }
 
+# ------------------------------------------
+
+function upload_custom_images_to_registry_cluster_a() {
+# Upload custom images to the registry - AWS cluster A (public)
+  PROMPT "Upload custom images to the registry of cluster A"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_A}"
+}
+
+# ------------------------------------------
+
+function upload_custom_images_to_registry_cluster_b() {
+# Upload custom images to the registry - OSP cluster B (on-prem)
+  PROMPT "Upload custom images to the registry of cluster B"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_B}"
+}
+
+# ------------------------------------------
+
+function upload_custom_images_to_registry() {
+# Join Submariner member - of current cluster kubeconfig
+  trap_to_debug_commands;
+
+  local join_cmd_file="$1"
+  echo "# Read subctl join command from file: $join_cmd_file"
+  local subctl_join="$(< $join_cmd_file)"
+
+  echo "# Deleting old Submariner images (if existing)"
+  delete_old_images_of_registry_mirror
+
+  echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
+  if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
+    export SUBM_VER_TAG="$(get_latest_subctl_version_tag)"
+  elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
+    echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
+    export SUBM_VER_TAG="v${SUBM_VER_TAG}"
+  fi
+
+  if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
+    echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBM_VER_TAG' the regex match: $REGISTRY_TAG_MATCH"
+    export SUBM_VER_TAG="v$(echo $SUBM_VER_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
+    echo "# New \$SUBM_VER_TAG for registry images: $SUBM_VER_TAG"
+  fi
+
+  echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
+  \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
+  \n# Version tag: ${SUBM_VER_TAG}"
+
+  for img in \
+    $SUBM_IMG_GATEWAY \
+    $SUBM_IMG_ROUTE \
+    $SUBM_IMG_NETWORK \
+    $SUBM_IMG_LIGHTHOUSE \
+    $SUBM_IMG_COREDNS \
+    $SUBM_IMG_GLOBALNET \
+    $SUBM_IMG_OPERATOR \
+    ; do
+      local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
+      echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
+
+      local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
+
+      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
+  done
+
+  BUG "SubM Gateway image name should be 'submariner-gateway'" \
+  "Rename SubM Gateway image to 'submariner' " \
+  "https://github.com/submariner-io/submariner-operator/pull/941
+  https://github.com/submariner-io/submariner-operator/issues/1018"
+
+  echo "# Adding custom images to subctl join command"
+  subctl_join="${subctl_join} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
+
+  # BUG ? : this is a potential bug - overriding with comma separated:
+  # subctl_join="${subctl_join} --image-override \
+  # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
+  # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
+  # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
+  # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
+  # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
+  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
+  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
+
+  echo "# Write the \"--image-override\" parameters into the join command file: $join_cmd_file"
+  echo "$subctl_join" > "$join_cmd_file"
+
+}
 # ------------------------------------------
 
 function run_subctl_join_on_cluster_a() {
@@ -2650,7 +2748,7 @@ function run_subctl_join_cmd_from_file() {
   trap_to_debug_commands;
 
   echo "# Read subctl join command from file: $1"
-  local subctl_join_cmd="$(< $1)"
+  local subctl_join="$(< $1)"
 
   cd ${WORKDIR}
 
@@ -2676,75 +2774,9 @@ function run_subctl_join_cmd_from_file() {
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view
 
-  # TODO: Move to a new test
-  # Overriding Submariner images with custom images from registry
-  if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+  echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join}"
 
-    echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
-    if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
-      export SUBM_VER_TAG="$(get_latest_subctl_version_tag)"
-    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
-      echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
-      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
-    fi
-
-    if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
-      echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBM_VER_TAG' the regex match: $REGISTRY_TAG_MATCH"
-      export SUBM_VER_TAG="v$(echo $SUBM_VER_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
-      echo "# New \$SUBM_VER_TAG for registry images: $SUBM_VER_TAG"
-    fi
-
-    echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
-    \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-    \n# Version tag: ${SUBM_VER_TAG}"
-
-    for img in \
-      $SUBM_IMG_GATEWAY \
-      $SUBM_IMG_ROUTE \
-      $SUBM_IMG_NETWORK \
-      $SUBM_IMG_LIGHTHOUSE \
-      $SUBM_IMG_COREDNS \
-      $SUBM_IMG_GLOBALNET \
-      $SUBM_IMG_OPERATOR \
-      ; do
-        local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
-        echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
-
-        local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
-
-        watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
-    done
-
-    BUG "SubM Gateway image name should be 'submariner-gateway'" \
-    "Rename SubM Gateway image to 'submariner' " \
-    "https://github.com/submariner-io/submariner-operator/pull/941
-    https://github.com/submariner-io/submariner-operator/issues/1018"
-
-    echo "# Adding custom images to subctl join command"
-
-    subctl_join_cmd="${subctl_join_cmd} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
-
-    # BUG ? : this is a potential bug - overriding with comma separated:
-    # subctl_join_cmd="${subctl_join_cmd} --image-override \
-    # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
-    # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
-    # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
-    # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
-    # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
-    # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
-    # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
-
-  elif [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
-    BUG "operator image 'devel' should be the default when using subctl devel binary" \
-    "Add '--version devel' to $join_cmd_file" \
-    "https://github.com/submariner-io/submariner-operator/issues/563"
-    # Workaround
-    subctl_join_cmd="${subctl_join_cmd} --version devel"
-  fi
-
-  echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join_cmd}"
-
-  $subctl_join_cmd
+  $subctl_join
 
 }
 
@@ -4125,17 +4157,19 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-    # Running test_custom_images_from_registry if requested - To use custom Submariner images
+    # Running configure_cluster_registry_secrets if requested - To use custom Submariner images
     if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
-        # ${junit_cmd} remove_submariner_images_from_local_registry
+        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
 
-        ${junit_cmd} test_custom_images_from_registry_cluster_a
+        ${junit_cmd} configure_cluster_registry_secrets_cluster_a
 
-        ${junit_cmd} test_custom_images_from_registry_cluster_b
+        ${junit_cmd} configure_cluster_registry_secrets_cluster_b
     fi
 
-  fi ### END of OCP Clusters Setup ###
+  fi
+  ### END of OCP Clusters Setup ###
+
 
   # Verify clusters status after OCP setup
 
@@ -4188,10 +4222,18 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} set_join_parameters_for_cluster_b
 
+    # Overriding Submariner images with custom images from registry
+    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+
+      ${junit_cmd} upload_custom_images_to_registry_cluster_a
+
+      ${junit_cmd} upload_custom_images_to_registry_cluster_b
+
+    fi
+
     ${junit_cmd} run_subctl_join_on_cluster_a
 
     ${junit_cmd} run_subctl_join_on_cluster_b
-
 
   fi
 
