@@ -380,7 +380,7 @@ if [[ -z "$got_user_input" ]]; then
       reset_cluster_a=${input:-no}
     done
 
-    # User input: $clean_cluster_a - to clean_aws_cluster_a
+    # User input: $clean_cluster_a - to clean cluster A
     if [[ "$reset_cluster_a" =~ ^(no|n)$ ]]; then
       while [[ ! "$clean_cluster_a" =~ ^(yes|no)$ ]]; do
         echo -e "\n${YELLOW}Do you want to clean AWS cluster A ? ${NO_COLOR}
@@ -398,7 +398,7 @@ if [[ -z "$got_user_input" ]]; then
       reset_cluster_b=${input:-no}
     done
 
-    # User input: $clean_cluster_b - to clean_osp_cluster_b
+    # User input: $clean_cluster_b - to clean cluster B
     if [[ "$reset_cluster_b" =~ ^(no|n)$ ]]; then
       while [[ ! "$clean_cluster_b" =~ ^(yes|no)$ ]]; do
         echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
@@ -1484,56 +1484,35 @@ function destroy_osp_cluster_b() {
 
 # ------------------------------------------
 
-function clean_aws_cluster_a() {
+function clean_submariner_namespace_and_resources_cluster_a() {
 ### Run cleanup of previous Submariner on AWS cluster A (public) ###
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on AWS cluster A (public)"
   trap_to_debug_commands;
+
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-
-  BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
-  "Run cleanup (oc delete) of any existing resource of submariner-operator" \
-  "https://github.com/submariner-io/submariner-operator/issues/88
-  https://github.com/submariner-io/submariner-website/issues/272"
-
-  delete_submariner_namespace_and_crds
-
-  delete_submariner_cluster_roles
-
-  delete_lighthouse_dns_list
-
-  delete_submariner_test_namespaces
-
-  delete_e2e_namespaces
-
-  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
-
-  remove_submariner_gateway_labels
-
-  remove_submariner_machine_sets
-
-  # Todo: Should also include globalnet network cleanup:
-  #
-  # 1 If you are using vanilla Submariner, please delete the following iptable chains from the nat/filter table of worker nodes
-  #   SUBMARINER-INPUT
-  #   SUBMARINER-POSTROUTING
-  #
-  # 2 The following chains will have to be deleted if you are using Globalnet:
-  #   SUBMARINER-GN-INGRESS
-  #   SUBMARINER-GN-EGRESS
-  #   SUBMARINER-GN-MARK
-  #
-  # 3 its recommended that you delete the vx-submariner interface from all the nodes.
-
+  clean_submariner_namespace_and_resources
 }
 
 # ------------------------------------------
 
-function clean_osp_cluster_b() {
+function clean_submariner_namespace_and_resources_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  clean_submariner_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_submariner_namespace_and_resources() {
+  trap_to_debug_commands;
+
+  BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
+  "Run cleanup (oc delete) of any existing resource of submariner-operator" \
+  "https://github.com/submariner-io/submariner-operator/issues/88
+  https://github.com/submariner-io/submariner-website/issues/272"
 
   delete_submariner_namespace_and_crds
 
@@ -1550,11 +1529,6 @@ function clean_osp_cluster_b() {
 
   delete_e2e_namespaces
 
-  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
-
-  remove_submariner_gateway_labels
-
-  remove_submariner_machine_sets
 }
 
 # ------------------------------------------
@@ -1641,6 +1615,34 @@ function delete_e2e_namespaces() {
     echo "No 'e2e-tests' namespaces exist to be deleted"
   fi
 
+}
+
+# ------------------------------------------
+
+function clean_node_labels_and_machines_cluster_a() {
+### Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public) ###
+  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+
+  remove_submariner_gateway_labels
+
+  remove_submariner_machine_sets
+}
+
+# ------------------------------------------
+
+function clean_node_labels_and_machines_cluster_b() {
+### Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem) ###
+  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+
+  remove_submariner_gateway_labels
+
+  remove_submariner_machine_sets
 }
 
 # ------------------------------------------
@@ -2444,6 +2446,7 @@ function delete_old_submariner_images_from_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -2463,6 +2466,8 @@ function delete_old_submariner_images_from_current_cluster() {
 ### Configure a mirror server on the cluster registry
   trap_to_debug_commands
 
+  echo "# Deleting old Submariner images, tags, and image streams (if exist)"
+
   # Delete images and image-stream tags
   ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
     set -- $(echo $line | awk '{ print $1, $2 }')
@@ -2471,8 +2476,10 @@ function delete_old_submariner_images_from_current_cluster() {
 
     echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
     ${OC} delete image $img_sha --ignore-not-found
+  done
 
-    local img_tag="$(oc get istag | grep "${img_sha}" | awk '{print $1}')"
+  # Delete image-stream tags
+  ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
     echo "# Deleting image stream tag: $img_tag"
     ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
   done
@@ -2694,9 +2701,6 @@ function upload_custom_images_to_registry() {
   local join_cmd_file="$1"
   echo "# Read subctl join command from file: $join_cmd_file"
   local subctl_join="$(< $join_cmd_file)"
-
-  echo "# Deleting old Submariner images (if existing)"
-  delete_old_submariner_images_from_current_cluster
 
   echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
   if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
@@ -4170,12 +4174,14 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ### Cleanup Submariner from all clusters ###
 
-    # Running clean_aws_cluster_a if requested
+    # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} test_kubeconfig_aws_cluster_a
 
-      ${junit_cmd} clean_aws_cluster_a
+      ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
+
+      ${junit_cmd} clean_node_labels_and_machines_cluster_a
 
       ${junit_cmd} configure_images_prune_cluster_a
 
@@ -4183,12 +4189,14 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     fi
 
-    # Running clean_osp_cluster_b if requested
+    # Running cleanup on cluster B if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} test_kubeconfig_osp_cluster_b
 
-      ${junit_cmd} clean_osp_cluster_b
+      ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
+
+      ${junit_cmd} clean_node_labels_and_machines_cluster_b
 
       ${junit_cmd} configure_images_prune_cluster_b
 
