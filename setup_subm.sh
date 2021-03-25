@@ -1692,6 +1692,7 @@ function remove_submariner_machine_sets() {
 #     $SUBM_IMG_COREDNS \
 #     $SUBM_IMG_GLOBALNET \
 #     $SUBM_IMG_OPERATOR \
+#     $SUBM_IMG_BUNDLE \
 #     ; do
 #       echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
 #
@@ -2318,8 +2319,6 @@ function configure_cluster_registry_secrets_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
-  # TODO: Split this function to separated tests
-
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   configure_cluster_registry_secrets
 
@@ -2334,16 +2333,12 @@ function configure_cluster_registry_secrets_cluster_b() {
   PROMPT "Using custom Registry for Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
-  # TODO: Split this function to separated tests
-
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
   configure_cluster_registry_secrets
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
   configure_cluster_registry_mirror
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  delete_old_images_of_registry_mirror
 }
 
 # ------------------------------------------
@@ -2444,16 +2439,58 @@ function configure_cluster_registry_mirror() {
 
 # ------------------------------------------
 
-function delete_old_images_of_registry_mirror() {
+function delete_old_submariner_images_from_cluster_a() {
+  PROMPT "Delete previous Submariner images in AWS cluster A"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  delete_old_submariner_images_from_current_cluster
+}
+
+# ------------------------------------------
+
+function delete_old_submariner_images_from_cluster_b() {
+  PROMPT "Delete previous Submariner images in OSP cluster B"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  delete_old_submariner_images_from_current_cluster
+}
+
+# ------------------------------------------
+
+function delete_old_submariner_images_from_current_cluster() {
 ### Configure a mirror server on the cluster registry
   trap_to_debug_commands
 
+  # Delete images and image-stream tags
   ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
     set -- $(echo $line | awk '{ print $1, $2 }')
     local img_sha="$1"
     local img_name="$2"
+
     echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
-    ${OC} delete image $img_sha
+    ${OC} delete image $img_sha --ignore-not-found
+
+    local img_tag="$(oc get istag | grep "${img_sha}" | awk '{print $1}')"
+    echo "# Deleting image stream tag: $img_tag"
+    ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
+  done
+
+  # Delete image-stream
+  for img_stream in \
+    $SUBM_IMG_GATEWAY \
+    $SUBM_IMG_ROUTE \
+    $SUBM_IMG_NETWORK \
+    $SUBM_IMG_LIGHTHOUSE \
+    $SUBM_IMG_COREDNS \
+    $SUBM_IMG_GLOBALNET \
+    $SUBM_IMG_OPERATOR \
+    $SUBM_IMG_BUNDLE \
+    ; do
+    echo "# Deleting image stream: $img_stream"
+    oc delete is "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found
+    # oc tag -d submariner-operator/${img_stream}
   done
 
 }
@@ -2659,7 +2696,7 @@ function upload_custom_images_to_registry() {
   local subctl_join="$(< $join_cmd_file)"
 
   echo "# Deleting old Submariner images (if existing)"
-  delete_old_images_of_registry_mirror
+  delete_old_submariner_images_from_current_cluster
 
   echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
   if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
@@ -2687,6 +2724,7 @@ function upload_custom_images_to_registry() {
     $SUBM_IMG_COREDNS \
     $SUBM_IMG_GLOBALNET \
     $SUBM_IMG_OPERATOR \
+    $SUBM_IMG_BUNDLE \
     ; do
       local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
@@ -2712,7 +2750,8 @@ function upload_custom_images_to_registry() {
   # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
   # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
   # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
-  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
+  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
+  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
 
   echo "# Write the \"--image-override\" parameters into the join command file: $join_cmd_file"
   echo "$subctl_join" > "$join_cmd_file"
@@ -4140,6 +4179,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} configure_images_prune_cluster_a
 
+      ${junit_cmd} delete_old_submariner_images_from_cluster_a
+
     fi
 
     # Running clean_osp_cluster_b if requested
@@ -4150,6 +4191,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} clean_osp_cluster_b
 
       ${junit_cmd} configure_images_prune_cluster_b
+
+      ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
     fi
 

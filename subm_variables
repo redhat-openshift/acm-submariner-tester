@@ -81,6 +81,7 @@ export SUBM_IMG_LIGHTHOUSE="${SUBM_IMG_LIGHTHOUSE:-lighthouse-agent-rhel8}"
 export SUBM_IMG_COREDNS="${SUBM_IMG_COREDNS:-lighthouse-coredns-rhel8}"
 export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
 export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
+export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
