@@ -828,11 +828,27 @@ function test_products_versions() {
 
     submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
     if [[ -n "$submariner_gateway_pod" ]] ; then
-      echo -e "\n### LibreSwan version ###"
+      echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
       ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
       echo -e "\n\n"
     fi
   fi
+
+  # Show images
+  ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
+    set -- $(echo $line | awk '{ print $1, $2 }')
+    local img_sha="$1"
+    local img_name="$2"
+
+    echo "# Describe registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
+    ${OC} describe image $img_sha || :
+  done
+
+  # Show image-stream tags
+  ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
+    echo "# Describe image stream tag: $img_tag"
+    ${OC} describe istag $img_tag -n ${SUBM_NAMESPACE} || :
+  done
 
 }
 
@@ -2468,21 +2484,28 @@ function delete_old_submariner_images_from_current_cluster() {
 
   echo "# Deleting old Submariner images, tags, and image streams (if exist)"
 
-  # Delete images and image-stream tags
-  ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
-    set -- $(echo $line | awk '{ print $1, $2 }')
-    local img_sha="$1"
-    local img_name="$2"
-
-    echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
-    ${OC} delete image $img_sha --ignore-not-found
+  for node in $(${OC} get nodes -o name) ; do
+    echo -e "\n### Delete Submariner images in $node ###"
+    ${OC} debug $node -n ${SUBM_NAMESPACE} -- chroot /host /bin/bash -c "\
+    crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi \
+    " || :
   done
 
-  # Delete image-stream tags
-  ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
-    echo "# Deleting image stream tag: $img_tag"
-    ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
-  done
+  # # Delete images
+  # ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
+  #   set -- $(echo $line | awk '{ print $1, $2 }')
+  #   local img_sha="$1"
+  #   local img_name="$2"
+  #
+  #   echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
+  #   ${OC} delete image $img_sha --ignore-not-found
+  # done
+  #
+  # # Delete image-stream tags
+  # ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
+  #   echo "# Deleting image stream tag: $img_tag"
+  #   ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
+  # done
 
   # Delete image-stream
   for img_stream in \
