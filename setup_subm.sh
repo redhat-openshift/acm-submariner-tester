@@ -443,7 +443,7 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $registry_images - to configure_cluster_registry_secrets
+  # User input: $registry_images - to configure_cluster_custom_registry
   while [[ ! "$registry_images" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
@@ -536,6 +536,7 @@ reset_cluster_b=${reset_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
 service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
+subm_cable_driver=${subm_cable_driver:-libreswan}
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
 skip_ocp_setup=${skip_ocp_setup:-NO}
@@ -593,8 +594,8 @@ function show_test_plan() {
 
     echo -e "# Submariner deployment and environment setup for the tests:
 
-    - configure_cluster_registry_secrets_cluster_a: $registry_images
-    - configure_cluster_registry_secrets_cluster_b: $registry_images
+    - configure_custom_registry_cluster_a: $registry_images
+    - configure_custom_registry_cluster_b: $registry_images
     - test_kubeconfig_aws_cluster_a
     - test_kubeconfig_osp_cluster_b
     - download_subctl: $SUBM_VER_TAG
@@ -2015,6 +2016,9 @@ function gateway_label_first_worker_node() {
   # gw_node1=$(${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}')
   ${OC} get nodes -l node-role.kubernetes.io/worker | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   gw_node1="$(< $TEMP_FILE)"
+
+  [[ -n "$gw_node1" ]] || FATAL "Failed to list worker nodes in current cluster"
+
   echo "# Adding submariner gateway labels to first worker node: $gw_node1"
     # gw_node1: user-cl1-bbmkg-worker-8mx4k
 
@@ -2333,35 +2337,35 @@ EOF
 
 # ------------------------------------------
 
-function configure_cluster_registry_secrets_cluster_a() {
+function configure_custom_registry_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  configure_cluster_registry_secrets
+  configure_cluster_custom_registry_secrets
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  configure_cluster_registry_mirror
+  configure_cluster_custom_registry_mirror
 
 }
 
 # ------------------------------------------
 
-function configure_cluster_registry_secrets_cluster_b() {
+function configure_custom_registry_cluster_b() {
   PROMPT "Using custom Registry for Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  configure_cluster_registry_secrets
+  configure_cluster_custom_registry_secrets
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  configure_cluster_registry_mirror
+  configure_cluster_custom_registry_mirror
 
 }
 
 # ------------------------------------------
 
-function configure_cluster_registry_secrets() {
+function configure_cluster_custom_registry_secrets() {
 ### Configure access to external docker registry
   trap - DEBUG # DONT trap_to_debug_commands
 
@@ -2437,7 +2441,7 @@ EOF
 
 # ------------------------------------------
 
-function configure_cluster_registry_mirror() {
+function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap - DEBUG # DONT trap_to_debug_commands
 
@@ -2462,7 +2466,6 @@ function delete_old_submariner_images_from_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -2486,9 +2489,8 @@ function delete_old_submariner_images_from_current_cluster() {
 
   for node in $(${OC} get nodes -o name) ; do
     echo -e "\n### Delete Submariner images in $node ###"
-    ${OC} debug $node -n ${SUBM_NAMESPACE} -- chroot /host /bin/bash -c "\
-    crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi \
-    " || :
+    ${OC} debug $node -n default -- chroot /host /bin/bash -c "\
+    crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi" || :
   done
 
   # # Delete images
@@ -2742,6 +2744,8 @@ function upload_custom_images_to_registry() {
   echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
   \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
   \n# Version tag: ${SUBM_VER_TAG}"
+
+  ${OC} create namespace "$SUBM_NAMESPACE" || echo "Using existing '${SUBM_NAMESPACE}' namespace"
 
   for img in \
     $SUBM_IMG_GATEWAY \
@@ -4150,6 +4154,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} configure_images_prune_cluster_a
 
+      ${junit_cmd} configure_custom_registry_cluster_a
+
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
@@ -4166,6 +4172,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} configure_images_prune_cluster_a
 
+        ${junit_cmd} configure_custom_registry_cluster_a
+
       fi
     fi
 
@@ -4177,6 +4185,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} create_osp_cluster_b
 
       ${junit_cmd} configure_images_prune_cluster_b
+
+      ${junit_cmd} configure_custom_registry_cluster_b
 
     else
       # Running destroy_osp_cluster_b and create_osp_cluster_b separately
@@ -4192,6 +4202,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} configure_images_prune_cluster_b
 
+        ${junit_cmd} configure_custom_registry_cluster_b
+
       fi
     fi
 
@@ -4206,8 +4218,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} clean_node_labels_and_machines_cluster_a
 
-      ${junit_cmd} configure_images_prune_cluster_a
-
       ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
     fi
@@ -4221,8 +4231,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} clean_node_labels_and_machines_cluster_b
 
-      ${junit_cmd} configure_images_prune_cluster_b
-
       ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
     fi
@@ -4231,15 +4239,15 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-    # Running configure_cluster_registry_secrets if requested - To use custom Submariner images
-    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-
-        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
-
-        ${junit_cmd} configure_cluster_registry_secrets_cluster_a
-
-        ${junit_cmd} configure_cluster_registry_secrets_cluster_b
-    fi
+    # # Running configure_cluster_custom_registry if requested - To use custom Submariner images
+    # if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
+    #
+    #     # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+    #
+    #     ${junit_cmd} configure_custom_registry_cluster_a
+    #
+    #     ${junit_cmd} configure_custom_registry_cluster_b
+    # fi
 
   fi
   ### END of OCP Clusters Setup ###
