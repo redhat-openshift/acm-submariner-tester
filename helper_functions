@@ -969,7 +969,11 @@ function print_pod_logs_in_namespace() {
 function build_go_repo() {
 ### Pull and build a GO project from URL ###
   trap_to_debug_commands;
-  local repo_url="${1#*://}"
+
+  local repo_url="${1#*://}" # Trim "http://" it begins with
+
+  # Optional param: branch or tag to pull (default is latest branch)
+  local branch_or_tag=${2}
 
   echo "# Download the repo with GO: "
   GO111MODULE="off" go get -v $repo_url/... || echo "# GO get '$repo_url/...' might have had errors"
@@ -977,7 +981,7 @@ function build_go_repo() {
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
 
-  git_reset_local_repo
+  git_reset_local_repo ${branch_or_tag}
 
   echo "# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
@@ -996,11 +1000,13 @@ function build_go_repo() {
 function git_reset_local_repo() {
   trap_to_debug_commands;
 
+  # Optional param: branch or tag to pull (default is latest branch)
+  local branch_or_tag=${1:-$(git remote show origin | awk '/HEAD branch/ { print $3 }')}
+
   #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   git fetch --prune --all
-  local default_branch=$(git remote show origin | awk '/HEAD branch/ { print $3 }')
-  git branch -m $default_branch
-  git branch -u origin/$default_branch
+  git branch -m $branch_or_tag
+  git branch -u origin/$branch_or_tag
   git reset --hard
   git checkout --theirs .
   git pull

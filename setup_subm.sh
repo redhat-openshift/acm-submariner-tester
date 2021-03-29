@@ -961,9 +961,19 @@ function build_submariner_repos() {
 
   verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
-  build_go_repo "https://github.com/submariner-io/submariner"
+  local branch_or_tag # To pull
 
-  build_go_repo "https://github.com/submariner-io/lighthouse"
+  echo "# Retrieve correct branch to pull for Submariner version '$SUBM_VER_TAG'"
+  if [[ "$SUBM_VER_TAG" =~ latest ]]; then
+    local branch_or_tag="$(get_latest_subctl_version_tag)"
+  elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
+    echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
+    local branch_or_tag="v${SUBM_VER_TAG}"
+  fi
+
+  build_go_repo "https://github.com/submariner-io/submariner" $branch_or_tag
+
+  build_go_repo "https://github.com/submariner-io/lighthouse" $branch_or_tag
 }
 
 # ------------------------------------------
