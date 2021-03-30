@@ -977,13 +977,18 @@ function build_go_repo() {
 ### Pull and build a GO project from URL ###
   trap_to_debug_commands;
 
-  local repo_url="${1#*://}" # Trim "http://" it begins with
+  local repo_url="${1#*://}" # For go get we need to trim the "https://"
 
-  # Optional param: branch or tag to pull (default is latest branch)
+  # Optional: branch or tag to pull (the default is latest branch)
+  # local branch_or_tag=${2:+@$2}
   local branch_or_tag=${2}
 
-  echo "# Download the repo with GO: "
-  GO111MODULE="off" go get -v $repo_url/... || echo "# GO get '$repo_url/...' might have had errors"
+  # local go_repo_and_branch="${repo_url}/...${branch_or_tag}"
+  local go_repo_and_branch="${repo_url}/..."
+
+  echo "# Downloading the repo [${go_repo_and_branch}] with GO: "
+  # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo "# 'go get ${go_repo_and_branch} might have had errors"
+  GO111MODULE="off" go get -v ${go_repo_and_branch} || echo "# GO get '${go_repo_and_branch}' might have had errors"
 
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
@@ -1010,13 +1015,14 @@ function git_reset_local_repo() {
   # Optional param: branch or tag to pull (default is latest branch)
   local branch_or_tag=${1:-$(git remote show origin | awk '/HEAD branch/ { print $3 }')}
 
-  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
   git fetch --prune --all
   git branch -m $branch_or_tag
-  git branch -u origin/$branch_or_tag
-  git reset --hard
+  # git branch -u origin $branch_or_tag
+  git remote set-branches --add origin $branch_or_tag
+  git reset --hard $branch_or_tag
+  # git clean -fdx
   git checkout --theirs .
-  git pull
+  git pull origin $branch_or_tag
 
   echo -e "\n# Latest commits in the repository: \n"
   git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
