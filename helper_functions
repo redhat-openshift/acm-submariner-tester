@@ -956,11 +956,18 @@ function print_pod_logs_in_namespace() {
 
   echo -e "\n##################### Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace #####################\n"
 
-  for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo -e "\n### Pod $pod in Namespace $namespace ###\n"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace get pod $pod -o yaml || :
+  for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}') ; do
+    echo -e "\n### Pod $pod in cluster: $cluster_name, namespace: $namespace ###\n"
+    ${OC} -n $namespace describe pod $pod || :
+    ${OC} -n $namespace get pod $pod -o yaml || :
+
+    if [[ "$(${OC} get pods -n $namespace $pod -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
+      echo -e "\n### Active pod $pod logs ###\n"
       ${OC} -n $namespace logs $pod --timestamps --tail=500 || :
+    else
+      echo -e "\n### Terminated (previous) pod $pod logs ###\n"
+      ${OC} -n $namespace logs -p $pod --timestamps --tail=500 || :
+    fi
   done
 }
 
