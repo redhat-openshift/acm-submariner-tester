@@ -4165,9 +4165,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} create_aws_cluster_a
 
-      ${junit_cmd} configure_images_prune_cluster_a
-
-      ${junit_cmd} configure_custom_registry_cluster_a
+      # ${junit_cmd} configure_images_prune_cluster_a
+      #
+      # ${junit_cmd} configure_custom_registry_cluster_a
 
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
@@ -4183,9 +4183,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} create_aws_cluster_a
 
-        ${junit_cmd} configure_images_prune_cluster_a
-
-        ${junit_cmd} configure_custom_registry_cluster_a
+        # ${junit_cmd} configure_images_prune_cluster_a
+        #
+        # ${junit_cmd} configure_custom_registry_cluster_a
 
       fi
     fi
@@ -4197,9 +4197,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} create_osp_cluster_b
 
-      ${junit_cmd} configure_images_prune_cluster_b
-
-      ${junit_cmd} configure_custom_registry_cluster_b
+      # ${junit_cmd} configure_images_prune_cluster_b
+      #
+      # ${junit_cmd} configure_custom_registry_cluster_b
 
     else
       # Running destroy_osp_cluster_b and create_osp_cluster_b separately
@@ -4213,9 +4213,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} create_osp_cluster_b
 
-        ${junit_cmd} configure_images_prune_cluster_b
-
-        ${junit_cmd} configure_custom_registry_cluster_b
+        # ${junit_cmd} configure_images_prune_cluster_b
+        #
+        # ${junit_cmd} configure_custom_registry_cluster_b
 
       fi
     fi
@@ -4252,15 +4252,19 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-    # # Running configure_cluster_custom_registry if requested - To use custom Submariner images
-    # if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-    #
-    #     # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
-    #
-    #     ${junit_cmd} configure_custom_registry_cluster_a
-    #
-    #     ${junit_cmd} configure_custom_registry_cluster_b
-    # fi
+    ${junit_cmd} configure_images_prune_cluster_a
+
+    ${junit_cmd} configure_images_prune_cluster_b
+
+    # Running configure_cluster_custom_registry if requested - To use custom Submariner images
+    if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
+
+        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+
+        ${junit_cmd} configure_custom_registry_cluster_a
+
+        ${junit_cmd} configure_custom_registry_cluster_b
+    fi
 
   fi
   ### END of OCP Clusters Setup ###
