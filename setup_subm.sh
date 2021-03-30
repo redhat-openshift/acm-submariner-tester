@@ -1,4 +1,4 @@
-subctl_join\n#!/bin/bash
+#!/bin/bash
 #######################################################################################################
 #                                                                                                     #
 # Setup Submariner on AWS and OSP (Upshift)                                                           #
@@ -170,12 +170,12 @@ export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
 > "$E2E_LOG"
 
-# Set LOG_FILE name according to REPORT_NAME (from subm_variables)
+# Set SYS_LOG name according to REPORT_NAME (from subm_variables)
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-# LOG_FILE="${REPORT_NAME// /_}" # replace all spaces with _
-# LOG_FILE="${LOG_FILE}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-LOG_FILE="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-> "$LOG_FILE"
+# SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
+# SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+> "$SYS_LOG"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -183,29 +183,32 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 
 ### Store dynamic variable values in local files
 
-# File to store test status
-export TEST_STATUS_RC="$SCRIPT_DIR/test_status.out"
-echo 1 > $TEST_STATUS_RC
+# The default script exit code is 1 (later it is updated)
+export SCRIPT_RC=1
+
+# File to store test status. Resetting to empty, since no test were yet run.
+export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.out"
+> $TEST_STATUS_FILE
 
 # File to store OCP cluster A version
-export CLUSTER_A_VERSION="$SCRIPT_DIR/cluster_a.ver"
-> $CLUSTER_A_VERSION
+export CLUSTER_A_VERSION_FILE="$SCRIPT_DIR/cluster_a.ver"
+> $CLUSTER_A_VERSION_FILE
 
 # File to store OCP cluster B version
-export CLUSTER_B_VERSION="$SCRIPT_DIR/cluster_b.ver"
-> $CLUSTER_B_VERSION
+export CLUSTER_B_VERSION_FILE="$SCRIPT_DIR/cluster_b.ver"
+> $CLUSTER_B_VERSION_FILE
 
 # File to store SubCtl version
-export SUBCTL_VERSION="$SCRIPT_DIR/subctl.ver"
-> $SUBCTL_VERSION
+export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
+> $SUBCTL_VERSION_FILE
 
 # File to store SubCtl JOIN command for cluster A
-export SUBCTL_JOIN_CLUSTER_A="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-> $SUBCTL_JOIN_CLUSTER_A
+export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
+> $SUBCTL_JOIN_CLUSTER_A_FILE
 
 # File to store SubCtl JOIN command for cluster B
-export SUBCTL_JOIN_CLUSTER_B="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-> $SUBCTL_JOIN_CLUSTER_B
+export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
+> $SUBCTL_JOIN_CLUSTER_B_FILE
 
 # File to store Polarion auth
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
@@ -1170,8 +1173,8 @@ function download_subctl_by_tag() {
     echo "# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
 
-    echo "# Store SubCtl version in $SUBCTL_VERSION"
-    subctl version > "$SUBCTL_VERSION"
+    echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
+    subctl version > "$SUBCTL_VERSION_FILE"
 
 }
 
@@ -1192,8 +1195,8 @@ function get_latest_subctl_version_tag() {
 
 function test_subctl_command() {
   trap_to_debug_commands;
-  # Get SubCTL version (from file $SUBCTL_VERSION)
-  # local subctl_version="$([[ ! -s "$SUBCTL_VERSION" ]] || cat "$SUBCTL_VERSION")"
+  # Get SubCTL version (from file $SUBCTL_VERSION_FILE)
+  # local subctl_version="$([[ ! -s "$SUBCTL_VERSION_FILE" ]] || cat "$SUBCTL_VERSION_FILE")"
   local subctl_version="$(subctl version | awk '{print $3}')"
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
@@ -1318,8 +1321,8 @@ function create_osp_cluster_b() {
 function test_kubeconfig_aws_cluster_a() {
 # Check that AWS cluster A (public) is up and running
 
-  # Get OCP cluster A version (from file $CLUSTER_A_VERSION)
-  cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION" ]] || cat "$CLUSTER_A_VERSION")"
+  # Get OCP cluster A version (from file $CLUSTER_A_VERSION_FILE)
+  cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION_FILE" ]] || cat "$CLUSTER_A_VERSION_FILE")"
 
   PROMPT "Testing status of AWS cluster A${cl_a_version:+ (OCP Version $cl_a_version)}"
   trap_to_debug_commands;
@@ -1327,7 +1330,7 @@ function test_kubeconfig_aws_cluster_a() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
   test_cluster_status "$CLUSTER_A_NAME"
   cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "$cl_a_version" > "$CLUSTER_A_VERSION"
+  echo "$cl_a_version" > "$CLUSTER_A_VERSION_FILE"
 
   # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 }
@@ -1343,8 +1346,8 @@ function test_kubeconfig_aws_cluster_a() {
 function test_kubeconfig_osp_cluster_b() {
 # Check that OSP cluster B (on-prem) is up and running
 
-  # Get OCP cluster B version (from file $CLUSTER_B_VERSION)
-  cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION" ]] || cat "$CLUSTER_B_VERSION")"
+  # Get OCP cluster B version (from file $CLUSTER_B_VERSION_FILE)
+  cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION_FILE" ]] || cat "$CLUSTER_B_VERSION_FILE")"
 
   PROMPT "Testing status of OSP cluster B${cl_b_version:+ (OCP Version $cl_b_version)}"
   trap_to_debug_commands;
@@ -1352,7 +1355,7 @@ function test_kubeconfig_osp_cluster_b() {
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
   test_cluster_status "$CLUSTER_B_NAME"
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "$cl_b_version" > "$CLUSTER_B_VERSION"
+  echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
 
   # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 }
@@ -1707,7 +1710,7 @@ function remove_submariner_machine_sets() {
 #   PROMPT "Remove previous Submariner images from local Podman registry"
 #
 #   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-#   # Get SubCTL version (from file $SUBCTL_VERSION)
+#   # Get SubCTL version (from file $SUBCTL_VERSION_FILE)
 #
 #   # install_local_podman "${WORKDIR}"
 #
@@ -2655,7 +2658,7 @@ function set_join_parameters_for_cluster_a() {
   PROMPT "Set parameters of SubCtl Join command for AWS cluster A (public)"
   trap_to_debug_commands;
 
-  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_A}"
+  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2664,7 +2667,7 @@ function set_join_parameters_for_cluster_b() {
   PROMPT "Set parameters of SubCtl Join command for OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
-  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_B}"
+  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 
 }
 
@@ -2713,7 +2716,7 @@ function upload_custom_images_to_registry_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_A}"
+  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2724,7 +2727,7 @@ function upload_custom_images_to_registry_cluster_b() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_B}"
+  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 }
 
 # ------------------------------------------
@@ -2806,7 +2809,7 @@ function run_subctl_join_on_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_A}"
+  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2817,7 +2820,7 @@ function run_subctl_join_on_cluster_b() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_B}"
+  run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 
 }
 
@@ -4122,7 +4125,7 @@ export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
 export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
 export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
-# Printing output both to stdout and to $LOG_FILE with tee
+# Printing output both to stdout and to $SYS_LOG with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
   # Print planned steps according to CLI/User inputs
@@ -4288,6 +4291,12 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
   ### Deploy Submariner on the clusters (if not requested to skip_install) ###
 
+  echo -e "# OCP clusters and environment setup is ready.
+  \n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED.
+  \n# ($TEST_STATUS_FILE with exit code 1)"
+
+  echo 1 > $TEST_STATUS_FILE
+
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
@@ -4420,10 +4429,10 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       fi
     fi
 
-    echo "# From this point, if script fails - \$TEST_STATUS_RC is considered UNSTABLE
-    \n# ($TEST_STATUS_RC with exit code 2)"
+    echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE.
+    \n# ($TEST_STATUS_FILE with exit code 2)"
 
-    echo 2 > $TEST_STATUS_RC
+    echo 2 > $TEST_STATUS_FILE
   fi
 
   ### Running Submariner Ginkgo tests
@@ -4482,9 +4491,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
 
   # If script got to here - all tests of Submariner has passed ;-)
-  echo 0 > $TEST_STATUS_RC
+  echo 0 > $TEST_STATUS_FILE
 
-) |& tee -a "$LOG_FILE"
+) |& tee -a "$SYS_LOG"
 
 
 #####################################################################################
@@ -4495,10 +4504,19 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
 cd ${SCRIPT_DIR}
 
-### Upload Junit xmls to Polarion (if requested by user CLI)  ###
-if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-  # Redirecting output both to stdout and LOG_FILE
-  create_all_test_results_in_polarion |& tee -a "$LOG_FILE" || :
+# Get test exit status (from file $TEST_STATUS_FILE)
+test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+echo -e "\n# System tests status was set to [${test_status}] \n"
+
+if [[ -n "$test_status" ]] ; then
+  # Update the script exit code according to system tests status
+  export SCRIPT_RC="$test_status"
+
+  ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
+  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+    # Redirecting output both to stdout and SYS_LOG
+    create_all_test_results_in_polarion |& tee -a "$SYS_LOG" || :
+  fi
 fi
 
 # ------------------------------------------
@@ -4506,27 +4524,26 @@ fi
 ### Creating HTML report from console output ###
 
 echo "# Creating HTML Report from:
-# LOG_FILE = $LOG_FILE
+# SYS_LOG = $SYS_LOG
 # REPORT_NAME = $REPORT_NAME
 # REPORT_FILE = $REPORT_FILE
 "
 
-# Get test exit status (from file $TEST_STATUS_RC)
-test_status="$([[ ! -s "$TEST_STATUS_RC" ]] || cat $TEST_STATUS_RC)"
-
-# prompt message (this is the last print into LOG_FILE
+# prompt message (this is the last print into $SYS_LOG)
 message="Creating HTML Report"
-if [[ -z "$test_status" || "$test_status" -ne 0 ]] ; then
-  message="$message - Test exit status: $test_status"
+
+# If $TEST_STATUS_FILE is not 0 (all Tests passed) or 2 (some tests passed) - it means that system tests have failed
+if [[ "$test_status" != @(0|2) ]] ; then
+  message="$message - System tests failed with exit status: $test_status"
   color="$RED"
 fi
-PROMPT "$message" "$color" |& tee -a "$LOG_FILE"
+PROMPT "$message" "$color" |& tee -a "$SYS_LOG"
 
-# Clean LOG_FILE from sh2ju debug lines (+++), if CLI option: --debug was NOT used
-[[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$LOG_FILE"
+# Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
+[[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
 
-### Run log_to_html() to create REPORT_FILE (html) from LOG_FILE
+### Run log_to_html() to create REPORT_FILE (html) from SYS_LOG
 
 if [[ -n "$REPORT_FILE" ]] ; then
   echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
@@ -4541,7 +4558,7 @@ if [[ -s "$POLARION_REPORTS" ]] ; then
   $(< "$POLARION_REPORTS")"
 fi
 
-log_to_html "$LOG_FILE" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
 
 
 # ------------------------------------------
@@ -4569,7 +4586,7 @@ sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \;
 
 tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
- "$LOG_FILE" \
+ "$SYS_LOG" \
  kubconf_* \
  subm_* \
  *.xml \
@@ -4581,7 +4598,7 @@ tar tvf $report_archive
 
 echo -e "# To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
-echo "# Exiting script with \$test_status return code: [$test_status]"
-exit $test_status
+echo "# Exiting script with \$SCRIPT_RC return code: [$SCRIPT_RC]"
+exit $SCRIPT_RC
 
 # ------------------------------------------
