@@ -4165,10 +4165,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
       ${junit_cmd} create_aws_cluster_a
 
-      # ${junit_cmd} configure_images_prune_cluster_a
-      #
-      # ${junit_cmd} configure_custom_registry_cluster_a
-
     else
       # Running destroy_aws_cluster_a and create_aws_cluster_a separately
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
@@ -4183,10 +4179,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} create_aws_cluster_a
 
-        # ${junit_cmd} configure_images_prune_cluster_a
-        #
-        # ${junit_cmd} configure_custom_registry_cluster_a
-
       fi
     fi
 
@@ -4196,10 +4188,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} destroy_osp_cluster_b
 
       ${junit_cmd} create_osp_cluster_b
-
-      # ${junit_cmd} configure_images_prune_cluster_b
-      #
-      # ${junit_cmd} configure_custom_registry_cluster_b
 
     else
       # Running destroy_osp_cluster_b and create_osp_cluster_b separately
@@ -4213,12 +4201,15 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} create_osp_cluster_b
 
-        # ${junit_cmd} configure_images_prune_cluster_b
-        #
-        # ${junit_cmd} configure_custom_registry_cluster_b
-
       fi
     fi
+
+
+    # Verify clusters status after OCP reset/create
+
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
+
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
 
     ### Cleanup Submariner from all clusters ###
 
@@ -4266,15 +4257,15 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
         ${junit_cmd} configure_custom_registry_cluster_b
     fi
 
+  else
+    # Verify clusters status even if OCP setup/cleanup was skipped
+
+    ${junit_cmd} test_kubeconfig_aws_cluster_a
+
+    ${junit_cmd} test_kubeconfig_osp_cluster_b
+
   fi
   ### END of OCP Clusters Setup ###
-
-
-  # Verify clusters status after OCP setup
-
-  ${junit_cmd} test_kubeconfig_aws_cluster_a
-
-  ${junit_cmd} test_kubeconfig_osp_cluster_b
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
