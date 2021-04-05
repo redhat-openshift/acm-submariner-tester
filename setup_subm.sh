@@ -849,7 +849,7 @@ function test_products_versions() {
   done
 
   # Show image-stream tags
-  ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
+  ${OC} get istag -n ${SUBM_NAMESPACE} | awk 'NR>1 {print $1}' | while read -r img_tag ; do
     echo "# Describe image stream tag: $img_tag"
     ${OC} describe istag $img_tag -n ${SUBM_NAMESPACE} || :
   done
