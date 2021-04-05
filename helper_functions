@@ -1056,7 +1056,7 @@ function create_polarion_testcases_doc_from_junit() {
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
-    local polarion_testcases_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
+    local polarion_testcases_file="$(basename ${junit_xml%.*})" # Get file name without path and extension
     polarion_testcases_file="${polarion_testcases_file//junit}polarion_testcases.xml" # Remove all "junit" from file name, and append "polarion_testcases.xml"
     polarion_testcases_file="$(dirname $junit_xml)/$(basename $polarion_testcases_file)" # Append full path as the original junit_xml file
 
