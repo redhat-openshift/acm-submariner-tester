@@ -2695,13 +2695,15 @@ function write_subctl_join_command() {
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
   subctl_join="${subctl_join} ${pod_debug_flag} --ipsec-debug"
 
-  if [[ ! "$registry_images" =~ ^(y|yes)$ ]] && [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
-    BUG "operator image 'devel' should be the default when using subctl devel binary" \
-    "Add '--version devel' to $join_cmd_file" \
-    "https://github.com/submariner-io/submariner-operator/issues/563"
-    # Workaround
-    subctl_join="${subctl_join} --version devel"
-  fi
+  # TODO: Following bug should be resolved by https://github.com/submariner-io/submariner-operator/pull/1227
+  #
+  # if [[ ! "$registry_images" =~ ^(y|yes)$ ]] && [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
+  #   BUG "operator image 'devel' should be the default when using subctl devel binary" \
+  #   "Add '--version devel' to $join_cmd_file" \
+  #   "https://github.com/submariner-io/submariner-operator/issues/563"
+  #   # Workaround
+  #   subctl_join="${subctl_join} --version devel"
+  # fi
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
   echo "$subctl_join" > "$join_cmd_file"
