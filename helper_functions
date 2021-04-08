@@ -89,11 +89,18 @@ function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
      cmd_eval="$BASH_COMMAND"
-     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{\w+\}|\\\$\w+" 2>/dev/null || : )"
-     for str_key in $var_list ; do
-        key=$(echo $str_key | tr -d "\${}")
-        value="${!key}"
-        cmd_eval="${cmd_eval//$str_key/$value}"
+     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\w+|\\\$\{[^\}]+\}" 2>/dev/null || : )"
+
+     for variable in $var_list ; do
+        var_name=$(echo ${variable%%:*} | tr -d "\${}")
+        value="${!var_name}"
+        if [[ "$variable" =~ [:/] ]] ; then
+          # For complex parameter expansion - replace just the $var_name
+          cmd_eval="${cmd_eval//$var_name/$value}"
+        else
+          # For simple $v or ${v} - replace the whole $variable
+          cmd_eval="${cmd_eval//$variable/$value}"
+        fi
       done
 
       print_cmd_location "$cmd_eval" 2>/dev/null || :
@@ -833,7 +840,7 @@ function get_running_pod_by_label() {
   local tmp_file="`mktemp`_pod_status"
 
   # Wait up to 3 minutes for the pod to be ready
-  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file
+  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file || :
   pod_status="$(head -1 $tmp_file | awk -F '/| ' '{print $2}' | xargs)"
 
   # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
