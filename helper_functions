@@ -88,22 +88,28 @@ function print_cmd_location() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
-     cmd_eval="$BASH_COMMAND"
-     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\w+|\\\$\{[^\}]+\}" 2>/dev/null || : )"
+     cmd_expanded="$BASH_COMMAND"
+     var_values="\n"
 
-     for variable in $var_list ; do
-        var_name=$(echo ${variable%%:*} | tr -d "\${}")
+     # List simple variables ($v or ${v}) first
+     var_list=( $(echo "$cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u) )
+
+     # List complex variables (with parameter expansion) next
+     var_list+=( $(echo "$cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u) )
+
+     for variable in "${var_list[@]}" ; do
+        var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
         value="${!var_name}"
         if [[ "$variable" =~ [:/] ]] ; then
-          # For complex parameter expansion - replace just the $var_name
-          cmd_eval="${cmd_eval/$var_name/$value}"
+          # For complex variables - add it to $var_values
+          var_values+="\$${var_name} = ${value} \n$"
         else
-          # For simple $v or ${v} - replace the whole $variable
-          cmd_eval="${cmd_eval/$variable/$value}"
+          # For simple variables - replace within $cmd_expanded
+          cmd_expanded="${cmd_expanded//$variable/$value}"
         fi
       done
 
-      print_cmd_location "$cmd_eval" 2>/dev/null || :
+      print_cmd_location "${var_values}${cmd_expanded}" 2>/dev/null || :
    fi
   ' DEBUG
 }
