@@ -2388,6 +2388,9 @@ function configure_cluster_custom_registry_secrets() {
 
   echo "# Configure OCP registry global secret"
 
+  wait_for_all_machines_ready || :
+  wait_for_all_nodes_ready || :
+
   local ocp_usr="${1:-$OCP_USR}"
   local ocp_pwd="${2:-$OCP_PWD}"
   local secret_filename="${3:-http.secret}"
@@ -2471,6 +2474,7 @@ function configure_cluster_custom_registry_mirror() {
 
   add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
   add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
+
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 

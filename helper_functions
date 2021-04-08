@@ -96,10 +96,10 @@ function trap_to_debug_commands() {
         value="${!var_name}"
         if [[ "$variable" =~ [:/] ]] ; then
           # For complex parameter expansion - replace just the $var_name
-          cmd_eval="${cmd_eval//$var_name/$value}"
+          cmd_eval="${cmd_eval/$var_name/$value}"
         else
           # For simple $v or ${v} - replace the whole $variable
-          cmd_eval="${cmd_eval//$variable/$value}"
+          cmd_eval="${cmd_eval/$variable/$value}"
         fi
       done
 
