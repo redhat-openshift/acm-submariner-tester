@@ -830,7 +830,11 @@ function test_products_versions() {
     # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
     [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-    submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+    # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+    local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
+    watch_and_retry "$cmd" 3m
+    local submariner_gateway_pod="$($cmd)"
+
     if [[ -n "$submariner_gateway_pod" ]] ; then
       echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
       ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
@@ -2968,7 +2972,11 @@ function test_disaster_recovery_of_gateway_nodes() {
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
+  watch_and_retry "$cmd" 3m
+  local submariner_gateway_pod="$($cmd)"
+
   regex="All controllers stopped or exited"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
@@ -3025,13 +3033,14 @@ function test_submariner_cable_driver() {
 
   PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
-  # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
-
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
+  watch_and_retry "$cmd" 3m
+  local submariner_gateway_pod="$($cmd)"
 
   local regex="(cable.* started|Status:connected)"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
@@ -3134,13 +3143,14 @@ function test_submariner_connection_established() {
 
   PROMPT "Check Submariner Gateway established connection on ${cluster_name}"
 
-  # local submariner_gateway_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-gateway -o jsonpath="{.items[0].metadata.name}")
-
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-  submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
+  local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
+  watch_and_retry "$cmd" 3m
+  local submariner_gateway_pod="$($cmd)"
 
   echo "# Tailing logs in Submariner-Gateway pod [$submariner_gateway_pod] to verify connection between clusters"
   # ${OC} logs $submariner_gateway_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
