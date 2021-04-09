@@ -833,7 +833,7 @@ function test_products_versions() {
     # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
     local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
     watch_and_retry "$cmd" 3m
-    local submariner_gateway_pod="$($cmd)"
+    local submariner_gateway_pod=$($cmd | tr -d \')
 
     if [[ -n "$submariner_gateway_pod" ]] ; then
       echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
@@ -2979,7 +2979,7 @@ function test_disaster_recovery_of_gateway_nodes() {
   # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
   watch_and_retry "$cmd" 3m
-  local submariner_gateway_pod="$($cmd)"
+  local submariner_gateway_pod=$($cmd | tr -d \')
 
   regex="All controllers stopped or exited"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
@@ -3044,7 +3044,7 @@ function test_submariner_cable_driver() {
   # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
   watch_and_retry "$cmd" 3m
-  local submariner_gateway_pod="$($cmd)"
+  local submariner_gateway_pod=$($cmd | tr -d \')
 
   local regex="(cable.* started|Status:connected)"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
@@ -3154,7 +3154,7 @@ function test_submariner_connection_established() {
   # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" `"
   local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
   watch_and_retry "$cmd" 3m
-  local submariner_gateway_pod="$($cmd)"
+  local submariner_gateway_pod=$($cmd | tr -d \')
 
   echo "# Tailing logs in Submariner-Gateway pod [$submariner_gateway_pod] to verify connection between clusters"
   # ${OC} logs $submariner_gateway_pod -n ${SUBM_NAMESPACE} | grep "received packet" -C 2 || submariner_status=DOWN
