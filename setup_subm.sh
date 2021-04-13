@@ -2542,7 +2542,7 @@ function delete_old_submariner_images_from_current_cluster() {
     $SUBM_IMG_BUNDLE \
     ; do
     echo "# Deleting image stream: $img_stream"
-    oc delete is "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found
+    oc delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
     # oc tag -d submariner-operator/${img_stream}
   done
 
