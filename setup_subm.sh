@@ -830,10 +830,7 @@ function test_products_versions() {
     # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
     [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-    # local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
-    local cmd="${OC} get pod -n ${SUBM_NAMESPACE} -l $gw_label -o jsonpath='{.items[0].metadata.name}'"
-    watch_and_retry "$cmd" 3m
-    local submariner_gateway_pod=$($cmd | tr -d \')
+    local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
 
     if [[ -n "$submariner_gateway_pod" ]] ; then
       echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
