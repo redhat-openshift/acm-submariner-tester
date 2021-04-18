@@ -217,15 +217,19 @@ function run_and_tail() {
   # Check the exit code of the command PID
   wait $pid || process_rc="$?"
 
+  if [[ "$process_rc" = 124 ]] ; then
+    echo -e "\n# Timeout of $duration has exceeded while running [$cmd]"
+  elif [[ ! "$process_rc" = 0 ]] ; then
+    echo -e "\n# Command [$cmd] has failed (Error $process_rc)"
+  fi
+
   if [[ -n "$regex" ]] ; then
+    # When searching for regex in log, it will ignore cmd exit code
     process_rc=0
     grep "$regex" "$log_to_tail" || process_rc="$?"
     [[ "$process_rc" = 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
-
-  [[ "$process_rc" = 0 ]] || \
-  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $process_rc)"
 
   return $process_rc
 }
