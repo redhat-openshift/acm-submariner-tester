@@ -3922,7 +3922,7 @@ function collect_submariner_info() {
   local log_file="${1:-subm_pods.log}"
 
   (
-    PROMPT "Collecting Submariner pods logs due to test failure" "$RED"
+    PROMPT "Collecting system information due to test failure" "$RED"
     trap_to_debug_commands;
 
     df -h
@@ -3962,6 +3962,8 @@ function collect_submariner_info() {
 function print_resources_and_pod_logs() {
   trap_to_debug_commands;
   local cluster_name="$1"
+
+  PROMPT "Submariner logs and resources data on ${cluster_name}"
 
   echo -e "
   \n################################################################################################ \
@@ -4047,6 +4049,8 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
+
+  print_pod_logs_in_namespace "$cluster_name" "kube-system" "component=kube-controller-manager"
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 

@@ -92,10 +92,10 @@ function trap_to_debug_commands() {
      var_values="\n"
 
      # List simple variables ($v or ${v}) first
-     var_list=( $(echo "$cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u) )
+     var_list=( $(echo "$cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
 
      # List complex variables (with parameter expansion) next
-     var_list+=( $(echo "$cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u) )
+     var_list+=( $(echo "$cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
      for variable in "${var_list[@]}" ; do
         var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
