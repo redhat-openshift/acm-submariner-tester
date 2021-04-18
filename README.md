@@ -26,7 +26,6 @@ Running with pre-defined parameters (optional):
   * Override images from a custom registry: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--registry-images
   * Configure and test Service Discovery:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--service-discovery
   * Configure and test GlobalNet: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--globalnet
-  * Use specific IPSec (cable driver): &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--cable-driver [libreswan / strongswan]
   * Skip Submariner installation on all clusters: &ensp;&ensp;&ensp;&ensp;&ensp;--skip-install
 
 

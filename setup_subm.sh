@@ -79,7 +79,6 @@ Running with pre-defined parameters (optional):
   * Override images from a custom registry:            --registry-images
   * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
-  * Use specific IPSec (cable driver):                 --cable-driver [libreswan / strongswan DEPRECATED]
   * Skip Submariner installation on all clusters:      --skip-install
 
 - Submariner test options:
@@ -289,7 +288,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    subm_cable_driver="$2" # libreswan / strongswan
+    subm_cable_driver="$2" # libreswan / strongswan [Deprecated]
     shift 2 ;;
   --skip-ocp-setup)
     skip_ocp_setup=YES
@@ -539,7 +538,7 @@ reset_cluster_b=${reset_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
 service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
-subm_cable_driver=${subm_cable_driver:-libreswan}
+# subm_cable_driver=${subm_cable_driver:-libreswan} [Deprecated]
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
 skip_ocp_setup=${skip_ocp_setup:-NO}
@@ -824,19 +823,16 @@ function test_products_versions() {
   }
   done
 
-  if [[ "${subm_cable_driver}" =~ libreswan ]] ; then
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-    local gw_label='app=submariner-gateway'
-    # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-    [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
+  local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
 
-    local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
-
-    if [[ -n "$submariner_gateway_pod" ]] ; then
-      echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
-      ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-      echo -e "\n\n"
-    fi
+  if [[ -n "$submariner_gateway_pod" ]] ; then
+    echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
+    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+    echo -e "\n\n"
   fi
 
   # Show images
@@ -3219,12 +3215,6 @@ function test_ipsec_status() {
     FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
   fi
 
-  if [[ "${subm_cable_driver}" =~ strongswan ]] ; then
-    echo "# Verify StrongSwan URI: "
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c \
-    "swanctl --list-sas --uri unix:///var/run/charon.vici" |& (! highlight "CONNECTING, IKEv2" ) || FAILURE "StrongSwan URI error"
-  fi
-
 }
 
 # ------------------------------------------
@@ -3371,7 +3361,7 @@ function test_clusters_connected_by_service_ip() {
 
     if ! ${OC} exec ${CURL_CMD} ; then
       FAILURE "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
-      \n Maybe you installed clusters with overlapping CIDRs ?"
+      \n Did you install clusters with overlapping CIDRs ?"
     fi
 
       # *   Trying 100.96.72.226:8080...
@@ -3721,7 +3711,6 @@ function test_submariner_packages() {
   # go test -v -cover \
   # ./pkg/apis/submariner.io/v1 \
   # ./pkg/cable/libreswan \
-  # ./pkg/cable/strongswan \
   # ./pkg/cableengine/syncer \
   # ./pkg/controllers/datastoresyncer \
   # ./pkg/controllers/tunnel \
