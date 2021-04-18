@@ -1406,6 +1406,8 @@ function test_cluster_status() {
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
+
+  wait_for_all_nodes_ready
 }
 
 # ------------------------------------------
