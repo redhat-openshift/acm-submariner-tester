@@ -823,7 +823,7 @@ function install_nginx_service() {
   if [[ -n "$target_namespace" ]] ; then
     echo "# Create Namespace for Nginx: $target_namespace"
     # delete_namespace_and_crds "${target_namespace}"
-    ${OC} create namespace "${target_namespace}" || echo "# Existing namespace \"${target_namespace}\" (ignore error)"
+    create_namespace "${target_namespace}"
   fi
 
   echo "# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
@@ -837,6 +837,18 @@ function install_nginx_service() {
   echo "# Wait 3 minutes for Ngnix service to be ready:"
   ${OC} rollout status --timeout=3m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
+
+}
+
+# ------------------------------------------
+
+# Function to create a namespace, if it does not exist
+function create_namespace() {
+  trap_to_debug_commands;
+
+  local ns=$1
+  # Create the namespace with the API directly
+  echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
 
 }
 

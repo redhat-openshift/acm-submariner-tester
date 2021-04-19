@@ -1619,7 +1619,7 @@ function delete_submariner_test_namespaces() {
   for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
     if [[ -n "$ns" ]]; then
       delete_namespace_and_crds "$ns"
-      # ${OC} create namespace "$ns" || : # || : to ignore none-zero exit code
+      # create_namespace "$ns"
     fi
   done
 
@@ -1763,7 +1763,7 @@ function configure_namespace_for_submariner_tests() {
   echo "# Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was set in variables file)"
   if [[ -n "$TEST_NS" ]] ; then
     echo "# Create namespace for Submariner tests: ${TEST_NS}"
-    ${OC} create namespace "${TEST_NS}" || echo "# '${TEST_NS}' namespace already exists, please ignore message"
+    create_namespace "${TEST_NS}"
   else
     echo "# Using the 'default' namespace for Submariner tests"
     export TEST_NS=default
@@ -1790,7 +1790,7 @@ function install_netshoot_app_on_cluster_a() {
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
-  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
+  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
 
   ${OC} delete pod ${NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -1839,7 +1839,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
   echo "# Install $netshoot_pod on OSP cluster B, and verify connectivity on the SAME cluster, to ${nginx_IP_cluster_b}:${NGINX_PORT}"
 
-  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
+  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -2630,7 +2630,7 @@ function create_docker_registry_secret() {
   echo -e "# Creating new docker-registry in '$namespace' namespace:
   \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
 
-  ${OC} create namespace "$namespace" || echo "Namespace '${namespace}' already exists"
+  create_namespace "${namespace}"
 
   ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
 
@@ -2763,7 +2763,7 @@ function upload_custom_images_to_registry() {
   \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
   \n# Version tag: ${SUBM_VER_TAG}"
 
-  ${OC} create namespace "$SUBM_NAMESPACE" || echo "Using existing '${SUBM_NAMESPACE}' namespace"
+  create_namespace "$SUBM_NAMESPACE"
 
   for img in \
     $SUBM_IMG_GATEWAY \
@@ -3506,7 +3506,7 @@ function install_new_netshoot_cluster_a() {
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
-  [[ -z "$TEST_NS" ]] || ${OC} create namespace "$TEST_NS" || : # || : to ignore none-zero exit code
+  [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS"
 
   ${OC} delete pod ${NEW_NETSHOOT_CLUSTER_A} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
