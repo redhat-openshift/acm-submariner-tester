@@ -1086,10 +1086,12 @@ function download_subctl_by_tag() {
 
     # Download SubCtl from private repository (e.g. gitlab), if using --registry-images and not subctl-devel tag
     if [[ ! "$subctl_tag" =~ devel ]] && \
-    [[ "$registry_images" =~ ^(y|yes)$ ]] && \
-    [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
+        [[ "$registry_images" =~ ^(y|yes)$ ]] && \
+        [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
 
       echo "# Downloading SubCtl from a private repository"
+
+
 
       BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
       "Get the latest subctl release number (without letters)"
@@ -1097,18 +1099,38 @@ function download_subctl_by_tag() {
       if [[ ! "$subctl_tag" =~ ^v[0-9\.]+  ]]; then
         subctl_tag="$(get_latest_subctl_version_tag)"
       fi
-      # Temporarily fix for GitLab releases - the version can only include numbers and dots, trim all other chars
-      subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
 
-      echo "# SubCtl download url: $SUBCTL_PRIVATE_URL/${subctl_tag}/subctl"
+      # TODO: Move to global vars:
+      # local subctl_image_url="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
+      local subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:${subctl_tag}"
+      local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
 
-      ( # subshell to hide commands
-        local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
-        local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
+      if ( ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm ) ; then
 
-        curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
-        [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
-      )
+        echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
+        tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
+
+        # Rename last extracted file to subctl
+        extracted_file="$(ls -1 -tu subctl* | head -1)"
+
+        [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+        chmod +x subctl
+
+      # Temporarily fix - Downloading subctl from GitLab (SUBCTL_PRIVATE_URL):
+      else
+        # For GitLab releases - the version can only include numbers and dots - trimming all other chars
+        subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
+
+        echo "# SubCtl binary will be extracted from: $SUBCTL_PRIVATE_URL/${subctl_tag}/subctl"
+        ( # subshell to hide commands
+          local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
+          local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
+
+          curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
+          [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
+        )
+
+      fi
 
       echo "# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
