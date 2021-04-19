@@ -1761,12 +1761,12 @@ function configure_namespace_for_submariner_tests() {
   trap_to_debug_commands;
 
   echo "# Set the default namespace to "${TEST_NS}" (if TEST_NS parameter was set in variables file)"
-  if [[ -z "$TEST_NS" ]] ; then
-    export TEST_NS=default
+  if [[ -n "$TEST_NS" ]] ; then
     echo "# Create namespace for Submariner tests: ${TEST_NS}"
     ${OC} create namespace "${TEST_NS}" || echo "# '${TEST_NS}' namespace already exists, please ignore message"
   else
     echo "# Using the 'default' namespace for Submariner tests"
+    export TEST_NS=default
   fi
 
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
@@ -3963,7 +3963,7 @@ function print_resources_and_pod_logs() {
   trap_to_debug_commands;
   local cluster_name="$1"
 
-  PROMPT "Submariner logs and resources data on ${cluster_name}"
+  PROMPT "Submariner logs and OCP events on ${cluster_name}"
 
   echo -e "
   \n################################################################################################ \
