@@ -4300,17 +4300,15 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
   echo 1 > $TEST_STATUS_FILE
 
+  # Running download_and_install_subctl
+  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+  fi
+
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
-
-    # Running download_and_install_subctl
-    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-    fi
 
     ${junit_cmd} test_subctl_command
 
