@@ -2155,6 +2155,11 @@ function install_broker_aws_cluster_a() {
   rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
 
   echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
+
+  BUG "For Submariner 0.9+ operator image should be accessible before broker deploy" \
+  "Run broker deployment after uploading custom images to the cluster registry" \
+  "https://github.com/submariner-io/submariner-website/issues/483"
+
   $DEPLOY_CMD
 }
 
@@ -4338,10 +4343,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} label_first_gateway_cluster_b
 
-    ${junit_cmd} install_broker_aws_cluster_a
-
-    ${junit_cmd} test_broker_before_join
-
     ${junit_cmd} set_join_parameters_for_cluster_a
 
     ${junit_cmd} set_join_parameters_for_cluster_b
@@ -4354,6 +4355,10 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} upload_custom_images_to_registry_cluster_b
 
     fi
+
+    ${junit_cmd} install_broker_aws_cluster_a
+
+    ${junit_cmd} test_broker_before_join
 
     ${junit_cmd} run_subctl_join_on_cluster_a
 
