@@ -628,7 +628,9 @@ function show_test_plan() {
 
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b
+    - test_public_ip_on_gateway_node
     - test_disaster_recovery_of_gateway_nodes
+    - test_renewal_of_gateway_and_public_ip
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
     - test_subctl_show_on_merged_kubeconfigs
@@ -2951,6 +2953,27 @@ function test_submariner_resources_status() {
 
 # ------------------------------------------
 
+function test_public_ip_on_gateway_node() {
+# Testing that Submariner Gateway node received public (external) IP
+  PROMPT "Testing that Submariner Gateway node received public (external) IP"
+  trap_to_debug_commands;
+
+  # Should be run on the Broker cluster
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+
+  local public_ip=$(get_external_ips_of_worker_nodes)
+  echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
+
+  BUG "When upgrading Submariner 0.8 to 0.9 - Lighthouse replica-set may fail to start" \
+  "No workaround" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1951587"
+
+  verify_gateway_public_ip "$public_ip"
+
+}
+
+# ------------------------------------------
+
 function test_disaster_recovery_of_gateway_nodes() {
 # Check that submariner tunnel works if broker nodes External-IPs (on gateways) is changed
   PROMPT "Testing Disaster Recovery: Reboot Submariner-Gateway VM, to verify re-allocation of public (external) IP"
@@ -2958,11 +2981,8 @@ function test_disaster_recovery_of_gateway_nodes() {
 
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
+  # Should be run on the Broker cluster
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-
-  local public_ip=$(get_external_ips_of_worker_nodes)
-  echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
-  verify_gateway_public_ip "$public_ip"
 
   echo "# Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
   gateway_aws_instance_ids="$(aws ec2 describe-instances \
@@ -2990,6 +3010,18 @@ function test_disaster_recovery_of_gateway_nodes() {
       FATAL "AWS-CLI reboot VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME has failed"
   fi
 
+}
+
+# ------------------------------------------
+
+function test_renewal_of_gateway_and_public_ip() {
+# Testing that Submariner Gateway node received public (external) IP
+  PROMPT "Testing that Submariner Gateway was re-created with new public IP"
+  trap_to_debug_commands;
+
+  # Should be run on the Broker cluster
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+
   echo "# Watching Submariner Gateway pod - It should create new Gateway:"
 
   local gw_label='app=submariner-gateway'
@@ -3001,12 +3033,12 @@ function test_disaster_recovery_of_gateway_nodes() {
   watch_and_retry "$cmd" 3m
   local submariner_gateway_pod=$($cmd | tr -d \')
 
-  regex="All controllers stopped or exited"
+  local regex="All controllers stopped or exited"
   # Watch submariner-gateway pod logs for 200 (10 X 20) seconds
   watch_pod_logs "$submariner_gateway_pod" "${SUBM_NAMESPACE}" "$regex" 10 || :
 
-  public_ip=$(get_external_ips_of_worker_nodes)
-  echo -e "\n\n# After VM reboot - Gateway public (external) IP should be: $public_ip \n"
+  local public_ip=$(get_external_ips_of_worker_nodes)
+  echo -e "\n\n# The new Gateway public (external) IP should be: $public_ip \n"
   verify_gateway_public_ip "$public_ip"
 
 }
@@ -3014,7 +3046,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 # ------------------------------------------
 
 function verify_gateway_public_ip() {
-# sub-function for test_disaster_recovery_of_gateway_nodes
+# sub-function for test_disaster_recovery_of_gateway_nodes functions
   trap_to_debug_commands;
 
   local public_ip="$1"
@@ -4370,7 +4402,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ### Running High-level (System) tests of Submariner ###
 
+    ${junit_cmd} test_public_ip_on_gateway_node
+
     ${junit_cmd} test_disaster_recovery_of_gateway_nodes
+
+    ${junit_cmd} test_renewal_of_gateway_and_public_ip
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
