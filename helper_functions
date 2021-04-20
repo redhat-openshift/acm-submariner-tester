@@ -854,9 +854,70 @@ function create_namespace() {
 
 # ------------------------------------------
 
+# Function to print details of all used images in the running pods of a namespace
+function print_images_info_of_namespace_pods() {
+  # Do not trap_to_debug_commands
+
+  local namespace=$1 # Default is current context namespace
+
+  echo -e "\n### Images of the running pods ${namespace:+in $namespace Namespace }###"
+
+  for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
+  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
+  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
+    print_image_info "$img_id"
+  done
+
+}
+
+# ------------------------------------------
+
+# Function to print container details of an image
+function print_image_info() {
+  # Do not trap_to_debug_commands
+
+  local img_id=$1
+  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+
+  echo -e "\n### $(echo $img_id | sed -r 's|.*/([^@]+).*|\1|') Image ###"
+  echo "id=${img_id}"
+
+  # Get info from image if the original image id is accessible by url
+  ${OC} image info $img_id 2>/dev/null | grep -Po "$regex_container_info" || \
+  {
+    # Otherwise, get the info from local copy of the image
+    img_id=$(echo $img_id | awk -F '@' '{print $2}')
+    ${OC} describe image $img_id 2>/dev/null | grep -Po "$regex_container_info"
+  } || :
+
+}
+
+# ------------------------------------------
+
+# Function to print details of all image tags info in namespace
+function print_image_tags_info() {
+  # Do not trap_to_debug_commands
+
+  local namespace=$1 # Default is current context namespace
+  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+
+  echo -e "\n### ImageStream Tags ${namespace:+(in namespace $namespace) }###"
+
+  # Show image-stream tags
+  ${OC} get istag ${namespace:+-n $namespace} | awk 'NR>1 {print $1}' | \
+  while read -r img_tag ; do
+    echo -e "\n### $(echo $img_tag | sed -r 's|.*/([^@]+).*|\1|') Image-Stream tag ###"
+    ${OC} describe istag $img_tag ${namespace:+-n $namespace} 2>/dev/null \
+    | grep -Po "$regex_container_info" || :
+  done
+
+}
+
+# ------------------------------------------
+
 # Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
 function get_running_pod_by_label() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
   local tmp_file="`mktemp`_pod_status"
@@ -925,7 +986,7 @@ function wait_for_all_machines_ready() {
 
 # Function to return (print) the all worker node ids, that have an external ip (nothing if none)
 function get_worker_nodes_with_external_ip() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
 }
 
@@ -933,7 +994,7 @@ function get_worker_nodes_with_external_ip() {
 
 # Function to return (print) all external ips of worker nodes (nothing if none)
 function get_external_ips_of_worker_nodes() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}'
 }
 

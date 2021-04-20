@@ -811,18 +811,32 @@ function test_products_versions() {
 
   subctl show versions || :
 
-  local regex="\s+\K(name=|url=|version=|release=).*"
-  for img in $(${OC} get pods -n ${SUBM_NAMESPACE} -o jsonpath="{..imageID}" \
-  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
-  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
-    echo -e "\n### $(echo $img | sed -r 's|.*/([^@]+).*|\1|') Image ###"
-    echo "id=${img}"
-    ${OC} image info $img 2>/dev/null | grep -Po "$regex" || {
-    img=$(echo $img | awk -F '@' '{print $2}')
-    ${OC} describe image $img 2>/dev/null | grep -Po "$regex" || continue
-  }
-  done
+  # Show images info of running pods
+  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
 
+  # Show image-stream tags
+  print_image_tags_info "${SUBM_NAMESPACE}"
+
+  # # Show REGISTRY_MIRROR images
+  # ${OC} get images | grep "${REGISTRY_MIRROR}" |\
+  # grep "$SUBM_IMG_GATEWAY|\
+  #     $SUBM_IMG_ROUTE|\
+  #     $SUBM_IMG_NETWORK|\
+  #     $SUBM_IMG_LIGHTHOUSE|\
+  #     $SUBM_IMG_COREDNS|\
+  #     $SUBM_IMG_GLOBALNET|\
+  #     $SUBM_IMG_OPERATOR|\
+  #     $SUBM_IMG_BUNDLE" |\
+  # while read -r line ; do
+  #   set -- $(echo $line | awk '{ print $1, $2 }')
+  #   local img_id="$1"
+  #   local img_name="$2"
+  #
+  #   echo -e "\n### Local registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|') ###"
+  #   print_image_info "$img_id"
+  # done
+
+  # Show Libreswan (cable driver) version in the active gateway pod
   local gw_label='app=submariner-gateway'
   # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
@@ -834,22 +848,6 @@ function test_products_versions() {
     ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
     echo -e "\n\n"
   fi
-
-  # Show images
-  ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
-    set -- $(echo $line | awk '{ print $1, $2 }')
-    local img_sha="$1"
-    local img_name="$2"
-
-    echo "# Describe registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
-    ${OC} describe image $img_sha || :
-  done
-
-  # Show image-stream tags
-  ${OC} get istag -n ${SUBM_NAMESPACE} | awk 'NR>1 {print $1}' | while read -r img_tag ; do
-    echo "# Describe image stream tag: $img_tag"
-    ${OC} describe istag $img_tag -n ${SUBM_NAMESPACE} || :
-  done
 
 }
 
@@ -2826,8 +2824,8 @@ function upload_custom_images_to_registry() {
   # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
   # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
   # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
-  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
-  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
+  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
+  # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
 
   echo "# Write the \"--image-override\" parameters into the join command file: $join_cmd_file"
   echo "$subctl_join" > "$join_cmd_file"
