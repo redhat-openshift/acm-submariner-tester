@@ -1105,6 +1105,8 @@ function git_reset_local_repo() {
   # Optional param: branch or tag to pull (default is latest branch)
   local branch_or_tag=${1:-$(git remote show origin | awk '/HEAD branch/ { print $3 }')}
 
+  git config --get-all remote.origin.fetch
+  git config --unset-all remote.origin.fetch
   git fetch --prune --all
   git branch -m $branch_or_tag
   # git branch -u origin $branch_or_tag
