@@ -2945,7 +2945,7 @@ function test_submariner_resources_status() {
     "No workaround yet" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1921824"
 
-    FATAL "Submariner installation failure occurred on $cluster_name.
+    FAILURE "Submariner installation failure occurred on $cluster_name.
     Resources/CRDs were not installed, or Submariner pods have crashed."
   fi
 

@@ -860,12 +860,12 @@ function print_images_info_of_namespace_pods() {
 
   local namespace=$1 # Default is current context namespace
 
-  echo -e "\n### Images of the running pods ${namespace:+in $namespace Namespace }###"
+  echo -e "\n### Images of Pods ${namespace:+(in namespace $namespace) }###"
 
   for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
   # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
-    print_image_info "$img_id"
+    print_image_info "$img_id" || continue
   done
 
 }
@@ -908,7 +908,7 @@ function print_image_tags_info() {
   while read -r img_tag ; do
     echo -e "\n### $(echo $img_tag | sed -r 's|.*/([^@]+).*|\1|') Image-Stream tag ###"
     ${OC} describe istag $img_tag ${namespace:+-n $namespace} 2>/dev/null \
-    | grep -Po "$regex_container_info" || :
+    | grep -Po "$regex_container_info" || continue
   done
 
 }
