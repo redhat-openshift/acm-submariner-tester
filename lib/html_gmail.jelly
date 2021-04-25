@@ -87,15 +87,15 @@ ${logger.println("# Email template generation #" )}
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-2
+       CHANGES-3
       </b>
      </td>
     </tr>
     <!-- <j:set var="scmChanges" value="${build.changeSets}" /> -->
     <!-- <j:set var="reverseChanges" value="${build.changeSet.items.reverse()}" /> -->
     <j:set var="reverseChanges" value="${build.changeSets.toArray()}" />
-    ${logger.println("Number of change sets (reversed) = " + build.changeSets.toArray() )}
-    <j:set var="reverseIndex" value="${reverseChanges.length}" />
+    ${logger.println("Number of change sets (reversed) = " + reverseChanges )}
+    <j:set var="reverseIndex" value="${reverseChanges.size() - 1}" />
     ${logger.println("Number of change sets (reversed) = " + reverseIndex )}
 
     <!-- <j:set var="scmChanges" value="${build.changeSet.items}" /> -->
