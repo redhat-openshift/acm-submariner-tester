@@ -1,5 +1,6 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
+${logger.println("# Email template generation #" )}
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
@@ -86,14 +87,12 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-9
+       CHANGES-10
       </b>
      </td>
     </tr>
-
-    <!-- <j:forEach var="cs" items="${scmChangeSet}" varStatus="loop"> -->
     <j:set var="changes" value="${build.changeSets}" />
-    ${logger.println("# Template log output #" )}
+
     ${logger.println("changes.size() = " + changes.size() )}
     <j:set var="reverseIndex" value="${changes.size() - 1}" />
     ${logger.println("reverseIndex = " + reverseIndex )}
