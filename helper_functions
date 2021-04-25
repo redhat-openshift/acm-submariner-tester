@@ -88,15 +88,28 @@ function print_cmd_location() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
-     cmd_eval="$BASH_COMMAND"
-     var_list="$(echo "$cmd_eval" | grep -ohP "\\\$\{?\w+\}?" 2>/dev/null || : )"
-     for str_key in $var_list ; do
-        key=$(echo $str_key | tr -d "\${}")
-        value="${!key}"
-        cmd_eval="${cmd_eval//$str_key/$value}"
+     cmd_expanded="$BASH_COMMAND"
+     var_values="\n"
+
+     # List simple variables ($v or ${v}) first
+     var_list=( $(echo "$cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
+
+     # List complex variables (with parameter expansion) next
+     var_list+=( $(echo "$cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
+
+     for variable in "${var_list[@]}" ; do
+        var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+        value="${!var_name}"
+        if [[ "$variable" =~ [:/] ]] ; then
+          # For complex variables - add it to $var_values
+          var_values+="\$${var_name} = ${value} \n$"
+        else
+          # For simple variables - replace within $cmd_expanded
+          cmd_expanded="${cmd_expanded//$variable/$value}"
+        fi
       done
 
-      print_cmd_location "$cmd_eval" 2>/dev/null || :
+      print_cmd_location "${var_values}${cmd_expanded}" 2>/dev/null || :
    fi
   ' DEBUG
 }
@@ -110,15 +123,15 @@ function trap_to_debug_commands() {
 function trap_function_on_error() {
   trap - DEBUG # DONT trap_to_debug_commands
 
-  func_to_eval="$@"
+  local func_on_script_error="$@"
 
-  # If other traps already set, add them first
+  # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
   trap_cmd='rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
-  [[ -z "'"$current_traps"'" ]] || ('${current_traps}') || : ;
-  [[ "$rc" = "0" ]] || '$func_to_eval''
+  [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
+  [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
   echo -e "\n# Trapping on script EXIT: \n${trap_cmd} \n"
   trap "$trap_cmd" EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
@@ -204,15 +217,19 @@ function run_and_tail() {
   # Check the exit code of the command PID
   wait $pid || process_rc="$?"
 
+  if [[ "$process_rc" = 124 ]] ; then
+    echo -e "\n# Timeout of $duration has exceeded while running [$cmd]"
+  elif [[ ! "$process_rc" = 0 ]] ; then
+    echo -e "\n# Command [$cmd] has failed (Error $process_rc)"
+  fi
+
   if [[ -n "$regex" ]] ; then
+    # When searching for regex in log, it will ignore cmd exit code
     process_rc=0
     grep "$regex" "$log_to_tail" || process_rc="$?"
     [[ "$process_rc" = 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
-
-  [[ "$process_rc" = 0 ]] || \
-  echo -e "\n# Command [$cmd] has failed, or $duration timeout exceeded (Error $process_rc)"
 
   return $process_rc
 }
@@ -806,7 +823,7 @@ function install_nginx_service() {
   if [[ -n "$target_namespace" ]] ; then
     echo "# Create Namespace for Nginx: $target_namespace"
     # delete_namespace_and_crds "${target_namespace}"
-    ${OC} create namespace "${target_namespace}" || echo "# Existing namespace \"${target_namespace}\" (ignore error)"
+    create_namespace "${target_namespace}"
   fi
 
   echo "# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
@@ -825,15 +842,88 @@ function install_nginx_service() {
 
 # ------------------------------------------
 
+# Function to create a namespace, if it does not exist
+function create_namespace() {
+  trap_to_debug_commands;
+
+  local ns=$1
+  # Create the namespace with the API directly
+  echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
+
+}
+
+# ------------------------------------------
+
+# Function to print details of all used images in the running pods of a namespace
+function print_images_info_of_namespace_pods() {
+  # Do not trap_to_debug_commands
+
+  local namespace=$1 # Default is current context namespace
+
+  echo -e "\n### Images of Pods ${namespace:+(in namespace $namespace) }###"
+
+  for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
+  | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
+  # for img in $(${OC} get images | awk '$0 ~ ENVIRON["REGISTRY_MIRROR"] { print $1 }') ; do
+    print_image_info "$img_id" || continue
+  done
+
+}
+
+# ------------------------------------------
+
+# Function to print container details of an image
+function print_image_info() {
+  # Do not trap_to_debug_commands
+
+  local img_id=$1
+  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+
+  echo -e "\n### $(echo $img_id | sed -r 's|.*/([^@]+).*|\1|') Image ###"
+  echo "id=${img_id}"
+
+  # Get info from image if the original image id is accessible by url
+  ${OC} image info $img_id 2>/dev/null | grep -Po "$regex_container_info" || \
+  {
+    # Otherwise, get the info from local copy of the image
+    img_id=$(echo $img_id | awk -F '@' '{print $2}')
+    ${OC} describe image $img_id 2>/dev/null | grep -Po "$regex_container_info"
+  } || :
+
+}
+
+# ------------------------------------------
+
+# Function to print details of all image tags info in namespace
+function print_image_tags_info() {
+  # Do not trap_to_debug_commands
+
+  local namespace=$1 # Default is current context namespace
+  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+
+  echo -e "\n### ImageStream Tags ${namespace:+(in namespace $namespace) }###"
+
+  # Show image-stream tags
+  ${OC} get istag ${namespace:+-n $namespace} | awk 'NR>1 {print $1}' | \
+  while read -r img_tag ; do
+    echo -e "\n### $(echo $img_tag | sed -r 's|.*/([^@]+).*|\1|') Image-Stream tag ###"
+    ${OC} describe istag $img_tag ${namespace:+-n $namespace} 2>/dev/null \
+    | grep -Po "$regex_container_info" || continue
+  done
+
+}
+
+# ------------------------------------------
+
 # Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
 function get_running_pod_by_label() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
   local tmp_file="`mktemp`_pod_status"
 
   # Wait up to 3 minutes for the pod to be ready
-  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file
+  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file || :
   pod_status="$(head -1 $tmp_file | awk -F '/| ' '{print $2}' | xargs)"
 
   # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
@@ -874,7 +964,7 @@ function wait_for_all_machines_ready() {
 ### function to wait for all Machine Configuration to be ready, with optional timeout duration
   trap_to_debug_commands
 
-  local duration=${1:-15m} # Default is 3 minutes
+  local duration=${1:-20m} # Default is 20 minutes
 
   echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
@@ -896,7 +986,7 @@ function wait_for_all_machines_ready() {
 
 # Function to return (print) the all worker node ids, that have an external ip (nothing if none)
 function get_worker_nodes_with_external_ip() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
 }
 
@@ -904,7 +994,7 @@ function get_worker_nodes_with_external_ip() {
 
 # Function to return (print) all external ips of worker nodes (nothing if none)
 function get_external_ips_of_worker_nodes() {
-  # Do not trap_command, so it will not be printed as return value
+  # Do not trap_to_debug_commands, so it will not be printed as return value
   ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $7}'
 }
 
@@ -956,11 +1046,18 @@ function print_pod_logs_in_namespace() {
 
   echo -e "\n##################### Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace #####################\n"
 
-  for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      echo -e "\n### Pod $pod in Namespace $namespace ###\n"
-      ${OC} -n $namespace describe pod $pod || :
-      ${OC} -n $namespace get pod $pod -o yaml || :
+  for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}') ; do
+    echo -e "\n### Pod $pod in cluster: $cluster_name, namespace: $namespace ###\n"
+    ${OC} -n $namespace describe pod $pod || :
+    ${OC} -n $namespace get pod $pod -o yaml || :
+
+    if [[ "$(${OC} get pods -n $namespace $pod -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
+      echo -e "\n### Active pod $pod logs ###\n"
       ${OC} -n $namespace logs $pod --timestamps --tail=500 || :
+    else
+      echo -e "\n### Terminated (previous) pod $pod logs ###\n"
+      ${OC} -n $namespace logs -p $pod --timestamps --tail=500 || :
+    fi
   done
 }
 
@@ -969,15 +1066,24 @@ function print_pod_logs_in_namespace() {
 function build_go_repo() {
 ### Pull and build a GO project from URL ###
   trap_to_debug_commands;
-  local repo_url="${1#*://}"
 
-  echo "# Download the repo with GO: "
-  GO111MODULE="off" go get -v $repo_url/... || echo "# GO get '$repo_url/...' might have had errors"
+  local repo_url="${1#*://}" # For go get we need to trim the "https://"
+
+  # Optional: branch or tag to pull (the default is latest branch)
+  # local branch_or_tag=${2:+@$2}
+  local branch_or_tag=${2}
+
+  # local go_repo_and_branch="${repo_url}/...${branch_or_tag}"
+  local go_repo_and_branch="${repo_url}/..."
+
+  echo "# Downloading the repo [${go_repo_and_branch}] with GO: "
+  # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo "# 'go get ${go_repo_and_branch} might have had errors"
+  GO111MODULE="off" go get -v ${go_repo_and_branch} || echo "# GO get '${go_repo_and_branch}' might have had errors"
 
   echo "# Pull latest changes with Git: "
   cd $GOPATH/src/$repo_url
 
-  git_reset_local_repo
+  git_reset_local_repo ${branch_or_tag}
 
   echo "# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
@@ -996,14 +1102,19 @@ function build_go_repo() {
 function git_reset_local_repo() {
   trap_to_debug_commands;
 
-  #git fetch && git reset --hard && git clean -fdx && git checkout --theirs . && git pull
+  # Optional param: branch or tag to pull (default is latest branch)
+  local branch_or_tag=${1:-$(git remote show origin | awk '/HEAD branch/ { print $3 }')}
+
+  git config --get-all remote.origin.fetch
+  git config --unset-all remote.origin.fetch
   git fetch --prune --all
-  local default_branch=$(git remote show origin | awk '/HEAD branch/ { print $3 }')
-  git branch -m $default_branch
-  git branch -u origin/$default_branch
-  git reset --hard
+  git branch -m $branch_or_tag
+  # git branch -u origin $branch_or_tag
+  git remote set-branches --add origin $branch_or_tag
+  git reset --hard $branch_or_tag
+  # git clean -fdx
   git checkout --theirs .
-  git pull
+  git pull origin $branch_or_tag
 
   echo -e "\n# Latest commits in the repository: \n"
   git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
@@ -1037,7 +1148,7 @@ function create_polarion_testcases_doc_from_junit() {
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
-    local polarion_testcases_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
+    local polarion_testcases_file="$(basename ${junit_xml%.*})" # Get file name without path and extension
     polarion_testcases_file="${polarion_testcases_file//junit}polarion_testcases.xml" # Remove all "junit" from file name, and append "polarion_testcases.xml"
     polarion_testcases_file="$(dirname $junit_xml)/$(basename $polarion_testcases_file)" # Append full path as the original junit_xml file
 

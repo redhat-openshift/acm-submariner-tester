@@ -120,8 +120,8 @@ function juLog() {
     class="default"
   fi
 
-  # Set test suite title to class name with spaces (instead of ._ ), and with uppercase words
-  suiteTitle="${class//[_.]/ }"
+  # Set test suite title to class name with spaces (instead of _ ), and with uppercase words
+  suiteTitle="${class//_/ }"
   suiteTitle="${suiteTitle[@]^}"
 
   # set output directory as ./results , if it was not given

@@ -86,11 +86,18 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES
+       CHANGES-2
       </b>
      </td>
     </tr>
-    <j:forEach var="cs" items="${changeSet}" varStatus="loop">
+
+    <!-- <j:forEach var="cs" items="${changeSet}" varStatus="loop"> -->
+    ${logger.println("changeSet.size() = " + changeSet.size() )}
+    <j:set var="changesLength" value="${changeSet.size()}" />
+    <j:forEach items="${changeSet}" varStatus="loop">
+     ${logger.println("loop.count = " + loop.count )}
+     <j:set var="cs" value="${changeSet[changesLength - loop.count]}" />
+
      <j:set var="hadChanges" value="true" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
