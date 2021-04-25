@@ -1,6 +1,5 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
-${logger.println("# Email template generation #" )}
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
@@ -80,36 +79,24 @@ ${logger.println("# Email template generation #" )}
   </table>
   <br />
   <!-- CHANGE SET -->
-  <j:set var="scmChanges" value="${build.changeSet}" />
-  <j:if test="${scmChanges!=null}">
+  <j:set var="changeSet" value="${build.changeSet}" />
+  <j:if test="${changeSet!=null}">
    <j:set var="hadChanges" value="false" />
    <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-11
+       CHANGES 11
       </b>
      </td>
     </tr>
-    <!-- <j:set var="scmChanges" value="${build.changeSets}" /> -->
-    <!-- <j:set var="reverseChanges" value="${build.changeSet.items.reverse()}" /> -->
-    <!-- <j:set var="reverseChanges" value="${build.changeSets.toArray()}" />
-    ${logger.println("Number of change sets (reversed) = " + reverseChanges )} -->
-    <j:set var="numOfChanges" value="${scmChanges.items.size()}" />
+
+    <j:set var="numOfChanges" value="${changeSet.items().size()}" />
     ${logger.println("Number of change sets (reversed) = " + numOfChanges )}
-
-    <!-- <j:set var="scmChanges" value="${build.changeSet.items}" /> -->
-    <!-- <j:set var="reverseIndex" value="${scmChanges.size() - 1}" /> -->
-    <!-- <j:set var="reverseIndex" value="${scmChanges.length - 1}" /> -->
-    <!-- ${logger.println("Number of change sets (reversed) = " + reverseIndex )} -->
-
-    <!-- final ListIterator<E> li = list.listIterator();     while (li.hasNext()) -->
-
-    <!-- <j:forEach var="cs" items="${reverseChanges}" varStatus="loop"> -->
-    <!-- <j:forEach var="cs" items="${reverseChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop"> -->
     <j:forEach var="i" begin="0" end=${numOfChanges}" step="1">
-     <j:set var="cs" value="${scmChanges.items.get(numOfChanges - i)}" />
+     <j:set var="cs" value="${changeSet.items().get(numOfChanges - i)}" />
 
+    <!-- <j:forEach var="cs" items="${changeSet}" varStatus="loop"> -->
      <j:set var="hadChanges" value="true" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
