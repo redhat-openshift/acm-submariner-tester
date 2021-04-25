@@ -92,8 +92,11 @@ ${logger.println("# Email template generation #" )}
      </td>
     </tr>
     <!-- <j:set var="scmChanges" value="${build.changeSets}" /> -->
-    <j:set var="reverseChanges" value="${build.changeSet.items.reverse()}" />
+    <!-- <j:set var="reverseChanges" value="${build.changeSet.items.reverse()}" /> -->
+    <j:set var="reverseChanges" value="${build.changeSets.toArray()}" />
     ${logger.println("Number of change sets (reversed) = " + build.changeSets.toArray() )}
+    <j:set var="reverseIndex" value="${reverseChanges.length}" />
+    ${logger.println("Number of change sets (reversed) = " + reverseIndex )}
 
     <!-- <j:set var="scmChanges" value="${build.changeSet.items}" /> -->
     <!-- <j:set var="reverseIndex" value="${scmChanges.size() - 1}" /> -->
@@ -102,8 +105,8 @@ ${logger.println("# Email template generation #" )}
 
     <!-- final ListIterator<E> li = list.listIterator();     while (li.hasNext()) -->
 
-    <j:forEach var="cs" items="${reverseChanges}" varStatus="loop">
-    <!-- <j:forEach var="cs" items="${scmChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop"> -->
+    <!-- <j:forEach var="cs" items="${reverseChanges}" varStatus="loop"> -->
+    <j:forEach var="cs" items="${reverseChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop">
     <!-- <j:forEach var="i" begin="${reverseIndex}" end="0" step="1"> -->
      <!-- <j:set var="cs" value="${scmChanges.get(i)}" /> -->
 
