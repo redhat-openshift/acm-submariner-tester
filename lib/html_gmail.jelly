@@ -106,9 +106,9 @@ ${logger.println("# Email template generation #" )}
     <!-- final ListIterator<E> li = list.listIterator();     while (li.hasNext()) -->
 
     <!-- <j:forEach var="cs" items="${reverseChanges}" varStatus="loop"> -->
-    <j:forEach var="cs" items="${reverseChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop">
-    <!-- <j:forEach var="i" begin="${reverseIndex}" end="0" step="1"> -->
-     <!-- <j:set var="cs" value="${scmChanges.get(i)}" /> -->
+    <!-- <j:forEach var="cs" items="${reverseChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop"> -->
+    <j:forEach var="i" begin="${reverseIndex}" end="0" step="1">
+     <j:set var="cs" value="${reverseChanges.get(i)}" />
 
      <j:set var="hadChanges" value="true" />
      <tr>
