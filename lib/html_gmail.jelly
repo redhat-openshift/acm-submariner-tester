@@ -87,7 +87,7 @@ ${logger.println("# Email template generation #" )}
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-4
+       CHANGES-6
       </b>
      </td>
     </tr>
