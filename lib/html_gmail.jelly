@@ -79,26 +79,27 @@
   </table>
   <br />
   <!-- CHANGE SET -->
-  <j:set var="changeSet" value="${build.changeSet}" />
-  <j:if test="${changeSet!=null}">
+  <j:set var="scmChangeSet" value="${build.changeSet}" />
+  <j:if test="${scmChangeSet!=null}">
    <j:set var="hadChanges" value="false" />
    <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-4
+       CHANGES-6
       </b>
      </td>
     </tr>
 
-    <!-- <j:forEach var="cs" items="${changeSet}" varStatus="loop"> -->
+    <!-- <j:forEach var="cs" items="${scmChangeSet}" varStatus="loop"> -->
+    <j:set var="changes" value="${build.changeSets}" />
     ${logger.println("# Template log output #" )}
-    ${logger.println("changeSet.size() = " + changeSet.size() )}
-    <j:set var="reverseIndex" value="${changeSet.size() - 1}" />
+    ${logger.println("changes.size() = " + changes.size() )}
+    <j:set var="reverseIndex" value="${changes.size() - 1}" />
     ${logger.println("reverseIndex = " + reverseIndex )}
-    <j:forEach items="${changeSet}" varStatus="loop">
+    <j:forEach items="${changes}" varStatus="loop">
      ${logger.println("loop.index = " + loop.index )}
-     <j:set var="cs" value="${changeSet.get(reverseIndex - loop.index)}" />
+     <j:set var="cs" value="${changes.get(reverseIndex - loop.index)}" />
 
      <j:set var="hadChanges" value="true" />
      <tr>
