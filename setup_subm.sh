@@ -4024,6 +4024,14 @@ function print_resources_and_pod_logs() {
 
   echo -e "
   \n################################################################################################ \
+  \n#                             Openshift Nodes on ${cluster_name}                               # \
+  \n################################################################################################ \
+  \n"
+
+  ${OC} get nodes || :
+
+  echo -e "
+  \n################################################################################################ \
   \n#                  Submariner Gateway and Deployments on ${cluster_name}                       # \
   \n################################################################################################ \
   \n"
@@ -4044,6 +4052,8 @@ function print_resources_and_pod_logs() {
   \n################################################################################################ \
   \n"
 
+  ${OC} get daemonsets -A || :
+
   ${OC} describe ds -n ${SUBM_NAMESPACE} || :
 
   ${OC} describe rs -n ${SUBM_NAMESPACE} || :
@@ -4062,15 +4072,11 @@ function print_resources_and_pod_logs() {
 
   echo -e "
   \n################################################################################################ \
-  \n#                             Openshift Nodes on ${cluster_name}                              # \
+  \n#                             Openshift Machines on ${cluster_name}                              # \
   \n################################################################################################ \
   \n"
 
-  ${OC} get nodes || :
-
   ${OC} get machineconfigpool || :
-
-  ${OC} get daemonsets -A || :
 
   ${OC} get Machine -A | awk '{
     if (NR>1) {
