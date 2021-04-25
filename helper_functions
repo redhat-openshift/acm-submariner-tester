@@ -964,7 +964,7 @@ function wait_for_all_machines_ready() {
 ### function to wait for all Machine Configuration to be ready, with optional timeout duration
   trap_to_debug_commands
 
-  local duration=${1:-15m} # Default is 3 minutes
+  local duration=${1:-20m} # Default is 20 minutes
 
   echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
