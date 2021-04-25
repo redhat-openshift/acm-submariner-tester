@@ -87,13 +87,18 @@ ${logger.println("# Email template generation #" )}
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-18
+       CHANGES-20
       </b>
      </td>
     </tr>
     <!-- <j:set var="scmChanges" value="${build.changeSets}" /> -->
-    <j:set var="reverseIndex" value="${scmChanges.size() - 1}" />
+
+    <j:set var="scmChanges" value="${build.changeSet.items}" />
+    <!-- <j:set var="reverseIndex" value="${scmChanges.size() - 1}" /> -->
+    <j:set var="reverseIndex" value="${scmChanges.length - 1}" />
     ${logger.println("Number of change sets (reversed) = " + reverseIndex )}
+
+    <!-- final ListIterator<E> li = list.listIterator();     while (li.hasNext()) -->
 
     <!-- <j:forEach var="cs" items="${scmChanges}" begin="${reverseIndex}" end="0" step="1" varStatus="loop"> -->
     <j:forEach var="i" begin="${reverseIndex}" end="0" step="1">
