@@ -86,7 +86,7 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES-8
+       CHANGES-9
       </b>
      </td>
     </tr>
@@ -98,7 +98,7 @@
     <j:set var="reverseIndex" value="${changes.size() - 1}" />
     ${logger.println("reverseIndex = " + reverseIndex )}
 
-    <j:forEach var="cs" items="${changes}" begin="${reverseIndex}" end="0" step="1">
+    <j:forEach var="cs" items="${scmChangeSet}" begin="${reverseIndex}" end="0" step="1">
     <!-- <j:forEach var="cs" items="${changes}" begin="${changes.size()}" end="0" step="-1"> -->
 
      <!-- ${logger.println("loop.index = " + loop.index )} -->
