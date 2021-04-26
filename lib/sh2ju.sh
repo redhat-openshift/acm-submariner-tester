@@ -229,7 +229,7 @@ EOF
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${suiteTitle}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${class//./-}\">
     ${output}
     </testcase>
   "
