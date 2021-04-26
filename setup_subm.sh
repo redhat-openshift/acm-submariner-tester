@@ -4096,8 +4096,8 @@ function print_resources_and_pod_logs() {
 
   echo -e "\n############################## ALL Openshift events on ${cluster_name} ##############################\n"
 
-  # ${OC} get all || :
-  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
+  ${OC} get events -A --sort-by='.metadata.creationTimestamp' \
+  -o custom-columns=FirstSeen:.firstTimestamp,LastSeen:.lastTimestamp,Count:.count,From:.source.component,Type:.type,Reason:.reason,Message:.message || :
 
 }
 
