@@ -2594,7 +2594,9 @@ EOF
 
   echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
 
-  cat <<EOF | ${OC} apply -f -
+  local nodes_conf="`mktemp`_${node_type}.yaml"
+
+  cat <<-EOF > $nodes_conf
   apiVersion: machineconfiguration.openshift.io/v1
   kind: MachineConfig
   metadata:
@@ -2613,6 +2615,9 @@ EOF
           mode: 0420
           path: /etc/containers/registries.conf.d/submariner-registries.conf
 EOF
+
+  [[ $( ${OC} apply --dry-run='server' -f $nodes_conf | grep "unchanged" ) ]] \
+  || ${OC} apply -f $nodes_conf
 
 }
 
