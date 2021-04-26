@@ -77,7 +77,6 @@ Running with pre-defined parameters (optional):
 
   * Download SubCtl version:                           --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
-  * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Skip Submariner installation on all clusters:      --skip-install
 
@@ -114,13 +113,12 @@ Examples with pre-defined options:
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
   * Install "subctl-devel" (subctl development branch)
-  * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
 
@@ -280,9 +278,6 @@ while [[ $# -gt 0 ]]; do
   --clean-cluster-b)
     clean_cluster_b=YES
     shift ;;
-  --service-discovery)
-    service_discovery=YES
-    shift ;;
   --globalnet)
     globalnet=YES
     shift ;;
@@ -411,14 +406,6 @@ if [[ -z "$got_user_input" ]]; then
     fi
   fi # End of skip_ocp_setup options
 
-  # User input: $service_discovery - to deploy with --service-discovery
-  while [[ ! "$service_discovery" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install Service-Discovery (lighthouse) ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    service_discovery=${input:-no}
-  done
-
   # User input: $globalnet - to deploy with --globalnet
   while [[ ! "$globalnet" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install Global Net ? ${NO_COLOR}
@@ -536,7 +523,6 @@ destroy_cluster_b=${destroy_cluster_b:-NO}
 create_cluster_b=${create_cluster_b:-NO}
 reset_cluster_b=${reset_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
-service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
 # subm_cable_driver=${subm_cable_driver:-libreswan} [Deprecated]
 config_golang=${config_golang:-NO}
@@ -614,7 +600,6 @@ function show_test_plan() {
     - set_join_parameters_for_cluster_b
     - run_subctl_join_on_cluster_a
     - run_subctl_join_on_cluster_b
-    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
   fi
@@ -640,20 +625,20 @@ function show_test_plan() {
     - test_submariner_connection_cluster_b
     - test_globalnet_status_cluster_a: $globalnet
     - test_globalnet_status_cluster_b: $globalnet
-    - export_nginx_default_namespace_cluster_b: $service_discovery
-    - export_nginx_headless_namespace_cluster_b: $service_discovery
-    - test_lighthouse_status_cluster_a: $service_discovery
-    - test_lighthouse_status_cluster_b: $service_discovery
+    - export_nginx_default_namespace_cluster_b
+    - export_nginx_headless_namespace_cluster_b
+    - test_lighthouse_status_cluster_a
+    - test_lighthouse_status_cluster_b
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
     - install_nginx_headless_namespace_cluster_b
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_new_netshoot_global_ip_cluster_a: $globalnet
     - test_nginx_headless_global_ip_cluster_b: $globalnet
-    - test_clusters_connected_full_domain_name: $service_discovery
-    - test_clusters_cannot_connect_short_service_name: $service_discovery
-    - test_clusters_connected_headless_service_on_new_namespace: $service_discovery
-    - test_clusters_cannot_connect_headless_short_service_name: $service_discovery
+    - test_clusters_connected_full_domain_name
+    - test_clusters_cannot_connect_short_service_name
+    - test_clusters_connected_headless_service_on_new_namespace
+    - test_clusters_cannot_connect_headless_short_service_name
     "
   fi
 
@@ -2122,15 +2107,7 @@ function install_broker_aws_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
   trap_to_debug_commands;
 
-  DEPLOY_CMD="subctl deploy-broker "
-
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
-    PROMPT "Adding Service-Discovery to Submariner Deploy command"
-
-    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --kubecontext ${CLUSTER_A_NAME}"
-    # subctl deploy-broker --kubecontext <BROKER-CONTEXT-NAME>  --kubeconfig <MERGED-KUBECONFIG> \
-    # --dataplane --service-discovery --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
-  fi
+  DEPLOY_CMD="subctl deploy-broker --kubecontext ${CLUSTER_A_NAME}"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding GlobalNet to Submariner Deploy command"
@@ -3407,7 +3384,7 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on cluster B, will be identified by its IP (without --service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
+  echo "# Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
     # nginx_IP_cluster_b: 100.96.43.129
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
@@ -3496,8 +3473,8 @@ function test_clusters_connected_overlapping_cidrs() {
 # ------------------------------------------
 
 function test_clusters_connected_full_domain_name() {
-### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
-# This is to test service discovery of NON-headless $NGINX_CLUSTER_B sevice, on the default namespace
+### Nginx service on cluster B, will be identified by its Domain Name ###
+# This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_B service, on the default namespace
 
   trap_to_debug_commands;
 
@@ -3639,7 +3616,7 @@ function test_nginx_headless_global_ip_cluster_b() {
 # ------------------------------------------
 
 function test_clusters_connected_headless_service_on_new_namespace() {
-### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
+### Nginx service on cluster B, will be identified by its Domain Name (with service-discovery) ###
 
   trap_to_debug_commands;
 
@@ -4443,12 +4420,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} test_globalnet_status_cluster_b
     fi
 
-    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    # Test service-discovery (lighthouse)
 
-      ${junit_cmd} test_lighthouse_status_cluster_a
+    ${junit_cmd} test_lighthouse_status_cluster_a
 
-      ${junit_cmd} test_lighthouse_status_cluster_b
-    fi
+    ${junit_cmd} test_lighthouse_status_cluster_b
 
   ### Running connectivity tests between the On-Premise and Public clusters,
   # To validate that now Submariner made the connection possible.
@@ -4466,35 +4442,32 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} test_nginx_headless_global_ip_cluster_b
     fi
 
-    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    # Test the default (pre-installed) netshoot and nginx with service-discovery
 
-      # Test the default (pre-installed) netshoot and nginx service discovery
+    ${junit_cmd} export_nginx_default_namespace_cluster_b
 
-      ${junit_cmd} export_nginx_default_namespace_cluster_b
+    ${junit_cmd} test_clusters_connected_full_domain_name
 
-      ${junit_cmd} test_clusters_connected_full_domain_name
+    ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
-      ${junit_cmd} test_clusters_cannot_connect_short_service_name
+    # Test the new netshoot and headless nginx service discovery
 
-      # Test the new netshoot and headless nginx service discovery
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-          ${junit_cmd} test_clusters_connected_overlapping_cidrs
+        # TODO: Test heasdless service with GLobalnet - when the feature of is supported
+        BUG "HEADLESS Service is not supported with GlobalNet" \
+         "No workaround yet - Skip the whole test" \
+        "https://github.com/submariner-io/lighthouse/issues/273"
+        # No workaround yet
 
-          # TODO: Test heasdless service with GLobalnet - when the feature of is supported
-          BUG "HEADLESS Service is not supported with GlobalNet" \
-           "No workaround yet - Skip the whole test" \
-          "https://github.com/submariner-io/lighthouse/issues/273"
-          # No workaround yet
+    else
+      ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
-      else
-        ${junit_cmd} export_nginx_headless_namespace_cluster_b
+      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
 
-        ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
-
-        ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
-      fi
+      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
     fi
 
     echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE.
