@@ -3692,22 +3692,18 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
 # ------------------------------------------
 
-function test_subctl_show_on_merged_kubeconfigs() {
+function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 ### Test subctl show commands on merged kubeconfig ###
   PROMPT "Testing SUBCTL show command on merged kubeconfig of multiple clusters"
   trap_to_debug_commands;
 
   local subctl_info
 
-  # BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
-  # "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
-  # "https://github.com/submariner-io/submariner/issues/245"
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
-
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
   ${OC} config get-contexts
+
+  subctl validate all || :
 
   subctl show versions || subctl_info=ERROR
 
