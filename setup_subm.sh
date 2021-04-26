@@ -1085,9 +1085,9 @@ function download_subctl_by_tag() {
         subctl_tag="$(get_latest_subctl_version_tag)"
       fi
 
-      # TODO: Move to global vars:
-      # local subctl_image_url="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
-      local subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:${subctl_tag}"
+      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
+      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+
       local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
 
       if ( ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm ) ; then
@@ -4461,7 +4461,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
         ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-        # TODO: Test heasdless service with GLobalnet - when the feature of is supported
+        # TODO: Test headless service with GLobalnet - when the feature of is supported
         BUG "HEADLESS Service is not supported with GlobalNet" \
          "No workaround yet - Skip the whole test" \
         "https://github.com/submariner-io/lighthouse/issues/273"
