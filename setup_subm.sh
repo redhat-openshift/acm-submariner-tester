@@ -2427,9 +2427,9 @@ EOF
 
   ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
 
-  ${OC} wait --timeout=3m --for=condition=Available clusteroperators authentication
-  ${OC} wait --timeout=3m --for='condition=Progressing=False' clusteroperators authentication
-  ${OC} wait --timeout=3m --for='condition=Degraded=False' clusteroperators authentication
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication
+  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication
 
   ( # subshell to hide commands
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
@@ -2476,6 +2476,123 @@ function configure_cluster_custom_registry_mirror() {
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
+
+}
+
+# ------------------------------------------
+
+function create_docker_registry_secret() {
+### Helper function to add new Docker registry
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  # input variables
+  local registry_server="$1"
+  local registry_usr=$2
+  local registry_pwd=$3
+  local namespace="$4"
+
+  local secret_name="${registry_server}-${registry_usr}"
+  local secret_name="${secret_name//[^a-z0-9]/-}"
+
+  echo -e "# Creating new docker-registry in '$namespace' namespace:
+  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+
+  create_namespace "${namespace}"
+
+  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
+
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace || :
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
+}
+
+# ------------------------------------------
+
+function add_submariner_registry_mirror_to_ocp_node() {
+### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
+  trap_to_debug_commands
+
+  # set registry variables
+  local node_type="$1" # master or worker
+  local registry_url="$2"
+  local registry_mirror="$3"
+
+  reg_values="
+  node_type = $node_type
+  registry_url = $registry_url
+  registry_mirror = $registry_mirror"
+
+  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
+  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
+    FATAL "Expected Openshift Registry values are missing: $reg_values"
+  else
+    echo "# Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
+  fi
+
+  config_source=$(cat <<EOF | raw_to_url_encode
+  [[registry]]
+    prefix = ""
+    location = "${registry_url}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${registry_mirror}"
+      insecure = false
+EOF
+  )
+
+  echo "# Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
+
+  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+  echo "# Checking API ignition version for OCP version: $ocp_version"
+
+  ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
+
+  echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
+
+  local nodes_conf="`mktemp`_${node_type}.yaml"
+
+  cat <<-EOF > $nodes_conf
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: MachineConfig
+  metadata:
+    labels:
+      machineconfiguration.openshift.io/role: ${node_type}
+    name: 99-${node_type}-submariner-registries
+  spec:
+    config:
+      ignition:
+        version: ${ignition_version}
+      storage:
+        files:
+        - contents:
+            source: data:text/plain,${config_source}
+          filesystem: root
+          mode: 0420
+          path: /etc/containers/registries.conf.d/submariner-registries.conf
+EOF
+
+  ${OC} apply --dry-run='server' -f $nodes_conf | highlight "unchanged" \
+  || ${OC} apply -f $nodes_conf
 
 }
 
@@ -2544,123 +2661,6 @@ function delete_old_submariner_images_from_current_cluster() {
     oc delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
     # oc tag -d submariner-operator/${img_stream}
   done
-
-}
-
-# ------------------------------------------
-
-function add_submariner_registry_mirror_to_ocp_node() {
-### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  # set registry variables
-  local node_type="$1" # master or worker
-  local registry_url="$2"
-  local registry_mirror="$3"
-
-  reg_values="
-  node_type = $node_type
-  registry_url = $registry_url
-  registry_mirror = $registry_mirror"
-
-  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
-  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
-    FATAL "Expected Openshift Registry values are missing: $reg_values"
-  else
-    echo "# Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
-  fi
-
-  config_source=$(cat <<EOF | raw_to_url_encode
-  [[registry]]
-    prefix = ""
-    location = "${registry_url}"
-    mirror-by-digest-only = false
-    insecure = false
-    blocked = false
-
-    [[registry.mirror]]
-      location = "${registry_mirror}"
-      insecure = false
-EOF
-  )
-
-  echo "# Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
-  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
-
-  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "# Checking API ignition version for OCP version: $ocp_version"
-
-  ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
-
-  echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
-
-  local nodes_conf="`mktemp`_${node_type}.yaml"
-
-  cat <<-EOF > $nodes_conf
-  apiVersion: machineconfiguration.openshift.io/v1
-  kind: MachineConfig
-  metadata:
-    labels:
-      machineconfiguration.openshift.io/role: ${node_type}
-    name: 99-${node_type}-submariner-registries
-  spec:
-    config:
-      ignition:
-        version: ${ignition_version}
-      storage:
-        files:
-        - contents:
-            source: data:text/plain,${config_source}
-          filesystem: root
-          mode: 0420
-          path: /etc/containers/registries.conf.d/submariner-registries.conf
-EOF
-
-  [[ $( ${OC} apply --dry-run='server' -f $nodes_conf | grep "unchanged" ) ]] \
-  || ${OC} apply -f $nodes_conf
-
-}
-
-# ------------------------------------------
-
-function create_docker_registry_secret() {
-### Helper function to add new Docker registry
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  # input variables
-  local registry_server="$1"
-  local registry_usr=$2
-  local registry_pwd=$3
-  local namespace="$4"
-
-  local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-z0-9]/-}"
-
-  echo -e "# Creating new docker-registry in '$namespace' namespace:
-  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
-
-  create_namespace "${namespace}"
-
-  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
-
-  ( # subshell to hide commands
-    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
-  )
-
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace || :
-
-  ( # update the cluster global pull-secret
-    ${OC} patch secret/pull-secret -n openshift-config -p \
-    '{"data":{".dockerconfigjson":"'"$( \
-    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
-  )
-
-  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
