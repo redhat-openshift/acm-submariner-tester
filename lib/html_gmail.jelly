@@ -90,7 +90,11 @@
       </b>
      </td>
     </tr>
-    <j:forEach var="cs" items="${changeSet}" varStatus="loop">
+    <j:set var="changes" value="${changeSet.getItems()}" />
+    <j:set var="numOfChanges" value="${changes.size()}" />
+    ${logger.println("Number of change sets = " + numOfChanges )}
+    <j:forEach var="i" begin="1" end="${numOfChanges}" step="1">
+     <j:set var="cs" value="${changes[numOfChanges-i]}" />
      <j:set var="hadChanges" value="true" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
