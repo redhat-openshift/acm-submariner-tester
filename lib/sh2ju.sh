@@ -49,23 +49,19 @@ else
   exit 1
 fi
 
-# A wrapper for the eval method witch allows catching seg-faults and use tee
-rcFile=/tmp/eval_rc.$$.log
-# :>${rcFile}
-
 function eVal() {
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
   echo 0 > "${rcFile}"
   (
     (
-      ( trap 'RC=$? ; echo $RC > "${rcFile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+      {
+        trap 'RC=$? ; echo $RC > "${rcFile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
         trap 'RC="$(< $rcFile)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
-        set -e; $1 ;
-      ) | tee -a ${outf}
-    )
-    3>&1 1>&2 2>&3 | tee ${errf}
-  )
+        set -e; $1;
+      } | tee -a ${outf}
+    ) 3>&1 1>&2 2>&3 | tee ${errf}
+  ) 3>&1 1>&2 2>&3
 
 }
 
@@ -87,15 +83,20 @@ function printPlainTextFile() {
 # Execute a command and record its results
 function juLog() {
 
+  # A wrapper for the eval method witch allows catching seg-faults and use tee
+  export rcFile=/tmp/eval_rc.$$.log
+  # :>${rcFile}
+
+  # eval the command sending output to a file
+  export outf=/var/tmp/ju$$.txt
+  export errf=/var/tmp/ju$$-err.txt
+
   # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
   set +e
-
 
   # In case of script error: Exit with the last return code of eVal()
   export returnCode=0
   trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
-
-  rcFile=/tmp/eval_rc.$$.log
 
   date="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; failures=0; suiteDuration=0; content=""
@@ -157,10 +158,6 @@ EOF
      cmd="${cmd} \"$1\""
      shift
   done
-
-  # eval the command sending output to a file
-  outf=/var/tmp/ju$$.txt
-  errf=/var/tmp/ju$$-err.txt
 
   :>${outf}
 
@@ -229,7 +226,7 @@ EOF
 
   ## testcase tag
   content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${suiteTitle}\">
+    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${class//./-}\">
     ${output}
     </testcase>
   "

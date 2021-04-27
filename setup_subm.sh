@@ -77,7 +77,6 @@ Running with pre-defined parameters (optional):
 
   * Download SubCtl version:                           --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
-  * Configure and test Service Discovery:              --service-discovery
   * Configure and test GlobalNet:                      --globalnet
   * Skip Submariner installation on all clusters:      --skip-install
 
@@ -114,13 +113,12 @@ Examples with pre-defined options:
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --service-discovery --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
   * Clean existing cluster on OSP (cluster B)
   * Install "subctl-devel" (subctl development branch)
-  * Configure Service-Discovery
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
 
@@ -280,9 +278,6 @@ while [[ $# -gt 0 ]]; do
   --clean-cluster-b)
     clean_cluster_b=YES
     shift ;;
-  --service-discovery)
-    service_discovery=YES
-    shift ;;
   --globalnet)
     globalnet=YES
     shift ;;
@@ -411,14 +406,6 @@ if [[ -z "$got_user_input" ]]; then
     fi
   fi # End of skip_ocp_setup options
 
-  # User input: $service_discovery - to deploy with --service-discovery
-  while [[ ! "$service_discovery" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install Service-Discovery (lighthouse) ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    service_discovery=${input:-no}
-  done
-
   # User input: $globalnet - to deploy with --globalnet
   while [[ ! "$globalnet" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install Global Net ? ${NO_COLOR}
@@ -536,7 +523,6 @@ destroy_cluster_b=${destroy_cluster_b:-NO}
 create_cluster_b=${create_cluster_b:-NO}
 reset_cluster_b=${reset_cluster_b:-NO}
 clean_cluster_b=${clean_cluster_b:-NO}
-service_discovery=${service_discovery:-NO}
 globalnet=${globalnet:-NO}
 # subm_cable_driver=${subm_cable_driver:-libreswan} [Deprecated]
 config_golang=${config_golang:-NO}
@@ -614,7 +600,6 @@ function show_test_plan() {
     - set_join_parameters_for_cluster_b
     - run_subctl_join_on_cluster_a
     - run_subctl_join_on_cluster_b
-    $([[ ! "$service_discovery" =~ ^(y|yes)$ ]] || echo "- test Service-Discovery")
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
   fi
@@ -640,20 +625,20 @@ function show_test_plan() {
     - test_submariner_connection_cluster_b
     - test_globalnet_status_cluster_a: $globalnet
     - test_globalnet_status_cluster_b: $globalnet
-    - export_nginx_default_namespace_cluster_b: $service_discovery
-    - export_nginx_headless_namespace_cluster_b: $service_discovery
-    - test_lighthouse_status_cluster_a: $service_discovery
-    - test_lighthouse_status_cluster_b: $service_discovery
+    - export_nginx_default_namespace_cluster_b
+    - export_nginx_headless_namespace_cluster_b
+    - test_lighthouse_status_cluster_a
+    - test_lighthouse_status_cluster_b
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
     - install_nginx_headless_namespace_cluster_b
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_new_netshoot_global_ip_cluster_a: $globalnet
     - test_nginx_headless_global_ip_cluster_b: $globalnet
-    - test_clusters_connected_full_domain_name: $service_discovery
-    - test_clusters_cannot_connect_short_service_name: $service_discovery
-    - test_clusters_connected_headless_service_on_new_namespace: $service_discovery
-    - test_clusters_cannot_connect_headless_short_service_name: $service_discovery
+    - test_clusters_connected_full_domain_name
+    - test_clusters_cannot_connect_short_service_name
+    - test_clusters_connected_headless_service_on_new_namespace
+    - test_clusters_cannot_connect_headless_short_service_name
     "
   fi
 
@@ -1100,9 +1085,9 @@ function download_subctl_by_tag() {
         subctl_tag="$(get_latest_subctl_version_tag)"
       fi
 
-      # TODO: Move to global vars:
-      # local subctl_image_url="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
-      local subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:${subctl_tag}"
+      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
+      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+
       local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
 
       if ( ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm ) ; then
@@ -2122,15 +2107,7 @@ function install_broker_aws_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
   trap_to_debug_commands;
 
-  DEPLOY_CMD="subctl deploy-broker "
-
-  if [[ "$service_discovery" =~ ^(y|yes)$ ]]; then
-    PROMPT "Adding Service-Discovery to Submariner Deploy command"
-
-    DEPLOY_CMD="${DEPLOY_CMD} --service-discovery --kubecontext ${CLUSTER_A_NAME}"
-    # subctl deploy-broker --kubecontext <BROKER-CONTEXT-NAME>  --kubeconfig <MERGED-KUBECONFIG> \
-    # --dataplane --service-discovery --broker-cluster-context <BROKER-CONTEXT-NAME> --clusterid  <CLUSTER-ID-FOR-TUNNELS>
-  fi
+  DEPLOY_CMD="subctl deploy-broker --kubecontext ${CLUSTER_A_NAME}"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
     PROMPT "Adding GlobalNet to Submariner Deploy command"
@@ -2450,9 +2427,9 @@ EOF
 
   ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
 
-  ${OC} wait --timeout=3m --for=condition=Available clusteroperators authentication
-  ${OC} wait --timeout=3m --for='condition=Progressing=False' clusteroperators authentication
-  ${OC} wait --timeout=3m --for='condition=Degraded=False' clusteroperators authentication
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication
+  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication
 
   ( # subshell to hide commands
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
@@ -2499,6 +2476,123 @@ function configure_cluster_custom_registry_mirror() {
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
+
+}
+
+# ------------------------------------------
+
+function create_docker_registry_secret() {
+### Helper function to add new Docker registry
+  trap - DEBUG # DONT trap_to_debug_commands
+
+  # input variables
+  local registry_server="$1"
+  local registry_usr=$2
+  local registry_pwd=$3
+  local namespace="$4"
+
+  local secret_name="${registry_server}-${registry_usr}"
+  local secret_name="${secret_name//[^a-z0-9]/-}"
+
+  echo -e "# Creating new docker-registry in '$namespace' namespace:
+  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+
+  create_namespace "${namespace}"
+
+  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
+
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace || :
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
+}
+
+# ------------------------------------------
+
+function add_submariner_registry_mirror_to_ocp_node() {
+### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
+  trap_to_debug_commands
+
+  # set registry variables
+  local node_type="$1" # master or worker
+  local registry_url="$2"
+  local registry_mirror="$3"
+
+  reg_values="
+  node_type = $node_type
+  registry_url = $registry_url
+  registry_mirror = $registry_mirror"
+
+  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
+  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
+    FATAL "Expected Openshift Registry values are missing: $reg_values"
+  else
+    echo "# Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
+  fi
+
+  config_source=$(cat <<EOF | raw_to_url_encode
+  [[registry]]
+    prefix = ""
+    location = "${registry_url}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${registry_mirror}"
+      insecure = false
+EOF
+  )
+
+  echo "# Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
+
+  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+  echo "# Checking API ignition version for OCP version: $ocp_version"
+
+  ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
+
+  echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
+
+  local nodes_conf="`mktemp`_${node_type}.yaml"
+
+  cat <<-EOF > $nodes_conf
+  apiVersion: machineconfiguration.openshift.io/v1
+  kind: MachineConfig
+  metadata:
+    labels:
+      machineconfiguration.openshift.io/role: ${node_type}
+    name: 99-${node_type}-submariner-registries
+  spec:
+    config:
+      ignition:
+        version: ${ignition_version}
+      storage:
+        files:
+        - contents:
+            source: data:text/plain,${config_source}
+          filesystem: root
+          mode: 0420
+          path: /etc/containers/registries.conf.d/submariner-registries.conf
+EOF
+
+  ${OC} apply --dry-run='server' -f $nodes_conf | highlight "unchanged" \
+  || ${OC} apply -f $nodes_conf
 
 }
 
@@ -2567,118 +2661,6 @@ function delete_old_submariner_images_from_current_cluster() {
     oc delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
     # oc tag -d submariner-operator/${img_stream}
   done
-
-}
-
-# ------------------------------------------
-
-function add_submariner_registry_mirror_to_ocp_node() {
-### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  # set registry variables
-  local node_type="$1" # master or worker
-  local registry_url="$2"
-  local registry_mirror="$3"
-
-  reg_values="
-  node_type = $node_type
-  registry_url = $registry_url
-  registry_mirror = $registry_mirror"
-
-  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
-  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
-    FATAL "Expected Openshift Registry values are missing: $reg_values"
-  else
-    echo "# Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
-  fi
-
-  config_source=$(cat <<EOF | raw_to_url_encode
-  [[registry]]
-    prefix = ""
-    location = "${registry_url}"
-    mirror-by-digest-only = false
-    insecure = false
-    blocked = false
-
-    [[registry.mirror]]
-      location = "${registry_mirror}"
-      insecure = false
-EOF
-  )
-
-  echo "# Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
-  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/${node_type}
-
-  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "# Checking API ignition version for OCP version: $ocp_version"
-
-  ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
-
-  echo "# Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
-
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: machineconfiguration.openshift.io/v1
-  kind: MachineConfig
-  metadata:
-    labels:
-      machineconfiguration.openshift.io/role: ${node_type}
-    name: 99-${node_type}-submariner-registries
-  spec:
-    config:
-      ignition:
-        version: ${ignition_version}
-      storage:
-        files:
-        - contents:
-            source: data:text/plain,${config_source}
-          filesystem: root
-          mode: 0420
-          path: /etc/containers/registries.conf.d/submariner-registries.conf
-EOF
-
-}
-
-# ------------------------------------------
-
-function create_docker_registry_secret() {
-### Helper function to add new Docker registry
-  trap - DEBUG # DONT trap_to_debug_commands
-
-  # input variables
-  local registry_server="$1"
-  local registry_usr=$2
-  local registry_pwd=$3
-  local namespace="$4"
-
-  local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-z0-9]/-}"
-
-  echo -e "# Creating new docker-registry in '$namespace' namespace:
-  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
-
-  create_namespace "${namespace}"
-
-  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
-
-  ( # subshell to hide commands
-    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
-  )
-
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace || :
-
-  ( # update the cluster global pull-secret
-    ${OC} patch secret/pull-secret -n openshift-config -p \
-    '{"data":{".dockerconfigjson":"'"$( \
-    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
-  )
-
-  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
@@ -3015,7 +2997,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 # ------------------------------------------
 
 function test_renewal_of_gateway_and_public_ip() {
-# Testing that Submariner Gateway node received public (external) IP
+# Testing that Submariner Gateway was re-created with new public IP
   PROMPT "Testing that Submariner Gateway was re-created with new public IP"
   trap_to_debug_commands;
 
@@ -3407,7 +3389,7 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  echo "# Nginx service on cluster B, will be identified by its IP (without --service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
+  echo "# Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
     # nginx_IP_cluster_b: 100.96.43.129
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
@@ -3496,8 +3478,8 @@ function test_clusters_connected_overlapping_cidrs() {
 # ------------------------------------------
 
 function test_clusters_connected_full_domain_name() {
-### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
-# This is to test service discovery of NON-headless $NGINX_CLUSTER_B sevice, on the default namespace
+### Nginx service on cluster B, will be identified by its Domain Name ###
+# This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_B service, on the default namespace
 
   trap_to_debug_commands;
 
@@ -3639,7 +3621,7 @@ function test_nginx_headless_global_ip_cluster_b() {
 # ------------------------------------------
 
 function test_clusters_connected_headless_service_on_new_namespace() {
-### Nginx service on cluster B, will be identified by its Domain Name, with --service-discovery ###
+### Nginx service on cluster B, will be identified by its Domain Name (with service-discovery) ###
 
   trap_to_debug_commands;
 
@@ -3710,22 +3692,18 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
 # ------------------------------------------
 
-function test_subctl_show_on_merged_kubeconfigs() {
+function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 ### Test subctl show commands on merged kubeconfig ###
   PROMPT "Testing SUBCTL show command on merged kubeconfig of multiple clusters"
   trap_to_debug_commands;
 
   local subctl_info
 
-  # BUG "Should be able to use default KUBECONFIGs of OCP installers, with identical context (\"admin\")" \
-  # "Modify KUBECONFIG context name on cluster A and B, to be unique (to prevent E2E failure)" \
-  # "https://github.com/submariner-io/submariner/issues/245"
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_A_NAME}\ncurrent-context: ${CLUSTER_A_NAME}#" -i.bak ${KUBECONF_CLUSTER_A}
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${CLUSTER_B_NAME}\ncurrent-context: ${CLUSTER_B_NAME}#" -i.bak ${KUBECONF_CLUSTER_B}
-
   export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}"
 
   ${OC} config get-contexts
+
+  subctl validate all || :
 
   subctl show versions || subctl_info=ERROR
 
@@ -4119,8 +4097,8 @@ function print_resources_and_pod_logs() {
 
   echo -e "\n############################## ALL Openshift events on ${cluster_name} ##############################\n"
 
-  # ${OC} get all || :
-  ${OC} get events -A --sort-by='.metadata.creationTimestamp' || :
+  ${OC} get events -A --sort-by='.metadata.creationTimestamp' \
+  -o custom-columns=FirstSeen:.firstTimestamp,LastSeen:.lastTimestamp,Count:.count,From:.source.component,Type:.type,Reason:.reason,Message:.message || :
 
 }
 
@@ -4204,9 +4182,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
   # # Setup and verify environment
   # setup_workspace
-  #
-  # # Set script trap functions
-  # set_trap_functions
+
+  # Set script trap functions
+  set_trap_functions
 
   # Debug functions
   ${junit_cmd} test_debug_pass
@@ -4443,12 +4421,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} test_globalnet_status_cluster_b
     fi
 
-    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    # Test service-discovery (lighthouse)
 
-      ${junit_cmd} test_lighthouse_status_cluster_a
+    ${junit_cmd} test_lighthouse_status_cluster_a
 
-      ${junit_cmd} test_lighthouse_status_cluster_b
-    fi
+    ${junit_cmd} test_lighthouse_status_cluster_b
 
   ### Running connectivity tests between the On-Premise and Public clusters,
   # To validate that now Submariner made the connection possible.
@@ -4466,35 +4443,32 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       ${junit_cmd} test_nginx_headless_global_ip_cluster_b
     fi
 
-    if [[ "$service_discovery" =~ ^(y|yes)$ ]] ; then
+    # Test the default (pre-installed) netshoot and nginx with service-discovery
 
-      # Test the default (pre-installed) netshoot and nginx service discovery
+    ${junit_cmd} export_nginx_default_namespace_cluster_b
 
-      ${junit_cmd} export_nginx_default_namespace_cluster_b
+    ${junit_cmd} test_clusters_connected_full_domain_name
 
-      ${junit_cmd} test_clusters_connected_full_domain_name
+    ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
-      ${junit_cmd} test_clusters_cannot_connect_short_service_name
+    # Test the new netshoot and headless nginx service discovery
 
-      # Test the new netshoot and headless nginx service discovery
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+        ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-          ${junit_cmd} test_clusters_connected_overlapping_cidrs
+        # TODO: Test headless service with GLobalnet - when the feature of is supported
+        BUG "HEADLESS Service is not supported with GlobalNet" \
+         "No workaround yet - Skip the whole test" \
+        "https://github.com/submariner-io/lighthouse/issues/273"
+        # No workaround yet
 
-          # TODO: Test heasdless service with GLobalnet - when the feature of is supported
-          BUG "HEADLESS Service is not supported with GlobalNet" \
-           "No workaround yet - Skip the whole test" \
-          "https://github.com/submariner-io/lighthouse/issues/273"
-          # No workaround yet
+    else
+      ${junit_cmd} export_nginx_headless_namespace_cluster_b
 
-      else
-        ${junit_cmd} export_nginx_headless_namespace_cluster_b
+      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
 
-        ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
-
-        ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
-      fi
+      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
     fi
 
     echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE.

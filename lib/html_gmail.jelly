@@ -86,20 +86,15 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       CHANGES 21
+       CHANGES
       </b>
      </td>
     </tr>
-
     <j:set var="changes" value="${changeSet.getItems()}" />
-    ${logger.println("changes = " + changes )}
     <j:set var="numOfChanges" value="${changes.size()}" />
-    ${logger.println("Number of change sets (reversed) = " + numOfChanges )}
+    ${logger.println("Number of change sets = " + numOfChanges )}
     <j:forEach var="i" begin="1" end="${numOfChanges}" step="1">
-     {logger.println("i = " + i )}
      <j:set var="cs" value="${changes[numOfChanges-i]}" />
-
-    <!-- <j:forEach var="cs" items="${changeSet}" varStatus="loop"> -->
      <j:set var="hadChanges" value="true" />
      <tr>
       <td colspan="2" class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
