@@ -2602,7 +2602,6 @@ EOF
   || ${OC} apply -f $nodes_conf
 
 }
-
 # ------------------------------------------
 
 function delete_old_submariner_images_from_cluster_a() {
@@ -3869,9 +3868,9 @@ function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
 
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || FATAL "Submariner benchmark latency tests have ended with failures, please investigate."
 
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}  || FATAL "Submariner benchmark throughput tests have ended with failures, please investigate."
 
 }
 
@@ -4507,12 +4506,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     echo 2 > $TEST_STATUS_FILE
   fi
 
-# Running benchmark tests
-    ${junit_cmd} test_subctl_benchmarks || subctl_benchmarks_status=FAILED 
-
-    if [[ "$subctl_benchmarks_status" = FAILED ]] ; then
-      FATAL "Submariner benchmark tests have ended with failures, please investigate."
-    fi
+  # Running benchmark tests
+  ${junit_cmd} test_subctl_benchmarks 
 
   ### Running Submariner Ginkgo tests
   if [[ ! "$skip_tests" =~ all ]]; then
