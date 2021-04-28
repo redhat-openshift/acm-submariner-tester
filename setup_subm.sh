@@ -716,10 +716,10 @@ function setup_workspace() {
   # # Installing Terraform
   # install_local_terraform "${WORKDIR}"
   BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-  "Use Terraform v0.12.12" \
+  "Use Terraform v0.12.29" \
   "https://github.com/submariner-io/submariner/issues/847"
   # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.12"
+  install_local_terraform "${WORKDIR}" "0.12.29"
 
   echo "# Installing JQ (JSON processor) with Anaconda"
   install_local_jq "${WORKDIR}"
@@ -1917,7 +1917,7 @@ function open_firewall_ports_on_the_broker_node() {
   cd "${target_path}/"
 
   # Fix bug in terraform version
-  # sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
@@ -1981,7 +1981,8 @@ function open_firewall_ports_on_openstack_cluster_b() {
   cd "${target_path}_scripts/"
   ### Temporary end
 
-  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+  # Fix bug in terraform version
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
