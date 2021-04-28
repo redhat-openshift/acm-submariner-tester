@@ -618,7 +618,7 @@ function show_test_plan() {
     - test_renewal_of_gateway_and_public_ip
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b
-    - test_subctl_show_on_merged_kubeconfigs
+    - test_subctl_show_and_validate_on_merged_kubeconfigs
     - test_ha_status_cluster_a
     - test_ha_status_cluster_b
     - test_submariner_connection_cluster_a
@@ -2997,7 +2997,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 # ------------------------------------------
 
 function test_renewal_of_gateway_and_public_ip() {
-# Testing that Submariner Gateway node received public (external) IP
+# Testing that Submariner Gateway was re-created with new public IP
   PROMPT "Testing that Submariner Gateway was re-created with new public IP"
   trap_to_debug_commands;
 
@@ -4412,7 +4412,7 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     ${junit_cmd} test_ipsec_status_cluster_b
 
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+    ${junit_cmd} test_subctl_show_and_validate_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
