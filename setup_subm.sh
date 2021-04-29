@@ -1917,10 +1917,16 @@ function open_firewall_ports_on_the_broker_node() {
   cd "${target_path}/"
 
   # Fix bug in terraform version
-  sed -r 's/, <= 0\.12\.12//g' -i versions.tf || :
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
+
+  BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
+  "Modify 'prep_for_subm.sh' so it will download all 'ocp-ipi-aws/*' and do not change directory" \
+  "----"
+  # Workaround:
+  sed 's/.*submariner_prep.*/# \0/' -i "${terraform_script}"
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
@@ -1982,7 +1988,7 @@ function open_firewall_ports_on_openstack_cluster_b() {
   ### Temporary end
 
   # Fix bug in terraform version
-  sed -r 's/, <= 0\.12\.12//g' -i versions.tf || :
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
