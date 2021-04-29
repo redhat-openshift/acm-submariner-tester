@@ -1917,7 +1917,7 @@ function open_firewall_ports_on_the_broker_node() {
   cd "${target_path}/"
 
   # Fix bug in terraform version
-  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+  sed -r 's/, <= 0\.12\.12//g' -i versions.tf || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
@@ -1982,7 +1982,7 @@ function open_firewall_ports_on_openstack_cluster_b() {
   ### Temporary end
 
   # Fix bug in terraform version
-  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+  sed -r 's/, <= 0\.12\.12//g' -i versions.tf || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
@@ -4263,7 +4263,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       fi
     fi
 
-
     # Verify clusters status after OCP reset/create
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
@@ -4275,8 +4274,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_kubeconfig_aws_cluster_a
-
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
       ${junit_cmd} clean_node_labels_and_machines_cluster_a
@@ -4287,8 +4284,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     # Running cleanup on cluster B if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} test_kubeconfig_osp_cluster_b
 
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
