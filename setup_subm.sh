@@ -3704,8 +3704,6 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   ${OC} config get-contexts
 
-  subctl validate all || :
-
   subctl show versions || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
@@ -3715,6 +3713,15 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
   subctl show connections || subctl_info=ERROR
 
   subctl show gateways || subctl_info=ERROR
+
+  # For Subctl > 0.8 : Run subctl diagnose
+  if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
+    BUG "subctl diagnose to return relevant exit code on Submariner failures" \
+    "No workaround is required" \
+    "https://github.com/submariner-io/submariner-operator/issues/1310"
+
+    subctl diagnose all || subctl_info=ERROR
+  fi
 
   [[ "$subctl_info" != ERROR ]] || FATAL "Subctl show indicates errors"
 }
@@ -3979,9 +3986,11 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    echo -e "\n############################## Submariner information (subctl show all) ##############################\n"
+    echo -e "\n############################## Submariner information (subctl show and diagnose) ##############################\n"
 
     subctl show all || :
+
+    subctl diagnose all || :
 
     export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
     print_resources_and_pod_logs "${CLUSTER_A_NAME}"
