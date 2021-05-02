@@ -3,6 +3,7 @@
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
+
   <!-- GENERAL INFO -->
   <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
    <!--<tr>
@@ -78,6 +79,7 @@
    </tr>
   </table>
   <br />
+
   <!-- CHANGE SET -->
   <j:set var="changeSet" value="${build.changeSet}" />
   <j:if test="${changeSet!=null}">
@@ -128,6 +130,7 @@
    </table>
    <br />
   </j:if>
+
   <!-- ARTIFACTS -->
   <j:set var="artifacts" value="${build.artifacts}" />
   <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
@@ -153,6 +156,7 @@
    </table>
    <br />
   </j:if>
+
   <!-- MAVEN ARTIFACTS -->
   <j:set var="mbuilds" value="${build.moduleBuilds}" />
   <j:if test="${mbuilds!=null}">
@@ -160,7 +164,7 @@
     <tr>
      <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       BUILD ARTIFACTS
+       MAVEN ARTIFACTS
       </b>
      </td>
     </tr>
@@ -192,6 +196,7 @@
    </table>
    <br />
   </j:if>
+
   <!-- JUnit TEMPLATE -->
   <j:set var="junitResultList" value="${it.JUnitTestResult}" />
   <j:if test="${junitResultList.isEmpty()!=true}">
@@ -220,14 +225,43 @@
          </b>
         </td>
        </tr>
+       <j:set var="lastFailedJunit" value="${failed_test}" />
       </j:forEach>
      </j:forEach>
     </j:forEach>
    </table>
    <br />
+
+   <!-- LAST FAILURE -->
+   <j:if test="${lastFailedJunit!=null}">
+    <table width="100%" cellpadding="0" cellspacing="0" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+     <tr>
+      <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
+       <b>
+        Last Test Failure
+       </b>
+      </td>
+     </tr>
+      <tr>
+       <td class="console" style="font-family: Courier New; font-size: 11px; color: black">
+        ${lastFailedJunit.getErrorDetails()}
+       </td>
+      </tr>
+      <j:if test="${lastFailedJunit.getErrorStackTrace()!=null}">
+        <tr>
+         <td class="console" style="font-family: Courier New; font-size: 11px; color: black">
+          Stack trace: ${lastFailedJunit.getErrorStackTrace()}
+         </td>
+        </tr>
+      </j:if>
+    </table>
+    <br />
+   </j:if>
+   
   </j:if>
+
   <!-- COBERTURA TEMPLATE -->
-  <j:set var="coberturaAction" value="${it.coberturaAction}" />
+  <!-- <j:set var="coberturaAction" value="${it.coberturaAction}" />
   <j:if test="${coberturaAction!=null}">
    <j:set var="coberturaResult" value="${coberturaAction.result}" />
    <j:if test="${coberturaResult!=null}">
@@ -342,7 +376,8 @@
     </j:forEach>
    </j:if>
    <br />
-  </j:if>
+  </j:if> -->
+
   <!-- CONSOLE OUTPUT -->
   <!-- <j:getStatic var="resultFailure" field="FAILURE" className="hudson.model.Result" />
   <j:if test="${build.result==resultFailure}">
@@ -364,5 +399,6 @@
    </table>
    <br />
   </j:if> -->
+
  </body>
 </j:jelly>
