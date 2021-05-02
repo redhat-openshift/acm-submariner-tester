@@ -159,10 +159,10 @@ export TEMP_FILE="`mktemp`_temp"
 
 # JOB_NAME is a prefix for files, which is the name of current script directory
 export JOB_NAME="$(basename "$SCRIPT_DIR")"
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
+export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_1_sys_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_2_pkg_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_3_e2e_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_4_lighthouse_junit.xml"
 
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
 > "$E2E_LOG"
