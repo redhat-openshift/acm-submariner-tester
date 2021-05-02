@@ -3729,7 +3729,14 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
     subctl diagnose all || subctl_info=ERROR
   fi
 
-  [[ "$subctl_info" != ERROR ]] || FATAL "Subctl show indicates errors"
+  if [[ "$subctl_info" = ERROR ]] ; then
+    FAILURE "Subctl show/diagnose failed on merged kubeconfig"
+
+    BUG "Subctl error obtaining the Submariner resource: Unauthorized" \
+    "It may happened due to merged kubeconfigs - ignoring failures" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1950960"
+  fi
+
 }
 
 # ------------------------------------------
