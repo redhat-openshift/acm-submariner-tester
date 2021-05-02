@@ -3868,9 +3868,11 @@ function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
 
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || FATAL "Submariner benchmark latency tests have ended with failures, please investigate."
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  FAILURE "Submariner benchmark latency tests have ended with failures, please investigate."
 
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B}  || FATAL "Submariner benchmark throughput tests have ended with failures, please investigate."
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  FAILURE "Submariner benchmark throughput tests have ended with failures, please investigate."
 
 }
 
@@ -4506,20 +4508,27 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     echo 2 > $TEST_STATUS_FILE
   fi
 
-  # Running benchmark tests
-  ${junit_cmd} test_subctl_benchmarks 
 
-  ### Running Submariner Ginkgo tests
+  ### Running Submariner tests with Ginkgo or with subctl commands
+
   if [[ ! "$skip_tests" =~ all ]]; then
 
-    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+    ### Running benchmark tests with subctl
 
-    # Running build_submariner_repos if requested
-    [[ ! "$build_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
+    ${junit_cmd} test_subctl_benchmarks
 
-    ### Running Unit-tests in Submariner project directory (Ginkgo)
+    ### Compiling Submariner projects in order to run Ginkgo tests with GO
+
+    if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+      verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+
+      ${junit_cmd} build_submariner_repos
+    fi
+
+    ### Running Unit-tests in Submariner project with Ginkgo
+
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
-      ${junit_cmd} test_submariner_packages # || ginkgo_tests_status=FAILED
+      ${junit_cmd} test_submariner_packages
 
       if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
         ginkgo_tests_status=FAILED
@@ -4528,10 +4537,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     fi
 
-    ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
     if [[ ! "$skip_tests" =~ e2e ]]; then
 
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+
+      ### Running E2E tests in Submariner and Lighthouse projects with Ginkgo
 
         ${junit_cmd} test_submariner_e2e_with_go
 
@@ -4548,6 +4558,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
         fi
 
       else
+
+      ### Running E2E tests with subctl
 
         ${junit_cmd} test_submariner_e2e_with_subctl
 
