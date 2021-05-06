@@ -159,10 +159,10 @@ export TEMP_FILE="`mktemp`_temp"
 
 # JOB_NAME is a prefix for files, which is the name of current script directory
 export JOB_NAME="$(basename "$SCRIPT_DIR")"
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
+export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_1_sys_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_2_pkg_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_3_e2e_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_4_lighthouse_junit.xml"
 
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
 > "$E2E_LOG"
@@ -716,10 +716,10 @@ function setup_workspace() {
   # # Installing Terraform
   # install_local_terraform "${WORKDIR}"
   BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-  "Use Terraform v0.12.12" \
+  "Use Terraform v0.12.29" \
   "https://github.com/submariner-io/submariner/issues/847"
   # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.12"
+  install_local_terraform "${WORKDIR}" "0.12.29"
 
   echo "# Installing JQ (JSON processor) with Anaconda"
   install_local_jq "${WORKDIR}"
@@ -1917,10 +1917,16 @@ function open_firewall_ports_on_the_broker_node() {
   cd "${target_path}/"
 
   # Fix bug in terraform version
-  # sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
+
+  BUG "'prep_for_subm.sh' downloads remote 'ocp-ipi-aws', even if local 'ocp-ipi-aws' already exists" \
+  "Modify 'prep_for_subm.sh' so it will download all 'ocp-ipi-aws/*' and do not change directory" \
+  "----"
+  # Workaround:
+  sed 's/.*submariner_prep.*/# \0/' -i "${terraform_script}"
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
 
@@ -1981,7 +1987,8 @@ function open_firewall_ports_on_openstack_cluster_b() {
   cd "${target_path}_scripts/"
   ### Temporary end
 
-  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf
+  # Fix bug in terraform version
+  sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
@@ -2595,7 +2602,6 @@ EOF
   || ${OC} apply -f $nodes_conf
 
 }
-
 # ------------------------------------------
 
 function delete_old_submariner_images_from_cluster_a() {
@@ -3703,8 +3709,6 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   ${OC} config get-contexts
 
-  subctl validate all || :
-
   subctl show versions || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
@@ -3715,7 +3719,23 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  [[ "$subctl_info" != ERROR ]] || FATAL "Subctl show indicates errors"
+  # For Subctl > 0.8 : Run subctl diagnose
+  if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
+    BUG "subctl diagnose to return relevant exit code on Submariner failures" \
+    "No workaround is required" \
+    "https://github.com/submariner-io/submariner-operator/issues/1310"
+
+    subctl diagnose all || subctl_info=ERROR
+  fi
+
+  if [[ "$subctl_info" = ERROR ]] ; then
+    FAILURE "Subctl show/diagnose failed on merged kubeconfig"
+
+    BUG "Subctl error obtaining the Submariner resource: Unauthorized" \
+    "It may happened due to merged kubeconfigs - ignoring failures" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1950960"
+  fi
+
 }
 
 # ------------------------------------------
@@ -3839,6 +3859,20 @@ function test_project_e2e_with_go() {
   -ginkgo.reportPassed ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -args $test_params | tee -a "$E2E_LOG"
+
+}
+
+# ------------------------------------------
+
+function test_subctl_benchmarks() {
+  PROMPT "Testing subctl benchmark: latency and throughput tests"
+  trap_to_debug_commands;
+
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  FAILURE "Submariner benchmark latency tests have ended with failures, please investigate."
+
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  FAILURE "Submariner benchmark throughput tests have ended with failures, please investigate."
 
 }
 
@@ -3978,9 +4012,11 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    echo -e "\n############################## Submariner information (subctl show all) ##############################\n"
+    echo -e "\n############################## Submariner information (subctl show and diagnose) ##############################\n"
 
     subctl show all || :
+
+    subctl diagnose all || :
 
     export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
     print_resources_and_pod_logs "${CLUSTER_A_NAME}"
@@ -4253,7 +4289,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
       fi
     fi
 
-
     # Verify clusters status after OCP reset/create
 
     ${junit_cmd} test_kubeconfig_aws_cluster_a
@@ -4265,8 +4300,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_kubeconfig_aws_cluster_a
-
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
       ${junit_cmd} clean_node_labels_and_machines_cluster_a
@@ -4277,8 +4310,6 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     # Running cleanup on cluster B if requested
     if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} test_kubeconfig_osp_cluster_b
 
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
@@ -4477,17 +4508,27 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     echo 2 > $TEST_STATUS_FILE
   fi
 
-  ### Running Submariner Ginkgo tests
+
+  ### Running Submariner tests with Ginkgo or with subctl commands
+
   if [[ ! "$skip_tests" =~ all ]]; then
 
-    verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+    ### Running benchmark tests with subctl
 
-    # Running build_submariner_repos if requested
-    [[ ! "$build_go_tests" =~ ^(y|yes)$ ]] || ${junit_cmd} build_submariner_repos
+    ${junit_cmd} test_subctl_benchmarks
 
-    ### Running Unit-tests in Submariner project directory (Ginkgo)
+    ### Compiling Submariner projects in order to run Ginkgo tests with GO
+
+    if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+      verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+
+      ${junit_cmd} build_submariner_repos
+    fi
+
+    ### Running Unit-tests in Submariner project with Ginkgo
+
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
-      ${junit_cmd} test_submariner_packages # || ginkgo_tests_status=FAILED
+      ${junit_cmd} test_submariner_packages
 
       if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
         ginkgo_tests_status=FAILED
@@ -4496,10 +4537,11 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
     fi
 
-    ### Running E2E tests in Submariner and Lighthouse projects directories (Ginkgo)
     if [[ ! "$skip_tests" =~ e2e ]]; then
 
       if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+
+      ### Running E2E tests in Submariner and Lighthouse projects with Ginkgo
 
         ${junit_cmd} test_submariner_e2e_with_go
 
@@ -4516,6 +4558,9 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
         fi
 
       else
+
+      ### Running E2E tests with subctl
+
         ${junit_cmd} test_submariner_e2e_with_subctl
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
