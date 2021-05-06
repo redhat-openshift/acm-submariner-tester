@@ -4183,8 +4183,8 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
   # # Setup and verify environment
   # setup_workspace
 
-  # Set script trap functions
-  set_trap_functions
+  # # Set script trap functions
+  # set_trap_functions
 
   # Debug functions
   ${junit_cmd} test_debug_pass
