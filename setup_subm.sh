@@ -381,7 +381,7 @@ if [[ -z "$got_user_input" ]]; then
       get_ocpup_tool=${input:-no}
     done
 
-    # User input: $reset_cluster_a - to destroy_cluster_a AND create_cluster_a
+    # User input: $reset_cluster_a - to destroy_aws_cluster AND create_aws_cluster
     while [[ ! "$reset_cluster_a" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create AWS cluster A ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -399,7 +399,7 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $reset_cluster_b - to destroy_cluster_b AND create_cluster_b
+    # User input: $reset_cluster_b - to destroy_osp_cluster AND create_osp_cluster
     while [[ ! "$reset_cluster_b" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -417,7 +417,7 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $reset_cluster_c - to destroy_cluster_c AND create_cluster_c
+    # User input: $reset_cluster_c - to destroy_aws_cluster AND create_cluster_c
     while [[ ! "$reset_cluster_c" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster C ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -1261,11 +1261,14 @@ function prepare_install_aws_cluster() {
   trap_to_debug_commands;
   # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
+  local ocp_install_dir="$1"
+  local installer_yaml_source="$2"
+
   cd ${WORKDIR}
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
-  if [[ -d "$CLUSTER_A_DIR" ]] && [[ -n `ls -A "$CLUSTER_A_DIR"` ]] ; then
-    FATAL "$CLUSTER_A_DIR directory contains previous deployment configuration. It should be initially removed."
+  if [[ -d "$ocp_install_dir" ]] && [[ -n `ls -A "$ocp_install_dir"` ]] ; then
+    FATAL "$ocp_install_dir directory contains previous deployment configuration. It should be initially removed."
   fi
 
   # To manually create new OCP install-config.yaml:
@@ -1283,28 +1286,30 @@ function prepare_install_aws_cluster() {
     # ? cluster Name user-cluster-a
     # ? Pull Secret
 
-  mkdir -p "${CLUSTER_A_DIR}"
-  local ocp_install_yaml="${CLUSTER_A_DIR}/install-config.yaml"
-  cp -f "${CLUSTER_A_YAML}" "$ocp_install_yaml"
-  chmod 777 "$ocp_install_yaml"
+  mkdir -p "${ocp_install_dir}"
+  local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
+  cp -f "${installer_yaml_source}" "$installer_yaml_new"
+  chmod 777 "$installer_yaml_new"
 
   echo "# Update the OCP installer configuration (YAML) of AWS cluster A"
 
-  change_yaml_key_value "$ocp_install_yaml" "region" "$AWS_REGION"
+  change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
-  # TODO: change more {keys : values} in $ocp_install_yaml, with external variables file
+  # TODO: change more {keys : values} in $installer_yaml_new, with external variables file
 
 }
 
 # ------------------------------------------
 
-function create_cluster_a() {
+function create_aws_cluster() {
 ### Create AWS cluster A (public) with OCP installer ###
   PROMPT "Creating AWS cluster A (public) with OCP installer"
   trap_to_debug_commands;
 
+  local ocp_install_dir="$1"
+
   # Run OCP installer with the user-cluster-a.yaml:
-  cd ${CLUSTER_A_DIR}
+  cd ${ocp_install_dir}
   ../openshift-install create cluster --log-level debug
 
   # To tail all OpenShift Installer logs (in a new session):
@@ -1318,7 +1323,7 @@ function create_cluster_a() {
 
 # ------------------------------------------
 
-function create_cluster_b() {
+function create_osp_cluster() {
 ### Create Openstack cluster B (on-prem) with OCPUP tool ###
   PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
   trap_to_debug_commands;
@@ -1456,10 +1461,14 @@ function test_cluster_status() {
 
 # ------------------------------------------
 
-function destroy_cluster_a() {
-### Destroy your previous AWS cluster A (public) ###
-  PROMPT "Destroying previous AWS cluster A (public)"
+function destroy_aws_cluster() {
+### Destroy your previous AWS cluster (public) ###
+  PROMPT "Destroying previous AWS cluster (public)"
   trap_to_debug_commands;
+
+  local ocp_install_dir="$1"
+  local cluster_name="$2"
+
   # Temp - CD to main working directory
   cd ${WORKDIR}
 
@@ -1467,12 +1476,12 @@ function destroy_cluster_a() {
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
   # TODO: should first check if it was not already purged, because it can save a lot of time.
-  if [[ -d "${CLUSTER_A_DIR}" ]]; then
-    echo "# Previous OCP Installation found: ${CLUSTER_A_DIR}"
-    # cd "${CLUSTER_A_DIR}"
-    if [[ -f "${CLUSTER_A_DIR}/metadata.json" ]] ; then
-      echo "# Destroying OCP cluster ${CLUSTER_A_NAME}:"
-      timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${CLUSTER_A_DIR}" || \
+  if [[ -d "${ocp_install_dir}" ]]; then
+    echo "# Previous OCP Installation found: ${ocp_install_dir}"
+    # cd "${ocp_install_dir}"
+    if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
+      echo "# Destroying OCP cluster ${cluster_name}:"
+      timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${ocp_install_dir}" || \
       ( [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
         "Force exist OCP destroy process" \
@@ -1481,18 +1490,18 @@ function destroy_cluster_a() {
     fi
     # cd ..
 
-    echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_A_NAME}"
-    parent_dir=$(dirname -- "$CLUSTER_A_DIR")
-    base_dir=$(basename -- "$CLUSTER_A_DIR")
-    backup_and_remove_dir "$CLUSTER_A_DIR" "${parent_dir}/_${base_dir}_${DATE_TIME}"
+    echo "# Backup previous OCP install-config directory of cluster ${cluster_name}"
+    parent_dir=$(dirname -- "$ocp_install_dir")
+    base_dir=$(basename -- "$ocp_install_dir")
+    backup_and_remove_dir "$ocp_install_dir" "${parent_dir}/_${base_dir}_${DATE_TIME}"
 
     # Remove existing OCP install-config directory:
-    #rm -r "_${CLUSTER_A_DIR}/" || echo "# Old config dir removed."
-    echo "# Deleting all previous ${CLUSTER_A_DIR} config directories (older than 1 day):"
+    #rm -r "_${ocp_install_dir}/" || echo "# Old config dir removed."
+    echo "# Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
     # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
   else
-    echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_A_DIR}. Skipping cluster Destroy."
+    echo "# OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
   fi
 
   BUG "WARNING: OCP destroy command does not remove the previous DNS record sets from AWS Route53" \
@@ -1501,8 +1510,8 @@ function destroy_cluster_a() {
   # Workaround:
 
   # set AWS DNS record sets to be deleted
-  AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
-  AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+  AWS_DNS_ALIAS1="api.${cluster_name}.${AWS_ZONE_NAME}."
+  AWS_DNS_ALIAS2="\052.apps.${cluster_name}.${AWS_ZONE_NAME}."
 
   echo -e "# Deleting AWS DNS record sets from Route53:
   # $AWS_DNS_ALIAS1
@@ -1511,7 +1520,7 @@ function destroy_cluster_a() {
 
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
   # chmod +x delete_aws_dns_alias_zones.sh
-  # ./delete_aws_dns_alias_zones.sh "${CLUSTER_A_NAME}"
+  # ./delete_aws_dns_alias_zones.sh "${cluster_name}"
   delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS1"
   delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS2"
 
@@ -1526,7 +1535,7 @@ function destroy_cluster_a() {
 
 # ------------------------------------------
 
-function destroy_cluster_b() {
+function destroy_osp_cluster() {
 ### If Required - Destroy your previous Openstack cluster B (on-prem) ###
   PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_to_debug_commands;
@@ -1937,7 +1946,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch=devel
+  local commit_or_branch="release-0.8"
   local github_dir="tools/openshift/ocp-ipi-aws"
   local cluster_path="$CLUSTER_A_DIR"
   local target_path="${cluster_path}/${github_dir}"
@@ -1959,6 +1968,9 @@ function open_firewall_ports_on_the_broker_node() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
@@ -2030,6 +2042,9 @@ function open_firewall_ports_on_openstack_cluster_b() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
@@ -3977,20 +3992,21 @@ function create_all_test_results_in_polarion() {
   add_polarion_testrun_url_to_report_description "$polarion_output"
 
 
-  # Upload E2E tests to Polarion
+  # Upload Ginkgo E2E tests to Polarion
   if [[ (! "$skip_tests" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
-    echo "# Upload Junit results of E2E (Ginkgo) tests to Polarion:"
 
-    BUG "Polarion cannot parse junit xml which where created by Ginkgo tests" \
-    "Rename in Ginkgo junit xml the 'passed' tags with 'system-out' tags" \
-    "https://github.com/submariner-io/shipyard/issues/48"
-    # Workaround:
-    sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$E2E_JUNIT_XML" || :
+    echo "# Upload Junit results of Submariner E2E (Ginkgo) tests to Polarion:"
 
-    # Redirect output to stdout and to $polarion_output, in order to get polarion testrun url into report
+    # Redirecting with TEE to stdout and to $polarion_output, in order to get polarion testrun url into report
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
-
     add_polarion_testrun_url_to_report_description "$polarion_output"
+
+    echo "# Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
+
+    # Redirecting with TEE to stdout and to $polarion_output, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
+    add_polarion_testrun_url_to_report_description "$polarion_output"
+
   fi
 
   # Upload UNIT tests to Polarion (skipping, not really required)
@@ -4066,6 +4082,9 @@ function collect_submariner_info() {
 
     export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
     print_resources_and_pod_logs "${CLUSTER_B_NAME}"
+
+    export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+    print_resources_and_pod_logs "${CLUSTER_C_NAME}"
 
   ) |& tee -a $log_file
 
@@ -4253,6 +4272,10 @@ export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
 export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
 export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 
+# Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
+export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
+export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
+
 # Printing output both to stdout and to $SYS_LOG with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
@@ -4287,25 +4310,25 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running reset_cluster_a if requested
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} destroy_cluster_a
+      ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
-      ${junit_cmd} prepare_install_aws_cluster
+      ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML"
 
-      ${junit_cmd} create_cluster_a
+      ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
 
     else
-      # Running destroy_cluster_a and create_cluster_a separately
+      # Running destroy_aws_cluster and create_aws_cluster separately
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_cluster_a
+        ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
       fi
 
       if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} prepare_install_aws_cluster
+        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML"
 
-        ${junit_cmd} create_cluster_a
+        ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
 
       fi
     fi
@@ -4313,21 +4336,21 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running reset_cluster_b if requested
     if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} destroy_cluster_b
+      ${junit_cmd} destroy_osp_cluster
 
-      ${junit_cmd} create_cluster_b
+      ${junit_cmd} create_osp_cluster
 
     else
-      # Running destroy_cluster_b and create_cluster_b separately
+      # Running destroy_osp_cluster and create_osp_cluster separately
       if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_cluster_b
+        ${junit_cmd} destroy_osp_cluster
 
       fi
 
       if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} create_cluster_b
+        ${junit_cmd} create_osp_cluster
 
       fi
     fi
@@ -4335,25 +4358,25 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     # Running reset_cluster_c if requested
     if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} destroy_cluster_c
+      ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
-      ${junit_cmd} prepare_install_aws_cluster
+      ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML"
 
-      ${junit_cmd} create_cluster_c
+      ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
 
     else
-      # Running destroy_cluster_c and create_cluster_c separately
+      # Running destroy_aws_cluster and create_cluster_c separately
       if [[ "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_cluster_c
+        ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
       if [[ "$create_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} prepare_install_aws_cluster
+        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML"
 
-        ${junit_cmd} create_cluster_c
+        ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
 
       fi
     fi
