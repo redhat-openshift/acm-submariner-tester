@@ -1896,7 +1896,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch=devel
+  local commit_or_branch="release-0.8"
   local github_dir="tools/openshift/ocp-ipi-aws"
   local cluster_path="$CLUSTER_A_DIR"
   local target_path="${cluster_path}/${github_dir}"
