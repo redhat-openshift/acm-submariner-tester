@@ -1918,6 +1918,9 @@ function open_firewall_ports_on_the_broker_node() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+  
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
@@ -1989,6 +1992,9 @@ function open_firewall_ports_on_openstack_cluster_b() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
