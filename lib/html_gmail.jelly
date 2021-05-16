@@ -6,7 +6,7 @@
 
   <!-- GENERAL INFO -->
   <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-   <tr>
+   <!-- <tr>
     <td align="left" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
      <j:choose>
       <j:when test="${build.result=='SUCCESS'}">
@@ -28,7 +28,7 @@
       BUILD ${build.result}
      </b>
     </td>
-   </tr>
+   </tr> -->
    <tr>
     <td>Build:</td>
     <td>${build.displayName}</td>

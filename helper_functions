@@ -211,6 +211,7 @@ function run_and_tail() {
   local process_rc=0
 
   # Tail the log, until command has ended or timed-out
+  mkdir -p "$(dirname "$log_to_tail")"
   touch "$log_to_tail"
   tail --pid=$pid -n0 -F "$log_to_tail"
 
@@ -1114,7 +1115,7 @@ function git_reset_local_repo() {
   git reset --hard $branch_or_tag
   # git clean -fdx
   git checkout --theirs .
-  git pull origin $branch_or_tag
+  # git pull origin $branch_or_tag
 
   echo -e "\n# Latest commits in the repository: \n"
   git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
