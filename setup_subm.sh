@@ -1359,8 +1359,8 @@ function create_osp_cluster() {
   cd "${OCPUP_DIR}"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
-#   local terraform_osp_provider="./tf/osp-sg/versions.tf"
-#
+  local terraform_osp_provider="./tf/osp-sg/versions.tf"
+
 #   cat <<-EOF > $terraform_osp_provider
 #   terraform {
 #     required_version = ">= 0.12, <= 0.12.12"
@@ -4659,24 +4659,53 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
     ${junit_cmd} open_firewall_ports_on_the_broker_node
 
     # TODO: Run only if it's an openstack (on-prem) cluster
-    ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+
+    ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
     ${junit_cmd} configure_images_prune_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} configure_images_prune_cluster_b
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} configure_images_prune_cluster_c
+      ${junit_cmd} label_first_gateway_cluster_b
 
-    # Running configure_cluster_custom_registry if requested - To use custom Submariner images
+      ${junit_cmd} configure_images_prune_cluster_b
+
+    fi
+
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} label_first_gateway_cluster_c
+
+      ${junit_cmd} configure_images_prune_cluster_c
+
+    fi
+
+    # Overriding Submariner images with custom images from registry, if requested with --registry-images
     if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
-        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+      # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
 
-        ${junit_cmd} configure_custom_registry_cluster_a
+      ${junit_cmd} configure_custom_registry_cluster_a
 
-        [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} configure_custom_registry_cluster_b
+      ${junit_cmd} upload_custom_images_to_registry_cluster_a
 
-        [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} configure_custom_registry_cluster_c
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        ${junit_cmd} configure_custom_registry_cluster_b
+
+        ${junit_cmd} upload_custom_images_to_registry_cluster_b
+
+      fi
+
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        ${junit_cmd} configure_custom_registry_cluster_c
+
+        ${junit_cmd} upload_custom_images_to_registry_cluster_c
+
+      fi
+
     fi
 
   else
@@ -4730,11 +4759,11 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
     ${junit_cmd} test_subctl_command
 
-    ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
-
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} label_first_gateway_cluster_b
-
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} label_first_gateway_cluster_c
+    # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+    #
+    # [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} label_first_gateway_cluster_b
+    #
+    # [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} label_first_gateway_cluster_c
 
     ${junit_cmd} set_join_parameters_for_cluster_a
 
@@ -4742,16 +4771,16 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
 
-    # Overriding Submariner images with custom images from registry
-    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
-
-      ${junit_cmd} upload_custom_images_to_registry_cluster_a
-
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_b
-
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_c
-
-    fi
+    # # Overriding Submariner images with custom images from registry
+    # if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+    #
+    #   ${junit_cmd} upload_custom_images_to_registry_cluster_a
+    #
+    #   [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_b
+    #
+    #   [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_c
+    #
+    # fi
 
     ${junit_cmd} install_broker_cluster_a
 
