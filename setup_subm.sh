@@ -1291,6 +1291,7 @@ function prepare_install_aws_cluster() {
 
   local ocp_install_dir="$1"
   local installer_yaml_source="$2"
+  local cluster_name="$3"
 
   cd ${WORKDIR}
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
@@ -1319,11 +1320,11 @@ function prepare_install_aws_cluster() {
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
-  echo "# Update the OCP installer configuration (YAML) of AWS cluster A"
+  echo "# Update the OCP installer configuration (YAML) of AWS cluster $cluster_name"
+  [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
+  [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
-  change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
-
-  # TODO: change more {keys : values} in $installer_yaml_new, with external variables file
+  # TODO: change more {keys : values} in $installer_yaml_new, from the global variables file
 
 }
 
@@ -4532,7 +4533,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
       ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
-      ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML"
+      ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
       ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
 
@@ -4546,7 +4547,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
       if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML"
+        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
         ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
 
@@ -4585,7 +4586,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
-        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML"
+        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
         ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
 
@@ -4599,7 +4600,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         if [[ "$create_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-          ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML"
+          ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
           ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
 
