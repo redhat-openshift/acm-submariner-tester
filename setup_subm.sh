@@ -1399,7 +1399,7 @@ function create_osp_cluster() {
   local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
   local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
 
-  run_and_tail "$ocp_cmd" "$ocp_log" 1h "Access the OpenShift web-console" \
+  run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
   || FATAL "OCP create cluster B did not complete as expected"
 
   # To tail all OpenShift Installer logs (in a new session):
