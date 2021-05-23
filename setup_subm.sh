@@ -2142,7 +2142,7 @@ function install_broker_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   echo "# Remove previous broker-info.subm (if exists)"
-  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
+  rm broker-info.subm || echo "# Previous ${BROKER_INFO} already removed"
 
   echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
 
