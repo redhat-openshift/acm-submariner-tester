@@ -183,7 +183,7 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 # The default script exit code is 1 (later it is updated)
 export SCRIPT_RC=1
 
-# File to store test status. Resetting to empty, since no test were yet run.
+# File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.out"
 > $TEST_STATUS_FILE
 
@@ -4197,6 +4197,10 @@ function create_all_test_results_in_polarion() {
   PROMPT "Upload all test results to Polarion"
   trap_to_debug_commands;
 
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+  echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
+
   # Temp file to store Polarion output
   local polarion_output="`mktemp`_polarion"
   local polarion_rc=0
@@ -4742,7 +4746,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
   ### Deploy Submariner on the clusters (if not requested to skip_install) ###
 
   echo -e "# OCP clusters and environment setup is ready.
-  \n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED.
+  \n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
   \n# ($TEST_STATUS_FILE with exit code 1)"
 
   echo 1 > $TEST_STATUS_FILE
@@ -4905,7 +4909,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
     fi
 
-    echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE.
+    echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion.
     \n# ($TEST_STATUS_FILE with exit code 2)"
 
     echo 2 > $TEST_STATUS_FILE
@@ -4996,7 +5000,7 @@ cd ${SCRIPT_DIR}
 
 # Get test exit status (from file $TEST_STATUS_FILE)
 test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
-echo -e "\n# System tests status was set to [${test_status}] \n"
+echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
 
 if [[ -n "$test_status" ]] ; then
   # Update the script exit code according to system tests status
