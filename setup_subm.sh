@@ -632,27 +632,23 @@ function show_test_plan() {
     echo -e "# Submariner deployment and environment setup for the tests:
 
     - configure_custom_registry_cluster_a: $registry_images
-    - configure_custom_registry_cluster_b: $registry_images
-    - configure_custom_registry_cluster_c: $registry_images
+    - configure_custom_registry_cluster_b / c: $registry_images
     - test_kubeconfig_cluster_a
-    - test_kubeconfig_cluster_b
-    - test_kubeconfig_cluster_c
+    - test_kubeconfig_cluster_b / c
     - download_subctl: $SUBM_VER_TAG
     - install_netshoot_app_on_cluster_a
-    - install_nginx_svc_on_cluster_b
+    - install_nginx_svc_on_cluster_b / c
     - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
     - open_firewall_ports_on_the_broker_node (\"prep_for_subm.sh\")
     - open_firewall_ports_on_openstack_cluster_b (\"configure_osp.sh\")
     - label_gateway_on_broker_nodes_with_external_ip
-    - label_first_gateway_cluster_b
+    - label_first_gateway_cluster_b / c
     - install_broker_cluster_a
     - set_join_parameters_for_cluster_a
-    - set_join_parameters_for_cluster_b
-    - set_join_parameters_for_cluster_c
+    - set_join_parameters_for_cluster_b / c
     - run_subctl_join_on_cluster_a
-    - run_subctl_join_on_cluster_b
-    - run_subctl_join_on_cluster_c
+    - run_subctl_join_on_cluster_b / c
     $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
   fi
@@ -665,35 +661,29 @@ function show_test_plan() {
   echo -e "\n### Will execute: High-level (System) tests of Submariner:
 
     - test_submariner_resources_cluster_a
-    - test_submariner_resources_cluster_b
-    - test_submariner_resources_cluster_c
+    - test_submariner_resources_cluster_b / c
     - test_public_ip_on_gateway_node
     - test_disaster_recovery_of_gateway_nodes
     - test_renewal_of_gateway_and_public_ip
     - test_cable_driver_cluster_a
-    - test_cable_driver_cluster_b
-    - test_cable_driver_cluster_c
+    - test_cable_driver_cluster_b / c
     - test_subctl_show_and_validate_on_merged_kubeconfigs
     - test_ha_status_cluster_a
-    - test_ha_status_cluster_b
-    - test_ha_status_cluster_c
+    - test_ha_status_cluster_b / c
     - test_submariner_connection_cluster_a
-    - test_submariner_connection_cluster_b
-    - test_submariner_connection_cluster_c
+    - test_submariner_connection_cluster_b / c
     - test_globalnet_status_cluster_a: $globalnet
-    - test_globalnet_status_cluster_b: $globalnet
-    - test_globalnet_status_cluster_c: $globalnet
-    - export_nginx_default_namespace_cluster_b
-    - export_nginx_headless_namespace_cluster_b
+    - test_globalnet_status_cluster_b / c: $globalnet
+    - export_nginx_default_namespace_cluster_b / c
+    - export_nginx_headless_namespace_cluster_b / c
     - test_lighthouse_status_cluster_a
-    - test_lighthouse_status_cluster_b
-    - test_lighthouse_status_cluster_c
+    - test_lighthouse_status_cluster_b / c
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
-    - install_nginx_headless_namespace_cluster_b
+    - install_nginx_headless_namespace_cluster_b / c
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_new_netshoot_global_ip_cluster_a: $globalnet
-    - test_nginx_headless_global_ip_cluster_b: $globalnet
+    - test_nginx_headless_global_ip_cluster_b / c: $globalnet
     - test_clusters_connected_full_domain_name
     - test_clusters_cannot_connect_short_service_name
     - test_clusters_connected_headless_service_on_new_namespace
@@ -2172,11 +2162,20 @@ function label_gateway_on_broker_nodes_with_external_ip() {
 }
 
 function label_first_gateway_cluster_b() {
-### Label a Gateway node on OSP cluster B (on-prem) ###
-  PROMPT "Adding Gateway label to the first worker node on OSP cluster B (on-prem)"
+### Label a Gateway node on cluster B ###
+  PROMPT "Adding Gateway label to the first worker node on cluster B"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  gateway_label_first_worker_node
+}
+
+function label_first_gateway_cluster_c() {
+### Label a Gateway node on cluster C ###
+  PROMPT "Adding Gateway label to the first worker node on cluster C"
+  trap_to_debug_commands;
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
   gateway_label_first_worker_node
 }
 
@@ -2281,7 +2280,7 @@ function install_broker_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   echo "# Remove previous broker-info.subm (if exists)"
-  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
+  rm broker-info.subm || echo "# Previous ${BROKER_INFO} already removed"
 
   echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
 
