@@ -1098,15 +1098,7 @@ function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    if [[ "$SUBM_VER_TAG" = latest ]]; then
-      # "latest" version is retrieved by most recent tag that starts with "vNUMBER"
-      export SUBM_VER_TAG='v[0-9]'
-
-    elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
-      # Number is considered "vNUMBER" tag
-      export SUBM_VER_TAG="v${SUBM_VER_TAG}"
-
-    fi
+    set_SUBM_VER_TAG
 
     download_subctl_by_tag "$SUBM_VER_TAG"
 
@@ -1128,53 +1120,31 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Download SubCtl from private repository (e.g. gitlab), if using --registry-images and not subctl-devel tag
+    # Download SubCtl from SUBCTL_REGISTRY_MIRROR, if using --registry-images and if subctl_tag is not devel
     if [[ ! "$subctl_tag" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
 
-      echo "# Downloading SubCtl from a private repository"
+      echo "# Downloading SubCtl from $SUBCTL_PRIVATE_URL"
 
-
-
-      BUG "When downloading SubCtl from GitLab, the version must be digits and dots only" \
-      "Get the latest subctl release number (without letters)"
-      # Workaround for bug:
-      if [[ ! "$subctl_tag" =~ ^v[0-9\.]+  ]]; then
-        subctl_tag="$(get_latest_subctl_version_tag)"
-      fi
+      # Update $subctl_tag value
+      set_subm_version_tag_var "subctl_tag"
 
       local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
 
-      if ( ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm ) ; then
+      ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm
 
-        echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
-        tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
+      echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
+      tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-        # Rename last extracted file to subctl
-        extracted_file="$(ls -1 -tu subctl* | head -1)"
+      # Rename last extracted file to subctl
+      extracted_file="$(ls -1 -tu subctl* | head -1)"
 
-        [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
-        chmod +x subctl
-
-      # Temporarily fix - Downloading subctl from GitLab (SUBCTL_PRIVATE_URL):
-      else
-        # For GitLab releases - the version can only include numbers and dots - trimming all other chars
-        subctl_tag=$(echo $subctl_tag | grep -Eo "[0-9.]+" | head -1)
-
-        echo "# SubCtl binary will be extracted from: $SUBCTL_PRIVATE_URL/${subctl_tag}/subctl"
-        ( # subshell to hide commands
-          local subctl_binary_url="${SUBCTL_PRIVATE_URL}/${subctl_tag}/subctl"
-          local subctl_url_token="${SUBCTL_PRIVATE_TOKEN:+PRIVATE-TOKEN: $SUBCTL_PRIVATE_TOKEN}"
-
-          curl_response_code=$(curl -L -X GET --header "$subctl_url_token" "$subctl_binary_url" --output subctl -w "%{http_code}")
-          [[ "$curl_response_code" -eq 200 ]] || FATAL "Failed to download SubCtl from $subctl_binary_url"
-        )
-
-      fi
+      [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+      chmod +x subctl
 
       echo "# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
@@ -2959,19 +2929,8 @@ function upload_custom_images_to_registry() {
   echo "# Read subctl join command from file: $join_cmd_file"
   local subctl_join="$(< $join_cmd_file)"
 
-  echo "# Retrieve correct tag for Subctl version '$SUBM_VER_TAG'"
-  if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
-    export SUBM_VER_TAG="$(get_latest_subctl_version_tag)"
-  elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
-    echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
-    export SUBM_VER_TAG="v${SUBM_VER_TAG}"
-  fi
-
-  if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
-    echo "# REGISTRY_TAG_MATCH variable was set to extract from '$SUBM_VER_TAG' the regex match: $REGISTRY_TAG_MATCH"
-    export SUBM_VER_TAG="v$(echo $SUBM_VER_TAG | grep -Po "$REGISTRY_TAG_MATCH")"
-    echo "# New \$SUBM_VER_TAG for registry images: $SUBM_VER_TAG"
-  fi
+  # Update $SUBM_VER_TAG value
+  set_subm_version_tag_var
 
   echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
   \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
@@ -3020,6 +2979,37 @@ function upload_custom_images_to_registry() {
   echo "$subctl_join" > "$join_cmd_file"
 
 }
+
+# ------------------------------------------
+
+function set_subm_version_tag_var() {
+# update the variable value of $SUBM_VER_TAG (or the $1 input var name)
+  trap_to_debug_commands;
+
+  # Get variable name (default is "SUBM_VER_TAG")
+  local tag_var_name="${1:-SUBM_VER_TAG}"
+  # Set subm_version_tag as the actual value of tag_var_name
+  local subm_version_tag="${!tag_var_name}"
+
+  echo "# Retrieve correct tag for Subctl version \$${tag_var_name} : $subm_version_tag"
+  if [[ "$subm_version_tag" =~ latest|devel ]]; then
+    subm_version_tag=$(get_latest_subctl_version_tag)
+  elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
+    echo "# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
+    subm_version_tag=v${subm_version_tag}
+  fi
+
+  if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
+    echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
+    subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
+    echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
+  fi
+
+  # Reevaluate $tag_var_name value
+  local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
+  eval $eval_cmd
+}
+
 # ------------------------------------------
 
 function run_subctl_join_on_cluster_a() {
