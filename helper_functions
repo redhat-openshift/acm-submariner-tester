@@ -71,15 +71,24 @@ function highlight()
 # ------------------------------------------
 
 function print_cmd_location() {
-  new_location="[$0] [${PWD##*/}]" && \
+  # Get command to print, but skip printing if it's empty
+  local cmd="$(echo "$1" | xargs)"
+  [[ -n "$cmd" ]] || return
+
+  # Get PS1 prompt (and trim trailing and leading spaces)
+  local prompt=$(echo -e "\n${PS1}\n" | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
+  local new_location="[$0]${prompt:+ $prompt} [${PWD##*/}]" && \
   if [[ "$new_location" != "$current_location" ]]; then
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
   fi
-  # Add PS1 prompt (and trim trailing and leading spaces)
-  prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
-  prompt="${prompt:+"$prompt "}${1}"
-  echo -e "${CYAN}${prompt}${NO_COLOR}"
+
+  # # Add PS1 prompt (and trim trailing and leading spaces)
+  # prompt=$(eval 'echo -e "\n'$PS1'\n"' | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
+  # prompt="${prompt:+"$prompt "}${1}"
+  # echo -e "${CYAN}${prompt}${NO_COLOR}"
+
+  echo -e "${CYAN}\$ ${cmd}${NO_COLOR}"
 }
 
 # ------------------------------------------
@@ -88,28 +97,28 @@ function print_cmd_location() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
-     cmd_expanded="$BASH_COMMAND"
-     var_values="\n"
+     _cmd_expanded="$BASH_COMMAND"
+     _all_vars_output="\n"
 
      # List simple variables ($v or ${v}) first
-     var_list=( $(echo "$cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
+     _var_list=( $(echo "$_cmd_expanded" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
 
      # List complex variables (with parameter expansion) next
-     var_list+=( $(echo "$cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
+     _var_list+=( $(echo "$_cmd_expanded" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
-     for variable in "${var_list[@]}" ; do
-        var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
-        value="${!var_name}"
-        if [[ "$variable" =~ [:/] ]] ; then
-          # For complex variables - add it to $var_values
-          var_values+="\$${var_name} = ${value} \n$"
+     for _variable in "${_var_list[@]}" ; do
+        _var_name=$(echo ${_variable%%[:/]*} | tr -d "\${}")
+        _var_value="${!_var_name}"
+        if [[ "$_variable" =~ [:/] ]] ; then
+          # For complex variables - add it to $_all_vars_output
+          _all_vars_output+="# ${_var_name}=${_var_value} \n$"
         else
-          # For simple variables - replace within $cmd_expanded
-          cmd_expanded="${cmd_expanded//$variable/$value}"
+          # For simple variables - replace within $_cmd_expanded
+          _cmd_expanded="${_cmd_expanded//$_variable/$_var_value}"
         fi
       done
 
-      print_cmd_location "${var_values}${cmd_expanded}" 2>/dev/null || :
+      print_cmd_location "${_all_vars_output}${_cmd_expanded}" 2>/dev/null || :
    fi
   ' DEBUG
 }
