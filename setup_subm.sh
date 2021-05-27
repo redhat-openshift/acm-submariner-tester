@@ -1098,7 +1098,7 @@ function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    set_SUBM_VER_TAG
+    set_subm_version_tag_var
 
     download_subctl_by_tag "$SUBM_VER_TAG"
 
