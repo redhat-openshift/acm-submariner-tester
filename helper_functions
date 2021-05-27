@@ -72,12 +72,14 @@ function highlight()
 
 function print_cmd_location() {
   # Get command to print, but skip printing if it's empty
-  local cmd="$(echo "$1" | xargs)"
+  local cmd="$(echo -e "$1" | xargs)"
   [[ -n "$cmd" ]] || return
 
   # Get PS1 prompt (and trim trailing and leading spaces)
-  local prompt=$(echo -e "\n${PS1}\n" | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
-  local new_location="[$0]${prompt:+ $prompt} [${PWD##*/}]" && \
+  #local prompt=$(echo $PS1 | sed -e 's#\\\[##g' -e 's#\\\\\]##g' | xargs)
+  # local new_location="[$0]${prompt:+ $prompt} [${PWD##*/}]" && \
+
+  local new_location="[$0] $PS1 [${PWD##*/}]" && \
   if [[ "$new_location" != "$current_location" ]]; then
     export current_location="$new_location"
     echo -e "\n${CYAN}$current_location${NO_COLOR}\n"
