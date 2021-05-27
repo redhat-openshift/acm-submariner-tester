@@ -1,14 +1,13 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
-<j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
 
   <!-- GENERAL INFO -->
   <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-   <!--<tr>
-    <td align="right" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+   <!-- <tr>
+    <td align="left" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
      <j:choose>
       <j:when test="${build.result=='SUCCESS'}">
        <img src="${rooturl}static/e59dfe28/images/32x32/blue.gif">
@@ -46,23 +45,30 @@
      </a>
     </td>
    </tr>
-   <j:if test="${it.isPluginInstalled('blueocean-display-url')}">
-     <!-- <j:set var="blueTestsUrl" value="${buildenv.get('RUN_TESTS_DISPLAY_URL')}"/> -->
-     <!-- <j:set var="blueTestsUrl" value="${it.getAction('org.jenkinsci.plugins.displayurlapi.DisplayURLProvider').get().getTestsURL(run)}" /> -->
-     <j:set var="blueTestsUrl" value="blue/organizations/jenkins/${project.fullName.replaceAll('/', '%2F')}/detail/${project.name}/${build.id}/tests"/>
-     ${logger.println("blueTestsUrl = " + rooturl + blueTestsUrl )}
+   <j:set var="blueoceanPlugin" value="${it.getAction('io.jenkins.blueocean.service.embedded.BlueOceanUrlAction')}" />
+   ${logger.println("blueoceanPlugin = " + blueoceanPlugin.getUrlName() )}
+   <j:if test="${blueoceanPlugin!=null}">
+     <j:set var="blueTestsUrl" value="${rooturl + blueoceanPlugin.getUrlName() + 'tests'}"/>
+     ${logger.println("blueTestsUrl = " + blueTestsUrl )}
      <tr>
        <td>Junit:</td>
-       <td>${rooturl}${blueTestsUrl}</td>
+       <td>
+        <a href="${blueTestsUrl}">${blueTestsUrl}</a>
+       </td>
      </tr>
    </j:if>
-   <j:if test="${it.isPluginInstalled('test-results-analyzer')}">
+   <j:set var="testResultsAnalyzerUrl" value="${rooturl}${project.url}test_results_analyzer" />
+   <j:new className="java.net.URL" var="url">
+    <j:arg type="java.lang.String" value="${testResultsAnalyzerUrl}"/>
+   </j:new>
+   <j:set var="connection" value="${url.openConnection()}" />
+   <j:set var="responseCode" value="${connection.getResponseCode()}" />
+   <j:if test="${responseCode == '200'}">
+    ${logger.println("testResultsAnalyzer URL = " + connection.getURL() )}
     <tr>
      <td>Statistics:</td>
      <td>
-      <a href="${rooturl}${project.url}test_results_analyzer">
-       ${rooturl}${project.url}test_results_analyzer
-      </a>
+      <a href="${testResultsAnalyzerUrl}">${testResultsAnalyzerUrl}</a>
      </td>
     </tr>
    </j:if>
@@ -260,6 +266,7 @@
          ${logger.println("Getting test stacktrace instead of stdout")}
          <j:set var="testOutput" value="${lastFailedJunit.getErrorStackTrace().trim()}" />
        </j:if>
+       <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
        <j:set var="testOutput" value="${StringUtils.abbreviateMiddle(testOutput, ' ... ', 1000) }" />
        ${logger.println("Last test output = " + testOutput )}
        <td class="trace" style="white-space: pre-line; font-family: Courier New; font-size: 11px; color: black">

@@ -1308,7 +1308,7 @@ function create_osp_cluster_b() {
   local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
   local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
 
-  run_and_tail "$ocp_cmd" "$ocp_log" 1h "Access the OpenShift web-console" \
+  run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
   || FATAL "OCP create cluster B did not complete as expected"
 
   # To tail all OpenShift Installer logs (in a new session):
@@ -1896,7 +1896,7 @@ function open_firewall_ports_on_the_broker_node() {
 
   local git_user="submariner-io"
   local git_project="submariner"
-  local commit_or_branch=devel
+  local commit_or_branch="release-0.8"
   local github_dir="tools/openshift/ocp-ipi-aws"
   local cluster_path="$CLUSTER_A_DIR"
   local target_path="${cluster_path}/${github_dir}"
@@ -1918,6 +1918,9 @@ function open_firewall_ports_on_the_broker_node() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+  
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
@@ -1989,6 +1992,9 @@ function open_firewall_ports_on_openstack_cluster_b() {
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
+
+  # Fix bug in terraform provider permission denied
+  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
 
@@ -2136,7 +2142,7 @@ function install_broker_aws_cluster_a() {
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   echo "# Remove previous broker-info.subm (if exists)"
-  rm broker-info.subm.* || echo "# Previous ${BROKER_INFO} already removed"
+  rm broker-info.subm || echo "# Previous ${BROKER_INFO} already removed"
 
   echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
 
