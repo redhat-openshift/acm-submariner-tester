@@ -2568,13 +2568,16 @@ EOF
 
   echo "# Add new user '${ocp_usr}' to cluster roles, and verify login, while saving kubeconfig current-context ($cur_context)"
 
-  # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
 
+  ### Give user admin privileges
+  # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
   ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
 
-  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication
-  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication
-  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication
+  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
+  watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
 
   ( # subshell to hide commands
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
