@@ -1568,7 +1568,7 @@ function destroy_osp_cluster() {
     local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
     local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
 
-    run_and_tail "$ocp_cmd" "$ocp_log" 20m || FAILURE "OCP destroy cluster B did not complete as expected"
+    run_and_tail "$ocp_cmd" "$ocp_log" 5m || BUG "OCP destroy cluster B did not complete as expected"
 
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
