@@ -773,10 +773,13 @@ function setup_workspace() {
   echo "# Installing JQ (JSON processor) with Anaconda"
   install_local_jq "${WORKDIR}"
 
-  # Set Polarion credentials if $upload_to_polarion = yes/y
+  # Set Polarion access if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-    local polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
-    echo "--header \"Authorization: Basic ${polauth}\"" > "$POLARION_AUTH"
+    echo "# Set Polarion access for the user [$POLARION_USR]"
+    ( # subshell to hide commands
+      local polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+      echo "--header \"Authorization: Basic ${polauth}\"" > "$POLARION_AUTH"
+    )
   fi
 
   # Trim trailing and leading spaces from $TEST_NS
@@ -2536,10 +2539,10 @@ function configure_cluster_custom_registry_secrets() {
   wait_for_all_nodes_ready || :
 
   local ocp_usr="${1:-$OCP_USR}"
-  local ocp_pwd="${2:-$OCP_PWD}"
-  local secret_filename="${3:-http.secret}"
 
   ( # subshell to hide commands
+    local ocp_pwd="${2:-$OCP_PWD}"
+    local secret_filename="${3:-http.secret}"
     printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
   )
 
