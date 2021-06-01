@@ -731,7 +731,7 @@ function show_test_plan() {
 
 function setup_workspace() {
   PROMPT "Configuring workspace (Golang, AWS-CLI, Terraform, Polarion) in: ${WORKDIR}"
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # Create WORKDIR and local BIN dir (if not yet exists)
   mkdir -p ${WORKDIR}
@@ -844,7 +844,7 @@ function test_products_versions_cluster_c() {
 
 function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   local cluster_name="$1"
 
@@ -2528,7 +2528,7 @@ function configure_custom_registry_cluster_c() {
 
 function configure_cluster_custom_registry_secrets() {
 ### Configure access to external docker registry
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   echo "# Configure OCP registry global secret"
 
@@ -2610,7 +2610,7 @@ EOF
 
 function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   local ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
@@ -2631,7 +2631,7 @@ function configure_cluster_custom_registry_mirror() {
 
 function create_docker_registry_secret() {
 ### Helper function to add new Docker registry
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # input variables
   local registry_server="$1"

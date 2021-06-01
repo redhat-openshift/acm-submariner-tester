@@ -125,7 +125,7 @@ function trap_to_debug_commands() {
 
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_function_on_error() {
-  trap - DEBUG # DONT trap_to_debug_commands
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   local func_on_script_error="$@"
 
@@ -133,7 +133,7 @@ function trap_function_on_error() {
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
   trap_cmd='rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
-  ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
+  ${BASH_SOURCE[$i+1]}:$LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
   [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
