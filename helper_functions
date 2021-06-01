@@ -972,10 +972,12 @@ function wait_for_all_machines_ready() {
   local duration=${1:-20m} # Default is 20 minutes
 
   echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
-  ${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon || machines_status=DOWN
+  local cmd="${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon"
+  watch_and_retry "$cmd" $duration || machines_status=DOWN
 
   echo "# Wait up to $duration for all Machines Config Pool to be updated:"
-  ${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all || machines_status=DOWN
+  cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
+  watch_and_retry "$cmd" $duration || machines_status=DOWN
 
   echo "# Status of Machine Config Pool and all Daemon-Sets:"
   ${OC} get machineconfigpool -o wide || machines_status=DOWN
