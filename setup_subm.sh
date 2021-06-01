@@ -893,6 +893,10 @@ function test_products_versions() {
   local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
 
   if [[ -n "$submariner_gateway_pod" ]] ; then
+    echo -e "\n### Linux version on the running '$gw_label' pod: $submariner_gateway_pod ###"
+    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+    echo -e "\n\n"
+
     echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
     ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
     echo -e "\n\n"
