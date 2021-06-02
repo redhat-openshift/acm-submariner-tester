@@ -2749,7 +2749,7 @@ function set_join_parameters_for_cluster_a() {
   PROMPT "Set parameters of SubCtl Join command for AWS cluster A (public)"
   trap_to_debug_commands;
 
-  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_A_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2758,7 +2758,7 @@ function set_join_parameters_for_cluster_b() {
   PROMPT "Set parameters of SubCtl Join command for OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
-  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_B_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 
 }
 
@@ -2768,13 +2768,13 @@ function set_join_parameters_for_cluster_c() {
   PROMPT "Set parameters of SubCtl Join command for cluster C"
   trap_to_debug_commands;
 
-  write_subctl_join_command "${SUBCTL_JOIN_CLUSTER_C_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
 
 }
 
 # ------------------------------------------
 
-function write_subctl_join_command() {
+function create_subctl_join_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
   local join_cmd_file="$1"
@@ -2819,7 +2819,7 @@ function upload_custom_images_to_registry_cluster_a() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_A_FILE}"
+  upload_custom_images_to_registry
 }
 
 # ------------------------------------------
@@ -2830,7 +2830,7 @@ function upload_custom_images_to_registry_cluster_b() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_B_FILE}"
+  upload_custom_images_to_registry
 }
 
 # ------------------------------------------
@@ -2841,7 +2841,7 @@ function upload_custom_images_to_registry_cluster_c() {
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
-  upload_custom_images_to_registry "${SUBCTL_JOIN_CLUSTER_C_FILE}"
+  upload_custom_images_to_registry
 }
 
 # ------------------------------------------
@@ -2849,10 +2849,6 @@ function upload_custom_images_to_registry_cluster_c() {
 function upload_custom_images_to_registry() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
-
-  local join_cmd_file="$1"
-  echo "# Read subctl join command from file: $join_cmd_file"
-  local subctl_join="$(< $join_cmd_file)"
 
   # Update $SUBM_VER_TAG value
   set_subm_version_tag_var
@@ -2881,12 +2877,53 @@ function upload_custom_images_to_registry() {
       watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
   done
 
-  BUG "SubM Gateway image name should be 'submariner-gateway'" \
-  "Rename SubM Gateway image to 'submariner' " \
-  "https://github.com/submariner-io/submariner-operator/pull/941
-  https://github.com/submariner-io/submariner-operator/issues/1018"
+}
 
-  echo "# Adding custom images to subctl join command"
+# ------------------------------------------
+
+function append_custom_images_to_join_cmd_cluster_a() {
+# Append custom images to the join cmd file, for cluster A
+  PROMPT "Append custom images to the join command of cluster A"
+  trap_to_debug_commands;
+
+  append_custom_images_to_join_cmd_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
+}
+
+# ------------------------------------------
+
+function append_custom_images_to_join_cmd_cluster_b() {
+# Append custom images to the join cmd file, for cluster B
+  PROMPT "Append custom images to the join command of cluster B"
+  trap_to_debug_commands;
+
+  append_custom_images_to_join_cmd_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
+}
+
+# ------------------------------------------
+
+function append_custom_images_to_join_cmd_cluster_c() {
+# Append custom images to the join cmd file, for cluster C
+  PROMPT "Append custom images to the join command of cluster C"
+  trap_to_debug_commands;
+
+  append_custom_images_to_join_cmd_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
+}
+
+# ------------------------------------------
+
+function append_custom_images_to_join_cmd_file() {
+# Join Submariner member - of current cluster kubeconfig
+  trap_to_debug_commands;
+
+  local join_cmd_file="$1"
+  echo "# Read subctl join command from file: $join_cmd_file"
+  local subctl_join="$(< $join_cmd_file)"
+
+  BUG "Overriding images with wrong keys should fail first in join command" \
+  "No workaround" \
+  "https://github.com/submariner-io/submariner-operator/issues/1018"
+
+  echo "# Append \"--image-override\" for custom images to subctl join command"
   subctl_join="${subctl_join} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
   # BUG ? : this is a potential bug - overriding with comma separated:
@@ -2900,7 +2937,7 @@ function upload_custom_images_to_registry() {
   # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
   # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
 
-  echo "# Write the \"--image-override\" parameters into the join command file: $join_cmd_file"
+  echo -e "# Write into the join command file [${join_cmd_file}]: \n${subctl_join}"
   echo "$subctl_join" > "$join_cmd_file"
 
 }
@@ -4795,16 +4832,16 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
 
-    # # Overriding Submariner images with custom images from registry
-    # if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
-    #
-    #   ${junit_cmd} upload_custom_images_to_registry_cluster_a
-    #
-    #   [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_b
-    #
-    #   [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} upload_custom_images_to_registry_cluster_c
-    #
-    # fi
+    # Overriding Submariner images with custom images from registry
+    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+
+      ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+
+    fi
 
     ${junit_cmd} install_broker_cluster_a
 
