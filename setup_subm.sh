@@ -67,7 +67,7 @@ Running with pre-defined parameters (optional):
   * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
   * Clean existing AWS cluster A:                      --clean-cluster-a
   * Clean existing OSP cluster B:                      --clean-cluster-b
-  * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z]
+  * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z / nightly]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
@@ -908,26 +908,29 @@ function test_products_versions() {
 
 function download_ocp_installer() {
 ### Download OCP installer ###
-  PROMPT "Downloading OCP Installer $OCP_VERSION"
-  # The nightly builds available at: https://openshift-release-artifacts.svc.ci.openshift.org/
+  PROMPT "Downloading OCP Installer $1"
   trap_to_debug_commands;
 
-  # Optional param: $1 => $OCP_VERSION (default = latest)
-  ocp_major_version="$(echo "$1" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
-  ocp_major_version="${ocp_major_version:-4}" # if no major version was found (e.g. "latest"), the default OCP is 4
-  OCP_VERSION="${1:-latest}"
+  # Optional param: $OCP_VERSION
+  local ocp_installer_version="${1:-latest}" # default version to download is latest formal release
+
+  local ocp_major_version="$(echo $ocp_installer_version | cut -s -d '.' -f 1)" # Get the major digit of OCP version
+  local ocp_major_version="${ocp_major_version:-4}" # if no numerical version was requested (e.g. "latest"), the default OCP major version is 4
+  local oc_version_path="ocp/${ocp_installer_version}"
+
+  # Get the nightly (ocp-dev-preview) build ?
+  if [[ "$oc_version_path" =~ nightly ]] ; then
+    oc_version_path="ocp-dev-preview/latest"
+    # Also available at: https://openshift-release-artifacts.svc.ci.openshift.org/
+  fi
 
   cd ${WORKDIR}
 
-  BUG "OCP 4.4.8 failure on generate asset \"Platform Permissions Check\"" \
-  "Run OCP Installer 4.4.6 instead" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1850099"
-
-  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/ocp/${OCP_VERSION}/"
+  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
   ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
   oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
-  [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [$OCP_VERSION] from $ocp_url"
+  [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $ocp_url"
 
   echo "# Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
