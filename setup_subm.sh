@@ -1302,10 +1302,11 @@ function prepare_install_aws_cluster() {
 
 function create_aws_cluster() {
 ### Create AWS cluster A (public) with OCP installer ###
-  PROMPT "Creating AWS cluster A (public) with OCP installer"
   trap_to_debug_commands;
-
   local ocp_install_dir="$1"
+  local cluster_name="$2"
+
+  PROMPT "Creating AWS cluster A (public): $cluster_name"
 
   # Run OCP installer with the user-cluster-a.yaml:
   cd ${ocp_install_dir}
@@ -1390,7 +1391,7 @@ function test_kubeconfig_cluster_a() {
   # Get OCP cluster A version (from file $CLUSTER_A_VERSION_FILE)
   cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION_FILE" ]] || cat "$CLUSTER_A_VERSION_FILE")"
 
-  PROMPT "Testing status of AWS cluster A${cl_a_version:+ (OCP Version $cl_a_version)}"
+  PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
@@ -1409,7 +1410,7 @@ function test_kubeconfig_cluster_b() {
   # Get OCP cluster B version (from file $CLUSTER_B_VERSION_FILE)
   cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION_FILE" ]] || cat "$CLUSTER_B_VERSION_FILE")"
 
-  PROMPT "Testing status of OSP cluster B${cl_b_version:+ (OCP Version $cl_b_version)}"
+  PROMPT "Testing status of cluster $CLUSTER_B_NAME ${cl_b_version:+(OCP Version $cl_b_version)}"
   trap_to_debug_commands;
 
   export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
@@ -1486,11 +1487,12 @@ function test_cluster_status() {
 
 function destroy_aws_cluster() {
 ### Destroy your previous AWS cluster (public) ###
-  PROMPT "Destroying previous AWS cluster (public)"
   trap_to_debug_commands;
-
   local ocp_install_dir="$1"
   local cluster_name="$2"
+
+  PROMPT "Destroying previous AWS cluster: $cluster_name"
+  trap_to_debug_commands;
 
   # Temp - CD to main working directory
   cd ${WORKDIR}
@@ -4306,11 +4308,15 @@ function collect_submariner_info() {
     export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
     print_resources_and_pod_logs "${CLUSTER_A_NAME}"
 
-    export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-    print_resources_and_pod_logs "${CLUSTER_B_NAME}"
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+      print_resources_and_pod_logs "${CLUSTER_B_NAME}"
+    fi
 
-    export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
-    print_resources_and_pod_logs "${CLUSTER_C_NAME}"
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+      print_resources_and_pod_logs "${CLUSTER_C_NAME}"
+    fi
 
   ) |& tee -a $log_file
 
@@ -4542,7 +4548,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
       ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-      ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
+      ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     else
       # Running destroy_aws_cluster and create_aws_cluster separately
@@ -4556,7 +4562,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-        ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR"
+        ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
       fi
     fi
@@ -4595,7 +4601,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-        ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
+        ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       else
         # Running destroy_aws_cluster and create_cluster_c separately
@@ -4609,7 +4615,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
           ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-          ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR"
+          ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
         fi
       fi
