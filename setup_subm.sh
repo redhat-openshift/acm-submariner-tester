@@ -803,103 +803,12 @@ function setup_workspace() {
 function set_trap_functions() {
   PROMPT "Configuring trap functions on script exit"
 
-  echo "# Show products_versions when exiting the script"
-
-  trap '${junit_cmd} test_products_versions_cluster_a || : ;
-  ${junit_cmd} test_products_versions_cluster_b || : ;
-  ${junit_cmd} test_products_versions_cluster_c || :' EXIT
+  echo "# Will run env_teardown() when exiting the script"
+  trap 'env_teardown' EXIT
 
   if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    echo "# Collect Submariner information on test failure (when using CLI option --print-logs)"
+    echo "# Will collect Submariner information on test failure (CLI option --print-logs)"
     trap_function_on_error collect_submariner_info
-  fi
-
-}
-
-# ------------------------------------------
-
-function test_products_versions_cluster_a() {
-  PROMPT "Show products versions on cluster A"
-
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
-  test_products_versions "${CLUSTER_A_NAME}"
-}
-
-# ------------------------------------------
-
-function test_products_versions_cluster_b() {
-  PROMPT "Show products versions on cluster B"
-
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
-  test_products_versions "${CLUSTER_B_NAME}"
-}
-
-# ------------------------------------------
-
-function test_products_versions_cluster_c() {
-  PROMPT "Show products versions on cluster C"
-
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
-  test_products_versions "${CLUSTER_C_NAME}"
-}
-
-# ------------------------------------------
-
-function test_products_versions() {
-# Show OCP clusters versions, and Submariner version
-  trap '' DEBUG # DONT trap_to_debug_commands
-
-  local cluster_name="$1"
-
-  echo -e "\n### OCP Cluster ${cluster_name} ###"
-  ${OC} version
-
-  echo -e "\n### Submariner components ###\n"
-
-  subctl version || :
-
-  subctl show versions || :
-
-  # Show images info of running pods
-  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
-
-  # Show image-stream tags
-  print_image_tags_info "${SUBM_NAMESPACE}"
-
-  # # Show REGISTRY_MIRROR images
-  # ${OC} get images | grep "${REGISTRY_MIRROR}" |\
-  # grep "$SUBM_IMG_GATEWAY|\
-  #     $SUBM_IMG_ROUTE|\
-  #     $SUBM_IMG_NETWORK|\
-  #     $SUBM_IMG_LIGHTHOUSE|\
-  #     $SUBM_IMG_COREDNS|\
-  #     $SUBM_IMG_GLOBALNET|\
-  #     $SUBM_IMG_OPERATOR|\
-  #     $SUBM_IMG_BUNDLE" |\
-  # while read -r line ; do
-  #   set -- $(echo $line | awk '{ print $1, $2 }')
-  #   local img_id="$1"
-  #   local img_name="$2"
-  #
-  #   echo -e "\n### Local registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|') ###"
-  #   print_image_info "$img_id"
-  # done
-
-  # Show Libreswan (cable driver) version in the active gateway pod
-  local gw_label='app=submariner-gateway'
-  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
-  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
-
-  local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
-
-  if [[ -n "$submariner_gateway_pod" ]] ; then
-    echo -e "\n### Linux version on the running '$gw_label' pod: $submariner_gateway_pod ###"
-    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
-    echo -e "\n\n"
-
-    echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
-    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-    echo -e "\n\n"
   fi
 
 }
@@ -4265,6 +4174,107 @@ function add_polarion_testrun_url_to_report_description() {
     echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
   else
     echo "Error reading Polarion Test results link $results_link" 1>&2
+  fi
+
+}
+
+# ------------------------------------------
+
+function env_teardown() {
+  # Run tests and environment functions at the end (call with trap exit)
+
+  ${junit_cmd} test_products_versions_cluster_a || :
+
+  [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
+
+  [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
+
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_a() {
+  PROMPT "Show products versions on cluster A"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  test_products_versions "${CLUSTER_A_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_b() {
+  PROMPT "Show products versions on cluster B"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  test_products_versions "${CLUSTER_B_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions_cluster_c() {
+  PROMPT "Show products versions on cluster C"
+
+  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  test_products_versions "${CLUSTER_C_NAME}"
+}
+
+# ------------------------------------------
+
+function test_products_versions() {
+# Show OCP clusters versions, and Submariner version
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local cluster_name="$1"
+
+  echo -e "\n### OCP Cluster ${cluster_name} ###"
+  ${OC} version
+
+  echo -e "\n### Submariner components ###\n"
+
+  subctl version || :
+
+  subctl show versions || :
+
+  # Show images info of running pods
+  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
+
+  # Show image-stream tags
+  print_image_tags_info "${SUBM_NAMESPACE}"
+
+  # # Show REGISTRY_MIRROR images
+  # ${OC} get images | grep "${REGISTRY_MIRROR}" |\
+  # grep "$SUBM_IMG_GATEWAY|\
+  #     $SUBM_IMG_ROUTE|\
+  #     $SUBM_IMG_NETWORK|\
+  #     $SUBM_IMG_LIGHTHOUSE|\
+  #     $SUBM_IMG_COREDNS|\
+  #     $SUBM_IMG_GLOBALNET|\
+  #     $SUBM_IMG_OPERATOR|\
+  #     $SUBM_IMG_BUNDLE" |\
+  # while read -r line ; do
+  #   set -- $(echo $line | awk '{ print $1, $2 }')
+  #   local img_id="$1"
+  #   local img_name="$2"
+  #
+  #   echo -e "\n### Local registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|') ###"
+  #   print_image_info "$img_id"
+  # done
+
+  # Show Libreswan (cable driver) version in the active gateway pod
+  local gw_label='app=submariner-gateway'
+  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label"
+  [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
+
+  local submariner_gateway_pod="`get_running_pod_by_label "$gw_label" "$SUBM_NAMESPACE" 2>/dev/null || :`"
+
+  if [[ -n "$submariner_gateway_pod" ]] ; then
+    echo -e "\n### Linux version on the running '$gw_label' pod: $submariner_gateway_pod ###"
+    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+    echo -e "\n\n"
+
+    echo -e "\n### LibreSwan version on the running '$gw_label' pod: $submariner_gateway_pod ###"
+    ${OC} exec $submariner_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+    echo -e "\n\n"
   fi
 
 }
