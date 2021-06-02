@@ -2543,10 +2543,10 @@ function configure_cluster_custom_registry_secrets() {
   wait_for_all_nodes_ready || :
 
   local ocp_usr="${1:-$OCP_USR}"
+  local secret_filename="${3:-http.secret}"
 
   ( # subshell to hide commands
     local ocp_pwd="${2:-$OCP_PWD}"
-    local secret_filename="${3:-http.secret}"
     printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
   )
 
@@ -2587,6 +2587,7 @@ EOF
   watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
 
   ( # subshell to hide commands
+    local ocp_pwd="${2:-$OCP_PWD}"
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
