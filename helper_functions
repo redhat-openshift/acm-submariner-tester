@@ -132,13 +132,15 @@ function trap_function_on_error() {
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
-  trap_cmd='rc=$?; echo "# [$FUNCNAME[$@]] returned EXIT $rc:
-  ${BASH_SOURCE[$i+1]}:$LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
+  trap_cmd='rc=$?; echo "# $FUNCNAME[$@] returned EXIT $rc:
+  ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
   [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
   echo -e "\n# Trapping on script EXIT: \n${trap_cmd} \n"
-  trap "$trap_cmd" EXIT # ERR HUP INT TERM  # Trap any script termination (not just EXIT)
+  trap '(exit 130)' INT # When SIGINT is received call $trap_cmd
+  trap '(exit 143)' TERM # When SIGTERM is received call $trap_cmd
+  trap "$trap_cmd" EXIT
 
 }
 
