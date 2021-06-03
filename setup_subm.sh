@@ -1017,6 +1017,7 @@ function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
+    # Fix the $SUBM_VER_TAG value for custom images
     set_subm_version_tag_var
 
     download_subctl_by_tag "$SUBM_VER_TAG"
@@ -1046,7 +1047,7 @@ function download_subctl_by_tag() {
 
       echo "# Downloading SubCtl from $SUBCTL_PRIVATE_URL"
 
-      # Update $subctl_tag value
+      # Fix the $subctl_tag value for custom images
       set_subm_version_tag_var "subctl_tag"
 
       local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
@@ -2850,7 +2851,7 @@ function upload_custom_images_to_registry() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
 
-  # Update $SUBM_VER_TAG value
+  # Fix the $SUBM_VER_TAG value for custom images
   set_subm_version_tag_var
 
   echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
@@ -2918,6 +2919,9 @@ function append_custom_images_to_join_cmd_file() {
   local join_cmd_file="$1"
   echo "# Read subctl join command from file: $join_cmd_file"
   local subctl_join="$(< $join_cmd_file)"
+
+  # Fix the $SUBM_VER_TAG value for custom images
+  set_subm_version_tag_var
 
   BUG "Overriding images with wrong keys should fail first in join command" \
   "No workaround" \
