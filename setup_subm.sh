@@ -1220,7 +1220,7 @@ function create_aws_cluster() {
 
   # Run OCP installer with the user-cluster-a.yaml:
   cd ${ocp_install_dir}
-  ../openshift-install create cluster --log-level debug
+  ../openshift-install wait-for install-complete create cluster --log-level debug
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*.log" | xargs tail -f
@@ -3326,18 +3326,18 @@ function test_ha_status() {
   echo "# Checking 'Gateway' resource status"
   local regex="Ha Status:\s*active"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for HA active
-  watch_and_retry "$cmd ; grep -A 30 'Connections:' $TEMP_FILE" 3m "$regex" || :
+  watch_and_retry "$cmd ; grep -E '$regex' $TEMP_FILE" 3m || :
   cat $TEMP_FILE |& highlight "$regex" || submariner_status=DOWN
 
   echo "# Checking 'Submariner' resource status"
   local regex="Status:\s*connect"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for Status connected
-  watch_and_retry "$cmd ; grep -A 30 'Connections:' $TEMP_FILE" 3m "$regex" || :
+  watch_and_retry "$cmd ; grep -E '$regex' $TEMP_FILE" 3m || :
   # cat $TEMP_FILE |& highlight "Status:\s*connected" || submariner_status=DOWN
   cat $TEMP_FILE |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
-    FAILURE "Submariner HA failure occurred."
+    FATAL "Submariner HA failure occurred."
   fi
 
 }
@@ -4549,6 +4549,16 @@ export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
 export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
 export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
+# # Debug functions
+# ${junit_cmd} test_debug_pass
+# ${junit_cmd} test_debug_fail
+# rc=$?
+# BUG "test_debug_fail - Exit code: $rc" \
+# "If RC $rc = 5 - junit_cmd should continue execution"
+# ${junit_cmd} test_debug_pass
+# ${junit_cmd} test_debug_fatal
+
+
 # Printing output both to stdout and to $SYS_LOG with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
 (
@@ -4560,15 +4570,6 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
   # Set script trap functions
   set_trap_functions
-
-  # # Debug functions
-  # ${junit_cmd} test_debug_pass
-  # ${junit_cmd} test_debug_fail
-  # rc=$?
-  # BUG "test_debug_fail - Exit code: $rc" \
-  # "If RC $rc = 5 - junit_cmd should continue execution"
-  # ${junit_cmd} test_debug_pass
-  # ${junit_cmd} test_debug_fatal
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
 
