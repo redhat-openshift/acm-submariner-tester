@@ -3309,7 +3309,7 @@ function test_ha_status_cluster_c() {
 function test_ha_status() {
 # Check submariner HA status
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$1"
   local submariner_status=UP
 
   PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
@@ -3321,35 +3321,23 @@ function test_ha_status() {
   # TODO: Need to get current cluster ID
   #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
-  ### Checking "Gateway" resource ###
-  BUG "API 'describe Gateway' does not show Gateway crashing and cable-driver failure" \
-  "No workaround" \
-  "https://github.com/submariner-io/submariner/issues/777"
+  local cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE} &> '$TEMP_FILE'"
 
-  cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE}"
+  echo "# Checking 'Gateway' resource status"
   local regex="Ha Status:\s*active"
-  watch_and_retry "$cmd" 3m "$regex"
+  # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for HA active
+  watch_and_retry "$cmd ; grep -A 30 'Connections:' $TEMP_FILE" 3m "$regex" || :
+  cat $TEMP_FILE |& highlight "$regex" || submariner_status=DOWN
 
-  submariner_gateway_info="$(${OC} describe Gateway -n ${SUBM_NAMESPACE})"
-  # echo "$submariner_gateway_info" |& highlight "Ha Status:\s*active" || submariner_status=DOWN
-  echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
-
-  ### Checking "Submariner" resource ###
-  cmd="${OC} describe Submariner -n ${SUBM_NAMESPACE}"
-  local regex="Status:\s*connect" || submariner_status=DOWN
+  echo "# Checking 'Submariner' resource status"
+  local regex="Status:\s*connect"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for Status connected
-  watch_and_retry "$cmd | grep -A 30 'Connections:'" 3m "$regex" || submariner_status=DOWN
-
-  submariner_gateway_info="$(${OC} describe Submariner -n ${SUBM_NAMESPACE})"
-  # echo "$submariner_gateway_info" |& highlight "Status:\s*connected" || submariner_status=DOWN
-  echo "$submariner_gateway_info" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
+  watch_and_retry "$cmd ; grep -A 30 'Connections:' $TEMP_FILE" 3m "$regex" || :
+  # cat $TEMP_FILE |& highlight "Status:\s*connected" || submariner_status=DOWN
+  cat $TEMP_FILE |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
-    BUG "Submariner-operator might loop on error in controller_submariner: failed to update the Submariner status " \
-    "No workaround" \
-    "https://github.com/submariner-io/submariner-operator/issues/1047"
-
-    FATAL "Submariner HA failure occurred."
+    FAILURE "Submariner HA failure occurred."
   fi
 
 }
