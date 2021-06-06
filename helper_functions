@@ -1111,19 +1111,34 @@ function build_go_repo() {
 function git_reset_local_repo() {
   trap_to_debug_commands;
 
-  # Optional param: branch or tag to pull (default is latest branch)
-  local branch_or_tag=${1:-$(git remote show origin | awk '/HEAD branch/ { print $3 }')}
+  # Optional param 2: another remote repository to pull from (e.g. fork)
+  local forked_repo=${2}
 
-  git config --get-all remote.origin.fetch
-  git config --unset-all remote.origin.fetch
+  local remote_name="origin"
+
+  if [[ -n "$forked_repo" ]] ; then
+    remote_name="upstream"
+    echo "# Add the a new remote '${remote_name}' to pull from: $forked_repo"
+    git remote -v | grep -w ${remote_name} || git remote add ${remote_name} ${forked_repo}
+    git remote set-url ${remote_name} ${forked_repo}
+  fi
+
+  # Optional param 1: branch or tag to pull (default is latest branch)
+  local branch_or_tag=${1:-$(git remote show ${remote_name} | awk '/HEAD branch/ { print $3 }')}
+
+  git config user.name 'Anonymous'
+  git config user.email '<>'
+  git config --get-all remote.${remote_name}.fetch
+  git config --unset-all remote.${remote_name}.fetch
   git fetch --prune --all
-  git branch -m $branch_or_tag
-  # git branch -u origin $branch_or_tag
-  git remote set-branches --add origin $branch_or_tag
-  git reset --hard $branch_or_tag
-  # git clean -fdx
-  git checkout --theirs .
-  # git pull origin $branch_or_tag
+  git branch -m ${branch_or_tag}
+  # git branch -u ${remote_name} ${branch_or_tag}
+  git remote set-branches --add ${remote_name} ${branch_or_tag}
+  # git fetch ${remote_name} ${branch_or_tag}
+  # git reset --hard ${remote_name}/${branch_or_tag}
+  # git checkout --theirs .
+  git reset --hard ${branch_or_tag}
+  git pull -f ${remote_name} ${branch_or_tag}
 
   echo -e "\n# Latest commits in the repository: \n"
   git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"

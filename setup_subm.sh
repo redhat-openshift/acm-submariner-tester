@@ -883,7 +883,7 @@ function build_ocpup_tool_latest() {
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  git_reset_local_repo
+  git_reset_local_repo "master" "https://github.com/manosnoam/ocpup.git"
 
   echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
@@ -1220,7 +1220,7 @@ function create_aws_cluster() {
 
   # Run OCP installer with the user-cluster-a.yaml:
   cd ${ocp_install_dir}
-  ../openshift-install wait-for install-complete create cluster --log-level debug
+  ../openshift-install create cluster --log-level debug
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*.log" | xargs tail -f
