@@ -3923,7 +3923,7 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}:${KUBECONF_CLUSTER_C}"
+  export_merged_kubeconfigs
 
   ${OC} config get-contexts
 
@@ -3953,6 +3953,30 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
     "It may happened due to merged kubeconfigs - ignoring failures" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1950960"
   fi
+
+}
+
+# ------------------------------------------
+
+function export_merged_kubeconfigs() {
+### Helper function to export all active clusters kubeconfig at once (merged) ###
+  trap_to_debug_commands;
+
+  echo "# exporting all active clusters kubeconfig at once (merged)"
+
+  local merged_kubeconfigs="${KUBECONF_CLUSTER_A}"
+
+  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    echo "# Appending \"${KUBECONF_CLUSTER_B}\" to \"${merged_kubeconfigs}\""
+    merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
+  fi
+
+  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    echo "# Appending \"${KUBECONF_CLUSTER_C}\" to \"${merged_kubeconfigs}\""
+    merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
+  fi
+
+  export KUBECONFIG="${merged_kubeconfigs}"
 
 }
 
@@ -4042,7 +4066,7 @@ function test_project_e2e_with_go() {
   cd "$e2e_project_path"
   pwd
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}:${KUBECONF_CLUSTER_C}"
+  export_merged_kubeconfigs
 
   ${OC} config get-contexts
     # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
@@ -4103,7 +4127,7 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}:${KUBECONF_CLUSTER_C}"
+  export_merged_kubeconfigs
 
   ${OC} config get-contexts
 
@@ -4325,7 +4349,7 @@ function collect_submariner_info() {
 
     echo -e "\n############################## Openshift information ##############################\n"
 
-    export KUBECONFIG="${KUBECONF_CLUSTER_A}:${KUBECONF_CLUSTER_B}:${KUBECONF_CLUSTER_C}"
+    export_merged_kubeconfigs
 
     # oc version
     BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
@@ -5002,14 +5026,14 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         ${junit_cmd} test_submariner_e2e_with_go
 
-        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
           BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
         fi
 
         ${junit_cmd} test_lighthouse_e2e_with_go
 
-        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
           BUG "Submariner End-to-End Ginkgo tests have FAILED"
         fi
@@ -5020,7 +5044,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 
         ${junit_cmd} test_submariner_e2e_with_subctl
 
-        if tail -n 5 "$E2E_LOG" | grep 'FAIL!' ; then
+        if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
           BUG "SubCtl End-to-End tests have FAILED"
         fi
