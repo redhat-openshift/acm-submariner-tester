@@ -5160,17 +5160,37 @@ report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 
 echo -e "# Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
 
-# Copy required file to local directory
-[[ ! -f "$KUBECONF_CLUSTER_A" ]] || cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
-[[ ! -f "$KUBECONF_CLUSTER_B" ]] || cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
-[[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
+if [[ -s "$CLUSTER_A_YAML" ]] ; then
+  # Artifact kubeconfig
+  cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
 
-find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
-sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+  # Artifact cluster logs
+  find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
+  sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+fi
 
-find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
-sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+if [[ -s "$CLUSTER_B_YAML" ]] ; then
+  # Artifact kubeconfig
+  cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
 
+  # Artifact cluster logs
+  find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
+  sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+fi
+
+if [[ -s "$CLUSTER_C_YAML" ]] ; then
+  # Artifact kubeconfig
+  cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}"
+
+  # Artifact cluster logs
+  find ${CLUSTER_C_DIR} -type f -name "*.log" -exec \
+  sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+fi
+
+# Artifact broker info
+[[ ! -s "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
+
+# Compress all artifacts
 tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$SYS_LOG" \
