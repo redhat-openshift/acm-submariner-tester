@@ -871,7 +871,7 @@ function build_ocpup_tool_latest() {
   PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
   trap_to_debug_commands;
 
-  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+  verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
   # TODO: Need to fix ocpup alias
 
@@ -919,10 +919,7 @@ function build_ocpup_tool_latest() {
 
 function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
-  PROMPT "Building latest Submariner-IO projects code, including test packages (unit-tests and E2E)"
   trap_to_debug_commands;
-
-  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
 
   local branch_or_tag # To pull
 
@@ -933,6 +930,10 @@ function build_submariner_repos() {
     echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
     local branch_or_tag="v${SUBM_VER_TAG}"
   fi
+
+  PROMPT "Building Submariner-IO code of E2E and unit-tests ${branch_or_tag:+(from branch $branch_or_tag)}"
+
+  verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
   build_go_repo "https://github.com/submariner-io/submariner" $branch_or_tag
 
@@ -946,7 +947,7 @@ function build_operator_latest() {  # [DEPRECATED]
   PROMPT "Building latest Submariner-Operator code and SubCTL tool"
   trap_to_debug_commands;
 
-  verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+  verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
   # Install Docker
   # install_local_docker "${WORKDIR}"
@@ -5001,7 +5002,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
     if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
-      verify_golang || FATAL "No Golang installation found. Try to run again with option '--config-golang'"
+      verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
       ${junit_cmd} build_submariner_repos
     fi
