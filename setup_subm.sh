@@ -1165,14 +1165,14 @@ function test_subctl_command() {
 # ------------------------------------------
 
 function prepare_install_aws_cluster() {
-### Prepare installation files for AWS cluster A (public) ###
-  PROMPT "Preparing installation files for AWS cluster A (public)"
+### Prepare installation files for AWS cluster (public) ###
   trap_to_debug_commands;
-  # Using existing OCP install-config.yaml - make sure to have it in the workspace.
 
   local ocp_install_dir="$1"
   local installer_yaml_source="$2"
   local cluster_name="$3"
+
+  PROMPT "Preparing installation files for AWS cluster $cluster_name"
 
   cd ${WORKDIR}
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
@@ -1198,6 +1198,8 @@ function prepare_install_aws_cluster() {
 
   mkdir -p "${ocp_install_dir}"
   local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
+
+  echo "# Using existing OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
@@ -1296,6 +1298,41 @@ function create_osp_cluster() {
 
 # ------------------------------------------
 
+function export_active_clusters_kubeconfig() {
+### Helper function to unset inactive clusters kubeconfig ###
+  trap_to_debug_commands;
+
+  echo "# Exporting all active clusters kubeconfig (and unset inactive kubeconfigs)"
+
+  # Setting Cluster A and Broker config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
+  export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
+  export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
+  export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
+
+  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    echo "# Exporting \$KUBECONF_CLUSTER_B"
+    # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
+    export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
+    export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
+  else
+    echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
+    unset KUBECONF_CLUSTER_B
+  fi
+
+  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    echo "# Exporting \$KUBECONF_CLUSTER_C"
+    # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
+    export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
+    export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
+  else
+    echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
+    unset KUBECONF_CLUSTER_C
+  fi
+
+}
+
+# ------------------------------------------
+
 function test_kubeconfig_cluster_a() {
 # Check that AWS cluster A (public) is up and running
 
@@ -1305,7 +1342,7 @@ function test_kubeconfig_cluster_a() {
   PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_cluster_status "$CLUSTER_A_NAME"
   cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_a_version" > "$CLUSTER_A_VERSION_FILE"
@@ -1324,7 +1361,7 @@ function test_kubeconfig_cluster_b() {
   PROMPT "Testing status of cluster $CLUSTER_B_NAME ${cl_b_version:+(OCP Version $cl_b_version)}"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_cluster_status "$CLUSTER_B_NAME"
   cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
@@ -1343,7 +1380,7 @@ function test_kubeconfig_cluster_c() {
   PROMPT "Testing status of cluster C${cl_c_version:+ (OCP Version $cl_c_version)}"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_cluster_status "$CLUSTER_C_NAME"
   cl_c_version=$(${OC} version | awk '/Server Version/ { print $3 }')
   echo "$cl_c_version" > "$CLUSTER_C_VERSION_FILE"
@@ -1511,7 +1548,7 @@ function clean_submariner_namespace_and_resources_cluster_a() {
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   clean_submariner_namespace_and_resources
 }
 
@@ -1522,7 +1559,7 @@ function clean_submariner_namespace_and_resources_cluster_b() {
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   clean_submariner_namespace_and_resources
 }
 
@@ -1533,7 +1570,7 @@ function clean_submariner_namespace_and_resources_cluster_c() {
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   clean_submariner_namespace_and_resources
 }
 
@@ -1657,7 +1694,7 @@ function clean_node_labels_and_machines_cluster_a() {
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   remove_submariner_gateway_labels
 
@@ -1671,7 +1708,7 @@ function clean_node_labels_and_machines_cluster_b() {
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   remove_submariner_gateway_labels
 
@@ -1685,7 +1722,7 @@ function clean_node_labels_and_machines_cluster_c() {
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
 
   remove_submariner_gateway_labels
 
@@ -1757,7 +1794,7 @@ function configure_namespace_for_submariner_tests_on_cluster_a() {
   PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   configure_namespace_for_submariner_tests
 
 }
@@ -1768,7 +1805,7 @@ function configure_namespace_for_submariner_tests_on_cluster_b() {
   PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on OSP cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   configure_namespace_for_submariner_tests
 
 }
@@ -1779,7 +1816,7 @@ function configure_namespace_for_submariner_tests_on_cluster_c() {
   PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_namespace_for_submariner_tests
 
 }
@@ -1817,7 +1854,7 @@ function install_netshoot_app_on_cluster_a() {
   PROMPT "Install Netshoot application on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
 
@@ -1841,7 +1878,7 @@ function install_nginx_svc_on_cluster_b() {
   PROMPT "Install Nginx service on OSP cluster B${TEST_NS:+ (Namespace $TEST_NS)}"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
@@ -1858,7 +1895,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   echo -e "\n# Get IP of ${NGINX_CLUSTER_B} on OSP cluster B${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
 
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS}
@@ -1887,13 +1924,13 @@ function test_clusters_disconnected_before_submariner() {
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_b="$(< $TEMP_FILE)"
     # nginx_cluster_b_ip: 100.96.43.129
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -1953,7 +1990,7 @@ function open_firewall_ports_on_the_broker_node() {
   # Workaround:
   sed 's/.*submariner_prep.*/# \0/' -i "${terraform_script}"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   BUG "Using the same IPSEC port numbers multiple times in one project, may be blocked on firewall" \
   "Make sure to use different IPSEC_NATT_PORT and IPSEC_IKE_PORT across clusters on same project" \
@@ -2018,7 +2055,7 @@ function open_firewall_ports_on_openstack_cluster_b() {
   # Fix bug in terraform provider permission denied
   chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   # export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
   # export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
@@ -2049,7 +2086,7 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   "Make sure one node with External-IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
   gateway_label_all_nodes_external_ip
 }
@@ -2059,7 +2096,7 @@ function label_first_gateway_cluster_b() {
   PROMPT "Adding Gateway label to the first worker node on cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   gateway_label_first_worker_node
 }
 
@@ -2068,7 +2105,7 @@ function label_first_gateway_cluster_c() {
   PROMPT "Adding Gateway label to the first worker node on cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   gateway_label_first_worker_node
 }
 
@@ -2167,7 +2204,7 @@ function install_broker_cluster_a() {
   PROMPT "Deploying Submariner Broker on AWS cluster A (public)"
 
   # Deploys Submariner CRDs, creates the SA for the broker, the role and role bindings
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -2222,7 +2259,7 @@ function export_nginx_default_namespace_cluster_b() {
   PROMPT "Create ServiceExport for $NGINX_CLUSTER_B on OSP cluster B, without specifying Namespace"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   echo -e "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
   \n# $KUBECONF_CLUSTER_B : ${TEST_NS:-default}"
@@ -2236,7 +2273,7 @@ function export_nginx_headless_namespace_cluster_b() {
   PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
   \n# $KUBECONF_CLUSTER_B : ${HEADLESS_TEST_NS}"
@@ -2307,7 +2344,7 @@ function configure_images_prune_cluster_a() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on AWS cluster A"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   configure_ocp_garbage_collection_and_images_prune
 }
 
@@ -2317,7 +2354,7 @@ function configure_images_prune_cluster_b() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on OSP cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   configure_ocp_garbage_collection_and_images_prune
 }
 
@@ -2327,7 +2364,7 @@ function configure_images_prune_cluster_c() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_ocp_garbage_collection_and_images_prune
 }
 
@@ -2411,10 +2448,10 @@ function configure_custom_registry_cluster_a() {
   PROMPT "Using custom Registry for Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   configure_cluster_custom_registry_secrets
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   configure_cluster_custom_registry_mirror
 
 }
@@ -2425,10 +2462,10 @@ function configure_custom_registry_cluster_b() {
   PROMPT "Using custom Registry for Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   configure_cluster_custom_registry_secrets
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   configure_cluster_custom_registry_mirror
 
 }
@@ -2439,10 +2476,10 @@ function configure_custom_registry_cluster_c() {
   PROMPT "Using custom Registry for Submariner images on cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_cluster_custom_registry_secrets
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_cluster_custom_registry_mirror
 
 }
@@ -2673,7 +2710,7 @@ function delete_old_submariner_images_from_cluster_a() {
   PROMPT "Delete previous Submariner images in AWS cluster A"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -2683,7 +2720,7 @@ function delete_old_submariner_images_from_cluster_b() {
   PROMPT "Delete previous Submariner images in OSP cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -2693,7 +2730,7 @@ function delete_old_submariner_images_from_cluster_c() {
   PROMPT "Delete previous Submariner images in cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -2820,7 +2857,7 @@ function upload_custom_images_to_registry_cluster_a() {
   PROMPT "Upload custom images to the registry of cluster A"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   upload_custom_images_to_registry
 }
 
@@ -2831,7 +2868,7 @@ function upload_custom_images_to_registry_cluster_b() {
   PROMPT "Upload custom images to the registry of cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   upload_custom_images_to_registry
 }
 
@@ -2842,7 +2879,7 @@ function upload_custom_images_to_registry_cluster_c() {
   PROMPT "Upload custom images to the registry of cluster C"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   upload_custom_images_to_registry
 }
 
@@ -2984,7 +3021,7 @@ function run_subctl_join_on_cluster_a() {
   PROMPT "Joining cluster A to Submariner Broker"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
@@ -2995,7 +3032,7 @@ function run_subctl_join_on_cluster_b() {
   PROMPT "Joining cluster B to Submariner Broker"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 
 }
@@ -3007,7 +3044,7 @@ function run_subctl_join_on_cluster_c() {
   PROMPT "Joining cluster C to Submariner Broker"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
 
 }
@@ -3056,7 +3093,7 @@ function run_subctl_join_cmd_from_file() {
 function test_submariner_resources_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_submariner_resources_status "${CLUSTER_A_NAME}"
 }
 
@@ -3065,7 +3102,7 @@ function test_submariner_resources_cluster_a() {
 function test_submariner_resources_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_submariner_resources_status "${CLUSTER_B_NAME}"
 }
 
@@ -3074,7 +3111,7 @@ function test_submariner_resources_cluster_b() {
 function test_submariner_resources_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_submariner_resources_status "${CLUSTER_C_NAME}"
 }
 
@@ -3124,7 +3161,7 @@ function test_public_ip_on_gateway_node() {
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   local public_ip=$(get_external_ips_of_worker_nodes)
   echo "# Before VM reboot - Gateway public (external) IP should be: $public_ip"
@@ -3147,7 +3184,7 @@ function test_disaster_recovery_of_gateway_nodes() {
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Should be run on the Broker cluster
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
   gateway_aws_instance_ids="$(aws ec2 describe-instances \
@@ -3185,7 +3222,7 @@ function test_renewal_of_gateway_and_public_ip() {
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Watching Submariner Gateway pod - It should create new Gateway:"
 
@@ -3232,7 +3269,7 @@ function verify_gateway_public_ip() {
 function test_cable_driver_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_submariner_cable_driver "${CLUSTER_A_NAME}"
 }
 
@@ -3241,7 +3278,7 @@ function test_cable_driver_cluster_a() {
 function test_cable_driver_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_submariner_cable_driver "${CLUSTER_B_NAME}"
 }
 
@@ -3250,7 +3287,7 @@ function test_cable_driver_cluster_b() {
 function test_cable_driver_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_submariner_cable_driver "${CLUSTER_C_NAME}"
 }
 
@@ -3283,7 +3320,7 @@ function test_submariner_cable_driver() {
 function test_ha_status_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_ha_status "${CLUSTER_A_NAME}"
 }
 
@@ -3292,7 +3329,7 @@ function test_ha_status_cluster_a() {
 function test_ha_status_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_ha_status "${CLUSTER_B_NAME}"
 }
 
@@ -3301,7 +3338,7 @@ function test_ha_status_cluster_b() {
 function test_ha_status_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_ha_status "${CLUSTER_C_NAME}"
 }
 
@@ -3348,7 +3385,7 @@ function test_ha_status() {
 function test_submariner_connection_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_submariner_connection_established "${CLUSTER_A_NAME}"
 }
 
@@ -3357,7 +3394,7 @@ function test_submariner_connection_cluster_a() {
 function test_submariner_connection_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_submariner_connection_established "${CLUSTER_B_NAME}"
 }
 
@@ -3366,7 +3403,7 @@ function test_submariner_connection_cluster_b() {
 function test_submariner_connection_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_submariner_connection_established "${CLUSTER_C_NAME}"
 }
 
@@ -3406,7 +3443,7 @@ function test_submariner_connection_established() {
 function test_ipsec_status_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_ipsec_status "${CLUSTER_A_NAME}"
 }
 
@@ -3415,7 +3452,7 @@ function test_ipsec_status_cluster_a() {
 function test_ipsec_status_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_ipsec_status "${CLUSTER_B_NAME}"
 }
 
@@ -3424,7 +3461,7 @@ function test_ipsec_status_cluster_b() {
 function test_ipsec_status_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_ipsec_status "${CLUSTER_C_NAME}"
 }
 
@@ -3468,7 +3505,7 @@ function test_ipsec_status() {
 function test_globalnet_status_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_globalnet_status "${CLUSTER_A_NAME}"
 }
 
@@ -3477,7 +3514,7 @@ function test_globalnet_status_cluster_a() {
 function test_globalnet_status_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_globalnet_status "${CLUSTER_B_NAME}"
 }
 
@@ -3486,7 +3523,7 @@ function test_globalnet_status_cluster_b() {
 function test_globalnet_status_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_globalnet_status "${CLUSTER_C_NAME}"
 }
 
@@ -3524,7 +3561,7 @@ function test_globalnet_status() {
 function test_lighthouse_status_cluster_a() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_lighthouse_status "${CLUSTER_A_NAME}"
 }
 
@@ -3533,7 +3570,7 @@ function test_lighthouse_status_cluster_a() {
 function test_lighthouse_status_cluster_b() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_lighthouse_status "${CLUSTER_B_NAME}"
 }
 
@@ -3542,7 +3579,7 @@ function test_lighthouse_status_cluster_b() {
 function test_lighthouse_status_cluster_c() {
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_lighthouse_status "${CLUSTER_C_NAME}"
 }
 
@@ -3601,7 +3638,7 @@ function test_clusters_connected_by_service_ip() {
   Identify Netshoot pod on cluster A, and Nginx service on cluster B"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -3609,7 +3646,7 @@ function test_clusters_connected_by_service_ip() {
   echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   echo "${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')"
   # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
@@ -3617,7 +3654,7 @@ function test_clusters_connected_by_service_ip() {
   echo "# Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
     # nginx_IP_cluster_b: 100.96.43.129
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT}"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
@@ -3667,7 +3704,7 @@ function test_clusters_connected_overlapping_cidrs() {
   PROMPT "Testing GlobalNet annotation - Nginx service on OSP cluster B (on-prem) should get a GlobalNet IP"
   trap_to_debug_commands;
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -3676,7 +3713,7 @@ function test_clusters_connected_overlapping_cidrs() {
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -3693,7 +3730,7 @@ function test_clusters_connected_overlapping_cidrs() {
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
   -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:${NGINX_PORT}
 
@@ -3714,7 +3751,7 @@ function test_clusters_connected_full_domain_name() {
   PROMPT "Testing Service-Discovery: From Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
   To the default Nginx service on cluster B${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Try to ping ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
@@ -3751,7 +3788,7 @@ function test_clusters_cannot_connect_short_service_name() {
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
@@ -3768,7 +3805,7 @@ function install_new_netshoot_cluster_a() {
 
   trap_to_debug_commands;
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
   [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS"
 
@@ -3789,7 +3826,7 @@ function test_new_netshoot_global_ip_cluster_a() {
 
   trap_to_debug_commands;
   PROMPT "Testing GlobalNet annotation - NEW Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   # netshoot_pod=$(${OC} get pods -l run=${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
@@ -3808,7 +3845,7 @@ function install_nginx_headless_namespace_cluster_b() {
 
   trap_to_debug_commands;
   PROMPT "Install HEADLESS Nginx service on OSP cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
@@ -3832,7 +3869,7 @@ function test_nginx_headless_global_ip_cluster_b() {
     FAILURE "Mark this test as failed, but continue"
   fi
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
   # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -3866,7 +3903,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
 
   else
 
-    export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
     echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
     #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
@@ -3904,7 +3941,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
@@ -3963,7 +4000,7 @@ function export_merged_kubeconfigs() {
 ### Helper function to export all active clusters kubeconfig at once (merged) ###
   trap_to_debug_commands;
 
-  echo "# exporting all active clusters kubeconfig at once (merged)"
+  echo "# Exporting all active clusters kubeconfig at once (merged)"
 
   local merged_kubeconfigs="${KUBECONF_CLUSTER_A}"
 
@@ -4129,12 +4166,12 @@ function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
 
-  # TODO: Add tests for Cluster C
+  export_active_clusters_kubeconfig
 
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || \
   FAILURE "Submariner benchmark latency tests have ended with failures, please investigate."
 
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} || \
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || \
   FAILURE "Submariner benchmark throughput tests have ended with failures, please investigate."
 
 }
@@ -4145,6 +4182,8 @@ function test_submariner_e2e_with_subctl() {
 # Run E2E Tests of Submariner:
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_to_debug_commands;
+
+  export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -4158,8 +4197,8 @@ function test_submariner_e2e_with_subctl() {
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
   echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
-  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_LOG"
-  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} | tee -a "$E2E_LOG"
+  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
 
 }
 
@@ -4268,7 +4307,7 @@ function env_teardown() {
 function test_products_versions_cluster_a() {
   PROMPT "Show products versions on cluster A"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   test_products_versions "${CLUSTER_A_NAME}"
 }
 
@@ -4277,7 +4316,7 @@ function test_products_versions_cluster_a() {
 function test_products_versions_cluster_b() {
   PROMPT "Show products versions on cluster B"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_products_versions "${CLUSTER_B_NAME}"
 }
 
@@ -4286,7 +4325,7 @@ function test_products_versions_cluster_b() {
 function test_products_versions_cluster_c() {
   PROMPT "Show products versions on cluster C"
 
-  export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_products_versions "${CLUSTER_C_NAME}"
 }
 
@@ -4387,16 +4426,16 @@ function collect_submariner_info() {
 
     subctl diagnose all || :
 
-    export "KUBECONFIG=${KUBECONF_CLUSTER_A}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_A}"
     print_resources_and_pod_logs "${CLUSTER_A_NAME}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
-      export "KUBECONFIG=${KUBECONF_CLUSTER_B}"
+      export KUBECONFIG="${KUBECONF_CLUSTER_B}"
       print_resources_and_pod_logs "${CLUSTER_B_NAME}"
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
-      export "KUBECONFIG=${KUBECONF_CLUSTER_C}"
+      export KUBECONFIG="${KUBECONF_CLUSTER_C}"
       print_resources_and_pod_logs "${CLUSTER_C_NAME}"
     fi
 
@@ -4577,21 +4616,6 @@ fi
 
 cd ${SCRIPT_DIR}
 
-# TODO: Check each $CLUSTER_A/B/C_YAML to determine if it's OCPUP install or OCP install
-
-# Setting Cluster A and Broker config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
-export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
-export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
-export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
-
-# Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
-export CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
-export KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
-
-# Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
-export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
-export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
-
 # # Debug functions
 # ${junit_cmd} test_debug_pass
 # ${junit_cmd} test_debug_fail
@@ -4601,6 +4625,7 @@ export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
 # ${junit_cmd} test_debug_pass
 # ${junit_cmd} test_debug_fatal
 
+export_active_clusters_kubeconfig
 
 # Printing output both to stdout and to $SYS_LOG with tee
 # TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
