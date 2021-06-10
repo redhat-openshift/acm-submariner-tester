@@ -1177,6 +1177,8 @@ function prepare_install_aws_cluster() {
   cd ${WORKDIR}
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
+  # TODO: This should be removed by using:
+  # openshift-install create cluster --log-level=debug --dir="$CLUSTER_DIR" || openshift-install wait-for install-complete --log-level=debug --dir="$CLUSTER_DIR"
   if [[ -d "$ocp_install_dir" ]] && [[ -n `ls -A "$ocp_install_dir"` ]] ; then
     FATAL "$ocp_install_dir directory contains previous deployment configuration. It should be initially removed."
   fi
@@ -1199,7 +1201,7 @@ function prepare_install_aws_cluster() {
   mkdir -p "${ocp_install_dir}"
   local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
 
-  echo "# Using existing OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
+  echo "# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
@@ -1236,16 +1238,20 @@ function create_aws_cluster() {
 
 # ------------------------------------------
 
-function create_osp_cluster() {
-### Create Openstack cluster B (on-prem) with OCPUP tool ###
-  PROMPT "Creating Openstack cluster B (on-prem) with OCP-UP tool"
+function prepare_install_osp_cluster() {
+### Prepare installation files for OSP cluster (on-prem) ###
   trap_to_debug_commands;
+
+  local installer_yaml_source="$1"
+  local cluster_name="$2"
+
+  PROMPT "Preparing installation files for OSP cluster $cluster_name"
 
   cd "${OCPUP_DIR}"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
-  local terraform_osp_provider="./tf/osp-sg/versions.tf"
-
+#   local terraform_osp_provider="./tf/osp-sg/versions.tf"
+#
 #   cat <<-EOF > $terraform_osp_provider
 #   terraform {
 #     required_version = ">= 0.12, <= 0.12.12"
@@ -1261,12 +1267,44 @@ function create_osp_cluster() {
 #
 #   echo -e "# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
 
-  echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-  cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+  local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
+  echo -e "# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
+  cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
 
-  ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
+  ls -l "$installer_yaml_new"
+  chmod 777 "$installer_yaml_new"
+
+  echo "# Update $installer_yaml_new with OSP cloud info, before installing $cluster_name"
+  ( # subshell to hide commands
+    [[ -z "$OS_AUTH_URL" ]] || change_yaml_key_value "$installer_yaml_new" "authUrl" "$OS_AUTH_URL" "openstack"
+    [[ -z "$OS_USERNAME" ]] || change_yaml_key_value "$installer_yaml_new" "userName" "$OS_USERNAME" "openstack"
+    [[ -z "$OS_PROJECT_DOMAIN_ID" ]] || change_yaml_key_value "$installer_yaml_new" "projectId" "$OS_PROJECT_DOMAIN_ID" "openstack"
+    [[ -z "$OS_PROJECT_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "projectName" "$OS_PROJECT_NAME" "openstack"
+    [[ -z "$OS_USER_DOMAIN_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "userDomainName" "$OS_USER_DOMAIN_NAME" "openstack"
+  )
+
+}
+
+# ------------------------------------------
+
+function create_osp_cluster() {
+### Create Openstack cluster B (on-prem) with OCPUP tool ###
+  trap_to_debug_commands;
+
+  local cluster_name="$1"
+
+  PROMPT "Creating Openstack cluster $cluster_name (on-prem) with OCP-UP tool"
+
+  cd ${OCPUP_DIR}
+
+  local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
+
+  echo -e "# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
+  mv -f ocpup.yaml ${ocpup_yml} || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
+
   ls -l "$ocpup_yml"
 
+  # Due to OCPUP limitation, $ocpup_cluster_name != $CLUSTER_B_NAME
   local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
   local ocpup_project_name="$(awk '/projectName:/ {print $NF}' $ocpup_yml)"
   local ocpup_user_name="$(awk '/userName:/ {print $NF}' $ocpup_yml)"
@@ -1317,6 +1355,7 @@ function export_active_clusters_kubeconfig() {
   else
     echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
     unset KUBECONF_CLUSTER_B
+    unset CLUSTER_B_NAME
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
@@ -1327,6 +1366,7 @@ function export_active_clusters_kubeconfig() {
   else
     echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
     unset KUBECONF_CLUSTER_C
+    unset CLUSTER_C_NAME
   fi
 
 }
@@ -1510,18 +1550,20 @@ function destroy_aws_cluster() {
 
 function destroy_osp_cluster() {
 ### If Required - Destroy your previous Openstack cluster B (on-prem) ###
-  PROMPT "Destroying previous Openstack cluster B (on-prem)"
   trap_to_debug_commands;
+  local ocp_install_dir="$1"
+  local cluster_name="$2"
+
+  PROMPT "Destroying previous Openstack cluster: $cluster_name"
 
   cd "${OCPUP_DIR}"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
-  if [[ -f "${CLUSTER_B_DIR}/metadata.json" ]] ; then
-    echo -e "# Using an existing OCPUP yaml configuration file: \n${CLUSTER_B_YAML}"
-    cp -f "${CLUSTER_B_YAML}" ./ || FATAL "OCPUP yaml configuration file is missing."
+  if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
+    echo -e "# Using last created OCPUP yaml configuration file"
+    local ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 || :)"
 
-    ocpup_yml=$(basename -- "$CLUSTER_B_YAML")
-    ls -l "$ocpup_yml"
+    ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
 
     local ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' $ocpup_yml)"
 
@@ -1533,10 +1575,10 @@ function destroy_osp_cluster() {
     # To tail all OpenShift Installer logs (in a new session):
       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
 
-    echo "# Backup previous OCP install-config directory of cluster ${CLUSTER_B_NAME} "
+    echo "# Backup previous OCP install-config directory of cluster ${cluster_name}"
     backup_and_remove_dir ".config"
   else
-    echo "# OCP cluster config (metadata.json) was not found in ${CLUSTER_B_DIR}. Skipping cluster Destroy."
+    echo "# OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
   fi
 }
 
@@ -4198,7 +4240,9 @@ function test_submariner_e2e_with_subctl() {
 
   echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
   # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
-  subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+  # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+  subctl verify --only service-discovery,connectivity --verbose \
+  --kubecontexts ${CLUSTER_A_NAME}${CLUSTER_B_NAME:+,$CLUSTER_B_NAME}${CLUSTER_C_NAME:+,$CLUSTER_C_NAME} | tee -a "$E2E_LOG"
 
 }
 
@@ -4680,21 +4724,25 @@ export_active_clusters_kubeconfig
 
       if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_osp_cluster
+        ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
-        ${junit_cmd} create_osp_cluster
+        ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+
+        ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
       else
         # Running destroy_osp_cluster and create_osp_cluster separately
         if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          ${junit_cmd} destroy_osp_cluster
+          ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
         fi
 
         if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          ${junit_cmd} create_osp_cluster
+          ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+
+          ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
         fi
       fi
