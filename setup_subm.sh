@@ -4077,22 +4077,40 @@ function test_project_e2e_with_go() {
   export GO111MODULE="on"
   go env
 
-  local junit_params
-  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Junit report will be created at: $junit_output_file \n"
-    junit_params="-ginkgo.reportFile $junit_output_file"
+  echo "# Set E2E context for the active clusters"
+  local e2e_dp_context="--dp-context ${CLUSTER_A_NAME}"
+
+  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
+    e2e_dp_context="${e2e_dp_context} --dp-context ${CLUSTER_B_NAME}"
   fi
 
-  test_params="$test_params
-  --dp-context ${CLUSTER_A_NAME} --dp-context ${CLUSTER_B_NAME}
+  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
+    e2e_dp_context="${e2e_dp_context} --dp-context ${CLUSTER_C_NAME}"
+  fi
+
+  ### Set E2E $test_params and $junit_params" ###
+
+  test_params="$test_params $e2e_dp_context
   --submariner-namespace ${SUBM_NAMESPACE}
   --connection-timeout 30 --connection-attempts 3"
 
   local msg="# Running End-to-End tests with GO in project: \n# $e2e_project_path
   \n# Ginkgo test parameters: $test_params"
 
-  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file. \n"
   echo -e "$msg" >> "$E2E_LOG"
+
+  local junit_params
+  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+    msg="# Junit report file will be created: \n# $junit_output_file \n"
+    echo -e "$msg"
+    echo -e "$msg" >> "$E2E_LOG"
+    junit_params="-ginkgo.reportFile $junit_output_file"
+  fi
+
+  ### Run E2E with GO test ###
 
   go test -v ./test/e2e \
   -timeout 120m \
