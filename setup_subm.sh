@@ -4005,8 +4005,6 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   export_merged_kubeconfigs
 
-  ${OC} config get-contexts
-
   subctl show versions || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
@@ -4045,18 +4043,39 @@ function export_merged_kubeconfigs() {
   echo "# Exporting all active clusters kubeconfig at once (merged)"
 
   local merged_kubeconfigs="${KUBECONF_CLUSTER_A}"
+  local active_context_names="${CLUSTER_A_NAME}"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending \"${KUBECONF_CLUSTER_B}\" to \"${merged_kubeconfigs}\""
+    echo "# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
+    active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending \"${KUBECONF_CLUSTER_C}\" to \"${merged_kubeconfigs}\""
+    echo "# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
+    active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
   fi
 
   export KUBECONFIG="${merged_kubeconfigs}"
+
+  echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
+  ${OC} config get-contexts
+
+  ${OC} config get-contexts -o name | grep -Ew --invert-match "${active_context_names}" \
+  | while read -r context_name ; do
+    echo "# Deleting kubeconfig context: $context_name"
+    ${OC} config delete-context "${context_name}" || :
+  done
+
+  # for context_name in `${OC} config get-contexts -o name | grep -E --invert-match "${active_context_names}"` ; do
+  #   ${OC} config delete-context "${context_name}" || :
+  # done
+
+  ${OC} config get-contexts
+    #   CURRENT   NAME                  CLUSTER               AUTHINFO      NAMESPACE
+    #   *         nmanos-cluster-a      nmanos-cluster-a      admin         default
+    #             nmanos-cluster-c      nmanos-cluster-c      admin         default
 
 }
 
@@ -4148,11 +4167,6 @@ function test_project_e2e_with_go() {
 
   export_merged_kubeconfigs
 
-  ${OC} config get-contexts
-    # CURRENT   NAME              CLUSTER            AUTHINFO   NAMESPACE
-    # *         admin             user-cluster-a   admin
-    #           admin_cluster_b   user-cl1         admin
-
   export GO111MODULE="on"
   go env
 
@@ -4228,8 +4242,6 @@ function test_submariner_e2e_with_subctl() {
   export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
-
-  ${OC} config get-contexts
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
