@@ -1437,9 +1437,8 @@ function test_cluster_status() {
   local cluster_name="$1"
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
-  # echo "# Modify KUBECONFIG current-context name to: ${cluster_name}"
-  # sed -z "s#name: [a-zA-Z0-9-]*\ncurrent-context: [a-zA-Z0-9-]*#name: ${cluster_name}\ncurrent-context: ${cluster_name}#" -i.bak ${KUBECONFIG}
-  # ${OC} config set "current-context" "$cluster_name"
+  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
   local cur_context="$(${OC} config current-context)" # $cur_context should be equal to $cluster_name
   if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
@@ -1876,9 +1875,6 @@ function configure_namespace_for_submariner_tests() {
     echo "# Using the 'default' namespace for Submariner tests"
     export TEST_NS=default
   fi
-
-  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
-  [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
   BUG "On OCP version < 4.4.6 : If running inside different cluster, OC can use wrong project name by default" \
   "Set the default namespace to \"${TEST_NS}\"" \
@@ -4062,15 +4058,11 @@ function export_merged_kubeconfigs() {
   echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
   ${OC} config get-contexts
 
-  ${OC} config get-contexts -o name | grep -Ew --invert-match "${active_context_names}" \
+  ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
   | while read -r context_name ; do
     echo "# Deleting kubeconfig context: $context_name"
     ${OC} config delete-context "${context_name}" || :
   done
-
-  # for context_name in `${OC} config get-contexts -o name | grep -E --invert-match "${active_context_names}"` ; do
-  #   ${OC} config delete-context "${context_name}" || :
-  # done
 
   ${OC} config get-contexts
     #   CURRENT   NAME                  CLUSTER               AUTHINFO      NAMESPACE
