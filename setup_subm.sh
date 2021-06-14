@@ -4062,16 +4062,22 @@ function export_merged_kubeconfigs() {
   echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
   ${OC} config get-contexts
 
+  local context_changed
+
   ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
   | while read -r context_name ; do
     echo "# Deleting kubeconfig context: $context_name"
     ${OC} config delete-context "${context_name}" || :
+    context_changed=YES
   done
 
-  ${OC} config get-contexts
+  [[ -z "$context_changed" ]] || ${OC} config get-contexts
     #   CURRENT   NAME                  CLUSTER               AUTHINFO      NAMESPACE
     #   *         nmanos-cluster-a      nmanos-cluster-a      admin         default
     #             nmanos-cluster-c      nmanos-cluster-c      admin         default
+
+  echo "# Current OC user: "
+  ${OC} whoami || :
 
 }
 
@@ -4391,6 +4397,9 @@ function test_products_versions() {
 
   echo -e "\n### OCP Cluster ${cluster_name} ###"
   ${OC} version
+
+  echo "# Current OC user: "
+  ${OC} whoami || :
 
   echo -e "\n### Submariner components ###\n"
 
