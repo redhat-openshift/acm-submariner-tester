@@ -1177,12 +1177,6 @@ function prepare_install_aws_cluster() {
   cd ${WORKDIR}
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
-  # TODO: This should be removed by using:
-  # openshift-install create cluster --log-level=debug --dir="$CLUSTER_DIR" || openshift-install wait-for install-complete --log-level=debug --dir="$CLUSTER_DIR"
-  if [[ -d "$ocp_install_dir" ]] && [[ -n `ls -A "$ocp_install_dir"` ]] ; then
-    FATAL "$ocp_install_dir directory contains previous deployment configuration. It should be initially removed."
-  fi
-
   # To manually create new OCP install-config.yaml:
   # ./openshift-install create install-config --dir user-cluster-a
   #
@@ -1205,7 +1199,7 @@ function prepare_install_aws_cluster() {
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
-  echo "# Update the OCP installer configuration (YAML) of AWS cluster $cluster_name"
+  echo "# Update OCP installer configuration (${installer_yaml_new}) of AWS cluster $cluster_name"
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
   [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
@@ -1223,9 +1217,19 @@ function create_aws_cluster() {
 
   PROMPT "Creating AWS cluster A (public): $cluster_name"
 
-  # Run OCP installer with the user-cluster-a.yaml:
-  cd ${ocp_install_dir}
-  ../openshift-install create cluster --log-level debug
+  if [[ ! -d "$ocp_install_dir" ]] ; then
+    FATAL "OCP install directory [$ocp_install_dir] does not exist"
+  else
+    cd ${ocp_install_dir}
+  fi
+
+  if [[ -s "metadata.json" ]] ; then
+    echo "# $ocp_install_dir directory contains previous OCP installer files. Will attempt to continue previous installation"
+    ../openshift-install wait-for install-complete --log-level=debug # --dir="$CLUSTER_DIR"
+  else
+    echo "# Run OCP installer from scratch using install-config.yaml"
+    ../openshift-install create cluster --log-level debug
+  fi
 
   # To tail all OpenShift Installer logs (in a new session):
     # find . -name "*.log" | xargs tail -f
