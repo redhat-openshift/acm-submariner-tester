@@ -1523,7 +1523,7 @@ function update_kubeconfig_context() {
 
     if ${OC} config get-contexts "${cur_context}" 2>/dev/null ; then
       echo "# Update kubeconfig current-context '${cur_context}' to: ${cluster_name}"
-      ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
+      ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
     fi
   fi
 
@@ -2810,7 +2810,7 @@ function create_docker_registry_secret() {
   local namespace="$4"
 
   local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-z0-9]/-}"
+  local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo -e "# Creating new docker-registry in '$namespace' namespace:
   \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
@@ -2997,6 +2997,7 @@ function set_join_parameters_for_cluster_a() {
   PROMPT "Set parameters of SubCtl Join command for AWS cluster A (public)"
   trap_to_debug_commands;
 
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
@@ -3006,6 +3007,7 @@ function set_join_parameters_for_cluster_b() {
   PROMPT "Set parameters of SubCtl Join command for OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 
 }
@@ -3016,6 +3018,7 @@ function set_join_parameters_for_cluster_c() {
   PROMPT "Set parameters of SubCtl Join command for cluster C"
   trap_to_debug_commands;
 
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
 
 }
@@ -3044,15 +3047,14 @@ function create_subctl_join_file() {
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
   subctl_join="${subctl_join} ${pod_debug_flag} --ipsec-debug"
 
-  # TODO: Following bug should be resolved by https://github.com/submariner-io/submariner-operator/pull/1227
-  #
-  # if [[ ! "$registry_images" =~ ^(y|yes)$ ]] && [[ "$SUBM_VER_TAG" =~ ^subctl-devel ]]; then
-  #   BUG "operator image 'devel' should be the default when using subctl devel binary" \
-  #   "Add '--version devel' to $join_cmd_file" \
-  #   "https://github.com/submariner-io/submariner-operator/issues/563"
-  #   # Workaround
-  #   subctl_join="${subctl_join} --version devel"
-  # fi
+  BUG "Subctl fails to join cluster, since it does not automatically generate cluster id" \
+  "Add '--clusterid <ID>' to $join_cmd_file" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1972703"
+  # Workaround
+  ${OC} config view
+  local context_name=$(${OC} config get-contexts -o name | tail -1)
+  ${OC} config use-context $context_name
+  subctl_join="${subctl_join} --clusterid ${context_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
   echo "$subctl_join" > "$join_cmd_file"
