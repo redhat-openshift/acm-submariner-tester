@@ -148,7 +148,7 @@ function trap_function_on_error() {
 
 # function to watch for expected regex of command output, with retry attempts or timeout
 function watch_and_retry() {
-  # trap_to_debug_commands
+  # Do not trap_to_debug_commands
 
   # Param 1: Command to execute and watch
   CMD="$1"
@@ -160,12 +160,8 @@ function watch_and_retry() {
   # Max timeout for the whole watch process (default is 10 minutes)
   TIMEOUT=10m
 
-  # If REGEX was specified - will wait for REGEX to be found in CMD output
-  [[ -z "$REGEX" ]] || CMD="( $CMD ) | highlight '$REGEX'"
-
-  #echo -e "# Watching output of command: $(eval echo \"$CMD\") \
-  echo -e "# Watching output of command: $CMD \
-  \n# Search pattern (or exit code): $REGEX"
+  # echo -e "# Watching output of command: $(eval echo \"$CMD\") \
+  # echo -e "# Watching output of command: $CMD"
 
   # Set timeout for the whole process, if RETRY is number of seconds/minutes (e.g. 20s or 3m)
   if [[ "$RETRY" =~ [0-9]+[sm] ]] ; then
@@ -173,8 +169,15 @@ function watch_and_retry() {
     RETRY=-1
   fi
 
-  echo -e "# Retry attempts: $RETRY \
+  echo -e "# Watching output of command #
+  \n# Retry attempts: $RETRY
   \n# Timeout limit: $TIMEOUT"
+
+  # If REGEX was specified - will wait for REGEX to be found in CMD output
+  if [[ -n "$REGEX" ]] ; then
+    echo "# Search pattern: $REGEX"
+    CMD="( $CMD ) | highlight '$REGEX'"
+  fi
 
   # To use timeout - must run command as an external script
   timeout $TIMEOUT bash <<EOF \
