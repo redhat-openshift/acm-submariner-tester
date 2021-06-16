@@ -631,12 +631,12 @@ function show_test_plan() {
 
     echo -e "# Submariner deployment and environment setup for the tests:
 
-    - configure_custom_registry_cluster_a: $registry_images
-    - configure_custom_registry_cluster_b / c: $registry_images
+    - update_kubeconfig_context_cluster_a
+    - update_kubeconfig_context_cluster_b / c
     - test_kubeconfig_cluster_a
     - test_kubeconfig_cluster_b / c
-    - add_elevated_kubeconfig_context_cluster_a
-    - add_elevated_kubeconfig_context_cluster_b / c
+    - add_elevated_user_to_cluster_a
+    - add_elevated_user_to_cluster_b / c
     - download_subctl: $SUBM_VER_TAG
     - install_netshoot_app_on_cluster_a
     - install_nginx_svc_on_cluster_b / c
@@ -646,6 +646,12 @@ function show_test_plan() {
     - open_firewall_ports_on_openstack_cluster_b (\"configure_osp.sh\")
     - label_gateway_on_broker_nodes_with_external_ip
     - label_first_gateway_cluster_b / c
+    - configure_images_prune_cluster_a
+    - configure_images_prune_cluster_b / c
+    - configure_custom_registry_cluster_a: $registry_images
+    - configure_custom_registry_cluster_b / c: $registry_images
+    - upload_custom_images_to_registry_cluster_a: $registry_images
+    - upload_custom_images_to_registry_cluster_b / c: $registry_images
     - install_broker_cluster_a
     - set_join_parameters_for_cluster_a
     - set_join_parameters_for_cluster_b / c
@@ -1442,9 +1448,9 @@ function test_cluster_status() {
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   ${OC} config view
-  ${OC} status || FATAL "Openshift cluster is not installed, or using bad context '$cluster_name' in kubeconfig: ${KUBECONFIG}"
+  ${OC} status -n default || FATAL "Openshift cluster is not installed, or using bad context '$cluster_name' in kubeconfig: ${KUBECONFIG}"
   ${OC} version
-  ${OC} get all
+  ${OC} get all -n default
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
@@ -1454,52 +1460,160 @@ function test_cluster_status() {
 
 # ------------------------------------------
 
-function add_elevated_kubeconfig_context_cluster_a() {
-  PROMPT "Adding elevated user and updating kubeconfig context on cluster A"
+function update_kubeconfig_context_cluster_a() {
+  PROMPT "Updating kubeconfig context on cluster A"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  add_elevated_kubeconfig_context "$CLUSTER_A_NAME"
+  update_kubeconfig_context "$CLUSTER_A_NAME"
 
 }
 
 # ------------------------------------------
 
-function add_elevated_kubeconfig_context_cluster_b() {
-  PROMPT "Adding elevated user and updating kubeconfig context on cluster B"
+function update_kubeconfig_context_cluster_b() {
+  PROMPT "Updating kubeconfig context on cluster B"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  add_elevated_kubeconfig_context "$CLUSTER_B_NAME"
+  update_kubeconfig_context "$CLUSTER_B_NAME"
 
 }
 
 # ------------------------------------------
 
-function add_elevated_kubeconfig_context_cluster_c() {
-  PROMPT "Adding elevated user and updating kubeconfig context on cluster C"
+function update_kubeconfig_context_cluster_c() {
+  PROMPT "Updating kubeconfig context on cluster C"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  add_elevated_kubeconfig_context "$CLUSTER_C_NAME"
+  update_kubeconfig_context "$CLUSTER_C_NAME"
 
 }
 
 # ------------------------------------------
 
-function add_elevated_kubeconfig_context() {
+function update_kubeconfig_context() {
   # Add new elevated user and set new kubeconfig context
   trap_to_debug_commands;
 
   local cluster_name="$1"
-  local ocp_usr="${2:-$OCP_USR}"
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  echo "# Adding new user '${ocp_usr}' to cluster roles, and verify login to cluster '$cluster_name'"
+  # Updating kubeconfig current-context - it should be equal to $cluster_name
+  local cur_context="$(${OC} config current-context)"
+  if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
+
+    BUG "E2E will fail if clusters have same name (default is \"admin\")" \
+    "Modify KUBECONFIG cluster context name on both clusters to be unique" \
+    "https://github.com/submariner-io/submariner/issues/245"
+
+    BUG "E2E will fail if cluster id is not equal to cluster name" \
+    "Modify KUBECONFIG context cluster name = cluster id" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=1928805"
+
+    if ${OC} config get-contexts "${cluster_name}" 2>/dev/null ; then
+      echo "# Rename existing kubeconfig context '${cluster_name}' to: ${cluster_name}_old"
+      ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
+    fi
+
+    if ${OC} config get-contexts "${cur_context}" 2>/dev/null ; then
+      echo "# Update kubeconfig current-context '${cur_context}' to: ${cluster_name}"
+      ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
+    fi
+  fi
+
+  local cluster_id=$(${OC} config get-clusters | tail -1)
+  echo "# Set KUBECONFIG context '$cluster_name' to cluster id '$cluster_id', and its namespace to 'default'"
+  # ${OC} config set "contexts.${cluster_name}.namespace" "default"
+  ${OC} config set-context "$cluster_name" --cluster "$cluster_id" --user "admin" --namespace "default"
+  ${OC} config use-context "$cluster_name"
+
+  # ${OC} set env dc/dcname TZ=Asia/Jerusalem
+
+}
+
+# ------------------------------------------
+
+function add_elevated_user_to_cluster_a() {
+  PROMPT "Adding elevated user to cluster A"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  add_elevated_user
+
+}
+
+# ------------------------------------------
+
+function add_elevated_user_to_cluster_b() {
+  PROMPT "Adding elevated user to cluster B"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  add_elevated_user
+
+}
+
+# ------------------------------------------
+
+function add_elevated_user_to_cluster_c() {
+  PROMPT "Adding elevated user to cluster C"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  add_elevated_user
+
+}
+
+# ------------------------------------------
+
+function add_elevated_user() {
+  # Add new elevated user to OCP cluster
+  # Ref: https://docs.openshift.com/container-platform/4.1/authentication/identity_providers/configuring-htpasswd-identity-provider.html
+
+  trap_to_debug_commands;
+
+  local ocp_usr="${1:-$OCP_USR}"
+  local secret_filename="${3:-http.secret}"
+
+  echo "# Create an HTPasswd file for OCP user '$ocp_usr'"
+
+  ( # subshell to hide commands
+    local ocp_pwd="${2:-$OCP_PWD}"
+    printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
+  )
+
+  echo "# Create secret from the HTPasswd file"
+
+  ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
+
+  ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
+
+  echo "# Add the HTPasswd identity provider to the registry"
+
+  cat <<EOF | ${OC} apply -f -
+    apiVersion: config.openshift.io/v1
+    kind: OAuth
+    metadata:
+     name: cluster
+    spec:
+     identityProviders:
+     - name: htpasswd_provider
+       mappingMethod: claim
+       type: HTPasswd
+       htpasswd:
+         fileData:
+           name: ${secret_filename}
+EOF
+
+  ${OC} describe oauth.config.openshift.io/cluster
+
+  echo "# Adding the new user '${ocp_usr}' to cluster roles, and verify that the user can login"
 
   ### Give user admin privileges
   # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
@@ -1514,33 +1628,6 @@ function add_elevated_kubeconfig_context() {
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
-
-  # Updating kubeconfig current-context - it should be equal to $cluster_name
-  local cur_context="$(${OC} config current-context)"
-  if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
-
-    BUG "E2E will fail if clusters have same name (default is \"admin\")" \
-    "Modify KUBECONFIG cluster context name on both clusters to be unique" \
-    "https://github.com/submariner-io/submariner/issues/245"
-
-    BUG "E2E will fail if cluster id is not equal to cluster name" \
-    "Modify KUBECONFIG context cluster name = cluster id" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1928805"
-
-    if [[ $( ${OC} config get-contexts "${cluster_name}") ]] ; then
-      echo "# Rename existing kubeconfig context '${cluster_name}' to: ${cluster_name}_old"
-      ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
-    fi
-
-    echo "# Updating kubeconfig current-context '${cur_context}' to: ${cluster_name}"
-    ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
-    ${OC} config use-context "${cluster_name}"
-  fi
-
-  echo "# Set KUBECONFIG context '$cluster_name' namespace to 'default'"
-  ${OC} config set "contexts.${cluster_name}.namespace" "default"
-
-  # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 
 }
 
@@ -2602,61 +2689,67 @@ function configure_cluster_custom_registry_secrets() {
 ### Configure access to external docker registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  echo "# Configure OCP registry global secret"
-
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
   local ocp_usr="${1:-$OCP_USR}"
-  local secret_filename="${3:-http.secret}"
 
-  ( # subshell to hide commands
-    local ocp_pwd="${2:-$OCP_PWD}"
-    printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
-  )
+#   local secret_filename="${3:-http.secret}"
+#
+#   echo "# Create an HTPasswd file for OCP user '$ocp_usr'"
+#
+#   ( # subshell to hide commands
+#     local ocp_pwd="${2:-$OCP_PWD}"
+#     printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
+#   )
+#
+#   echo "# Create secret from the HTPasswd file"
+#
+#   ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
+#
+#   ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
+#
+#   echo "# Add the HTPasswd identity provider to the registry"
+#
+#   cat <<EOF | ${OC} apply -f -
+#     apiVersion: config.openshift.io/v1
+#     kind: OAuth
+#     metadata:
+#      name: cluster
+#     spec:
+#      identityProviders:
+#      - name: htpasswd_provider
+#        mappingMethod: claim
+#        type: HTPasswd
+#        htpasswd:
+#          fileData:
+#            name: ${secret_filename}
+# EOF
+#
+#   ${OC} describe oauth.config.openshift.io/cluster
+#
+#   local cur_context=$(${OC} config current-context)
+#
+#   echo "# Add new user '${ocp_usr}' to cluster roles, and verify login, while saving kubeconfig current-context ($cur_context)"
+#
+#   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
+#   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
+#   ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
+#
+#   ### Give user admin privileges
+#   # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
+#   ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
+#
+#   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
+#   watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
+#
+#   ( # subshell to hide commands
+#     local ocp_pwd="${2:-$OCP_PWD}"
+#     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
+#     # Attempt to login up to 3 minutes
+#     watch_and_retry "$cmd" 3m
 
-  ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
-
-  ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
-
-  cat <<EOF | ${OC} apply -f -
-    apiVersion: config.openshift.io/v1
-    kind: OAuth
-    metadata:
-     name: cluster
-    spec:
-     identityProviders:
-     - name: htpasswd_provider
-       mappingMethod: claim
-       type: HTPasswd
-       htpasswd:
-         fileData:
-           name: ${secret_filename}
-EOF
-
-  ${OC} describe oauth.config.openshift.io/cluster
-
-  # local cur_context=$(${OC} config current-context)
-  #
-  # echo "# Add new user '${ocp_usr}' to cluster roles, and verify login, while saving kubeconfig current-context ($cur_context)"
-  #
-  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
-  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
-  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
-  #
-  # ### Give user admin privileges
-  # # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
-  # ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
-  #
-  # local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
-  # watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
-
-  ( # subshell to hide commands
-    # local ocp_pwd="${2:-$OCP_PWD}"
-    # local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
-    # # Attempt to login up to 3 minutes
-    # watch_and_retry "$cmd" 3m
-
+  (
     # ocp_usr=$(${OC} whoami | tr -d ':')
     # ocp_pwd=$(${OC} whoami -t)
     ocp_token=$(${OC} whoami -t)
@@ -2684,6 +2777,10 @@ EOF
 function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap '' DEBUG # DONT trap_to_debug_commands
+
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
 
   local ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
@@ -4866,25 +4963,31 @@ export_active_clusters_kubeconfig
 
     ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
+    ${junit_cmd} update_kubeconfig_context_cluster_a
+
     ${junit_cmd} test_kubeconfig_cluster_a
 
-    ${junit_cmd} add_elevated_kubeconfig_context_cluster_a
+    ${junit_cmd} add_elevated_user_to_cluster_a
 
     # Verify cluster B (if it is expected to be an active cluster)
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
+      ${junit_cmd} update_kubeconfig_context_cluster_b
+
       ${junit_cmd} test_kubeconfig_cluster_b
 
-      ${junit_cmd} add_elevated_kubeconfig_context_cluster_b
+      ${junit_cmd} add_elevated_user_to_cluster_b
 
     fi
 
     # Verify cluster C (if it is expected to be an active cluster)
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
+      ${junit_cmd} update_kubeconfig_context_cluster_c
+
       ${junit_cmd} test_kubeconfig_cluster_c
 
-      ${junit_cmd} add_elevated_kubeconfig_context_cluster_c
+      ${junit_cmd} add_elevated_user_to_cluster_c
 
     fi
 
