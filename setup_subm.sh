@@ -2946,7 +2946,7 @@ function set_join_parameters_for_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
+  create_subctl_join_file "${CLUSTER_A_NAME}" "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2956,8 +2956,7 @@ function set_join_parameters_for_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
-
+  create_subctl_join_file "${CLUSTER_B_NAME}" "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 }
 
 # ------------------------------------------
@@ -2967,8 +2966,7 @@ function set_join_parameters_for_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
-
+  create_subctl_join_file "${CLUSTER_C_NAME}" "${SUBCTL_JOIN_CLUSTER_C_FILE}"
 }
 
 # ------------------------------------------
@@ -2976,9 +2974,10 @@ function set_join_parameters_for_cluster_c() {
 function create_subctl_join_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
-  local join_cmd_file="$1"
+  local cluster_name="$1"
+  local join_cmd_file="$2"
 
-  echo -e "# Adding Broker file and IPSec ports to subctl join command"
+  echo -e "# Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
 
   subctl_join="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
@@ -3000,12 +2999,17 @@ function create_subctl_join_file() {
   "https://bugzilla.redhat.com/show_bug.cgi?id=1972703"
   # Workaround
   ${OC} config view
-  # local context_name=$(${OC} config get-contexts -o name | tail -1)
-  # ${OC} config use-context $context_name
-  local context_name=$(${OC} config current-context)
-  subctl_join="${subctl_join} --clusterid ${context_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  local cluster_id=$(${OC} config current-context)
+
+  BUG "subctl join failed on \"Error creating SA for cluster\"" \
+  "Add '--clusterid <short ID>' (${cluster_name}) to $join_cmd_file" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
+  # Workaround
+  cluster_id=$cluster_name
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
+
+  subctl_join="${subctl_join} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
   echo "$subctl_join" > "$join_cmd_file"
 
 }
@@ -4300,7 +4304,7 @@ function test_project_e2e_with_go() {
   fi
 
   echo "E2E context: ${e2e_dp_context}"
-  
+
   ### Set E2E $test_params and $junit_params" ###
 
   test_params="$test_params $e2e_dp_context
@@ -4333,7 +4337,8 @@ function test_project_e2e_with_go() {
   -ginkgo.v -ginkgo.trace \
   -ginkgo.randomizeAllSpecs \
   -ginkgo.noColor \
-  -ginkgo.reportPassed ${junit_params} \
+  -ginkgo.reportPassed \
+  ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -args $test_params | tee -a "$E2E_LOG"
 
