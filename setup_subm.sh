@@ -1448,7 +1448,7 @@ function test_cluster_status() {
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   ${OC} config view
-  ${OC} status -n default || FATAL "Openshift cluster is not installed, or using bad context '$cluster_name' in kubeconfig: ${KUBECONFIG}"
+  ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${KUBECONFIG}"
   ${OC} version
   ${OC} get all -n default
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
@@ -1504,34 +1504,37 @@ function update_kubeconfig_context() {
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  # Updating kubeconfig current-context - it should be equal to $cluster_name
   local cur_context="$(${OC} config current-context)"
-  if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
 
-    BUG "E2E will fail if clusters have same name (default is \"admin\")" \
-    "Modify KUBECONFIG cluster context name on both clusters to be unique" \
-    "https://github.com/submariner-io/submariner/issues/245"
+  # Updating kubeconfig current-context - it should be equal to $cluster_name
+  #
+  # if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
+  #
+  #   BUG "E2E will fail if clusters have same name (default is \"admin\")" \
+  #   "Modify KUBECONFIG cluster context name on both clusters to be unique" \
+  #   "https://github.com/submariner-io/submariner/issues/245"
+  #
+  #   if ${OC} config get-contexts "${cluster_name}" 2>/dev/null ; then
+  #     echo "# Rename existing kubeconfig context '${cluster_name}' to: ${cluster_name}_old"
+  #     ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
+  #   fi
+  #
+  #   if ${OC} config get-contexts "${cur_context}" 2>/dev/null ; then
+  #     echo "# Update kubeconfig current-context '${cur_context}' to: ${cluster_name}"
+  #     ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
+  #   fi
+  # fi
+  #
+  # local cluster_id=$(${OC} config get-clusters | tail -1)
+  # echo "# Set KUBECONFIG context '$cluster_name' to cluster id '$cluster_id', and its namespace to 'default'"
+  # # ${OC} config set "contexts.${cluster_name}.namespace" "default"
+  # ${OC} config set-context "$cluster_name" --cluster "$cluster_id" --user "admin" --namespace "default"
+  # ${OC} config use-context "$cluster_name"
 
-    BUG "E2E will fail if cluster id is not equal to cluster name" \
-    "Modify KUBECONFIG context cluster name = cluster id" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1928805"
+  echo "# Set KUBECONFIG current context '$cur_context' to use the 'default' namespace"
+  ${OC} config set "contexts.${cur_context}.namespace" "default"
 
-    if ${OC} config get-contexts "${cluster_name}" 2>/dev/null ; then
-      echo "# Rename existing kubeconfig context '${cluster_name}' to: ${cluster_name}_old"
-      ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
-    fi
-
-    if ${OC} config get-contexts "${cur_context}" 2>/dev/null ; then
-      echo "# Update kubeconfig current-context '${cur_context}' to: ${cluster_name}"
-      ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
-    fi
-  fi
-
-  local cluster_id=$(${OC} config get-clusters | tail -1)
-  echo "# Set KUBECONFIG context '$cluster_name' to cluster id '$cluster_id', and its namespace to 'default'"
-  # ${OC} config set "contexts.${cluster_name}.namespace" "default"
-  ${OC} config set-context "$cluster_name" --cluster "$cluster_id" --user "admin" --namespace "default"
-  ${OC} config use-context "$cluster_name"
+  ${OC} config get-contexts
 
   # ${OC} set env dc/dcname TZ=Asia/Jerusalem
 
@@ -1627,6 +1630,10 @@ EOF
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
+
+    echo "# Updating the default kubeconfig current-context"
+    cur_context="$(${OC} config current-context)"
+    ${OC} config use-context "$cur_context"
   )
 
 }
@@ -2694,61 +2701,6 @@ function configure_cluster_custom_registry_secrets() {
 
   local ocp_usr="${1:-$OCP_USR}"
 
-#   local secret_filename="${3:-http.secret}"
-#
-#   echo "# Create an HTPasswd file for OCP user '$ocp_usr'"
-#
-#   ( # subshell to hide commands
-#     local ocp_pwd="${2:-$OCP_PWD}"
-#     printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
-#   )
-#
-#   echo "# Create secret from the HTPasswd file"
-#
-#   ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
-#
-#   ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
-#
-#   echo "# Add the HTPasswd identity provider to the registry"
-#
-#   cat <<EOF | ${OC} apply -f -
-#     apiVersion: config.openshift.io/v1
-#     kind: OAuth
-#     metadata:
-#      name: cluster
-#     spec:
-#      identityProviders:
-#      - name: htpasswd_provider
-#        mappingMethod: claim
-#        type: HTPasswd
-#        htpasswd:
-#          fileData:
-#            name: ${secret_filename}
-# EOF
-#
-#   ${OC} describe oauth.config.openshift.io/cluster
-#
-#   local cur_context=$(${OC} config current-context)
-#
-#   echo "# Add new user '${ocp_usr}' to cluster roles, and verify login, while saving kubeconfig current-context ($cur_context)"
-#
-#   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
-#   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
-#   ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
-#
-#   ### Give user admin privileges
-#   # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${ocp_usr}
-#   ${OC} adm policy add-cluster-role-to-user cluster-admin ${ocp_usr}
-#
-#   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
-#   watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
-#
-#   ( # subshell to hide commands
-#     local ocp_pwd="${2:-$OCP_PWD}"
-#     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
-#     # Attempt to login up to 3 minutes
-#     watch_and_retry "$cmd" 3m
-
   (
     # ocp_usr=$(${OC} whoami | tr -d ':')
     # ocp_pwd=$(${OC} whoami -t)
@@ -2765,10 +2717,6 @@ function configure_cluster_custom_registry_secrets() {
 
   echo "# Prune old registry images associated with Mirror url: https://${REGISTRY_MIRROR}"
   oc adm prune images --registry-url=https://${REGISTRY_MIRROR} --force-insecure --confirm || :
-
-  # echo "# Restore kubeconfig current-context to $cur_context"
-  # # ${OC} config set "current-context" "$cur_context"
-  # ${OC} config use-context "$cur_context"
 
 }
 
@@ -3052,8 +3000,9 @@ function create_subctl_join_file() {
   "https://bugzilla.redhat.com/show_bug.cgi?id=1972703"
   # Workaround
   ${OC} config view
-  local context_name=$(${OC} config get-contexts -o name | tail -1)
-  ${OC} config use-context $context_name
+  # local context_name=$(${OC} config get-contexts -o name | tail -1)
+  # ${OC} config use-context $context_name
+  local context_name=$(${OC} config current-context)
   subctl_join="${subctl_join} --clusterid ${context_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
@@ -4212,41 +4161,39 @@ function export_merged_kubeconfigs() {
   echo "# Exporting all active clusters kubeconfig at once (merged)"
 
   local merged_kubeconfigs="${KUBECONF_CLUSTER_A}"
-  local active_context_names="${CLUSTER_A_NAME}"
+  # local active_context_names="${CLUSTER_A_NAME}"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
     echo "# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
-    active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
+    # active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
     echo "# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
-    active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
+    # active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
   fi
 
   export KUBECONFIG="${merged_kubeconfigs}"
-
-  echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
   ${OC} config get-contexts
 
-  local context_changed
+  # echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
+  # local context_changed
+  #
+  # ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
+  # | while read -r context_name ; do
+  #   echo "# Deleting kubeconfig context: $context_name"
+  #   ${OC} config delete-context "${context_name}" || :
+  #   context_changed=YES
+  # done
+  #
+  # [[ -z "$context_changed" ]] || ${OC} config get-contexts
+  #   #   CURRENT   NAME                  CLUSTER               AUTHINFO      NAMESPACE
+  #   #   *         nmanos-cluster-a      nmanos-cluster-a      admin         default
+  #   #             nmanos-cluster-c      nmanos-cluster-c      admin         default
 
-  ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
-  | while read -r context_name ; do
-    echo "# Deleting kubeconfig context: $context_name"
-    ${OC} config delete-context "${context_name}" || :
-    context_changed=YES
-  done
-
-  [[ -z "$context_changed" ]] || ${OC} config get-contexts
-    #   CURRENT   NAME                  CLUSTER               AUTHINFO      NAMESPACE
-    #   *         nmanos-cluster-a      nmanos-cluster-a      admin         default
-    #             nmanos-cluster-c      nmanos-cluster-c      admin         default
-
-  echo "# Current OC user: "
-  ${OC} whoami || :
+  echo -e "\n# Current OC user: $(${OC} whoami || : )"
 
 }
 
@@ -4336,24 +4283,24 @@ function test_project_e2e_with_go() {
   cd "$e2e_project_path"
   pwd
 
-  export_merged_kubeconfigs
-
-  export GO111MODULE="on"
-  go env
-
   echo "# Set E2E context for the active clusters"
-  local e2e_dp_context="--dp-context ${CLUSTER_A_NAME}"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  local e2e_dp_context="--dp-context $(${OC} config current-context)"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
     echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
-    e2e_dp_context="${e2e_dp_context} --dp-context ${CLUSTER_B_NAME}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+    e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
     echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
-    e2e_dp_context="${e2e_dp_context} --dp-context ${CLUSTER_C_NAME}"
+    export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+    e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
 
+  echo "E2E context: ${e2e_dp_context}"
+  
   ### Set E2E $test_params and $junit_params" ###
 
   test_params="$test_params $e2e_dp_context
@@ -4375,6 +4322,11 @@ function test_project_e2e_with_go() {
   fi
 
   ### Run E2E with GO test ###
+
+  export_merged_kubeconfigs
+
+  export GO111MODULE="on"
+  go env
 
   go test -v ./test/e2e \
   -timeout 120m \
@@ -4564,11 +4516,12 @@ function test_products_versions() {
 
   local cluster_name="$1"
 
+  echo -e "\n# Current OC user: $(${OC} whoami || : )"
+  echo -e "\n# Current Kubeconfig contexts:"
+  ${OC} config get-contexts
+
   echo -e "\n### OCP Cluster ${cluster_name} ###"
   ${OC} version
-
-  echo "# Current OC user: "
-  ${OC} whoami || :
 
   echo -e "\n### Submariner components ###\n"
 
