@@ -1231,21 +1231,27 @@ function create_aws_cluster() {
     cd ${ocp_install_dir}
   fi
 
+  # Continue previous OCP installation
   if [[ -s "metadata.json" ]] ; then
     echo "# $ocp_install_dir directory contains previous OCP installer files. Will attempt to continue previous installation"
-    ../openshift-install wait-for install-complete --log-level=debug # --dir="$CLUSTER_DIR"
+
+    local ocp_cmd="../openshift-install wait-for install-complete --log-level=debug" # --dir="$CLUSTER_DIR"
+    local ocp_log=".openshift_install.log"
+
+    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
+    || FATAL "OCP installer failed to continue previous installation for $cluster_name"
+
+  # Start new OCP installation
   else
     echo "# Run OCP installer from scratch using install-config.yaml"
-    ../openshift-install create cluster --log-level debug
+
+    local ocp_cmd="../openshift-install create cluster --log-level debug"
+    local ocp_log=".openshift_install.log"
+
+    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
+    || FATAL "OCP installer failed to create $cluster_name"
   fi
-
-  # To tail all OpenShift Installer logs (in a new session):
-    # find . -name "*.log" | xargs tail -f
-
-  # Login to the new created cluster:
-    # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
-      # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
-      # "Login to the console with user: kubeadmin, password: ..."
+  
 }
 
 # ------------------------------------------
