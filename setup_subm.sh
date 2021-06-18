@@ -1251,7 +1251,7 @@ function create_aws_cluster() {
     run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
     || FATAL "OCP installer failed to create $cluster_name"
   fi
-  
+
 }
 
 # ------------------------------------------
@@ -2400,9 +2400,10 @@ function install_broker_cluster_a() {
   # TODO: Call kubeconfig of broker cluster
   trap_to_debug_commands;
 
-  DEPLOY_CMD="subctl deploy-broker --kubecontext ${CLUSTER_A_NAME}"
+  local DEPLOY_CMD="subctl deploy-broker"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+    # TODO: Move to a seperate function
     PROMPT "Adding GlobalNet to Submariner Deploy command"
 
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -2414,9 +2415,10 @@ function install_broker_cluster_a() {
   fi
 
   PROMPT "Deploying Submariner Broker on AWS cluster A (public)"
-
   # Deploys Submariner CRDs, creates the SA for the broker, the role and role bindings
+
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  DEPLOY_CMD="${DEPLOY_CMD} --kubecontext $(${OC} config current-context)"
 
   cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -4373,12 +4375,28 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_to_debug_commands;
 
-  export_active_clusters_kubeconfig
-
-  export_merged_kubeconfigs
+  # export_active_clusters_kubeconfig
 
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
+
+  echo "# Set Subctl E2E context for the active clusters"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  local e2e_subctl_context="$(${OC} config current-context)"
+
+  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
+    export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+    e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
+  fi
+
+  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
+    export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+    e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
+  fi
+
+  export_merged_kubeconfigs
 
   BUG "No Subctl option to set -ginkgo.reportFile" \
   "No workaround yet..." \
@@ -4387,8 +4405,7 @@ function test_submariner_e2e_with_subctl() {
   echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
   # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
   # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
-  subctl verify --only service-discovery,connectivity --verbose \
-  --kubecontexts ${CLUSTER_A_NAME}${CLUSTER_B_NAME:+,$CLUSTER_B_NAME}${CLUSTER_C_NAME:+,$CLUSTER_C_NAME} | tee -a "$E2E_LOG"
+  subctl verify --only service-discovery,connectivity --verbose --kubecontexts ${e2e_subctl_context} | tee -a "$E2E_LOG"
 
 }
 
