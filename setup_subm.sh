@@ -1510,6 +1510,10 @@ function update_kubeconfig_context() {
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
+  echo "# Set current context back to the default one"
+  local admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}')
+  ${OC} config use-context "$admin_context"
+
   local cur_context="$(${OC} config current-context)"
 
   # Updating kubeconfig current-context - it should be equal to $cluster_name
