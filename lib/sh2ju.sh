@@ -75,7 +75,7 @@ function juLogClean() {
 function printPlainTextFile() {
   local data_file="$1"
   while read line ; do
-    echo "$line" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
+    echo "$line" | xargs -d "\n" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
   done < "$data_file"
 }
 
@@ -178,9 +178,9 @@ EOF
   # ulimit -s 65536
 
   # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
-  outMsg="$(printPlainTextFile "$outf")"
+  outMsg="$(printPlainTextFile "$outf" || :)"
   rm -f ${outf} || :
-  errMsg="$(printPlainTextFile "$errf")"
+  errMsg="$(printPlainTextFile "$errf" || :)"
   rm -f ${errf} || :
 
   # Set the appropriate error, based in the exit code and the regex
