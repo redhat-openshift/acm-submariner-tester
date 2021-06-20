@@ -2098,7 +2098,7 @@ function install_nginx_svc_on_cluster_b() {
 
   echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${TEST_NS}" "--port=${NGINX_PORT}"
+  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${TEST_NS}" "--port=${NGINX_PORT}" || :
 }
 
 # ------------------------------------------
@@ -4025,7 +4025,7 @@ function install_nginx_headless_namespace_cluster_b() {
 
   echo "# Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${HEADLESS_TEST_NS}" "--port=${NGINX_PORT} --cluster-ip=None"
+  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${HEADLESS_TEST_NS}" "--port=${NGINX_PORT} --cluster-ip=None" || :
 }
 
 # ------------------------------------------

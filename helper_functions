@@ -845,8 +845,8 @@ function install_nginx_service() {
   ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
 
-  echo "# Wait 3 minutes for Ngnix service to be ready:"
-  ${OC} rollout status --timeout=3m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  echo "# Wait 5 minutes for Ngnix service to be ready:"
+  ${OC} rollout status --timeout=5m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
 
 }
