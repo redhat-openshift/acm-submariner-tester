@@ -4364,11 +4364,14 @@ function test_subctl_benchmarks() {
 
   export_active_clusters_kubeconfig
 
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || \
-  FAILURE "Submariner benchmark latency tests have ended with failures, please investigate."
+  subctl benchmark --verbose latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
 
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || \
-  FAILURE "Submariner benchmark throughput tests have ended with failures, please investigate."
+  subctl benchmark --verbose throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
+
+  if [[ "$benchmark_status" = ERROR ]] ; then
+    FAILURE "Submariner benchmark tests have ended with failures. \n\
+    Possible bug: https://bugzilla.redhat.com/show_bug.cgi?id=1971246"
+  fi
 
 }
 
