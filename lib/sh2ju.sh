@@ -217,7 +217,7 @@ EOF
     "
   else
     output="
-    <failure type=\"ScriptError\" message=\"Failure in ${class}.${name}\">
+    <failure type=\"ScriptError\" message=\"${errMsg##*$'\n'} (at ${class}.${name})\">
     <![CDATA[${outMsg}]]>
     </failure>
     <system-err><![CDATA[${errMsg}]]></system-err>

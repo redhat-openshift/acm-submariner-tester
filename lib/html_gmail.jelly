@@ -2,6 +2,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
+  <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
 
   <!-- GENERAL INFO -->
@@ -226,11 +227,13 @@
       <!-- <j:forEach var="failed_test" items="${packageResult.getFailedTests()}"> -->
        <tr bgcolor="white">
         <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: red">
-         <b>
-          <li>
-           Failed: ${failed_test.getFullName()}
-          </li>
-         </b>
+         <li>
+          <b> Failed: ${failed_test.getFullName()} </b>
+          <j:if test="${failed_test.getErrorDetails().trim() != ''}">
+           <j:set var="errorMessage" value=" : ${StringUtils.abbreviate(failed_test.getErrorDetails(), ' ... ', 100) }" />
+           ${errorMessage}
+          </j:if>
+        </li>
         </td>
        </tr>
        <j:set var="lastFailedJunit" value="${failed_test}" />
@@ -266,7 +269,6 @@
          ${logger.println("Getting test stacktrace instead of stdout")}
          <j:set var="testOutput" value="${lastFailedJunit.getErrorStackTrace().trim()}" />
        </j:if>
-       <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
        <j:set var="testOutput" value="${StringUtils.abbreviateMiddle(testOutput, ' ... ', 1000) }" />
        ${logger.println("Last test output = " + testOutput )}
        <td class="trace" style="white-space: pre-line; font-family: Courier New; font-size: 11px; color: black">
