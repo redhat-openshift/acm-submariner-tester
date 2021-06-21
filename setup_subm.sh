@@ -4364,9 +4364,17 @@ function test_subctl_benchmarks() {
 
   export_active_clusters_kubeconfig
 
-  subctl benchmark --verbose latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
+  # subctl benchmark --verbose latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
+  #
+  # subctl benchmark --verbose throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C}  || benchmark_status=ERROR
 
-  subctl benchmark --verbose throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
+  BUG "subctl benchmark --verbose cannot be placed before the sub-commands" \
+  "Put the --verbose at the end" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1974378"
+
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --verbose || benchmark_status=ERROR
+
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --verbose || benchmark_status=ERROR
 
   if [[ "$benchmark_status" = ERROR ]] ; then
     FAILURE "Submariner benchmark tests have ended with failures. \n\
