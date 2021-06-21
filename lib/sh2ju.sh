@@ -216,8 +216,14 @@ EOF
     <system-out><![CDATA[${outMsg}]]></system-out>
     "
   else
+    # Get failure summary from $errMsg as one line, by:
+    # Removing empty lines + getting last line + replacing invalid xml characters
+
+    # failure_summary="$(echo -e "$errMsg" | grep "\S" | tail -1 | tr -dC '[:alnum:][:blank:]')"
+    failure_summary=$(echo -e "$errMsg" | grep "\S" | tail -1 | sed -e 's/"/&quot;/g' -e 's/</&lt;/g' -e 's/&/&amp;/g')
+
     output="
-    <failure type=\"ScriptError\" message=\"${errMsg##*$'\n'} (at ${class}.${name})\">
+    <failure type=\"ScriptError\" message=\"${failure_summary} (at ${class}.${name})\">
     <![CDATA[${outMsg}]]>
     </failure>
     <system-err><![CDATA[${errMsg}]]></system-err>

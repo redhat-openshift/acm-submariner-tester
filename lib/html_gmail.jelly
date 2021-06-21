@@ -230,7 +230,7 @@
          <li>
           <b> Failed: ${failed_test.getFullName()} </b>
           <j:if test="${failed_test.getErrorDetails().trim() != ''}">
-           <j:set var="errorMessage" value=" : ${StringUtils.abbreviate(failed_test.getErrorDetails(), ' ... ', 100) }" />
+           <j:set var="errorMessage" value=" : ${StringUtils.abbreviateMiddle(failed_test.getErrorDetails(), ' ... ', 100)}" />
            ${errorMessage}
           </j:if>
         </li>
