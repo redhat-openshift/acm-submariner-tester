@@ -1223,7 +1223,7 @@ function create_aws_cluster() {
   local ocp_install_dir="$1"
   local cluster_name="$2"
 
-  PROMPT "Creating AWS cluster A (public): $cluster_name"
+  PROMPT "Creating AWS cluster (public): $cluster_name"
 
   if [[ ! -d "$ocp_install_dir" ]] ; then
     FATAL "OCP install directory [$ocp_install_dir] does not exist"
