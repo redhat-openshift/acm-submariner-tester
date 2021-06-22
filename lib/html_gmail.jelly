@@ -212,7 +212,7 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       JUnit Tests
+       Failed Tests
       </b>
      </td>
     </tr>
@@ -226,11 +226,13 @@
       <j:forEach var="failed_test" items="${packageResult.getFailedTestsSortedByAge()}">
       <!-- <j:forEach var="failed_test" items="${packageResult.getFailedTests()}"> -->
        <tr bgcolor="white">
-        <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: red">
+        <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
          <li>
-          <b> Failed: ${failed_test.getFullName()} </b>
+          <b style="color: red">
+           ${failed_test.getName()}
+          </b>
           <j:if test="${failed_test.getErrorDetails().trim() != ''}">
-           <j:set var="errorMessage" value=" : ${StringUtils.abbreviateMiddle(failed_test.getErrorDetails(), ' ... ', 100)}" />
+           <j:set var="errorMessage" value=" : ${StringUtils.abbreviate(failed_test.getErrorDetails(), 500) }" />
            ${errorMessage}
           </j:if>
         </li>
