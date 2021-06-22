@@ -226,14 +226,18 @@
       <j:forEach var="failed_test" items="${packageResult.getFailedTestsSortedByAge()}">
       <!-- <j:forEach var="failed_test" items="${packageResult.getFailedTests()}"> -->
        <tr bgcolor="white">
-        <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+        <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: red">
          <li>
-          <b style="color: red">
-           ${failed_test.getName()}
+          <b>
+           <a href="${rooturl}${failed_test.url}" style="color: red">
+            ${failed_test.getName()}
+           </a>
           </b>
-          <j:if test="${failed_test.getErrorDetails().trim() != ''}">
-           <j:set var="errorMessage" value=" : ${StringUtils.abbreviate(failed_test.getErrorDetails(), 500) }" />
-           ${errorMessage}
+          <j:if test="${!StringUtils.isEmpty(failed_test.getErrorDetails())}">
+           <j:set var="errorMessage" value="${StringUtils.abbreviate(failed_test.getErrorDetails(), 500) }" />
+            <p style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; white-space: pre-line; color: black">
+             ${errorMessage}
+            </p>
           </j:if>
         </li>
         </td>
