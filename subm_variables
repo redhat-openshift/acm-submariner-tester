@@ -27,6 +27,9 @@ export CLUSTER_B_NAME="cluster-b"
 export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
 export NGINX_CLUSTER_B="nginx-cl-b"
 
+export CLUSTER_C_NAME="cluster-c"
+export CLUSTER_C_YAML="${CLUSTER_C_YAML:-${WORKDIR}/setup-cluster-c.yaml}"
+
 export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
 export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"

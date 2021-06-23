@@ -71,12 +71,10 @@ function juLogClean() {
   find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
 }
 
-# Function to print text file without special characters and ansi colors
-function printPlainTextFile() {
-  local data_file="$1"
-  while read line ; do
-    echo "$line" | tr -dC '[:print:]\t\n' | ${SED} -r 's:\[[0-9;]+[mK]::g'
-  done < "$data_file"
+# Function to remove special characters and ansi colors from a text file
+function ConvertToPlainTextFile() {
+  local filePath="$1"
+  ${SED} -r -e 's:\[[0-9;]+[mK]::g' -e 's/[^[:print:]\t\n]//g' -i "$filePath"
 }
 
 
@@ -159,36 +157,40 @@ EOF
      shift
   done
 
-  :>${outf}
+  : > ${outf}
+  : > ${errf}
 
-  echo ""                         | tee -a ${outf}
-  echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} " # | tee -a ${outf}
-  echo "+++ sh2ju working directory: $(pwd)"           # | tee -a ${outf}
-  echo "+++ sh2ju command: ${cmd}"            # | tee -a ${outf}
+  # To print +++ sh2ju debugs to ${outf}, add:   | tee -a ${outf}
+  echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} "
+  echo "+++ sh2ju working directory: $(pwd)"
+  echo "+++ sh2ju command: ${cmd}"
 
+  ### Calling eVal() function that will run the command and save stdout into ${outf}, and stderr into ${errf}
+
+  # Save datetime before execution
   testStartTime="$(${date} +%s.%N)"
 
   eVal "${cmd}"
   returnCode="$([[ -s "$rcFile" ]] && cat "$rcFile" || echo "0")"
   rm -f "${rcFile}"
 
+  # Save datetime after execution
   testEndTime="$(${date} +%s.%N)"
 
   # Workaround for "Argument list too long" memory errors
   # ulimit -s 65536
 
-  # Save output and error messages without special characters (e.g. ansi colors), and delete their temp files
-  outMsg="$(printPlainTextFile "$outf")"
-  rm -f ${outf} || :
-  errMsg="$(printPlainTextFile "$errf")"
-  rm -f ${errf} || :
+  # Convert $outf (stdout file) and $errf (stderr file) to plain text files without special characters (e.g. ansi colors)
+  ConvertToPlainTextFile "${outf}" || :
+  ConvertToPlainTextFile "${errf}" || :
 
   # Set the appropriate error, based in the exit code and the regex
   [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
   # echo "+++ sh2ju exit code: ${returnCode} (testStatus=$testStatus)"
   if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
-      H=$(echo "${outMsg}" | grep -E ${icase} "${ereg}")
-      [[ -n "${H}" ]] && testStatus=FAILED
+      if grep -q -E ${icase} "${ereg}" "${outf}" ; then
+        testStatus=FAILED
+      fi
   elif [[ ${testStatus} = FAILED ]] ; then
     failures=$((failures+1))
   fi
@@ -213,14 +215,18 @@ EOF
   ## system-out or system-err tag
   if [[ ${testStatus} = PASSED ]] ; then
     output="
-    <system-out><![CDATA[${outMsg}]]></system-out>
+    <system-out><![CDATA[$(cat ${outf})]]></system-out>
     "
   else
+    # Get failure summary from $errf as one line, by:
+    # Removing empty lines + getting last line + replacing invalid xml characters
+    failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e 's/"/&quot;/g' -e 's/</&lt;/g' -e 's/&/&amp;/g')
+
     output="
-    <failure type=\"ScriptError\" message=\"Failure in ${class}.${name}\">
-    <![CDATA[${outMsg}]]>
+    <failure type=\"ScriptError\" message=\"${failure_summary}\">
+    <![CDATA[$(cat ${outf})]]>
     </failure>
-    <system-err><![CDATA[${errMsg}]]></system-err>
+    <system-err><![CDATA[$(cat ${errf})]]></system-err>
     "
   fi
 

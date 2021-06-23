@@ -2,6 +2,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
+  <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
   <!-- <j:set var="buildenv" value="${build.getEnvironment(listener)}"/> -->
 
   <!-- GENERAL INFO -->
@@ -211,7 +212,7 @@
     <tr>
      <td class="bg1" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
       <b>
-       JUnit Tests
+       Failed Tests
       </b>
      </td>
     </tr>
@@ -226,11 +227,19 @@
       <!-- <j:forEach var="failed_test" items="${packageResult.getFailedTests()}"> -->
        <tr bgcolor="white">
         <td class="test_failed" colspan="2" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: red">
-         <b>
-          <li>
-           Failed: ${failed_test.getFullName()}
-          </li>
-         </b>
+         <li>
+          <b>
+           <a href="${rooturl}${failed_test.url}" style="color: red">
+            ${failed_test.getName()}
+           </a>
+          </b>
+          <j:if test="${!StringUtils.isEmpty(failed_test.getErrorDetails())}">
+           <j:set var="errorMessage" value="${StringUtils.abbreviate(failed_test.getErrorDetails(), 500) }" />
+            <p style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; white-space: pre-line; color: black">
+             ${errorMessage}
+            </p>
+          </j:if>
+        </li>
         </td>
        </tr>
        <j:set var="lastFailedJunit" value="${failed_test}" />
@@ -266,7 +275,6 @@
          ${logger.println("Getting test stacktrace instead of stdout")}
          <j:set var="testOutput" value="${lastFailedJunit.getErrorStackTrace().trim()}" />
        </j:if>
-       <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
        <j:set var="testOutput" value="${StringUtils.abbreviateMiddle(testOutput, ' ... ', 1000) }" />
        ${logger.println("Last test output = " + testOutput )}
        <td class="trace" style="white-space: pre-line; font-family: Courier New; font-size: 11px; color: black">
