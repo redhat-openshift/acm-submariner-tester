@@ -34,8 +34,8 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-asserts=00; failures=0; suiteDuration=0; content=""
-date="$(which gdate 2>/dev/null || which date)"
+# asserts=00; failures=0; suiteDuration=0; content=""
+# date="$(which gdate 2>/dev/null || which date)"
 
 export sortTests=""
 export testIndex=0
@@ -81,17 +81,6 @@ function ConvertToPlainTextFile() {
 # Execute a command and record its results
 function juLog() {
 
-  # A wrapper for the eval method witch allows catching seg-faults and use tee
-  # export rcFile=/tmp/eval_rc.$$.log
-  export rcFile=`mktemp`_eval_rc.log
-  # :>${rcFile}
-
-  # eval the command sending output to a file
-  # export outf=/var/tmp/ju$$.txt
-  export outf=`mktemp`_ju.out
-  # export errf=/var/tmp/ju$$-err.txt
-  export errf=`mktemp`_ju.err
-
   # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
   set +e
 
@@ -99,9 +88,20 @@ function juLog() {
   export returnCode=0
   trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
 
+  # A wrapper for the eval method witch allows catching seg-faults and use tee
+  export rcFile=`mktemp`_eval_rc.log
+
+  # eval the command sending output to a file
+  export outf=`mktemp`_ju.out
+  export errf=`mktemp`_ju.err
+
+  # Initialize testsuite attributes
   date="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; failures=0; suiteDuration=0; content=""
   export testIndex=$(( testIndex+1 ))
+
+  # Testcase tag content file, that is added for each new testcase
+  newTestCaseTag=`mktemp`_tc_content
 
   # parse arguments
   ya=""; icase=""
@@ -122,7 +122,7 @@ function juLog() {
     class="default"
   fi
 
-  # Set test suite title to class name with spaces (instead of _ ), and with uppercase words
+  # Set testsuite title to class name with spaces (instead of _ ), and with uppercase words
   suiteTitle="${class//_/ }"
   suiteTitle="${suiteTitle[@]^}"
 
@@ -214,50 +214,59 @@ EOF
     testTitle="${zero_padding:(-${#digits})} : ${testTitle}"
   fi
 
-  # write the junit xml report
-  ## system-out or system-err tag
+  # Write the junit xml report
+
+  # Update testcase tag content file (not saving data in variables due to "Argument list too long" potential error)
+  cat <<-EOF > ${newTestCaseTag}
+    <testcase assertions="1" name="${testTitle}" time="${testDuration}" classname="${class//./-}">
+EOF
+
+  # system-out tag if testcase passed
   if [[ ${testStatus} = PASSED ]] ; then
-    output="
-    <system-out><![CDATA[$(cat ${outf})]]></system-out>
-    "
+    echo '    <system-out> <![CDATA[' >> ${newTestCaseTag}
+    cat ${outf} >> ${newTestCaseTag}
+    echo '    ]]> </system-out>' >> ${newTestCaseTag}
+
+  # Or failure tag if testcase failed
   else
     # Get failure summary from $errf as one line, by:
     # Removing empty lines + getting last line + replacing invalid xml characters
     failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e 's/"/&quot;/g' -e 's/</&lt;/g' -e 's/&/&amp;/g')
 
-    output="
-    <failure type=\"ScriptError\" message=\"${failure_summary}\">
-    <![CDATA[$(cat ${outf})]]>
-    </failure>
-    <system-err><![CDATA[$(cat ${errf})]]></system-err>
-    "
+    echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\"> <![CDATA[" >> ${newTestCaseTag}
+    cat ${outf} >> ${newTestCaseTag}
+    echo '    ]]> </failure>' >> ${newTestCaseTag}
+
+    ## system-err tag in addition to failure tag
+    echo '    <system-err> <![CDATA[' >> ${newTestCaseTag}
+    cat ${errf} >> ${newTestCaseTag}
+    echo '    ]]> </system-err>' >> ${newTestCaseTag}
+
   fi
 
-  ## testcase tag
-  content="${content}
-    <testcase assertions=\"1\" name=\"${testTitle}\" time=\"${testDuration}\" classname=\"${class//./-}\">
-    ${output}
-    </testcase>
-  "
-  ## testsuite block
+  ## testcase tag end
+  echo '    </testcase>' >> ${newTestCaseTag}
 
+  # Testsuite block
   if [[ -e "${juDIR}/${juFILE}" ]]; then
 
     # Get the number of failures in existing junit.xml, and append current failures counter to it
-    failCountFile=`mktemp`_failures.txt
-    grep -Po -m1 'testsuite.*failures="\K[0-9]+' "${juDIR}/${juFILE}" > $failCountFile
-    failCount="$(< $failCountFile)"
+    failCount=$(grep -Po -m1 'testsuite.*failures="\K[0-9]+' "${juDIR}/${juFILE}")
     [[ ! "$failCount" =~ ^[0-9]+$ ]] || failures=$((failCount+failures))
 
-    # Update failures and errors number in testsuite tag
+    # Update the number of failures and errors in testsuite tag
     ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${failures}\"/" "${juDIR}/${juFILE}"
     ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${failures}\"/" "${juDIR}/${juFILE}"
 
-    # Need to append to it. If we remove the testsuite end tag, we can just add it in after.
-    ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}" ## remove testSuite so we can add it later
+    # In order to append the new testcase tag in the testsuite, remove the closing testsuite and testsuites end tags
+    ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}"
     ${SED} -i "s^</testsuites>^^g" "${juDIR}/${juFILE}"
-    cat <<EOF >> "$juDIR/${juFILE}"
-     ${content:-}
+
+    # Append the new testcase tag
+    cat "${newTestCaseTag}" >> "${juDIR}/${juFILE}"
+
+    # Testsuite (and testsuites) tags end
+    cat <<-EOF >> "${juDIR}/${juFILE}"
     </testsuite>
 </testsuites>
 EOF
