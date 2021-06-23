@@ -5277,22 +5277,23 @@ export_active_clusters_kubeconfig
         ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
       fi
 
-    fi
+    fi # END of System tests that uses Cluster B (OSP)
 
     echo -e "# From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion.
     \n# ($TEST_STATUS_FILE with exit code 2)"
 
     echo 2 > $TEST_STATUS_FILE
-  fi
+
+    ### Running benchmark tests with subctl
+
+    ${junit_cmd} test_subctl_benchmarks
+
+  fi # END of all System tests
 
 
   ### Running Submariner tests with Ginkgo or with subctl commands
 
   if [[ ! "$skip_tests" =~ all ]]; then
-
-    ### Running benchmark tests with subctl
-
-    ${junit_cmd} test_subctl_benchmarks
 
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
