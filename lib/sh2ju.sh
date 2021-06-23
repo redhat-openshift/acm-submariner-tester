@@ -82,12 +82,15 @@ function ConvertToPlainTextFile() {
 function juLog() {
 
   # A wrapper for the eval method witch allows catching seg-faults and use tee
-  export rcFile=/tmp/eval_rc.$$.log
+  # export rcFile=/tmp/eval_rc.$$.log
+  export rcFile=`mktemp`_eval_rc.log
   # :>${rcFile}
 
   # eval the command sending output to a file
-  export outf=/var/tmp/ju$$.txt
-  export errf=/var/tmp/ju$$-err.txt
+  # export outf=/var/tmp/ju$$.txt
+  export outf=`mktemp`_ju.out
+  # export errf=/var/tmp/ju$$-err.txt
+  export errf=`mktemp`_ju.err
 
   # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
   set +e
@@ -239,13 +242,18 @@ EOF
   ## testsuite block
 
   if [[ -e "${juDIR}/${juFILE}" ]]; then
-    # file exists. first update the failures count
-    failCount=$(${SED} -n "s/.*testsuite.*failures=\"\([0-9]*\)\".*/\1/p" "${juDIR}/${juFILE}")
-    failures=$((failCount+failures))
+
+    # Get the number of failures in existing junit.xml, and append current failures counter to it
+    failCountFile=`mktemp`_failures.txt
+    grep -Po -m1 'testsuite.*failures="\K[0-9]+' "${juDIR}/${juFILE}" > $failCountFile
+    failCount="$(< $failCountFile)"
+    [[ ! "$failCount" =~ ^[0-9]+$ ]] || failures=$((failCount+failures))
+
+    # Update failures and errors number in testsuite tag
     ${SED} -i "0,/failures=\"${failCount}\"/ s/failures=\"${failCount}\"/failures=\"${failures}\"/" "${juDIR}/${juFILE}"
     ${SED} -i "0,/errors=\"${failCount}\"/ s/errors=\"${failCount}\"/errors=\"${failures}\"/" "${juDIR}/${juFILE}"
 
-    # file exists. Need to append to it. If we remove the testsuite end tag, we can just add it in after.
+    # Need to append to it. If we remove the testsuite end tag, we can just add it in after.
     ${SED} -i "s^</testsuite>^^g" "${juDIR}/${juFILE}" ## remove testSuite so we can add it later
     ${SED} -i "s^</testsuites>^^g" "${juDIR}/${juFILE}"
     cat <<EOF >> "$juDIR/${juFILE}"
