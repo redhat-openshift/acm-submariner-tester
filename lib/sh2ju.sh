@@ -229,7 +229,7 @@ EOF
   else
     # Get failure summary from $errf as one line, by:
     # Removing empty lines + getting last line + replacing invalid xml characters
-    failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e 's/"/&quot;/g' -e 's/</&lt;/g' -e 's/&/&amp;/g')
+    failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e "s/\"/'/g" -e 's/</&lt;/g' -e 's/&/&amp;/g')
 
     echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\"> <![CDATA[" >> ${newTestCaseTag}
     cat ${outf} >> ${newTestCaseTag}
@@ -273,7 +273,7 @@ EOF
     ${SED} -e "0,/<testsuite .*>/s/<testsuite .*>\s*/\
     <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" \
     -i "${juDIR}/${juFILE}"
-    
+
   fi
 
   # Set returnCode=0, if missing or equals 5
