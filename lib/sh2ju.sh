@@ -34,8 +34,13 @@ set +e
 # set +x - To avoid printing commands in debug mode
 set +x
 
-# asserts=00; failures=0; suiteDuration=0; content=""
-# date="$(which gdate 2>/dev/null || which date)"
+# Temporary files to store the command stdout, stderr and exit code
+export outf=`mktemp`_ju.out
+export errf=`mktemp`_ju.err
+export returnf=`mktemp`_eval_rc.log
+
+# Temporary file to store Testcase tag content, that is added for each new testcase in the junit xml
+newTestCaseTag=`mktemp`_tc_content
 
 export sortTests=""
 export testIndex=0
@@ -49,20 +54,20 @@ else
   exit 1
 fi
 
+# Function to execute command (like bash eval method), witch allows catching seg-faults and use tee
 function eVal() {
   # execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
   # then swapping them back again so that the streams are written correctly for the invoking process
-  echo 0 > "${rcFile}"
+  echo 0 > "${returnf}"
   (
     (
       {
-        trap 'RC=$? ; echo $RC > "${rcFile}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
-        trap 'RC="$(< $rcFile)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
+        trap 'RC=$? ; echo $RC > "${returnf}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+        trap 'RC="$(< $returnf)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
         set -e; $1;
       } | tee -a ${outf}
     ) 3>&1 1>&2 2>&3 | tee ${errf}
   ) 3>&1 1>&2 2>&3
-
 }
 
 # TODO: Use this function to clean old test results (xmls)
@@ -84,24 +89,17 @@ function juLog() {
   # set +e - To avoid breaking the calling script, if juLog has internal error (e.g. in SED)
   set +e
 
+  # Workaround for "Argument list too long" memory errors
+  # ulimit -s 65536
+
   # In case of script error: Exit with the last return code of eVal()
   export returnCode=0
   trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
 
-  # A wrapper for the eval method witch allows catching seg-faults and use tee
-  export rcFile=`mktemp`_eval_rc.log
-
-  # eval the command sending output to a file
-  export outf=`mktemp`_ju.out
-  export errf=`mktemp`_ju.err
-
   # Initialize testsuite attributes
-  date="$(which gdate 2>/dev/null || which date || :)"
+  dateTime="$(which gdate 2>/dev/null || which date || :)"
   asserts=00; failures=0; suiteDuration=0; content=""
   export testIndex=$(( testIndex+1 ))
-
-  # Testcase tag content file, that is added for each new testcase
-  newTestCaseTag=`mktemp`_tc_content
 
   # parse arguments
   ya=""; icase=""
@@ -160,28 +158,28 @@ EOF
      shift
   done
 
-  : > ${outf}
-  : > ${errf}
-
-  # To print +++ sh2ju debugs to ${outf}, add:   | tee -a ${outf}
   echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} "
   echo "+++ sh2ju working directory: $(pwd)"
   echo "+++ sh2ju command: ${cmd}"
+  # To print +++ sh2ju debugs also into ${outf}, add:   | tee -a ${outf}
 
-  ### Calling eVal() function that will run the command and save stdout into ${outf}, and stderr into ${errf}
+  # Clear content of the temporary files
+  : > ${outf}
+  : > ${errf}
+  : > ${returnf}
 
-  # Save datetime before execution
-  testStartTime="$(${date} +%s.%N)"
+  # Save datetime before executing the command
+  testStartTime="$(${dateTime} +%s.%N)"
 
+  ### Calling eVal() function that will run the command and save output to the temporary files:
+  # Function stdout > ${outf}
+  # Function stderr > ${errf}
+  # Function return (exit) code > ${returnf}
   eVal "${cmd}"
-  returnCode="$([[ -s "$rcFile" ]] && cat "$rcFile" || echo "0")"
-  rm -f "${rcFile}"
+  returnCode="$([[ -s "$returnf" ]] && cat "$returnf" || echo "0")"
 
-  # Save datetime after execution
-  testEndTime="$(${date} +%s.%N)"
-
-  # Workaround for "Argument list too long" memory errors
-  # ulimit -s 65536
+  # Save datetime after executing the command
+  testEndTime="$(${dateTime} +%s.%N)"
 
   # Convert $outf (stdout file) and $errf (stderr file) to plain text files without special characters (e.g. ansi colors)
   ConvertToPlainTextFile "${outf}" || :
@@ -218,7 +216,7 @@ EOF
 
   # Update testcase tag content file (not saving data in variables due to "Argument list too long" potential error)
   cat <<-EOF > ${newTestCaseTag}
-    <testcase assertions="1" name="${testTitle}" time="${testDuration}" classname="${class//./-}">
+      <testcase assertions="1" name="${testTitle}" time="${testDuration}" classname="${class//./-}">
 EOF
 
   # system-out tag if testcase passed
@@ -245,7 +243,7 @@ EOF
   fi
 
   ## testcase tag end
-  echo '    </testcase>' >> ${newTestCaseTag}
+  echo '      </testcase>' >> ${newTestCaseTag}
 
   # Testsuite block
   if [[ -e "${juDIR}/${juFILE}" ]]; then
@@ -272,8 +270,10 @@ EOF
 EOF
 
     # Update suite summary on the first <testsuite> tag:
-    ${SED} -e "0,/<testsuite .*>/s/<testsuite .*>/\
-    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" -i "${juDIR}/${juFILE}"
+    ${SED} -e "0,/<testsuite .*>/s/<testsuite .*>\s*/\
+    <testsuite name=\"${suiteTitle}\" tests=\"${testIndex}\" assertions=\"${assertions:-}\" failures=\"${failures}\" errors=\"${failures}\" time=\"${suiteDuration}\">/" \
+    -i "${juDIR}/${juFILE}"
+    
   fi
 
   # Set returnCode=0, if missing or equals 5
