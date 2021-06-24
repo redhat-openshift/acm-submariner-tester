@@ -1508,7 +1508,6 @@ function update_kubeconfig_context() {
   trap_to_debug_commands;
 
   local cluster_name="$1"
-
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
@@ -2434,7 +2433,8 @@ function install_broker_cluster_a() {
   echo "# Remove previous broker-info.subm (if exists)"
   rm broker-info.subm || echo "# Previous ${BROKER_INFO} already removed"
 
-  echo "# Executing Subctl Deploy command: ${DEPLOY_CMD}"
+  local cluster_name="$(print_current_cluster_name)"
+  echo -e "# Executing Subctl Deploy command on $cluster_name: \n# ${DEPLOY_CMD}"
 
   BUG "For Submariner 0.9+ operator image should be accessible before broker deploy" \
   "Run broker deployment after uploading custom images to the cluster registry" \
@@ -2962,7 +2962,7 @@ function set_join_parameters_for_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  create_subctl_join_file "${CLUSTER_A_NAME}" "${SUBCTL_JOIN_CLUSTER_A_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
 # ------------------------------------------
@@ -2972,7 +2972,7 @@ function set_join_parameters_for_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  create_subctl_join_file "${CLUSTER_B_NAME}" "${SUBCTL_JOIN_CLUSTER_B_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_B_FILE}"
 }
 
 # ------------------------------------------
@@ -2982,7 +2982,7 @@ function set_join_parameters_for_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  create_subctl_join_file "${CLUSTER_C_NAME}" "${SUBCTL_JOIN_CLUSTER_C_FILE}"
+  create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_C_FILE}"
 }
 
 # ------------------------------------------
@@ -2990,25 +2990,25 @@ function set_join_parameters_for_cluster_c() {
 function create_subctl_join_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
-  local cluster_name="$1"
-  local join_cmd_file="$2"
+  local cluster_name="$(print_current_cluster_name)"
+  local join_cmd_file="$1"
 
   echo -e "# Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
 
-  subctl_join="subctl join \
+  JOIN_CMD="subctl join \
   ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   echo "# Adding '--health-check' to subctl join command (to enable Gateway health check)"
 
-  subctl_join="${subctl_join} --health-check"
+  JOIN_CMD="${JOIN_CMD} --health-check"
 
   local pod_debug_flag="--pod-debug"
   # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || pod_debug_flag="--enable-pod-debugging"
 
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
-  subctl_join="${subctl_join} ${pod_debug_flag} --ipsec-debug"
+  JOIN_CMD="${JOIN_CMD} ${pod_debug_flag} --ipsec-debug"
 
   BUG "Subctl fails to join cluster, since it does not automatically generate cluster id" \
   "Add '--clusterid <ID>' to $join_cmd_file" \
@@ -3025,8 +3025,8 @@ function create_subctl_join_file() {
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
 
-  subctl_join="${subctl_join} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
-  echo "$subctl_join" > "$join_cmd_file"
+  JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  echo "$JOIN_CMD" > "$join_cmd_file"
 
 }
 
@@ -3136,7 +3136,7 @@ function append_custom_images_to_join_cmd_file() {
 
   local join_cmd_file="$1"
   echo "# Read subctl join command from file: $join_cmd_file"
-  local subctl_join="$(< $join_cmd_file)"
+  local JOIN_CMD="$(< $join_cmd_file)"
 
   # Fix the $SUBM_VER_TAG value for custom images
   set_subm_version_tag_var
@@ -3146,10 +3146,10 @@ function append_custom_images_to_join_cmd_file() {
   "https://github.com/submariner-io/submariner-operator/issues/1018"
 
   echo "# Append \"--image-override\" for custom images to subctl join command"
-  subctl_join="${subctl_join} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
+  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
 
   # BUG ? : this is a potential bug - overriding with comma separated:
-  # subctl_join="${subctl_join} --image-override \
+  # JOIN_CMD="${JOIN_CMD} --image-override \
   # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
   # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
   # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
@@ -3159,8 +3159,8 @@ function append_custom_images_to_join_cmd_file() {
   # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
   # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
 
-  echo -e "# Write into the join command file [${join_cmd_file}]: \n${subctl_join}"
-  echo "$subctl_join" > "$join_cmd_file"
+  echo -e "# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
+  echo "$JOIN_CMD" > "$join_cmd_file"
 
 }
 
@@ -3172,8 +3172,11 @@ function set_subm_version_tag_var() {
 
   # Get variable name (default is "SUBM_VER_TAG")
   local tag_var_name="${1:-SUBM_VER_TAG}"
+
   # Set subm_version_tag as the actual value of tag_var_name
   local subm_version_tag="${!tag_var_name}"
+
+  [[ -n "${subm_version_tag}" ]] || FATAL "Submariner version to use was not defined. Try to run again with option '--subctl-version x.y.z'"
 
   echo "# Retrieve correct tag for Subctl version \$${tag_var_name} : $subm_version_tag"
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
@@ -3236,7 +3239,7 @@ function run_subctl_join_cmd_from_file() {
   trap_to_debug_commands;
 
   echo "# Read subctl join command from file: $1"
-  local subctl_join="$(< $1)"
+  local JOIN_CMD="$(< $1)"
 
   cd ${WORKDIR}
 
@@ -3262,9 +3265,10 @@ function run_subctl_join_cmd_from_file() {
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
   ${OC} config view
 
-  echo -e "\n# Executing Subctl Join command on current cluster: \n ${subctl_join}"
+  local cluster_name="$(print_current_cluster_name)"
+  echo -e "# Executing Subctl Join command on $cluster_name: \n# ${JOIN_CMD}"
 
-  $subctl_join
+  $JOIN_CMD
 
 }
 
@@ -3274,7 +3278,7 @@ function test_submariner_resources_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_submariner_resources_status "${CLUSTER_A_NAME}"
+  test_submariner_resources_status
 }
 
 # ------------------------------------------
@@ -3283,7 +3287,7 @@ function test_submariner_resources_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_submariner_resources_status "${CLUSTER_B_NAME}"
+  test_submariner_resources_status
 }
 
 # ------------------------------------------
@@ -3292,7 +3296,7 @@ function test_submariner_resources_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_submariner_resources_status "${CLUSTER_C_NAME}"
+  test_submariner_resources_status
 }
 
 # ------------------------------------------
@@ -3300,7 +3304,7 @@ function test_submariner_resources_cluster_c() {
 function test_submariner_resources_status() {
 # Check submariner-gateway on the Operator pod
   trap_to_debug_commands;
-  local cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
   local submariner_status=UP
 
   PROMPT "Testing that Submariner CRDs and resources were created on cluster ${cluster_name}"
@@ -3450,7 +3454,7 @@ function test_cable_driver_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_submariner_cable_driver "${CLUSTER_A_NAME}"
+  test_submariner_cable_driver
 }
 
 # ------------------------------------------
@@ -3459,7 +3463,7 @@ function test_cable_driver_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_submariner_cable_driver "${CLUSTER_B_NAME}"
+  test_submariner_cable_driver
 }
 
 # ------------------------------------------
@@ -3468,7 +3472,7 @@ function test_cable_driver_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_submariner_cable_driver "${CLUSTER_C_NAME}"
+  test_submariner_cable_driver
 }
 
 # ------------------------------------------
@@ -3476,7 +3480,7 @@ function test_cable_driver_cluster_c() {
 function test_submariner_cable_driver() {
 # Check submariner cable driver
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
@@ -3501,7 +3505,7 @@ function test_ha_status_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_ha_status "${CLUSTER_A_NAME}"
+  test_ha_status
 }
 
 # ------------------------------------------
@@ -3510,7 +3514,7 @@ function test_ha_status_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_ha_status "${CLUSTER_B_NAME}"
+  test_ha_status
 }
 
 # ------------------------------------------
@@ -3519,7 +3523,7 @@ function test_ha_status_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_ha_status "${CLUSTER_C_NAME}"
+  test_ha_status
 }
 
 # ------------------------------------------
@@ -3527,7 +3531,7 @@ function test_ha_status_cluster_c() {
 function test_ha_status() {
 # Check submariner HA status
   trap_to_debug_commands;
-  local cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
   local submariner_status=UP
 
   PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
@@ -3566,7 +3570,7 @@ function test_submariner_connection_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_submariner_connection_established "${CLUSTER_A_NAME}"
+  test_submariner_connection_established
 }
 
 # ------------------------------------------
@@ -3575,7 +3579,7 @@ function test_submariner_connection_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_submariner_connection_established "${CLUSTER_B_NAME}"
+  test_submariner_connection_established
 }
 
 # ------------------------------------------
@@ -3584,7 +3588,7 @@ function test_submariner_connection_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_submariner_connection_established "${CLUSTER_C_NAME}"
+  test_submariner_connection_established
 }
 
 # ------------------------------------------
@@ -3592,7 +3596,7 @@ function test_submariner_connection_cluster_c() {
 function test_submariner_connection_established() {
 # Check submariner cable driver
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Check Submariner Gateway established connection on ${cluster_name}"
 
@@ -3624,7 +3628,7 @@ function test_ipsec_status_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_ipsec_status "${CLUSTER_A_NAME}"
+  test_ipsec_status
 }
 
 # ------------------------------------------
@@ -3633,7 +3637,7 @@ function test_ipsec_status_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_ipsec_status "${CLUSTER_B_NAME}"
+  test_ipsec_status
 }
 
 # ------------------------------------------
@@ -3642,7 +3646,7 @@ function test_ipsec_status_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_ipsec_status "${CLUSTER_C_NAME}"
+  test_ipsec_status
 }
 
 # ------------------------------------------
@@ -3650,7 +3654,7 @@ function test_ipsec_status_cluster_c() {
 function test_ipsec_status() {
 # Check submariner cable driver
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Testing IPSec Status of the Active Gateway in ${cluster_name}"
 
@@ -3686,7 +3690,7 @@ function test_globalnet_status_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_globalnet_status "${CLUSTER_A_NAME}"
+  test_globalnet_status
 }
 
 # ------------------------------------------
@@ -3695,7 +3699,7 @@ function test_globalnet_status_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_globalnet_status "${CLUSTER_B_NAME}"
+  test_globalnet_status
 }
 
 # ------------------------------------------
@@ -3704,7 +3708,7 @@ function test_globalnet_status_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_globalnet_status "${CLUSTER_C_NAME}"
+  test_globalnet_status
 }
 
 # ------------------------------------------
@@ -3712,7 +3716,7 @@ function test_globalnet_status_cluster_c() {
 function test_globalnet_status() {
   # Check Globalnet controller pod status
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Testing GlobalNet controller, Global IPs and Endpoints status on ${cluster_name}"
 
@@ -3742,7 +3746,7 @@ function test_lighthouse_status_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_lighthouse_status "${CLUSTER_A_NAME}"
+  test_lighthouse_status
 }
 
 # ------------------------------------------
@@ -3751,7 +3755,7 @@ function test_lighthouse_status_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_lighthouse_status "${CLUSTER_B_NAME}"
+  test_lighthouse_status
 }
 
 # ------------------------------------------
@@ -3760,7 +3764,7 @@ function test_lighthouse_status_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_lighthouse_status "${CLUSTER_C_NAME}"
+  test_lighthouse_status
 }
 
 # ------------------------------------------
@@ -3768,7 +3772,7 @@ function test_lighthouse_status_cluster_c() {
 function test_lighthouse_status() {
   # Check Lighthouse (the pod for service-discovery) status
   trap_to_debug_commands;
-  cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Testing Lighthouse agent status on ${cluster_name}"
 
@@ -4534,7 +4538,7 @@ function test_products_versions_cluster_a() {
   PROMPT "Show products versions on cluster A"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_products_versions "${CLUSTER_A_NAME}"
+  test_products_versions
 }
 
 # ------------------------------------------
@@ -4543,7 +4547,7 @@ function test_products_versions_cluster_b() {
   PROMPT "Show products versions on cluster B"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  test_products_versions "${CLUSTER_B_NAME}"
+  test_products_versions
 }
 
 # ------------------------------------------
@@ -4552,7 +4556,7 @@ function test_products_versions_cluster_c() {
   PROMPT "Show products versions on cluster C"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_products_versions "${CLUSTER_C_NAME}"
+  test_products_versions
 }
 
 # ------------------------------------------
@@ -4561,7 +4565,7 @@ function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   echo -e "\n# Current OC user: $(${OC} whoami || : )"
   echo -e "\n# Current Kubeconfig contexts:"
@@ -4657,16 +4661,16 @@ function collect_submariner_info() {
     subctl diagnose all || :
 
     export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-    print_resources_and_pod_logs "${CLUSTER_A_NAME}"
+    print_resources_and_pod_logs
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-      print_resources_and_pod_logs "${CLUSTER_B_NAME}"
+      print_resources_and_pod_logs
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-      print_resources_and_pod_logs "${CLUSTER_C_NAME}"
+      print_resources_and_pod_logs
     fi
 
   ) |& tee -a $log_file
@@ -4677,7 +4681,7 @@ function collect_submariner_info() {
 
 function print_resources_and_pod_logs() {
   trap_to_debug_commands;
-  local cluster_name="$1"
+  local cluster_name="$(print_current_cluster_name)"
 
   PROMPT "Submariner logs and OCP events on ${cluster_name}"
 
