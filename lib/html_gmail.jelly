@@ -248,8 +248,10 @@
     </j:forEach>
    </table>
    <br />
+
    <!-- LAST FAILURE -->
    <j:if test="${lastFailedJunit!=null}">
+    ${logger.println("\n Last failed test = " + lastFailedJunit.getName() )}
     <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
      <tr>
       <td class="bg1" style="font-size: 120%; color: white; background-color: #0000C0">
@@ -258,28 +260,27 @@
        </b>
       </td>
      </tr>
-     <tr>
+     <!-- Print test error message if exists -->
+     <j:if test="${!StringUtils.isEmpty(lastFailedJunit.getErrorDetails())}">
+      <tr>
+       <j:set var="errorMessage" value="${StringUtils.abbreviate(lastFailedJunit.getErrorDetails(), 500) }" />
        <td class="bg2" style="font-size: 110%; color: white; background-color: #9999ff">
-        ${lastFailedJunit.getErrorDetails()}
-        ${logger.println("\n Test name = " + lastFailedJunit.getName() )}
-        <!-- ${logger.println("\n stdout = " + lastFailedJunit.getStdout() )}
-        ${logger.println("\n stderr = " + lastFailedJunit.getStderr() )}
-        ${logger.println("\n stacktrace = " + lastFailedJunit.getErrorStackTrace() )} -->
+        ${errorMessage}
        </td>
-     </tr>
-
-     <!-- Get stderr and stacktrace if exists, otherwise get stdout -->
+      </tr>
+     </j:if>
+     <!-- Print stderr and stacktrace if exists, otherwise print stdout -->
      <tr>
-       <j:set var="testOutput" value="${lastFailedJunit.getStdout().trim()}" />
-       <j:if test="${lastFailedJunit.getErrorStackTrace()!=null}">
-         ${logger.println("Getting test stacktrace instead of stdout")}
-         <j:set var="testOutput" value="${lastFailedJunit.getErrorStackTrace().trim()}" />
-       </j:if>
-       <j:set var="testOutput" value="${StringUtils.abbreviateMiddle(testOutput, ' ... ', 1000) }" />
+      <j:set var="testOutput" value="${lastFailedJunit.getStdout().trim()}" />
+      <j:if test="${lastFailedJunit.getErrorStackTrace()!=null}">
+       ${logger.println("Getting test stacktrace instead of stdout")}
+       <j:set var="testOutput" value="${lastFailedJunit.getErrorStackTrace().trim()}" />
+      </j:if>
+      <j:set var="testOutput" value="${StringUtils.abbreviateMiddle(testOutput, ' ... ', 1000) }" />
        ${logger.println("Last test output = " + testOutput )}
-       <td class="trace" style="white-space: pre-line; font-family: Courier New; font-size: 11px; color: black">
-        ${testOutput}
-       </td>
+      <td class="trace" style="white-space: pre-line; font-family: Courier New; font-size: 11px; color: black">
+       ${testOutput}
+      </td>
      </tr>
      <tr>
        <j:set var="testFailure" value="${lastFailedJunit.getStderr().trim()}" />
@@ -291,8 +292,8 @@
      </tr>
     </table>
     <br />
-   </j:if>
-  </j:if>
+   </j:if> <!-- End of LAST FAILURE -->
+  </j:if> <!-- End of JUnit TEMPLATE -->
 
   <!-- COBERTURA TEMPLATE -->
   <!-- <j:set var="coberturaAction" value="${it.coberturaAction}" />
