@@ -1453,6 +1453,10 @@ function test_cluster_status() {
   local cluster_name="$1"
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
+  local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
+  echo "# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
+  cp -f "$KUBECONFIG" "${kubeconfig_copy}" || :
+
   ${OC} config view
   ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${KUBECONFIG}"
   ${OC} version
