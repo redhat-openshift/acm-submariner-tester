@@ -865,6 +865,17 @@ function create_namespace() {
 
 # ------------------------------------------
 
+# Function to get the cluster name from kubeconfig current-context
+function print_current_cluster_name() {
+  # Do not trap_to_debug_commands
+
+  local current_context=$(${OC} config current-context)
+  ${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}"
+
+}
+
+# ------------------------------------------
+
 # Function to print details of all used images in the running pods of a namespace
 function print_images_info_of_namespace_pods() {
   # Do not trap_to_debug_commands
