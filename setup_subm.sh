@@ -1514,7 +1514,7 @@ function update_kubeconfig_context() {
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
   echo "# Set current context back to the default one"
-  local admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}')
+  local admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}' | awk '{print $1}')
   ${OC} config use-context "$admin_context"
 
   local cur_context="$(${OC} config current-context)"
@@ -1643,11 +1643,24 @@ EOF
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
-
-    echo "# Updating the default kubeconfig current-context"
-    cur_context="$(${OC} config current-context)"
-    ${OC} config use-context "$cur_context"
   )
+
+  local cur_context="$(${OC} config current-context)"
+  echo "# Kubeconfig current-context is: $cur_context"
+
+  BUG "subctl deploy failed on \"Error deploying the operator: timed out waiting for the condition\"" \
+  "Replace all special characters in kubeconfig current context" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
+
+  # Workaround:
+  local renamed_context="${cur_context//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
+    echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+    ${OC} config delete-context "${renamed_context}_old" || :
+    ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
+  fi
+  ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
+  ${OC} config use-context "$renamed_context" || :
 
 }
 
@@ -2430,8 +2443,8 @@ function install_broker_cluster_a() {
   cd ${WORKDIR}
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  echo "# Remove previous broker-info.subm (if exists)"
-  rm broker-info.subm || echo "# Previous ${BROKER_INFO} already removed"
+  echo "# Remove previous ${BROKER_INFO} (if exists)"
+  [[ ! -e "${BROKER_INFO}" ]] || rm "${BROKER_INFO}"
 
   local cluster_name="$(print_current_cluster_name)"
   echo -e "# Executing Subctl Deploy command on $cluster_name: \n# ${DEPLOY_CMD}"
@@ -3018,10 +3031,10 @@ function create_subctl_join_file() {
   local cluster_id=$(${OC} config current-context)
 
   BUG "subctl join failed on \"Error creating SA for cluster\"" \
-  "Add '--clusterid <short ID>' (${cluster_name}) to $join_cmd_file" \
+  "Add '--clusterid <SHORT ID>' (e.g. of cluster id of admin) to $join_cmd_file" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
   # Workaround
-  cluster_id=$cluster_name
+  cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
 
