@@ -4432,16 +4432,24 @@ function test_submariner_e2e_with_subctl() {
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
 
-  export_merged_kubeconfigs
-
   BUG "No Subctl option to set -ginkgo.reportFile" \
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
   echo "# SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
-  # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
-  # subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
-  subctl verify --only service-discovery,connectivity --verbose --kubecontexts ${e2e_subctl_context} | tee -a "$E2E_LOG"
+
+  export_active_clusters_kubeconfig
+
+  export_merged_kubeconfigs
+
+  # For Subctl > 0.8:
+  if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
+    subctl verify --only service-discovery,connectivity --verbose --kubecontexts ${e2e_subctl_context} | tee -a "$E2E_LOG"
+  else
+    # For Subctl <= 0.8:
+    # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+    subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+  fi
 
 }
 
