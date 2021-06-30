@@ -2089,9 +2089,13 @@ function download_subctl_by_tag() {
     # Download SubCtl from SUBCTL_REGISTRY_MIRROR, if using --registry-images and if subctl_tag is not devel
     if [[ ! "$subctl_tag" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
-        [[ -n "$SUBCTL_PRIVATE_URL" ]] ; then
+        [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
-      echo "# Downloading SubCtl from $SUBCTL_PRIVATE_URL"
+      echo -e "# Backup previous subctl archive (if exists)"
+      local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
+      [[ ! -e "$subctl_xz" ]] || mv -f ${subctl_xz} ${subctl_xz}.bak
+
+      echo "# Downloading SubCtl from $SUBM_IMG_SUBCTL"
 
       # Fix the $subctl_tag value for custom images
       set_subm_version_tag_var "subctl_tag"
@@ -2099,9 +2103,15 @@ function download_subctl_by_tag() {
       local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
-      local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
+      # Check if $subctl_xz exists in $subctl_image_url
+      ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
+      |& highlight "$subctl_xz" || BUG "Subctl binary with tag '$subctl_tag' was not found in $subctl_image_url"
 
-      ${OC} image extract $subctl_image_url --path=/dist/${subctl_xz}:./ --confirm
+      ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
+
+      echo -e "# Getting last downloaded subctl archive filename"
+      local new_subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 || :)"
+      mv -f "${new_subctl_xz}" "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
       echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
       tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
