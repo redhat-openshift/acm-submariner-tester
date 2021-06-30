@@ -1136,7 +1136,7 @@ function download_subctl_by_tag() {
     export PATH="$HOME/.local/bin:$PATH"
 
     echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
-    subctl version > "$SUBCTL_VERSION_FILE"
+    subctl version > "$SUBCTL_VERSION_FILE" || :
 
 }
 
@@ -4151,12 +4151,14 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
 # ------------------------------------------
 
-function test_subctl_show_and_validate_on_merged_kubeconfigs() {
+function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
 ### Test subctl show commands on merged kubeconfig ###
-  PROMPT "Testing SUBCTL show command on merged kubeconfig of multiple clusters"
+  PROMPT "Testing Subctl show and diagnose on merged kubeconfig of multiple clusters"
   trap_to_debug_commands;
 
   local subctl_info
+
+  export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -4170,13 +4172,28 @@ function test_subctl_show_and_validate_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  # For Subctl > 0.8 : Run subctl diagnose
+  # For Subctl > 0.8 : Run subctl diagnose:
+
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
+
     BUG "subctl diagnose to return relevant exit code on Submariner failures" \
     "No workaround is required" \
     "https://github.com/submariner-io/submariner-operator/issues/1310"
 
     subctl diagnose all || subctl_info=ERROR
+
+    # TODO: report bug of missing --kubecontexts option:
+    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
+    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
+    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
+
+    subctl diagnose firewall vxlan --validation-timeout 120 || subctl_info=ERROR
+    subctl diagnose firewall metrics --validation-timeout 120 || subctl_info=ERROR
+
+    # TODO: report bug that diagnose does not work with merged kubeconfigs:
+    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_info=ERROR
+    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 || subctl_info=ERROR
+
   fi
 
   if [[ "$subctl_info" = ERROR ]] ; then
