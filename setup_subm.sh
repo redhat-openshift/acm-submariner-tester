@@ -689,7 +689,7 @@ function show_test_plan() {
     - test_renewal_of_gateway_and_public_ip
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b / c
-    - test_subctl_show_and_validate_on_merged_kubeconfigs
+    - test_subctl_show_and_diagnose_on_merged_kubeconfigs
     - test_ha_status_cluster_a
     - test_ha_status_cluster_b / c
     - test_submariner_connection_cluster_a
@@ -2116,7 +2116,7 @@ function download_subctl_by_tag() {
       echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
       tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-      # Rename last extracted file to subctl
+      echo "# Rename last extracted file to subctl"
       extracted_file="$(ls -1 -tu subctl* | head -1)"
 
       [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
@@ -2332,26 +2332,30 @@ function append_custom_images_to_join_cmd_file() {
   echo "# Read subctl join command from file: $join_cmd_file"
   local JOIN_CMD="$(< $join_cmd_file)"
 
-  # Fix the $SUBM_VER_TAG value for custom images
-  set_subm_version_tag_var
+  # # Fix the $SUBM_VER_TAG value for custom images
+  # set_subm_version_tag_var
+  # local image_tag=${SUBM_VER_TAG}"
+
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
+  local image_tag="$(subctl version | awk '{print $3}')"
 
   BUG "Overriding images with wrong keys should fail first in join command" \
   "No workaround" \
   "https://github.com/submariner-io/submariner-operator/issues/1018"
 
   echo "# Append \"--image-override\" for custom images to subctl join command"
-  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG}"
+  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${image_tag}"
 
   # BUG ? : this is a potential bug - overriding with comma separated:
   # JOIN_CMD="${JOIN_CMD} --image-override \
-  # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${SUBM_VER_TAG},\
-  # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${SUBM_VER_TAG}, \
-  # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${SUBM_VER_TAG},\
-  # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${SUBM_VER_TAG},\
-  # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${SUBM_VER_TAG},\
-  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${SUBM_VER_TAG},\
-  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${SUBM_VER_TAG},\
-  # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${SUBM_VER_TAG}"
+  # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${image_tag},\
+  # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${image_tag}, \
+  # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${image_tag},\
+  # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${image_tag},\
+  # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${image_tag},\
+  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${image_tag},\
+  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${image_tag},\
+  # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${image_tag}"
 
   echo -e "# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
   echo "$JOIN_CMD" > "$join_cmd_file"
@@ -3026,6 +3030,7 @@ function upload_custom_images_to_registry_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+
   upload_custom_images_to_registry
 }
 
@@ -3058,11 +3063,15 @@ function upload_custom_images_to_registry() {
   trap_to_debug_commands;
 
   # Fix the $SUBM_VER_TAG value for custom images
-  set_subm_version_tag_var
+  # set_subm_version_tag_var
+  # local image_tag=${SUBM_VER_TAG}"
+
+  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
+  local image_tag="$(subctl version | awk '{print $3}')"
 
   echo -e "# Overriding submariner images with custom images from ${REGISTRY_URL} \
   \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-  \n# Version tag: ${SUBM_VER_TAG}"
+  \n# Version tag: ${image_tag}"
 
   create_namespace "$SUBM_NAMESPACE"
 
@@ -3076,12 +3085,12 @@ function upload_custom_images_to_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${SUBM_VER_TAG}"
+      local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${image_tag}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
-      local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
+      local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"
 
-      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
+      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${image_tag}"
   done
 
 }
@@ -5164,6 +5173,15 @@ export_active_clusters_kubeconfig
 
     fi
 
+    ### Getting Submariner installation binary and images ###
+
+    # Downloading and installing subctl
+    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+    fi
+
     # Overriding Submariner images with custom images from registry, if requested with --registry-images
     if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
@@ -5229,11 +5247,6 @@ export_active_clusters_kubeconfig
   \n# ($TEST_STATUS_FILE with exit code 1)"
 
   echo 1 > $TEST_STATUS_FILE
-
-  # Running download_and_install_subctl
-  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-  fi
 
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
@@ -5313,7 +5326,7 @@ export_active_clusters_kubeconfig
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_c
 
-    ${junit_cmd} test_subctl_show_and_validate_on_merged_kubeconfigs
+    ${junit_cmd} test_subctl_show_and_diagnose_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
