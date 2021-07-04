@@ -2445,42 +2445,41 @@ function test_broker_before_join() {
 # ------------------------------------------
 
 function open_firewall_ports_on_aws_cluster_a() {
-  PROMPT "Open AWS Firewall ports for the gateway node on AWS cluster A"
+  PROMPT "Open AWS firewall ports for the gateway node on AWS cluster A"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  open_firewall_ports_on_aws_gateway_nodes
+  open_firewall_ports_on_aws_gateway_nodes "$CLUSTER_A_DIR"
 }
 
 # ------------------------------------------
 
 function open_firewall_ports_on_aws_cluster_c() {
-  PROMPT "Open AWS Firewall ports for the gateway node on AWS cluster C"
+  PROMPT "Open AWS firewall ports for the gateway node on AWS cluster C"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  open_firewall_ports_on_aws_gateway_nodes
+  open_firewall_ports_on_aws_gateway_nodes "$CLUSTER_C_DIR"
 }
 
 # ------------------------------------------
 
 function open_firewall_ports_on_aws_gateway_nodes() {
-### Open AWS Firewall ports for the gateway node with terraform (prep_for_subm.sh) ###
+### Open AWS firewall ports for the gateway node with terraform (prep_for_subm.sh) ###
   # Old readme: https://github.com/submariner-io/submariner/tree/devel/tools/openshift/ocp-ipi-aws
   # TODO: subctl cloud prepare as: https://submariner.io/getting-started/quickstart/openshift/aws/#prepare-aws-clusters-for-submariner
-
-  echo -e "# Using \"prep_for_subm.sh\" - to add External IP and open ports on AWS cluster nodes for Submariner gateway"
-
   trap_to_debug_commands;
 
+  echo -e "# Using \"prep_for_subm.sh\" - to add External IP and open ports on AWS cluster nodes for Submariner gateway"
   command -v terraform || FATAL "Terraform is required in order to run 'prep_for_subm.sh'"
+
+  local ocp_install_dir="$1"
 
   local git_user="submariner-io"
   local git_project="submariner"
   local commit_or_branch="release-0.8"
   local github_dir="tools/openshift/ocp-ipi-aws"
-  local cluster_path="$CLUSTER_A_DIR"
-  local target_path="${cluster_path}/${github_dir}"
+  local target_path="${ocp_install_dir}/${github_dir}"
   local terraform_script="prep_for_subm.sh"
 
   mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
@@ -2522,9 +2521,9 @@ function open_firewall_ports_on_aws_gateway_nodes() {
 
   export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
-  echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  echo "# Running '${terraform_script} ${ocp_install_dir} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  ./${terraform_script} "${ocp_install_dir}" -auto-approve |& highlight "Apply complete| already exists" \
   || FATAL "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
@@ -2537,19 +2536,29 @@ function open_firewall_ports_on_aws_gateway_nodes() {
 # ------------------------------------------
 
 function open_firewall_ports_on_openstack_cluster_b() {
-### Open AWS Firewall ports on the gateway node with terraform (configure_osp.sh) ###
-  # Readme: https://github.com/sridhargaddam/configure-osp-for-subm
-  PROMPT "Running \"configure_osp.sh\" - to open Firewall ports on all nodes in OSP cluster B (on-prem)"
+  PROMPT "Open OSP firewall ports for the gateway node on OSP cluster B"
   trap_to_debug_commands;
 
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  open_firewall_ports_on_osp_gateway_nodes "$CLUSTER_B_DIR"
+}
+
+# ------------------------------------------
+
+function open_firewall_ports_on_osp_gateway_nodes() {
+### Open AWS firewall ports on the gateway node with terraform (configure_osp.sh) ###
+  # Readme: https://github.com/sridhargaddam/configure-osp-for-subm
+  trap_to_debug_commands;
+
+  echo -e "# Using \"configure_osp.sh\" - to open firewall ports on all nodes in OSP cluster (on-prem)"
   command -v terraform || FATAL "Terraform is required in order to run 'configure_osp.sh'"
 
+  local ocp_install_dir="$1"
   local git_user="manosnoam"
   local git_project="configure-osp-for-subm"
   local commit_or_branch="main"
   local github_dir="osp-scripts"
-  local cluster_path="$CLUSTER_B_DIR"
-  local target_path="${cluster_path}/${github_dir}"
+  local target_path="${ocp_install_dir}/${github_dir}"
   local terraform_script="configure_osp.sh"
 
   mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
@@ -2575,17 +2584,15 @@ function open_firewall_ports_on_openstack_cluster_b() {
   # Fix bug in terraform provider permission denied
   chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-
   # export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
   # export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
 
-  echo "# Running '${terraform_script} ${cluster_path} -auto-approve' script to apply open OSP required ports:"
+  echo "# Running '${terraform_script} ${ocp_install_dir} -auto-approve' script to apply open OSP required ports:"
 
   chmod a+x ./${terraform_script}
   # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
-  ./${terraform_script} "${cluster_path}" -auto-approve |& highlight "Apply complete| already exists" \
+  ./${terraform_script} "${ocp_install_dir}" -auto-approve |& highlight "Apply complete| already exists" \
   || FATAL "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
