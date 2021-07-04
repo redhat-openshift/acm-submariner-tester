@@ -61,12 +61,16 @@ Running with pre-defined parameters (optional):
 
   * Create AWS cluster A:                              --create-cluster-a
   * Create OSP cluster B:                              --create-cluster-b
+  * Create AWS cluster C:                              --create-cluster-c
   * Destroy existing AWS cluster A:                    --destroy-cluster-a
   * Destroy existing OSP cluster B:                    --destroy-cluster-b
+  * Destroy existing AWS cluster C:                    --destroy-cluster-c
   * Reset (create & destroy) AWS cluster A:            --reset-cluster-a
   * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
+  * Reset (create & destroy) AWS cluster C:            --reset-cluster-c
   * Clean existing AWS cluster A:                      --clean-cluster-a
   * Clean existing OSP cluster B:                      --clean-cluster-b
+  * Clean existing AWS cluster C:                      --clean-cluster-c
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z / nightly]
   * Download latest OCPUP Tool:                        --get-ocpup-tool
   * Install Golang if missing:                         --config-golang

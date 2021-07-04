@@ -7,12 +7,16 @@ Running with pre-defined parameters (optional):
 
   * Create AWS cluster A: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--create-cluster-a
   * Create OSP cluster B:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--create-cluster-b
+  * Create AWS cluster C: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--create-cluster-c
   * Destroy existing AWS cluster A:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--destroy-cluster-a
   * Destroy existing OSP cluster B: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--destroy-cluster-b
+  * Destroy existing AWS cluster C:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--destroy-cluster-c
   * Reset (create & destroy) AWS cluster A: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--reset-cluster-a
   * Reset (create & destroy) OSP cluster B:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--reset-cluster-b
+  * Reset (create & destroy) AWS cluster C: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--reset-cluster-c
   * Clean existing AWS cluster A:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--clean-cluster-a
   * Clean existing OSP cluster B: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--clean-cluster-b
+  * Clean existing AWS cluster C:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--clean-cluster-c
   * Download OCP Installer version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--get-ocp-installer [latest / x.y.z / nightly]
   * Download latest OCPUP Tool: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--get-ocpup-tool
   * Install Golang if missing:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp; --config-golang
