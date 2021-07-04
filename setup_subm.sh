@@ -5428,9 +5428,11 @@ export_active_clusters_kubeconfig
     if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
       ${junit_cmd} test_submariner_packages
 
-      if tail -n 5 "$E2E_LOG" | grep "FAIL" ; then
+      if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
         ginkgo_tests_status=FAILED
-        BUG "Submariner Unit-Tests FAILED."
+        BUG "Submariner Unit-Tests FAILED"
+      else
+        echo "### Submariner Unit-Tests PASSED ###"
       fi
 
     fi
@@ -5445,14 +5447,18 @@ export_active_clusters_kubeconfig
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Lighthouse End-to-End Ginkgo tests have FAILED"
+          BUG "Lighthouse End-to-End Ginkgo tests FAILED"
+        else
+          echo "### Lighthouse End-to-End Ginkgo tests PASSED ###"
         fi
 
         ${junit_cmd} test_lighthouse_e2e_with_go
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Submariner End-to-End Ginkgo tests have FAILED"
+          BUG "Submariner End-to-End Ginkgo tests FAILED"
+        else
+          echo "### Submariner End-to-End Ginkgo tests PASSED ###"
         fi
 
       else
@@ -5463,7 +5469,9 @@ export_active_clusters_kubeconfig
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "SubCtl End-to-End tests have FAILED"
+          BUG "SubCtl End-to-End tests FAILED"
+        else
+          echo "### SubCtl End-to-End tests PASSED ###"
         fi
       fi
 
