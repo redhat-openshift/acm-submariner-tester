@@ -1276,8 +1276,8 @@ function create_polarion_testrun_result_from_junit() {
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
-    local polarion_testrun_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
-    polarion_testrun_file="${polarion_testrun_file//junit}polarion_testrun_file.xml" # Remove all "junit" from file name, and append "polarion_testrun_file.xml"
+    local polarion_testrun_file="$(basename ${junit_xml%.*})" # Get file name without path and extension
+    polarion_testrun_file="${polarion_testrun_file//junit}_polarion_testrun.xml" # Remove all "junit" from file name, and append "_polarion_testrun.xml"
     polarion_testrun_file="$(dirname $junit_xml)/$(basename $polarion_testrun_file)" # Append full path as the original junit_xml file
 
     # Set Polarion test run title
