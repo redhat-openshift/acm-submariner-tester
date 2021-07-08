@@ -68,13 +68,13 @@
    <j:if test="${jenkinsUrl!=null}">
     <j:set var="testResultsAnalyzerUrl" value="${jenkinsUrl}${project.url}test_results_analyzer" />
     ${logger.println("testResultsAnalyzerUrl (text) = " + testResultsAnalyzerUrl )}
-    <j:new className="java.net.URL" var="URL" useContextClassLoader="true">
+    <j:new className="java.net.URL" var="URL">
      <j:arg type="java.lang.String" value="${testResultsAnalyzerUrl}"/>
     </j:new>
     <j:set var="connection" value="${URL.openConnection()}" />
     <j:set var="responseCode" value="${connection.getResponseCode()}" />
+    ${logger.println("testResultsAnalyzer URL = " + connection.getURL() )}
     <j:if test="${responseCode == '200'}">
-     ${logger.println("testResultsAnalyzer URL = " + connection.getURL() )}
      <tr>
       <td>Statistics:</td>
       <td>

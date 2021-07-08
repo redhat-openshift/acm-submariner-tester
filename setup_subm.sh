@@ -1530,8 +1530,8 @@ EOF
   local cur_context="$(${OC} config current-context)"
   echo "# Kubeconfig current-context is: $cur_context"
 
-  BUG "subctl deploy failed on \"Error deploying the operator: timed out waiting for the condition\"" \
-  "Replace all special characters in kubeconfig current context" \
+  BUG "subctl deploy can fail later on \"Error deploying the operator: timed out waiting for the condition\"" \
+  "Replace all special characters in kubeconfig current context before running subctl deploy" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
 
   # Workaround:
@@ -2276,7 +2276,7 @@ function create_subctl_join_file() {
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
   JOIN_CMD="${JOIN_CMD} ${pod_debug_flag} --ipsec-debug"
 
-  BUG "Subctl fails to join cluster, since it does not automatically generate cluster id" \
+  BUG "Subctl fails to join cluster, since it cannot auto-generate a valid cluster id" \
   "Add '--clusterid <ID>' to $join_cmd_file" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1972703"
   # Workaround
@@ -2290,8 +2290,8 @@ function create_subctl_join_file() {
   cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
-
   JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+
   echo "$JOIN_CMD" > "$join_cmd_file"
 
 }
