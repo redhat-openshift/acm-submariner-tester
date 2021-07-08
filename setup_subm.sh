@@ -2084,13 +2084,10 @@ function download_subctl_by_tag() {
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
     local subctl_tag="${1:-v[0-9]}"
 
-    local regex="tag/.*\K${subctl_tag}[^\"]*"
-    local repo_url="https://github.com/submariner-io/submariner-operator"
-    local repo_tag="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
-
     cd ${WORKDIR}
 
-    # Download SubCtl from SUBCTL_REGISTRY_MIRROR, if using --registry-images and if subctl_tag is not devel
+    # Downloading SubCtl from SUBCTL_REGISTRY_MIRROR (downstream)
+    # if using --registry-images and if subctl_tag is not devel
     if [[ ! "$subctl_tag" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
@@ -2114,16 +2111,18 @@ function download_subctl_by_tag() {
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
       echo -e "# Getting last downloaded subctl archive filename"
-      local new_subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 || :)"
-      mv -f "${new_subctl_xz}" "${subctl_xz}" || FATAL "subctl archive was not downloaded"
+      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 || :)"
+      ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
-      echo "# SubCtl binary will be extracted from [${subctl_xz}] downloaded from $subctl_image_url"
+      echo "# SubCtl binary will be extracted from [${subctl_xz}]"
       tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
       echo "# Rename last extracted file to subctl"
-      extracted_file="$(ls -1 -tu subctl* | head -1)"
+      local extracted_file="$(ls -1 -tu subctl* | head -1)"
+      [[ -f "$extracted_file" ]] || FATAL "subctl binary was not found in ${subctl_xz}"
+      ls -l "${extracted_file}"
 
-      [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
+      mv "$extracted_file" subctl
       chmod +x subctl
 
       echo "# Install subctl into ${GOBIN}:"
@@ -2136,7 +2135,14 @@ function download_subctl_by_tag() {
       /usr/bin/install ./subctl ~/.local/bin/subctl
 
     else
-      echo "# Downloading SubCtl from upstream URL: $releases_url"
+      # Downloading SubCtl from Github (upstream)
+
+      local regex="tags/\K.*${subctl_tag}.*"
+      local repo_url="https://github.com/submariner-io/submariner-operator"
+      local repo_tag="$(git ls-remote --tags $repo_url | grep -Po -m 1 "$regex" || :)"
+
+      echo "# Downloading SubCtl '${subctl_tag}' with getsubctl.sh from: https://get.submariner.io/"
+
       # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
@@ -2152,8 +2158,14 @@ function download_subctl_by_tag() {
       curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
 
       if [[ "$getsubctl_status" = FAILED ]] ; then
-        releases_url="${repo_url}/releases"
-        file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
+
+        # Download subctl directly, since getsubctl.sh failed.
+        # For example, download: https://github.com/submariner-io/submariner-operator/releases/tag/subctl-release-0.8
+
+        local releases_url="${repo_url}/releases"
+        echo "# Downloading SubCtl from upstream repository tag: ${releases_url}/tag/${repo_tag}"
+
+        local file_path="$(curl "${releases_url}/tag/${repo_tag}" | grep -Eoh 'download\/.*\/subctl-.*-linux-amd64[^"]+' -m 1)"
 
         download_file "${releases_url}/${file_path}"
 
@@ -2187,7 +2199,7 @@ function download_subctl_by_tag() {
     export PATH="$HOME/.local/bin:$PATH"
 
     echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
-    subctl version > "$SUBCTL_VERSION_FILE" || :
+    subctl version > "$SUBCTL_VERSION_FILE"
 
 }
 
@@ -4992,6 +5004,7 @@ cd ${SCRIPT_DIR}
 
 # # Debug functions
 # ${junit_cmd} test_debug_pass
+#
 # ${junit_cmd} test_debug_fail
 # rc=$?
 # BUG "test_debug_fail - Exit code: $rc" \
