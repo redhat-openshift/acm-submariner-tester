@@ -1360,18 +1360,15 @@ function update_kubeconfig_context() {
 
 function test_kubeconfig_cluster_a() {
 # Check that AWS cluster A (public) is up and running
-
-  # Get OCP cluster A version (from file $CLUSTER_A_VERSION_FILE)
-  cl_a_version="$([[ ! -s "$CLUSTER_A_VERSION_FILE" ]] || cat "$CLUSTER_A_VERSION_FILE")"
-
-  PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
   trap_to_debug_commands;
-
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  test_cluster_status "$CLUSTER_A_NAME"
-  cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+
+  # Get OCP cluster A version
+  cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
   echo "$cl_a_version" > "$CLUSTER_A_VERSION_FILE"
 
+  PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
+  test_cluster_status "$CLUSTER_A_NAME"
 
 }
 
@@ -1379,35 +1376,31 @@ function test_kubeconfig_cluster_a() {
 
 function test_kubeconfig_cluster_b() {
 # Check that OSP cluster B (on-prem) is up and running
+  trap_to_debug_commands;
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
-  # Get OCP cluster B version (from file $CLUSTER_B_VERSION_FILE)
-  cl_b_version="$([[ ! -s "$CLUSTER_B_VERSION_FILE" ]] || cat "$CLUSTER_B_VERSION_FILE")"
+  # Get OCP cluster B version
+  cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
+  echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
 
   PROMPT "Testing status of cluster $CLUSTER_B_NAME ${cl_b_version:+(OCP Version $cl_b_version)}"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_cluster_status "$CLUSTER_B_NAME"
-  cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
 
 }
 
 # ------------------------------------------
 
 function test_kubeconfig_cluster_c() {
-# Check that cluster C is up and running
-
-  # Get OCP cluster C version (from file $CLUSTER_C_VERSION_FILE)
-  cl_c_version="$([[ ! -s "$CLUSTER_C_VERSION_FILE" ]] || cat "$CLUSTER_C_VERSION_FILE")"
-
-  PROMPT "Testing status of cluster C${cl_c_version:+ (OCP Version $cl_c_version)}"
+# Check that AWS cluster C (public) is up and running
   trap_to_debug_commands;
-
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  test_cluster_status "$CLUSTER_C_NAME"
-  cl_c_version=$(${OC} version | awk '/Server Version/ { print $3 }')
+
+  # Get OCP cluster C version
+  cl_c_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
   echo "$cl_c_version" > "$CLUSTER_C_VERSION_FILE"
+
+  PROMPT "Testing status of cluster $CLUSTER_C_NAME ${cl_c_version:+(OCP Version $cl_c_version)}"
+  test_cluster_status "$CLUSTER_C_NAME"
 
 }
 
