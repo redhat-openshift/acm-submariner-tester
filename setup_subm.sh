@@ -2521,6 +2521,7 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   "https://github.com/submariner-io/submariner-operator/issues/1047"
   # Workaround:
   # Do not use the same IPSEC port numbers multiple times in one project
+  # Add in global submariner_variables
   # export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4501}
   # export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-501}
 
@@ -2642,7 +2643,12 @@ function label_first_gateway_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  gateway_label_first_worker_node
+
+  BUG "Having 2 nodes with GW label, can cause connection failure" \
+  "Skip labeling another node with Submariner gateway" \
+  "TODO: Report bug"
+  # Workaround: Skip:
+  # gateway_label_first_worker_node
 }
 
 # ------------------------------------------
