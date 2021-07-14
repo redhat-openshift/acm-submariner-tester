@@ -1213,7 +1213,7 @@ function create_polarion_testcases_doc_from_junit() {
       </properties>" > "$polarion_testcases_file"
       # Maybe required: <response-property name="${polarion_team_name}" value="testcase_importer"/>
 
-    echo "# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
+    echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
     # Todo: This should rather be defined on external properties file:
     while read tc_name ; do
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">

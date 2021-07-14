@@ -1767,7 +1767,7 @@ function remove_submariner_machine_sets() {
 #   PROMPT "Remove previous Submariner images from local Podman registry"
 #
 #   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-#   # Get SubCTL version (from file $SUBCTL_VERSION_FILE)
+#   # Get SubCtl version (from file $SUBCTL_VERSION_FILE)
 #
 #   # install_local_podman "${WORKDIR}"
 #
@@ -2048,9 +2048,9 @@ function set_subm_version_tag_var() {
 
   [[ -n "${subm_version_tag}" ]] || FATAL "Submariner version to use was not defined. Try to run again with option '--subctl-version x.y.z'"
 
-  echo "# Retrieve correct tag for Subctl version \$${tag_var_name} : $subm_version_tag"
+  echo "# Retrieve correct tag for SubCtl version \$${tag_var_name} : $subm_version_tag"
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
-    subm_version_tag=$(get_latest_subctl_version_tag)
+    subm_version_tag=$(get_subctl_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
     echo "# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
     subm_version_tag=v${subm_version_tag}
@@ -2075,31 +2075,31 @@ function download_subctl_by_tag() {
 
     # Optional param: $1 => SubCtl version by tag to download
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
-    local subctl_tag="${1:-v[0-9]}"
+    local subctl_version="${1:-v[0-9]}"
 
     cd ${WORKDIR}
 
     # Downloading SubCtl from SUBCTL_REGISTRY_MIRROR (downstream)
-    # if using --registry-images and if subctl_tag is not devel
-    if [[ ! "$subctl_tag" =~ devel ]] && \
+    # if using --registry-images and if subctl_version is not devel
+    if [[ ! "$subctl_version" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       echo -e "# Backup previous subctl archive (if exists)"
-      local subctl_xz="subctl-${subctl_tag}-linux-amd64.tar.xz"
+      local subctl_xz="subctl-${subctl_version}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f ${subctl_xz} ${subctl_xz}.bak
 
       echo "# Downloading SubCtl from $SUBM_IMG_SUBCTL"
 
-      # Fix the $subctl_tag value for custom images
-      set_subm_version_tag_var "subctl_tag"
+      # Fix the $subctl_version value for custom images
+      set_subm_version_tag_var "subctl_version"
 
-      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_tag}"
+      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_version}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       # Check if $subctl_xz exists in $subctl_image_url
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "Subctl binary with tag '$subctl_tag' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_version' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2130,20 +2130,18 @@ function download_subctl_by_tag() {
     else
       # Downloading SubCtl from Github (upstream)
 
-      local regex="tags/\K.*${subctl_tag}.*"
-      local repo_url="https://github.com/submariner-io/submariner-operator"
-      local repo_tag="$(git ls-remote --tags $repo_url | grep -Po -m 1 "$regex" || :)"
+      local repo_tag=$(get_subctl_branch_tag "${subctl_version}")
 
-      echo "# Downloading SubCtl '${subctl_tag}' with getsubctl.sh from: https://get.submariner.io/"
+      echo "# Downloading SubCtl '${repo_tag}' with getsubctl.sh from: https://get.submariner.io/"
 
-      # curl https://get.submariner.io/ | VERSION=${subctl_tag} bash -x
+      # curl https://get.submariner.io/ | VERSION=${subctl_version} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
       PATH="/usr/bin:$PATH" which install
 
-      #curl https://get.submariner.io/ | VERSION=${subctl_tag} PATH="/usr/bin:$PATH" bash -x
+      #curl https://get.submariner.io/ | VERSION=${subctl_version} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
       "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
       "https://github.com/submariner-io/submariner-operator/issues/526"
@@ -2192,30 +2190,31 @@ function download_subctl_by_tag() {
     export PATH="$HOME/.local/bin:$PATH"
 
     echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
-    subctl version > "$SUBCTL_VERSION_FILE"
+    subctl version | awk '{print $3}' > "$SUBCTL_VERSION_FILE"
 
 }
 
 # ------------------------------------------
 
-function get_latest_subctl_version_tag() {
+function get_subctl_branch_tag() {
   ### Print the tag of latest subctl version released ###
 
-  local subctl_tag="v[0-9]"
-  local regex="tag/.*\K${subctl_tag}[^\"]*"
-  local repo_url="https://github.com/submariner-io/submariner-operator"
-  local subm_release_version="`curl "$repo_url/tags/" | grep -Po -m 1 "$regex"`"
+  # Optional param: $1 => Search for branch tag that include this text.
+  # If not specifying - it will search for the latest version tag (sorted by refname)
+  local subctl_tag_to_search="${1:-v[0-9]}"
 
-  echo $subm_release_version
+  local regex="tags/\K.*${subctl_tag_to_search}.*"
+  local subctl_repo_url="https://github.com/submariner-io/submariner-operator"
+  local subctl_branch_tag="$(git ls-remote --tags --sort='-version:refname' $subctl_repo_url | grep -Po -m 1 "$regex" || :)"
+
+  echo $subctl_branch_tag
 }
 
 # ------------------------------------------
 
 function test_subctl_command() {
   trap_to_debug_commands;
-  # Get SubCTL version (from file $SUBCTL_VERSION_FILE)
-  # local subctl_version="$([[ ! -s "$SUBCTL_VERSION_FILE" ]] || cat "$SUBCTL_VERSION_FILE")"
-  local subctl_version="$(subctl version | awk '{print $3}')"
+  local subctl_version="$(subctl version | awk '{print $3}' || :)"
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
@@ -2275,13 +2274,13 @@ function create_subctl_join_file() {
   JOIN_CMD="${JOIN_CMD} --health-check"
 
   local pod_debug_flag="--pod-debug"
-  # For Subctl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
+  # For SubCtl <= 0.8 : '--enable-pod-debugging' is expected as the debug flag for the join command"
   [[ $(subctl version | grep --invert-match "v0.8") ]] || pod_debug_flag="--enable-pod-debugging"
 
   echo "# Adding '${pod_debug_flag}' and '--ipsec-debug' to subctl join command (for tractability)"
   JOIN_CMD="${JOIN_CMD} ${pod_debug_flag} --ipsec-debug"
 
-  BUG "Subctl fails to join cluster, since it cannot auto-generate a valid cluster id" \
+  BUG "SubCtl fails to join cluster, since it cannot auto-generate a valid cluster id" \
   "Add '--clusterid <ID>' to $join_cmd_file" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1972703"
   # Workaround
@@ -2406,7 +2405,7 @@ function install_broker_cluster_a() {
   [[ ! -e "${BROKER_INFO}" ]] || rm "${BROKER_INFO}"
 
   local cluster_name="$(print_current_cluster_name)"
-  echo -e "# Executing Subctl Deploy command on $cluster_name: \n# ${DEPLOY_CMD}"
+  echo -e "# Executing SubCtl Deploy command on $cluster_name: \n# ${DEPLOY_CMD}"
 
   BUG "For Submariner 0.9+ operator image should be accessible before broker deploy" \
   "Run broker deployment after uploading custom images to the cluster registry" \
@@ -2437,7 +2436,7 @@ function test_broker_before_join() {
   # gateways.submariner.io \
 
   local regex="submariner-operator"
-  # For Subctl <= 0.8 : "No resources found" is expected on the broker after deploy command
+  # For SubCtl <= 0.8 : "No resources found" is expected on the broker after deploy command
   [[ $(subctl version | grep --invert-match "v0.8") ]] || regex="No resources found"
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
@@ -3186,7 +3185,7 @@ function run_subctl_join_cmd_from_file() {
   ${OC} config view
 
   local cluster_name="$(print_current_cluster_name)"
-  echo -e "# Executing Subctl Join command on $cluster_name: \n# ${JOIN_CMD}"
+  echo -e "# Executing SubCtl Join command on $cluster_name: \n# ${JOIN_CMD}"
 
   $JOIN_CMD
 
@@ -3374,7 +3373,7 @@ function export_variable_name_of_active_gateway_pod() {
 
   # Define label for the search of a gateway pod
   local gw_label='app=submariner-gateway'
-  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
+  # For SubCtl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
@@ -4170,7 +4169,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
 function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
 ### Test subctl show commands on merged kubeconfig ###
-  PROMPT "Testing Subctl show and diagnose on merged kubeconfig of multiple clusters"
+  PROMPT "Testing SubCtl show and diagnose on merged kubeconfig of multiple clusters"
   trap_to_debug_commands;
 
   local subctl_info
@@ -4189,7 +4188,7 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  # For Subctl > 0.8 : Run subctl diagnose:
+  # For SubCtl > 0.8 : Run subctl diagnose:
 
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
 
@@ -4214,9 +4213,9 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
   fi
 
   if [[ "$subctl_info" = ERROR ]] ; then
-    FAILURE "Subctl show/diagnose failed on merged kubeconfig"
+    FAILURE "SubCtl show/diagnose failed on merged kubeconfig"
 
-    BUG "Subctl error obtaining the Submariner resource: Unauthorized" \
+    BUG "SubCtl error obtaining the Submariner resource: Unauthorized" \
     "It may happened due to merged kubeconfigs - ignoring failures" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1950960"
   fi
@@ -4444,30 +4443,30 @@ function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
   trap_to_debug_commands;
 
-  local branch_or_tag # To pull
-
   echo "# Retrieve correct branch to pull for Submariner version '$SUBM_VER_TAG'"
-  if [[ "$SUBM_VER_TAG" =~ latest ]]; then
-    local branch_or_tag="$(get_latest_subctl_version_tag)"
-  elif [[ "$SUBM_VER_TAG" =~ ^[0-9] ]]; then
-    echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
-    local branch_or_tag="v${SUBM_VER_TAG}"
+  if [[ "$SUBM_VER_TAG" =~ devel ]]; then
+    local subctl_version="$(get_subctl_branch_tag)"
+  else
+    # echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
+    # local subctl_version="v${SUBM_VER_TAG}"
+    echo "# Get SubCtl version that was stored in file [${SUBCTL_VERSION_FILE}]"
+    local subctl_version="$([[ ! -s "$SUBCTL_VERSION_FILE" ]] || cat "$SUBCTL_VERSION_FILE")"
   fi
 
-  PROMPT "Building Submariner-IO code of E2E and unit-tests ${branch_or_tag:+(from branch $branch_or_tag)}"
+  PROMPT "Building Submariner-IO code of E2E and unit-tests for version $SUBM_VER_TAG"
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  build_go_repo "https://github.com/submariner-io/submariner" $branch_or_tag
+  build_go_repo "https://github.com/submariner-io/submariner" $subctl_version
 
-  build_go_repo "https://github.com/submariner-io/lighthouse" $branch_or_tag
+  build_go_repo "https://github.com/submariner-io/lighthouse" $subctl_version
 }
 
 # ------------------------------------------
 
 function build_operator_latest() {  # [DEPRECATED]
-### Building latest Submariner-Operator code and SubCTL tool ###
-  PROMPT "Building latest Submariner-Operator code and SubCTL tool"
+### Building latest Submariner-Operator code and SubCtl tool ###
+  PROMPT "Building latest Submariner-Operator code and SubCtl tool"
   trap_to_debug_commands;
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
@@ -4547,7 +4546,7 @@ function test_submariner_e2e_with_subctl() {
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
 
-  echo "# Set Subctl E2E context for the active clusters"
+  echo "# Set SubCtl E2E context for the active clusters"
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   local e2e_subctl_context="$(${OC} config current-context)"
 
@@ -4563,7 +4562,7 @@ function test_submariner_e2e_with_subctl() {
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
 
-  BUG "No Subctl option to set -ginkgo.reportFile" \
+  BUG "No SubCtl option to set -ginkgo.reportFile" \
   "No workaround yet..." \
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
@@ -4573,11 +4572,11 @@ function test_submariner_e2e_with_subctl() {
 
   export_merged_kubeconfigs
 
-  # For Subctl > 0.8:
+  # For SubCtl > 0.8:
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
     subctl verify --only service-discovery,connectivity --verbose --kubecontexts ${e2e_subctl_context} | tee -a "$E2E_LOG"
   else
-    # For Subctl <= 0.8:
+    # For SubCtl <= 0.8:
     # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
     subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
   fi
@@ -4912,7 +4911,7 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
-  # For Subctl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
+  # For SubCtl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
@@ -5368,13 +5367,13 @@ export_active_clusters_kubeconfig
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_c
 
+    ${junit_cmd} test_subctl_show_and_diagnose_on_merged_kubeconfigs
+
     ${junit_cmd} test_ipsec_status_cluster_a
 
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_c
-
-    ${junit_cmd} test_subctl_show_and_diagnose_on_merged_kubeconfigs
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
