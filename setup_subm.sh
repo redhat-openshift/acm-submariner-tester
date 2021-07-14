@@ -4609,16 +4609,17 @@ function create_all_test_results_in_polarion() {
   echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
 
   # Temp file to store Polarion output
-  local polarion_output="`mktemp`_polarion"
+  local polarion_testrun_import_result="`mktemp`_polarion"
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
   echo "# Upload Junit results of SYSTEM (Shell) tests to Polarion:"
 
-  # Redirect output to stdout and to $polarion_output, in order to get polarion testrun url into report
-  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
+  # Redirect output to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
 
-  add_polarion_testrun_url_to_report_description "$polarion_output"
+  # Add Polarion link to the HTML report
+  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$SHELL_JUNIT_XML"
 
 
   # Upload Ginkgo E2E tests to Polarion
@@ -4626,15 +4627,19 @@ function create_all_test_results_in_polarion() {
 
     echo "# Upload Junit results of Submariner E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_output, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
-    add_polarion_testrun_url_to_report_description "$polarion_output"
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+
+    # Add Polarion link to the HTML report
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$E2E_JUNIT_XML"
 
     echo "# Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_output, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_output" || polarion_rc=1
-    add_polarion_testrun_url_to_report_description "$polarion_output"
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+
+    # Add Polarion link to the HTML report
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$LIGHTHOUSE_JUNIT_XML"
 
   fi
 
@@ -4654,18 +4659,26 @@ function create_all_test_results_in_polarion() {
 # ------------------------------------------
 
 function add_polarion_testrun_url_to_report_description() {
-# Helper function to search polarion testrun url in input log file, to add later to the HTML report
+# Helper function to search polarion testrun url in the testrun import output, in order to add later to the HTML report
   trap_to_debug_commands;
 
-  local polarion_output="$1"
+  local polarion_testrun_import_result="$1"
+  local polarion_test_run_file="$2"
 
   echo "# Add new Polarion Test run results to the Html report description: "
-  local results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_output" | sed -z 's/\.\n.* to:/:\n/' || :)
+  local results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_result" | sed -z 's/\.\n.* to:/:\n/' || :)
 
   if [[ -n "$results_link" ]] ; then
     echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
+
+    local polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
+    polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
+    polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
+
+    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_REPORTS" || :
+
   else
-    echo "Error reading Polarion Test results link $results_link" 1>&2
+    echo "Error reading Polarion Test results link [${results_link}]" 1>&2
   fi
 
 }
