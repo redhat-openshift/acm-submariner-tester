@@ -2075,31 +2075,31 @@ function download_subctl_by_tag() {
 
     # Optional param: $1 => SubCtl version by tag to download
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
-    local subctl_version="${1:-v[0-9]}"
+    local subctl_branch_tag="${1:-v[0-9]}"
 
     cd ${WORKDIR}
 
     # Downloading SubCtl from SUBCTL_REGISTRY_MIRROR (downstream)
-    # if using --registry-images and if subctl_version is not devel
-    if [[ ! "$subctl_version" =~ devel ]] && \
+    # if using --registry-images and if $subctl_branch_tag is not devel
+    if [[ ! "$subctl_branch_tag" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       echo -e "# Backup previous subctl archive (if exists)"
-      local subctl_xz="subctl-${subctl_version}-linux-amd64.tar.xz"
+      local subctl_xz="subctl-${subctl_branch_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f ${subctl_xz} ${subctl_xz}.bak
 
       echo "# Downloading SubCtl from $SUBM_IMG_SUBCTL"
 
-      # Fix the $subctl_version value for custom images
-      set_subm_version_tag_var "subctl_version"
+      # Fix the $subctl_branch_tag value for custom images
+      set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_version}"
+      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       # Check if $subctl_xz exists in $subctl_image_url
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_version' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_branch_tag' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2130,18 +2130,18 @@ function download_subctl_by_tag() {
     else
       # Downloading SubCtl from Github (upstream)
 
-      local repo_tag=$(get_subctl_branch_tag "${subctl_version}")
+      local repo_tag=$(get_subctl_branch_tag "${subctl_branch_tag}")
 
       echo "# Downloading SubCtl '${repo_tag}' with getsubctl.sh from: https://get.submariner.io/"
 
-      # curl https://get.submariner.io/ | VERSION=${subctl_version} bash -x
+      # curl https://get.submariner.io/ | VERSION=${subctl_branch_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
       PATH="/usr/bin:$PATH" which install
 
-      #curl https://get.submariner.io/ | VERSION=${subctl_version} PATH="/usr/bin:$PATH" bash -x
+      #curl https://get.submariner.io/ | VERSION=${subctl_branch_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
       "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
       "https://github.com/submariner-io/submariner-operator/issues/526"
@@ -2198,16 +2198,12 @@ function download_subctl_by_tag() {
 
 function get_subctl_branch_tag() {
   ### Print the tag of latest subctl version released ###
+  # Do not echo more info, since the output is the returned value
 
-  # Optional param: $1 => Search for branch tag that include this text.
-  # If not specifying - it will search for the latest version tag (sorted by refname)
-  local subctl_tag_to_search="${1:-v[0-9]}"
-
-  local regex="tags/\K.*${subctl_tag_to_search}.*"
+  local subctl_tag_to_search="${1:-v[0-9]}" # any tag that starts with v{NUMBER}
   local subctl_repo_url="https://github.com/submariner-io/submariner-operator"
-  local subctl_branch_tag="$(git ls-remote --tags --sort='-version:refname' $subctl_repo_url | grep -Po -m 1 "$regex" || :)"
 
-  echo $subctl_branch_tag
+  get_latest_repository_version_by_tag "$subctl_repo_url" "$subctl_tag_to_search"
 }
 
 # ------------------------------------------
@@ -4292,20 +4288,6 @@ function test_submariner_packages() {
   echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
   echo -e "$msg" >> "$E2E_LOG"
 
-  # go test -v -cover \
-  # ./pkg/apis/submariner.io/v1 \
-  # ./pkg/cable/libreswan \
-  # ./pkg/cableengine/syncer \
-  # ./pkg/controllers/datastoresyncer \
-  # ./pkg/controllers/tunnel \
-  # ./pkg/event \
-  # ./pkg/event/controller \
-  # ./pkg/globalnet/controllers/ipam \
-  # ./pkg/routeagent/controllers/route \
-  # ./pkg/util \
-  # -ginkgo.v -ginkgo.trace \
-  # -ginkgo.reportPassed ${junit_params}
-
   go test -v -cover ./pkg/... \
   -ginkgo.v -ginkgo.trace -ginkgo.reportPassed ${junit_params} \
   | tee -a "$E2E_LOG"
@@ -4441,25 +4423,25 @@ function test_subctl_benchmarks() {
 
 function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
-  trap_to_debug_commands;
-
-  echo "# Retrieve correct branch to pull for Submariner version '$SUBM_VER_TAG'"
-  if [[ "$SUBM_VER_TAG" =~ devel ]]; then
-    local subctl_version="$(get_subctl_branch_tag)"
-  else
-    # echo "# Version ${SUBM_VER_TAG} is considered as 'v${SUBM_VER_TAG}' tag"
-    # local subctl_version="v${SUBM_VER_TAG}"
-    echo "# Get SubCtl version that was stored in file [${SUBCTL_VERSION_FILE}]"
-    local subctl_version="$([[ ! -s "$SUBCTL_VERSION_FILE" ]] || cat "$SUBCTL_VERSION_FILE")"
-  fi
-
   PROMPT "Building Submariner-IO code of E2E and unit-tests for version $SUBM_VER_TAG"
+  trap_to_debug_commands;
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  build_go_repo "https://github.com/submariner-io/submariner" $subctl_version
+  echo "# Retrieve correct branch to pull for Submariner version '$SUBM_VER_TAG'"
 
-  build_go_repo "https://github.com/submariner-io/lighthouse" $subctl_version
+  local subctl_branch_tag
+  if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
+    # Find the latest release branch name
+    subctl_branch_tag="$(get_subctl_branch_tag)"
+  else
+    # Find the latest release branch name that includes ${SUBM_VER_TAG} regex
+    subctl_branch_tag=$(get_subctl_branch_tag "${SUBM_VER_TAG}")
+  fi
+
+  build_go_repo "https://github.com/submariner-io/submariner" $subctl_branch_tag
+
+  build_go_repo "https://github.com/submariner-io/lighthouse" $subctl_branch_tag
 }
 
 # ------------------------------------------

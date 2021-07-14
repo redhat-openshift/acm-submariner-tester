@@ -1170,6 +1170,26 @@ function git_reset_local_repo() {
 
 # ------------------------------------------
 
+function get_latest_repository_version_by_tag() {
+  ### Print Git repository tag, of the latest released version ###
+  # Do not echo more info, since the output is the returned value
+
+  local repo_url="$1"
+
+  # Optional param: $2 => Search for branch tag that include this text.
+  # If not specifying - it will search for the latest version tag (sorted by refname)
+  local tag_to_search="$2"
+
+  local regex="tags/\K.*${tag_to_search}.*"
+  local branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+
+  [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
+
+  echo $branch_tag
+}
+
+# ------------------------------------------
+
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
     trap_to_debug_commands;
