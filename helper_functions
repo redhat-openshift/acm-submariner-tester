@@ -772,11 +772,10 @@ function delete_namespace_and_crds() {
   trap_to_debug_commands;
   # Input $1 : Namespace to delete
   # Input $2 (Optional) : All CRDs to delete, by searching for *crd_name*
-  ns_name=$1
-  crd_name=$2
-  delete_namespace=FALSE
-  delete_crds=FALSE
-  force_ns_delete=FALSE
+  local ns_name=$1
+  local crd_name=$2
+
+  local delete_crds=FALSE
 
   if [[ -n $crd_name ]] ; then
     echo "# Searching for existing CRDs of previous ${crd_name} installation on the cluster:"
@@ -789,9 +788,6 @@ function delete_namespace_and_crds() {
       crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
       # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
       ${OC} delete --timeout=10s crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
-          # customresourcedefinition.apiextensions.k8s.io "clusters.submariner.io" deleted
-          # customresourcedefinition.apiextensions.k8s.io "endpoints.submariner.io" deleted
-          # customresourcedefinition.apiextensions.k8s.io "submariners.submariner.io" deleted
     fi
   fi
 
@@ -805,19 +801,31 @@ function delete_namespace_and_crds() {
     return
   else
     echo "# Deleting whole namespace ${ns_name} from the cluster"
-    ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
-
-    if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
-      echo "# Warning: Force delete of namespace via API"
-      ${OC} proxy &
-      ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
-      curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
-      kill -9 %% || :
-      ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait || :
-    fi
+    force_delete_namespace "${ns_name}"
   fi
 }
 
+
+# ------------------------------------------
+
+# Function to force delete namespace
+function force_delete_namespace() {
+  trap_to_debug_commands;
+  # Input $1 : Namespace to delete
+  ns_name=$1
+
+  ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
+
+  if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
+    echo "# Warning: Force delete of namespace via API"
+    ${OC} proxy &
+    ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
+    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
+    kill -9 %% || :
+    ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait || :
+  fi
+
+}
 
 # ------------------------------------------
 
@@ -860,6 +868,17 @@ function create_namespace() {
   local ns=$1
   # Create the namespace with the API directly
   echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
+
+}
+
+# ------------------------------------------
+
+# Function to get the cluster name from kubeconfig current-context
+function print_current_cluster_name() {
+  # Do not trap_to_debug_commands
+
+  local current_context=$(${OC} config current-context)
+  ${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}"
 
 }
 
@@ -1151,6 +1170,26 @@ function git_reset_local_repo() {
 
 # ------------------------------------------
 
+function get_latest_repository_version_by_tag() {
+  ### Print Git repository tag, of the latest released version ###
+  # Do not echo more info, since the output is the returned value
+
+  local repo_url="$1"
+
+  # Optional param: $2 => Search for branch tag that include this text.
+  # If not specifying - it will search for the latest version tag (sorted by refname)
+  local tag_to_search="$2"
+
+  local regex="tags/\K.*${tag_to_search}.*"
+  local branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+
+  [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
+
+  echo $branch_tag
+}
+
+# ------------------------------------------
+
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
     trap_to_debug_commands;
@@ -1194,7 +1233,7 @@ function create_polarion_testcases_doc_from_junit() {
       </properties>" > "$polarion_testcases_file"
       # Maybe required: <response-property name="${polarion_team_name}" value="testcase_importer"/>
 
-    echo "# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
+    echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
     # Todo: This should rather be defined on external properties file:
     while read tc_name ; do
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
@@ -1257,8 +1296,11 @@ function create_polarion_testrun_result_from_junit() {
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
 
     echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
-    local polarion_testrun_file="$(basename ${junit_xml%%.*})" # Get file name without path and extension
-    polarion_testrun_file="${polarion_testrun_file//junit}polarion_testrun_file.xml" # Remove all "junit" from file name, and append "polarion_testrun_file.xml"
+
+    local polarion_testrun_name="$(basename ${junit_xml%.*})" # Get file name without path and extension
+    polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
+
+    local polarion_testrun_file="${polarion_testrun_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
     polarion_testrun_file="$(dirname $junit_xml)/$(basename $polarion_testrun_file)" # Append full path as the original junit_xml file
 
     # Set Polarion test run title
