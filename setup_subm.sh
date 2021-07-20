@@ -2499,8 +2499,11 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
 
-  # Fix bug in terraform provider permission denied
-  chmod -R a+x ./.terraform/plugins/linux_amd64/* || :
+  # Workaround for Terraform provider permission denied
+  local terraform_plugins_dir="./.terraform/plugins/linux_amd64"
+  if [[ -d "${terraform_plugins_dir}" ]] && [[ "$(ls -A "$terraform_plugins_dir")" ]] ; then
+    chmod -R a+x $terraform_plugins_dir/* || :
+  fi
 
   # Fix bug of using non-existing kubeconfig conext "admin"
   sed -e 's/--context=admin //g' -i "${terraform_script}"
