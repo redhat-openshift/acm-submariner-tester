@@ -267,36 +267,45 @@ while [[ $# -gt 0 ]]; do
     build_go_tests=YES
     shift ;;
   --destroy-cluster-a)
+    ocp_installer_required=YES
     destroy_cluster_a=YES
     shift ;;
   --create-cluster-a)
+    ocp_installer_required=YES
     create_cluster_a=YES
     shift ;;
   --reset-cluster-a)
+    ocp_installer_required=YES
     reset_cluster_a=YES
     shift ;;
   --clean-cluster-a)
     clean_cluster_a=YES
     shift ;;
   --destroy-cluster-b)
+    ocpup_tool_required=YES
     destroy_cluster_b=YES
     shift ;;
   --create-cluster-b)
+    ocpup_tool_required=YES
     create_cluster_b=YES
     shift ;;
   --reset-cluster-b)
+    ocpup_tool_required=YES
     reset_cluster_b=YES
     shift ;;
   --clean-cluster-b)
     clean_cluster_b=YES
     shift ;;
   --destroy-cluster-c)
+    ocp_installer_required=YES
     destroy_cluster_c=YES
     shift ;;
   --create-cluster-c)
+    ocp_installer_required=YES
     create_cluster_c=YES
     shift ;;
   --reset-cluster-c)
+    ocp_installer_required=YES
     reset_cluster_c=YES
     shift ;;
   --clean-cluster-c)
@@ -679,7 +688,7 @@ function show_test_plan() {
     "
   fi
 
-  # TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs
+  echo -e "# TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs"
 
   if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
@@ -899,7 +908,7 @@ function build_ocpup_tool_latest() {
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  # TODO: Need to fix ocpup alias
+  echo -e "# TODO: Need to fix ocpup alias"
 
   cd ${WORKDIR}
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
@@ -958,7 +967,7 @@ function destroy_aws_cluster() {
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
-  # TODO: should first check if it was not already purged, because it can save a lot of time.
+  echo -e "# TODO: should first check if it was not already purged, because it can save a lot of time."
   if [[ -d "${ocp_install_dir}" ]]; then
     echo "# Previous OCP Installation found: ${ocp_install_dir}"
     # cd "${ocp_install_dir}"
@@ -1093,7 +1102,7 @@ function prepare_install_aws_cluster() {
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
   [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
-  # TODO: change more {keys : values} in $installer_yaml_new, from the global variables file
+  echo -e "# TODO: change more {keys : values} in $installer_yaml_new, from the global variables file"
 
 }
 
@@ -2370,14 +2379,14 @@ function append_custom_images_to_join_cmd_file() {
 
 function install_broker_cluster_a() {
 ### Installing Submariner Broker on AWS cluster A (public) ###
-  # TODO - Should test broker deployment also on different Public cluster (C), rather than on Public cluster A.
-  # TODO: Call kubeconfig of broker cluster
+  echo -e "# TODO: Should test broker deployment also on different Public cluster (C), rather than on Public cluster A."
+  echo -e "# TODO: Call kubeconfig of broker cluster"
   trap_to_debug_commands;
 
   local DEPLOY_CMD="subctl deploy-broker"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    # TODO: Move to a seperate function
+    echo -e "# TODO: Move to a separate function"
     PROMPT "Adding GlobalNet to Submariner Deploy command"
 
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -2467,7 +2476,7 @@ function open_firewall_ports_on_aws_cluster_c() {
 function open_firewall_ports_on_aws_gateway_nodes() {
 ### Open firewall ports for the gateway node with terraform (prep_for_subm.sh) on AWS cluster ###
   # Old readme: https://github.com/submariner-io/submariner/tree/devel/tools/openshift/ocp-ipi-aws
-  # TODO: subctl cloud prepare as: https://submariner.io/getting-started/quickstart/openshift/aws/#prepare-aws-clusters-for-submariner
+  echo -e "# TODO: subctl cloud prepare as: https://submariner.io/getting-started/quickstart/openshift/aws/#prepare-aws-clusters-for-submariner"
   trap_to_debug_commands;
 
   echo -e "# Using \"prep_for_subm.sh\" - to add External IP and open ports on AWS cluster nodes for Submariner gateway"
@@ -2618,7 +2627,7 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  # TODO: Check that the Gateway label was created with "prep_for_subm.sh" on AWS cluster A (public) ?
+  echo -e "# TODO: Check that the Gateway label was created with prep_for_subm.sh on AWS cluster A (public) ?"
   gateway_label_all_nodes_external_ip
 }
 
@@ -2664,7 +2673,7 @@ function gateway_label_first_worker_node() {
   echo "# Adding submariner gateway labels to first worker node: $gw_node1"
     # gw_node1: user-cl1-bbmkg-worker-8mx4k
 
-  # TODO: Run only If there's no Gateway label already:
+  echo -e "# TODO: Run only If there's no Gateway label already"
   ${OC} label node $gw_node1 "submariner.io/gateway=true" --overwrite
     # node/user-cl1-bbmkg-worker-8mx4k labeled
 
@@ -2710,7 +2719,7 @@ function gateway_label_all_nodes_external_ip() {
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
   for node in $gw_nodes; do
-    # TODO: Run only If there's no Gateway label already:
+    echo -e "# TODO: Run only If there's no Gateway label already"
     ${OC} label node $node "submariner.io/gateway=true" --overwrite
       # node/user-cl1-bbmkg-worker-8mx4k labeled
   done
@@ -3236,7 +3245,7 @@ function test_submariner_resources_status() {
 
   ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || submariner_status=DOWN
-  # TODO: consider checking for "Terminating" pods
+  echo -e "# TODO: consider checking for 'Terminating' pods"
 
   if [[ "$submariner_status" = DOWN ]] ; then
     echo "### Potential Bugs ###"
@@ -3498,7 +3507,7 @@ function test_ha_status() {
 
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || submariner_status=DOWN
 
-  # TODO: Need to get current cluster ID
+  echo -e "# TODO: Need to get current cluster ID"
   #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   local cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE} &> '$TEMP_FILE'"
@@ -3813,7 +3822,7 @@ function test_lighthouse_status() {
   # Watch lighthouse pod logs for 100 (5 X 20) seconds
   watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || FAILURE "Lighthouse status is not as expected"
 
-  # TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status
+  echo -e "# TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status"
 }
 
 
@@ -3832,7 +3841,6 @@ function test_global_ip_created_for_svc_or_pod() {
 
   globalnet_tag='submariner.io\/globalIp'
   ipv4_regex='[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
-  # TODO: Fix no wait on: watch_and_retry "$cmd | grep -E '$globalnet_tag'" 3m "$ipv4_regex"
   watch_and_retry "$cmd | grep '$globalnet_tag'" 3m "$ipv4_regex"
 
   $cmd | highlight "$globalnet_tag" || \
@@ -3936,7 +3944,7 @@ function test_clusters_connected_overlapping_cidrs() {
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
   netshoot_global_ip="$GLOBAL_IP"
 
-  # TODO: Ping to the netshoot_global_ip
+  echo -e "# TODO: Ping to the netshoot_global_ip"
 
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
@@ -3946,7 +3954,7 @@ function test_clusters_connected_overlapping_cidrs() {
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
   -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:${NGINX_PORT}
 
-  #TODO: validate annotation of globalIp in the node
+  echo -e "# TODO: validate annotation of globalIp in the node"
 }
 
 # ------------------------------------------
@@ -3966,7 +3974,7 @@ function test_clusters_connected_full_domain_name() {
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Try to ping ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
-  #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
+  echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
       # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
@@ -3984,7 +3992,7 @@ function test_clusters_connected_full_domain_name() {
   echo "# Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:${NGINX_PORT} :"
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:${NGINX_PORT}"
 
-  # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+  echo -e "# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
 
 }
 
@@ -4088,7 +4096,7 @@ function test_nginx_headless_global_ip_cluster_b() {
   test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
-  # TODO: Ping to the new_nginx_global_ip
+  echo -e "# TODO: Ping to the new_nginx_global_ip"
   # new_nginx_global_ip="$GLOBAL_IP"
 }
 
@@ -4118,7 +4126,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
     echo "# Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
-    #TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all
+    echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
         # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
         # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
         # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
@@ -4135,7 +4143,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     echo "# Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:${NGINX_PORT} :"
     ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:${NGINX_PORT}"
 
-    # TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk
+    echo -e "# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
 
   fi
 
@@ -4197,7 +4205,7 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
 
     subctl diagnose all || subctl_info=ERROR
 
-    # TODO: report bug of missing --kubecontexts option:
+    echo -e "# TODO: report bug of missing --kubecontexts option"
     # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
     # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
     # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
@@ -4205,7 +4213,7 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
     subctl diagnose firewall vxlan --validation-timeout 120 || subctl_info=ERROR
     subctl diagnose firewall metrics --validation-timeout 120 || subctl_info=ERROR
 
-    # TODO: report bug that diagnose does not work with merged kubeconfigs:
+    echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
     # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_info=ERROR
     subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 || subctl_info=ERROR
 
@@ -4871,7 +4879,7 @@ function print_resources_and_pod_logs() {
 
   ${OC} describe cm -n openshift-dns || :
 
-  # TODO: Loop on each cluster: ${OC} describe cluster "${cluster_name}" -n ${SUBM_NAMESPACE} || :
+  echo -e "# TODO: Loop on each cluster: ${OC} describe cluster ${cluster_name} -n ${SUBM_NAMESPACE}"
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-gateway,submariner-globalnet,kube-proxy)' \
@@ -5011,7 +5019,7 @@ cd ${SCRIPT_DIR}
 export_active_clusters_kubeconfig
 
 # Printing output both to stdout and to $SYS_LOG with tee
-# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s
+echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
@@ -5026,13 +5034,16 @@ export_active_clusters_kubeconfig
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
-    # Running download_ocp_installer if requested
-    [[ ! "$get_ocp_installer" =~ ^(y|yes)$ ]] || ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+    # Running download_ocp_installer for cluster A
 
-    # Running build_ocpup_tool_latest if requested
-    [[ ! "$get_ocpup_tool" =~ ^(y|yes)$ ]] || ${junit_cmd} build_ocpup_tool_latest
+    if [[ "$get_ocp_installer" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+
+    fi
 
     # Running reset_cluster_a if requested
+
     if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
@@ -5042,7 +5053,8 @@ export_active_clusters_kubeconfig
       ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     else
-      # Running destroy_aws_cluster and create_aws_cluster separately
+      # Running destroy_aws_cluster with or without create_aws_cluster afterwards
+
       if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
@@ -5058,8 +5070,17 @@ export_active_clusters_kubeconfig
       fi
     fi
 
-    # Running reset_cluster_b if requested
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      # Running build_ocpup_tool_latest if requested, for cluster B
+
+      if [[ "$get_ocpup_tool" =~ ^(y|yes)$ ]] && [[ "$ocpup_tool_required" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} build_ocpup_tool_latest
+
+      fi
+
+      # Running reset_cluster_b if requested
 
       if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
 
@@ -5070,8 +5091,11 @@ export_active_clusters_kubeconfig
         ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
       else
-        # Running destroy_osp_cluster and create_osp_cluster separately
+        # Running destroy_osp_cluster with or without create_osp_cluster afterwards
+
         if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+          ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
           ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
@@ -5079,16 +5103,25 @@ export_active_clusters_kubeconfig
 
         if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
-
           ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
         fi
       fi
     fi
 
-    # Running reset_cluster_c if requested
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      # Running download_ocp_installer if requested, for cluster C
+
+      if [[ "$get_ocp_installer" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+
+        echo -e "# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
+
+        # ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+
+      fi
+
+      # Running reset_cluster_c if requested
 
       if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] ; then
 
@@ -5099,7 +5132,8 @@ export_active_clusters_kubeconfig
         ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       else
-        # Running destroy_aws_cluster and create_cluster_c separately
+        # Running destroy_aws_cluster with or without create_cluster_c afterwards
+
         if [[ "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
           ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
@@ -5189,7 +5223,7 @@ export_active_clusters_kubeconfig
 
     # Configure firewall ports, gateway labels, and images prune on all clusters
 
-    # TODO: Run only if it's an AWS (public) cluster
+    echo -e "# TODO: Run only if it's an AWS (public) cluster"
     ${junit_cmd} open_firewall_ports_on_aws_cluster_a
 
     ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
@@ -5198,7 +5232,7 @@ export_active_clusters_kubeconfig
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # TODO: Run only if it's an openstack (on-prem) cluster
+      echo -e "# TODO: Run only if it's an openstack (on-prem) cluster"
       ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
       ${junit_cmd} label_first_gateway_cluster_b
@@ -5209,7 +5243,7 @@ export_active_clusters_kubeconfig
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      # TODO: Run only if it's an AWS (public) cluster
+      echo -e "# TODO: Run only if it's an AWS (public) cluster"
       ${junit_cmd} open_firewall_ports_on_aws_cluster_c
 
       ${junit_cmd} label_first_gateway_cluster_c
@@ -5269,7 +5303,7 @@ export_active_clusters_kubeconfig
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-    # TODO: Need to add tests for cluster C
+    echo -e "# TODO: Need to add tests for cluster C"
 
     ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
 
@@ -5395,7 +5429,7 @@ export_active_clusters_kubeconfig
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # TODO: Add tests for Cluster C
+      echo -e "# TODO: Add tests for Cluster C"
 
       ${junit_cmd} test_clusters_connected_by_service_ip
 
@@ -5424,7 +5458,7 @@ export_active_clusters_kubeconfig
 
           ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-          # TODO: Test headless service with GLobalnet - when the feature of is supported
+          echo -e "# TODO: Test headless service with GLobalnet - when the feature of is supported"
           BUG "HEADLESS Service is not supported with GlobalNet" \
            "No workaround yet - Skip the whole test" \
           "https://github.com/submariner-io/lighthouse/issues/273"
