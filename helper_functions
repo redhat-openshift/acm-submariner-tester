@@ -258,6 +258,22 @@ function PROMPT() {
 
 # ------------------------------------------
 
+# Function to message as a title inside #####
+function TITLE() {
+  local message="$1"
+  local color="${2:-${YELLOW}}"
+
+  local line_length=$(( ${#message} + 15 ))
+  local color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
+  local color_char="${color}#${NO_COLOR}"
+
+  echo -e "$color_line"
+  echo -e "$color_char       $message      $color_char"
+  echo -e "$color_line"
+}
+
+# ------------------------------------------
+
 # Function to print FAILURE message and return 5 for the current test
 # sh2ju treats exit code 5 as non-critical failure (to continue tests)
 function FAILURE() {

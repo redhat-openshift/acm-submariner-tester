@@ -4793,7 +4793,7 @@ function collect_submariner_info() {
     df -h
     free -h
 
-    echo -e "\n############################## Openshift information ##############################\n"
+    TITLE "Openshift information"
 
     export_merged_kubeconfigs
 
@@ -4808,7 +4808,7 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    echo -e "\n############################## Submariner information (subctl show and diagnose) ##############################\n"
+    TITLE "Submariner information (subctl show and diagnose)"
 
     subctl show all || :
 
@@ -4839,27 +4839,15 @@ function print_resources_and_pod_logs() {
 
   PROMPT "Submariner logs and OCP events on ${cluster_name}"
 
-  echo -e "
-  \n################################################################################################ \
-  \n#                             Openshift Nodes on ${cluster_name}                               # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Openshift Nodes on ${cluster_name}"
 
   ${OC} get nodes -o wide || :
 
-  echo -e "
-  \n################################################################################################ \
-  \n#                             Unready Pods (if any) on ${cluster_name}                               # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Unready Pods (if any) on ${cluster_name}"
 
   ${OC} get pod -A |  grep -Ev '([1-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
 
-  echo -e "
-  \n################################################################################################ \
-  \n#                  Submariner Gateway and Deployments on ${cluster_name}                       # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Submariner Gateway and Deployments on ${cluster_name}"
 
   ${OC} get nodes --selector=submariner.io/gateway=true --show-labels || :
 
@@ -4873,11 +4861,7 @@ function print_resources_and_pod_logs() {
   ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
   #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
-  echo -e "
-  \n################################################################################################ \
-  \n#             Submariner Daemons, Replicas and configurations on ${cluster_name}               # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Submariner Daemons, Replicas and configurations on ${cluster_name}"
 
   ${OC} get daemonsets -A || :
 
@@ -4897,11 +4881,7 @@ function print_resources_and_pod_logs() {
   #     ${OC}  -n $namespace logs $pod
   # done
 
-  echo -e "
-  \n################################################################################################ \
-  \n#                             Openshift Machines on ${cluster_name}                              # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Openshift Machines on ${cluster_name}"
 
   ${OC} get machineconfigpool || :
 
@@ -4916,11 +4896,7 @@ function print_resources_and_pod_logs() {
     }
   }'
 
-  echo -e "
-  \n################################################################################################ \
-  \n#                             Submariner LOGS on ${cluster_name}                              # \
-  \n################################################################################################ \
-  \n"
+  TITLE "Submariner LOGS on ${cluster_name}"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -4944,7 +4920,7 @@ function print_resources_and_pod_logs() {
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 
-  echo -e "\n############################## ALL Openshift events on ${cluster_name} ##############################\n"
+  TITLE "ALL Openshift events on ${cluster_name}"
 
   ${OC} get events -A --sort-by='.metadata.creationTimestamp' \
   -o custom-columns=FirstSeen:.firstTimestamp,LastSeen:.lastTimestamp,Count:.count,From:.source.component,Type:.type,Reason:.reason,Message:.message || :
