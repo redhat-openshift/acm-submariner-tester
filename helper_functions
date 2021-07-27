@@ -1219,7 +1219,7 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_team_name="$5"
     local polarion_user_name="$6"
     local polarion_component_id="$7"
-    local polarion_testcases_doc="$8"
+    local polarion_testcases_doc=${8//[^a-zA-Z0-9 _]/-} # Replace special characters with - (dash)
 
     local tc_list="`mktemp`_testcases"
 
