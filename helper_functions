@@ -1219,7 +1219,7 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_team_name="$5"
     local polarion_user_name="$6"
     local polarion_component_id="$7"
-    local polarion_testcases_doc=${8//[^a-zA-Z0-9 _]/-} # Replace special characters with - (dash)
+    local polarion_testcases_doc=${8//[^a-zA-Z0-9 -]/_} # Replace special characters with underscore
 
     local tc_list="`mktemp`_testcases"
 
@@ -1313,15 +1313,14 @@ function create_polarion_testrun_result_from_junit() {
 
     echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
 
-    local polarion_testrun_name="$(basename ${junit_xml%.*})" # Get file name without path and extension
-    polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
+    local polarion_testrun_title="$(basename ${junit_xml%.*})" # Get file name without path and extension
+    polarion_testrun_title="${polarion_testrun_title//junit}" # Remove all "junit" from file name
 
-    local polarion_testrun_file="${polarion_testrun_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
+    local polarion_testrun_file="${polarion_testrun_title}polarion_testrun.xml" # Append "polarion_testrun.xml"
     polarion_testrun_file="$(dirname $junit_xml)/$(basename $polarion_testrun_file)" # Append full path as the original junit_xml file
 
-    # Set Polarion test run title
-    local polarion_testrun_title="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
-    echo -e "### Polarion Test-run Title: [${polarion_testrun_title}],
+    # polarion_testrun_title="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
+    echo -e "### Polarion Test-run title: [${polarion_testrun_title}],
     \n# Polarion Test-run file [${polarion_testrun_file}] \n"
 
     cp "$junit_xml" "$polarion_testrun_file"
