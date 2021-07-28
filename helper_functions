@@ -1230,10 +1230,12 @@ function create_polarion_testcases_doc_from_junit() {
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
-    echo "# Set output xml for Polarion test-cases (without 'junit' substring in filename)"
-    local polarion_testcases_file="$(basename ${junit_xml%.*})" # Get file name without path and extension
-    polarion_testcases_file="${polarion_testcases_file//junit}polarion_testcases.xml" # Remove all "junit" from file name, and append "polarion_testcases.xml"
-    polarion_testcases_file="$(dirname $junit_xml)/$(basename $polarion_testcases_file)" # Append full path as the original junit_xml file
+    echo "# Set output xml for Polarion test-cases"
+
+    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
+
+    local polarion_testcases_file="${testsuite_name}polarion_testcases.xml" # Append "polarion_testcases.xml"
+    polarion_testcases_file="$(dirname ${junit_xml})/${polarion_testcases_file}" # Append full directory path of the original junit_xml file
 
     echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
     grep '<testcase ' "$junit_xml" | \
@@ -1250,11 +1252,13 @@ function create_polarion_testcases_doc_from_junit() {
       # Maybe required: <response-property name="${polarion_team_name}" value="testcase_importer"/>
 
     echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
-    # Todo: This should rather be defined on external properties file:
-    while read tc_name ; do
+    # TODO: This should rather be defined on external properties file:
+
+    while read testcase_name ; do
+      local testcase_title="${testsuite_name}.${testcase_name#*.}"
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
-          <title>${tc_name}</title>
-            <description>${tc_name}</description>
+          <title>${testcase_title}</title>
+            <description>${testcase_title}</description>
             <custom-fields>
 
               <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
@@ -1277,9 +1281,9 @@ function create_polarion_testcases_doc_from_junit() {
       #
       # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
       # <linked-work-items>
-      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"verifies\" />
-      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
-      #   <linked-work-item workitem-id=\"${tc_name}\" lookup-method=\"name\" role-id=\"refines\" />
+      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"verifies\" />
+      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
+      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"refines\" />
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_file"
 
@@ -1311,22 +1315,25 @@ function create_polarion_testrun_result_from_junit() {
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
 
-    echo "# Set output xml for Polarion test-run results (without 'junit' substring in filename)"
+    # ------------------------------------------------------------------------ #
 
-    local polarion_testrun_title="$(basename ${junit_xml%.*})" # Get file name without path and extension
-    polarion_testrun_title="${polarion_testrun_title//junit}" # Remove all "junit" from file name
+    echo "# Set output xml for Polarion test-run results"
 
-    local polarion_testrun_file="${polarion_testrun_title}polarion_testrun.xml" # Append "polarion_testrun.xml"
-    polarion_testrun_file="$(dirname $junit_xml)/$(basename $polarion_testrun_file)" # Append full path as the original junit_xml file
+    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
-    # polarion_testrun_title="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
-    echo -e "### Polarion Test-run title: [${polarion_testrun_title}],
+    local polarion_testrun_file="${testsuite_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
+    polarion_testrun_file="$(dirname $junit_xml)/${polarion_testrun_file}" # Append full directory path of the original junit_xml file
+
+    # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
+    echo -e "### Polarion Test-run title: [${testsuite_name}],
     \n# Polarion Test-run file [${polarion_testrun_file}] \n"
 
     cp "$junit_xml" "$polarion_testrun_file"
 
     echo "# Remove Test-Cases Junit index (if added within sh2ju): "
     sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_file"
+
+    # ------------------------------------------------------------------------ #
 
     echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
 
@@ -1340,7 +1347,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
-            <property name=\"polarion-testrun-title\" value=\"$polarion_testrun_title\" /> \n\
+            <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
@@ -1361,7 +1368,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testcase> with Polarion test-run title: $polarion_testrun_title"
+    echo "# Add <testcase> properties comment: $polarion_testrun_file"
 
     # Define Polarion <testcase> property  (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_testcase_content="\n\
@@ -1375,6 +1382,20 @@ function create_polarion_testrun_result_from_junit() {
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_file"
 
+    # ------------------------------------------------------------------------ #
+
+    echo "# Update <testsuite name> to: $testsuite_name"
+
+    sed -r "s/(testsuite name=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_file"
+
+    # ------------------------------------------------------------------------ #
+
+    echo "# Update <classname> to: $testsuite_name"
+
+    sed -r "s/(classname=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_file"
+
+    # ------------------------------------------------------------------------ #
+
     # Watch testcase-log web page
     watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
 
@@ -1385,15 +1406,31 @@ function create_polarion_testrun_result_from_junit() {
     all_templates_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A\"${polarion_testrun_template// /%20}\""
 
     # Set links for all titles:
-    all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${polarion_testrun_title// /%20}\""
+    all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${testsuite_name// /%20}\""
 
     echo -e "\n### The new test-run was successfully added to Polarion ###
     \n# $testrun_url \n
     \n# All test-runs by template-id '${polarion_testrun_template}':
     \n# ${all_templates_link}
-    \n# All test-runs by title '${polarion_testrun_title}':
+    \n# All test-runs by title '${testsuite_name}':
     \n# ${all_titles_link}"
 
+}
+
+# ------------------------------------------
+
+# Function to create test cases document in Polarion from Junit xml
+function generate_suite_title_from_junit_filename() {
+    # Do not trap_to_debug_commands or echo, so it will not be printed as return value
+
+    # Get file name without path and extension
+    local testsuite_title="$(basename ${1%.*})"
+
+    # Remove all 'junit' substring from testsuite title
+    testsuite_title="${testsuite_title//junit/}"
+
+    # Remove leading and trailing non-alphabetic characters
+    echo "$testsuite_title" | sed 's/^[^[:alnum:]]*//;s/[^[:alnum:]]*$//'
 }
 
 # ------------------------------------------
