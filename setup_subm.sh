@@ -163,10 +163,10 @@ export TEMP_FILE="`mktemp`_temp"
 
 # JOB_NAME is a prefix for files, which is the name of current script directory
 export JOB_NAME="$(basename "$SCRIPT_DIR")"
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_1_sys_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_2_pkg_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_3_e2e_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_4_lighthouse_junit.xml"
+export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
 
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
 > "$E2E_LOG"
@@ -2292,11 +2292,11 @@ function create_subctl_join_file() {
   ${OC} config view
   local cluster_id=$(${OC} config current-context)
 
-  BUG "subctl join failed on \"Error creating SA for cluster\"" \
-  "Add '--clusterid <SHORT ID>' (e.g. of cluster id of admin) to $join_cmd_file" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
-  # Workaround
-  cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
+  # BUG "subctl join failed on \"Error creating SA for cluster\"" \
+  # "Add '--clusterid <SHORT ID>' (e.g. of cluster id of admin) to $join_cmd_file" \
+  # "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
+  # # Workaround
+  # cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
   JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
