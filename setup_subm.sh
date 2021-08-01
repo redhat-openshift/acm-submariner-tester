@@ -2292,11 +2292,11 @@ function create_subctl_join_file() {
   ${OC} config view
   local cluster_id=$(${OC} config current-context)
 
-  # BUG "subctl join failed on \"Error creating SA for cluster\"" \
-  # "Add '--clusterid <SHORT ID>' (e.g. of cluster id of admin) to $join_cmd_file" \
-  # "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
-  # # Workaround
-  # cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
+  BUG "SubCtl join of a long clusterid - No IPsec connections will be loaded later" \
+  "Add '--clusterid <SHORT ID>' (e.g. of cluster id of the admin context) to $join_cmd_file" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=1988797"
+  # Workaround
+  cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
   JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
@@ -3621,17 +3621,13 @@ function test_ipsec_status() {
 
   > "$TEMP_FILE"
 
-  echo "# Verify IPSec status on Active Node [${active_gateway_node}] Gateway Pod [${active_gateway_pod}]:"
+  echo "# Verify IPSec status on the active Gateway pod [${active_gateway_pod}]:"
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
 
   local loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
   local active_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1`"
 
   if [[ ! "$active_con" = "$loaded_con" ]] ; then
-    BUG "Not all Submariner IPsec connections were established" \
-     "No workaround yet, it is caused by LibreSwan bug 1081" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1920408"
-    # No workaround yet
     FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
   fi
 
