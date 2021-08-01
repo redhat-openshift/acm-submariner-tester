@@ -4176,6 +4176,7 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
   trap_to_debug_commands;
 
   local subctl_info
+  local subctl_diagnose
 
   export_active_clusters_kubeconfig
 
@@ -4192,35 +4193,32 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
   subctl show gateways || subctl_info=ERROR
 
   # For SubCtl > 0.8 : Run subctl diagnose:
-
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
 
-    BUG "subctl diagnose to return relevant exit code on Submariner failures" \
-    "No workaround is required" \
-    "https://github.com/submariner-io/submariner-operator/issues/1310"
-
-    subctl diagnose all || subctl_info=ERROR
+    subctl diagnose all || subctl_diagnose=ERROR
 
     echo -e "# TODO: report bug of missing --kubecontexts option"
-    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
-    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
-    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_info=ERROR
+    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
 
-    subctl diagnose firewall vxlan --validation-timeout 120 || subctl_info=ERROR
-    subctl diagnose firewall metrics --validation-timeout 120 || subctl_info=ERROR
+    subctl diagnose firewall vxlan --validation-timeout 120 || subctl_diagnose=ERROR
+    subctl diagnose firewall metrics --validation-timeout 120 || subctl_diagnose=ERROR
 
     echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
-    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_info=ERROR
-    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 || subctl_info=ERROR
+    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_diagnose=ERROR
+    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 || subctl_diagnose=ERROR
+
+    if [[ "$subctl_diagnose" = ERROR ]] ; then
+      BUG "subctl diagnose exit with non-zero exit code, while output has no error message" \
+      "Ignore subctl diagnose exit code" \
+      "https://bugzilla.redhat.com/show_bug.cgi?id=1988836"
+    fi
 
   fi
 
   if [[ "$subctl_info" = ERROR ]] ; then
-    FAILURE "SubCtl show/diagnose failed on merged kubeconfig"
-
-    BUG "SubCtl error obtaining the Submariner resource: Unauthorized" \
-    "It may happened due to merged kubeconfigs - ignoring failures" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1950960"
+    FAILURE "SubCtl show failed when using merged kubeconfig"
   fi
 
 }
