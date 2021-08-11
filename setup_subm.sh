@@ -4202,12 +4202,12 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
     # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
     # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
 
-    subctl diagnose firewall vxlan --validation-timeout 120 || subctl_diagnose=ERROR
-    subctl diagnose firewall metrics --validation-timeout 120 || subctl_diagnose=ERROR
+    subctl diagnose firewall vxlan --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+    subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
     echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
     # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_diagnose=ERROR
-    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 || subctl_diagnose=ERROR
+    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
     if [[ "$subctl_diagnose" = ERROR ]] ; then
       BUG "subctl diagnose exit with non-zero exit code, while output has no error message" \
