@@ -4809,16 +4809,16 @@ function collect_submariner_info() {
     subctl diagnose all || :
 
     export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-    print_resources_and_pod_logs
+    print_resources_and_pod_logs "$CLUSTER_A_NAME"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-      print_resources_and_pod_logs
+      print_resources_and_pod_logs "$CLUSTER_B_NAME"
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-      print_resources_and_pod_logs
+      print_resources_and_pod_logs "$CLUSTER_C_NAME"
     fi
 
   ) |& tee -a $log_file
@@ -4829,7 +4829,7 @@ function collect_submariner_info() {
 
 function print_resources_and_pod_logs() {
   trap_to_debug_commands;
-  local cluster_name="$(print_current_cluster_name)"
+  local cluster_name="$1"
 
   PROMPT "Submariner logs and OCP events on ${cluster_name}"
 
