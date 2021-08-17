@@ -5020,33 +5020,22 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    # Running reset_cluster_a if requested
+    # Running destroy or create or both (reset) for cluster A
 
-    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] ; then
+    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+
+    fi
+
+    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] || [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
       ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
-    else
-      # Running destroy_aws_cluster with or without create_aws_cluster afterwards
-
-      if [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
-
-        ${junit_cmd} destroy_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
-
-      fi
-
-      if [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
-
-        ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
-
-        ${junit_cmd} create_aws_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
-
-      fi
     fi
+    ### END of Cluster A Setup ###
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
@@ -5058,34 +5047,25 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      # Running reset_cluster_b if requested
 
-      if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] ; then
+      # Running destroy or create or both (reset) for cluster B
+
+      if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+
+      fi
+
+      if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] || [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
         ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
-      else
-        # Running destroy_osp_cluster with or without create_osp_cluster afterwards
-
-        if [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
-
-          ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
-
-        fi
-
-        if [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
-
-        fi
       fi
+
     fi
+    ### END of Cluster B Setup ###
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
@@ -5099,34 +5079,24 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      # Running reset_cluster_c if requested
+      # Running destroy or create or both (reset) for cluster C
 
-      if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] ; then
+      if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+
+      fi
+
+      if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] || [[ "$create_cluster_c" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
         ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
-      else
-        # Running destroy_aws_cluster with or without create_cluster_c afterwards
-
-        if [[ "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} destroy_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
-
-        fi
-
-        if [[ "$create_cluster_c" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} prepare_install_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
-
-          ${junit_cmd} create_aws_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
-
-        fi
       fi
+
     fi
+    ### END of Cluster C Setup ###
 
     ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
@@ -5276,7 +5246,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
 
   fi
-  ### END of OCP Clusters Setup ###
+  ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then
