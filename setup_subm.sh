@@ -79,6 +79,7 @@ Running with pre-defined parameters (optional):
 
 - Submariner installation options:
 
+  * Install ACM and Submariner:                        --acm-version [x.y.z]
   * Download SubCtl version:                           --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
@@ -255,6 +256,11 @@ while [[ $# -gt 0 ]]; do
   --get-ocpup-tool)
     get_ocpup_tool=YES
     shift ;;
+  --acm-version)
+    check_cli_args "$2"
+    export ACM_VER_TAG="$2"
+    install_acm=YES
+    shift 2 ;;
   --subctl-version)
     check_cli_args "$2"
     export SUBM_VER_TAG="$2"
@@ -474,9 +480,19 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
+  # User input: $install_acm and ACM_VER_TAG - to install_acm_with_submariner
+  if [[ "$install_acm" =~ ^(yes|y)$ ]]; then
+    while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
+      echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
+      Enter version number, or nothing to install \"latest\" version: "
+      read -r input
+      ACM_VER_TAG=${input:-latest}
+    done
+  fi
+
   # User input: $download_subctl and SUBM_VER_TAG - to download_and_install_subctl
   if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+$ ]]; do
+    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"latest\" version: "
       read -r input
@@ -564,7 +580,9 @@ get_ocp_installer=${get_ocp_installer:-NO}
 get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
+install_acm=${install_acm:-NO}
 download_subctl=${download_subctl:-NO}
+# ACM_VER_TAG=${SUBM_VER_TAG}
 # SUBM_VER_TAG=${SUBM_VER_TAG}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -2028,6 +2046,17 @@ function test_clusters_disconnected_before_submariner() {
   curl --output /dev/null --max-time 20 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT} \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
+}
+
+# ------------------------------------------
+
+function install_acm_with_submariner() {
+  ### Install ACM operator and Submariner operator ###
+    PROMPT "Install ACM operator $ACM_VER_TAG and Submariner operator $SUBM_VER_TAG"
+
+    # TODO: Run function with args instead of calling sh script, e.g. deploy_acm_operator "$ACM_VER_TAG"
+    ./acm/downstream_deploy_bundle_acm_operator.sh
+
 }
 
 # ------------------------------------------
@@ -5247,6 +5276,18 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
+
+
+  ### INSTALL ACM ###
+
+  # Downloading and installing subctl
+  if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
+
+    ${junit_cmd} install_acm_with_submariner "$ACM_VER_TAG"
+
+    exit # Temporary exit after ACM INSTALL
+
+  fi
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then
