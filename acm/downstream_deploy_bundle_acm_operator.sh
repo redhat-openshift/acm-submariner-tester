@@ -8,6 +8,8 @@
 
 wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+source ${wd:?}/debug.sh
+
 # export ACM_VERSION="${ACM_VERSION}"
 # export OPERATOR_NAME="advanced-cluster-management"
 # export BUNDLE_NAME="acm-operator-bundle"

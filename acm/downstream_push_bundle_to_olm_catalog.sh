@@ -17,6 +17,8 @@
 
 wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+source ${wd:?}/debug.sh
+
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
 USER=''
