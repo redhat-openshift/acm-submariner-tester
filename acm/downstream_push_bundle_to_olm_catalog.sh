@@ -1,8 +1,19 @@
 #!/bin/bash
 
-source debug.sh
+# source debug.sh
+#
+# source /usr/local/etc/brew-auth.config
 
-source /usr/local/etc/brew-auth.config
+# Expected Env vars examples:
+#
+# export VERSION="${SUBMARINER_VERSION}"
+# export OPERATOR_NAME="submariner"
+# export BUNDLE_NAME="submariner-operator-bundle"
+# export NAMESPACE="${SUBMARINER_NAMESPACE}"
+# export CHANNEL="${SUBMARINER_CHANNEL}"
+# export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
+# export OPERATOR_RELATED_IMAGE="submariner-rhel8-operator"
+# export SUBSCRIBE=false
 
 wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
@@ -10,8 +21,8 @@ declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
 USER=''
 PASSWORD=''
-OPERATORS_NAMESPACE="openshift-operators"
-MARKETPLACE_NAMESPACE=${NAMESPACE:-openshift-marketplace}
+# OPERATORS_NAMESPACE="openshift-operators"
+# MARKETPLACE_NAMESPACE=${NAMESPACE:-openshift-marketplace}
 DOCKER_AUTH_FILE="/tmp/docker.config.json"
 INSTALL_MODE=${installModes[1]}
 BREW_SECRET_NAME='brew-registry'
@@ -46,14 +57,14 @@ OPERATOR_RELATED_IMAGE=${OPERATOR_RELATED_IMAGE:-''}
 # login
 #docker login registry.redhat.io
 #podman login -u $(oc whoami | tr -d ':') -p $(oc whoami -t) --tls-verify=false "${EXTERNAL_OCP_REGISTRY}"
-podman login -u ${BREW_REGISTRY_AUTH_USERNAME} -p ${BREW_REGISTRY_AUTH_PASSWORD} --tls-verify=false ${BREW_REGISTRY_URL}
+podman login -u ${REGISTRY_USR} -p ${REGISTRY_PWD} --tls-verify=false ${REGISTRY_MIRROR}
 oc login -u "${USER}" -p "${PASSWORD}"
 OCP_REGISTRY_URL=$(oc registry info --internal)
 OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${MARKETPLACE_NAMESPACE}/${BUNDLE_NAME}-index:${VERSION}"
 OCP_VERSION=$(oc version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)
 #CATALOG_SOURCE=registry.redhat.io/redhat/redhat-operator-index:v${OCP_VERSION}
-CATALOG_SOURCE=${BREW_REGISTRY_URL}/rh-osbs/iib-pub:v${OCP_VERSION}
-CATALOG_BINARY=${BREW_REGISTRY_URL}/rh-osbs/openshift-ose-operator-registry:v${OCP_VERSION}
+CATALOG_SOURCE=${REGISTRY_MIRROR}/rh-osbs/iib-pub:v${OCP_VERSION}
+CATALOG_BINARY=${REGISTRY_MIRROR}/rh-osbs/openshift-ose-operator-registry:v${OCP_VERSION}
 
 # Create/switch project
 oc new-project ${NAMESPACE} 2>/dev/null || oc project ${NAMESPACE} -q
@@ -62,7 +73,7 @@ oc new-project ${NAMESPACE} 2>/dev/null || oc project ${NAMESPACE} -q
 if oc get secret ${BREW_SECRET_NAME} -n ${NAMESPACE} > /dev/null 2>&1; then
   oc delete secret ${BREW_SECRET_NAME} -n ${NAMESPACE} --wait
 fi
-oc create secret -n ${NAMESPACE} docker-registry ${BREW_SECRET_NAME} --docker-server=${BREW_REGISTRY_URL} --docker-username="${BREW_REGISTRY_AUTH_USERNAME}" --docker-password="${BREW_REGISTRY_AUTH_PASSWORD}" --docker-email=${BREW_REGISTRY_EMAIL}
+oc create secret -n ${NAMESPACE} docker-registry ${BREW_SECRET_NAME} --docker-server=${REGISTRY_MIRROR} --docker-username="${REGISTRY_USR}" --docker-password="${REGISTRY_PWD}" --docker-email=${BREW_REGISTRY_EMAIL}
 
 # Set the subscription namespace
 subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${NAMESPACE}")
@@ -86,9 +97,9 @@ if [ "${BUILD_IIB}" = true ]; then
   #oc get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" | base64 --decode | jq > ${DOCKER_AUTH_FILE}
 
   ### pull the image
-  #podman login -u ${BREW_REGISTRY_AUTH_USERNAME} -p ${BREW_REGISTRY_AUTH_PASSWORD} --tls-verify=false ${BREW_REGISTRY_URL}
+  #podman login -u ${REGISTRY_USR} -p ${REGISTRY_PWD} --tls-verify=false ${REGISTRY_MIRROR}
   #podman login --authfile ${DOCKER_AUTH_FILE} --tls-verify=false registry.redhat.io
-  #podman image pull --creds ${BREW_REGISTRY_AUTH_USERNAME}:${BREW_REGISTRY_AUTH_PASSWORD} --tls-verify=false ${OPERATOR_BUNDLE_SNAPSHOT_IMAGE}
+  #podman image pull --creds ${REGISTRY_USR}:${REGISTRY_PWD} --tls-verify=false ${OPERATOR_BUNDLE_SNAPSHOT_IMAGE}
 
   ### tag the bundle
   # docker tag  ${SRC_IMAGE_INDEX} ${EXTERNAL_OCP_IMAGE_INDEX}
@@ -138,7 +149,7 @@ if [ "${BUILD_IIB}" = true ]; then
   # docker push ${OCP_IMAGE_INDEX}
   #podman login -u "$(oc whoami | tr -d ':')" -p "$(oc whoami -t)" --tls-verify=false "${EXTERNAL_OCP_REGISTRY}"
   podman image push --creds "$(oc whoami | tr -d ':')":"$(oc whoami -t)" --tls-verify=false "${EXTERNAL_OCP_IMAGE_INDEX}"
-  #podman logout ${BREW_REGISTRY_URL}
+  #podman logout ${REGISTRY_MIRROR}
   # oc image mirror "${SRC_IMAGE_INDEX}" "${EXTERNAL_OCP_IMAGE_INDEX}" \
   # -n "${MARKETPLACE_NAMESPACE}" \
   # --keep-manifest-list \
@@ -155,7 +166,7 @@ else
     fi
     SRC_IMAGE_INDEX=${1}
   else
-    SRC_IMAGE_INDEX="${BREW_REGISTRY_URL}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
+    SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
   fi
   if oc get is "${BUNDLE_NAME}-index" -n ${MARKETPLACE_NAMESPACE} > /dev/null 2>&1; then
     oc delete is "${BUNDLE_NAME}-index" -n ${MARKETPLACE_NAMESPACE} --wait
@@ -226,7 +237,7 @@ spec:
 EOF
 
   # Manual Approve
-  oc wait --for condition=InstallPlanPending --timeout=5m -n ${subscriptionNamespace} subs/my-subscription || (error "InstallPlan not found."; podman logout ${BREW_REGISTRY_URL}; exit 1)
+  oc wait --for condition=InstallPlanPending --timeout=5m -n ${subscriptionNamespace} subs/my-subscription || (error "InstallPlan not found."; podman logout ${REGISTRY_MIRROR}; exit 1)
   installPlan=$(oc get subscriptions.operators.coreos.com my-subscription -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
   if [ -n "${installPlan}" ]; then
     oc patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
@@ -244,17 +255,17 @@ fi
 
 if [[ "${BUILD_IIB}" = false ]] && [[ -n "${OPERATOR_RELATED_IMAGE}" ]]; then
   ### Wait for condition
-  #oc wait --for condition=pending --timeout=3m -n "${subscriptionNamespace}" csv/${OPERATOR_NAME}.${VERSION} || (podman logout ${BREW_REGISTRY_URL}; exit 1)
-  #oc wait --for condition=pending --timeout=3m -n "${MARKETPLACE_NAMESPACE}" packagemanifests/${OPERATOR_NAME} || (podman logout ${BREW_REGISTRY_URL}; exit 1)
+  #oc wait --for condition=pending --timeout=3m -n "${subscriptionNamespace}" csv/${OPERATOR_NAME}.${VERSION} || (podman logout ${REGISTRY_MIRROR}; exit 1)
+  #oc wait --for condition=pending --timeout=3m -n "${MARKETPLACE_NAMESPACE}" packagemanifests/${OPERATOR_NAME} || (podman logout ${REGISTRY_MIRROR}; exit 1)
   if ! (timeout 5m bash -c "until oc get packagemanifests/${OPERATOR_NAME} -n ${MARKETPLACE_NAMESPACE} > /dev/null 2>&1; do sleep 10; done"); then
     error "packagemanifests/${OPERATOR_NAME} not found."
-    podman logout ${BREW_REGISTRY_URL}
+    podman logout ${REGISTRY_MIRROR}
     exit 1
   fi
   #OPERATOR_IMAGE_DIGEST="$(oc get csv ${OPERATOR_NAME}.${VERSION} -n "${subscriptionNamespace}" -o json | jq -r '.spec.install.spec.deployments[] | select(.name=="submariner-operator") | .spec.template.spec.containers[] | select(.name=="submariner-operator") | .image' | cut -d '@' -f2)"
   #OPERATOR_IMAGE_DIGEST="$(oc get packagemanifest ${OPERATOR_NAME} -n "${MARKETPLACE_NAMESPACE}" -o json | jq -r '.status.channels[] | select(.currentCSV=="'${OPERATOR_NAME}'.'${VERSION}'") | .currentCSVDesc.relatedImages[]' | grep "${OPERATOR_RELATED_IMAGE}" | cut -d '@' -f2)"
   #OPERATOR_IMAGE_NAME="$(oc get packagemanifest ${OPERATOR_NAME} -n "${MARKETPLACE_NAMESPACE}" -o json | jq -r '.status.channels[] | select(.currentCSV=="'${OPERATOR_NAME}'.'${VERSION}'") | .currentCSVDesc.relatedImages[]' | grep "${OPERATOR_RELATED_IMAGE}" | awk -F/ '{print $NF}' | cut -d '@' -f1)"
-  #OPERATOR_IMAGE_URL="${BREW_REGISTRY_URL}/$(oc get packagemanifest ${OPERATOR_NAME} -n "${MARKETPLACE_NAMESPACE}" -o json | jq -r '.status.channels[] | select(.currentCSV=="'${OPERATOR_NAME}'.'${VERSION}'") | .currentCSVDesc.relatedImages[]' | grep "${OPERATOR_RELATED_IMAGE}" | cut -d'/' -f2-)"
+  #OPERATOR_IMAGE_URL="${REGISTRY_MIRROR}/$(oc get packagemanifest ${OPERATOR_NAME} -n "${MARKETPLACE_NAMESPACE}" -o json | jq -r '.status.channels[] | select(.currentCSV=="'${OPERATOR_NAME}'.'${VERSION}'") | .currentCSVDesc.relatedImages[]' | grep "${OPERATOR_RELATED_IMAGE}" | cut -d'/' -f2-)"
   #oc import-image "${subscriptionNamespace}/${OPERATOR_IMAGE_NAME}@${OPERATOR_IMAGE_DIGEST}" --from="${OPERATOR_IMAGE_URL}" -n "${subscriptionNamespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
   #  (oc get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" | base64 --decode | jq > /tmp/docker.config.json) && \
   #  sed -i "s/$(oc registry info --internal)/$(oc registry info --public)/g" /tmp/docker.config.json && \
@@ -267,4 +278,4 @@ if [[ "${BUILD_IIB}" = false ]] && [[ -n "${OPERATOR_RELATED_IMAGE}" ]]; then
   #  rm /tmp/docker.config.json
 fi
 
-podman logout ${BREW_REGISTRY_URL}
+podman logout ${REGISTRY_MIRROR}

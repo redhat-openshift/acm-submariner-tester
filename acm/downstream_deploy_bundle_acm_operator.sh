@@ -1,26 +1,26 @@
 #!/bin/bash
 
-source debug.sh
+# source debug.sh
+#
+# source /usr/local/etc/SUBMARINER_VERSION
+# source /usr/local/etc/brew-auth.config
+# source /usr/local/etc/aws-creds.config
 
-source /usr/local/etc/SUBMARINER_VERSION
-source /usr/local/etc/brew-auth.config
-source /usr/local/etc/aws-creds.config
+wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-export VERSION="${ACM_VERSION}"
-export OPERATOR_NAME="advanced-cluster-management"
-export BUNDLE_NAME="acm-operator-bundle"
-export NAMESPACE="open-cluster-management"
-export CHANNEL="${ACM_CHANNEL}"
-SUBMARINER_NAMESPACE="submariner-operator"
+# export ACM_VERSION="${ACM_VERSION}"
+# export OPERATOR_NAME="advanced-cluster-management"
+# export BUNDLE_NAME="acm-operator-bundle"
+# export ACM_NAMESPACE="open-cluster-management"
+# export CHANNEL="${ACM_CHANNEL}"
+# SUBMARINER_NAMESPACE="submariner-operator"
 
 ### For building the iib
-export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${BREW_REGISTRY_URL}/rh-osbs/rhacm2-${BUNDLE_NAME}:${VERSION},${BREW_REGISTRY_URL}/rh-osbs/rhacm2-tech-preview-submariner-operator-bundle:${SUBMARINER_VERSION}"
+export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-${BUNDLE_NAME}:${ACM_VERSION},${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-submariner-operator-bundle:${SUBMARINER_VERSION}"
 export BUILD_IIB=false
 
 USER=''
 PASSWORD=''
-
-wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 # Run on the Hub
 
@@ -43,20 +43,20 @@ apiVersion: operator.open-cluster-management.io/v1
 kind: MultiClusterHub
 metadata:
   name: multiclusterhub
-  namespace: ${NAMESPACE}
+  namespace: ${ACM_NAMESPACE}
 spec:
   disableHubSelfManagement: true
 EOF
 
 # Wait for the console url
-if ! (timeout 15m bash -c "until oc get routes -n ${NAMESPACE} multicloud-console > /dev/null 2>&1; do sleep 10; done"); then
+if ! (timeout 15m bash -c "until oc get routes -n ${ACM_NAMESPACE} multicloud-console > /dev/null 2>&1; do sleep 10; done"); then
   error "ACM Console url was not found."
   exit 1
 fi
 
 # Print ACM console url
 echo ""
-info "ACM Console URL: $(oc get routes -n ${NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
+info "ACM Console URL: $(oc get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 echo ""
 
 # Wait for multiclusterhub to be ready
@@ -190,7 +190,7 @@ for i in {1..3}; do
   export BUNDLE_NAME="submariner-operator-bundle"
   export NAMESPACE="${SUBMARINER_NAMESPACE}"
   export CHANNEL="${SUBMARINER_CHANNEL}"
-  export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${BREW_REGISTRY_URL}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
+  export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
   export OPERATOR_RELATED_IMAGE="submariner-rhel8-operator"
   export SUBSCRIBE=false
   ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
@@ -221,8 +221,8 @@ metadata:
     namespace: cluster${i}
 type: Opaque
 data:
-    aws_access_key_id: $(echo ${AWS_ACCESS_KEY_ID} | base64 -w0)
-    aws_secret_access_key: $(echo ${AWS_ACCESS_KEY} | base64 -w0)
+    aws_access_key_id: $(echo ${AWS_KEY} | base64 -w0)
+    aws_secret_access_key: $(echo ${AWS_SECRET} | base64 -w0)
 EOF
   ### Create the Submariner Subscription config
 cat <<EOF | oc apply -f -
