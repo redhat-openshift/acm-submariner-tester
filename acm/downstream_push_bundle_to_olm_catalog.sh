@@ -1,18 +1,6 @@
 #!/bin/bash
 
-source debug.sh
-#
-# source /usr/local/etc/brew-auth.config
-
-# Expected Env vars examples:
-#
-# export VERSION="${SUBMARINER_VERSION}"
-# export OPERATOR_NAME="submariner"
-# export BUNDLE_NAME="submariner-operator-bundle"
-# export NAMESPACE="${SUBMARINER_NAMESPACE}"
-# export CHANNEL="${SUBMARINER_CHANNEL}"
-# export SUBSCRIBE=false
-
+# Set working dir
 wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 source ${wd:?}/debug.sh

@@ -1,11 +1,6 @@
 #!/bin/bash
 
-source debug.sh
-#
-# source /usr/local/etc/SUBMARINER_VERSION
-# source /usr/local/etc/brew-auth.config
-# source /usr/local/etc/aws-creds.config
-
+# Set working dir
 wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 source ${wd:?}/debug.sh
