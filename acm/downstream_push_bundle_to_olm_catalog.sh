@@ -21,8 +21,6 @@ source ${wd:?}/debug.sh
 
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
-USER=''
-PASSWORD=''
 # OPERATORS_NAMESPACE="openshift-operators"
 # MARKETPLACE_NAMESPACE=${NAMESPACE:-openshift-marketplace}
 DOCKER_AUTH_FILE="/tmp/docker.config.json"
@@ -60,7 +58,7 @@ OPERATOR_RELATED_IMAGE=${OPERATOR_RELATED_IMAGE:-''}
 #docker login registry.redhat.io
 #podman login -u $(oc whoami | tr -d ':') -p $(oc whoami -t) --tls-verify=false "${EXTERNAL_OCP_REGISTRY}"
 podman login -u ${REGISTRY_USR} -p ${REGISTRY_PWD} --tls-verify=false ${REGISTRY_MIRROR}
-oc login -u "${USER}" -p "${PASSWORD}"
+oc login -u "${OCP_USR}" -p "${OCP_PWD}"
 OCP_REGISTRY_URL=$(oc registry info --internal)
 OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${MARKETPLACE_NAMESPACE}/${BUNDLE_NAME}-index:${VERSION}"
 OCP_VERSION=$(oc version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)

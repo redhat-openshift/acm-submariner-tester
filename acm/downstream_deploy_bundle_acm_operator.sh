@@ -23,13 +23,11 @@ export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-p
 ### For building the iib
 export BUILD_IIB=false
 
-USER=''
-PASSWORD=''
-
 # Run on the Hub
 
 export LOG_TITLE="cluster1"
-export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
+# export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
+export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
 # Deploy the operator
 ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
@@ -160,33 +158,81 @@ done
 # TODO: wait for kluserlet addon
 sleep 1m
 
-
 # Run on the managed clusters
 
-### Import the clusters to the clusterSet
-for i in {1..3}; do
-  export LOG_TITLE="cluster${i}"
-  export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
-  oc login -u ${USER} -p ${PASSWORD}
+# -### Import the clusters to the clusterSet
+# for i in {1..3}; do
+#   export LOG_TITLE="cluster${i}"
+#   export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
+#   oc login -u ${OCP_USR} -p ${OCP_PWD}
+#
+#   # Install klusterlet (addon) on the managed clusters
+#   # Import the managed clusters
+#   info "install the agent"
+#   oc apply -f /tmp/cluster${i}-klusterlet-crd.yaml
+#
+#   # TODO: Wait for klusterlet crds installation
+#   sleep 2m
+#
+#   oc apply -f /tmp/cluster${i}-import.yaml
+#   info "$(oc get pod -n open-cluster-management-agent)"
+#
+# done
+
+### Function to import the clusters to the clusterSet
+function import_managed_cluster() {
+  trap_to_debug_commands;
+
+  local cluster_name="$(print_current_cluster_name)"
+  # TODO: cluster counter should rather not be used. Need to create crd with function
+  local cluster_counter="$1"
+
+  ( # subshell to hide commands
+    local cmd="${OC} login -u ${OCP_USR} -p ${OCP_PWD}"
+    # Attempt to login up to 3 minutes
+    watch_and_retry "$cmd" 3m
+  )
 
   # Install klusterlet (addon) on the managed clusters
   # Import the managed clusters
   info "install the agent"
-  oc apply -f /tmp/cluster${i}-klusterlet-crd.yaml
+  oc apply -f /tmp/cluster${cluster_counter}-klusterlet-crd.yaml
 
   # TODO: Wait for klusterlet crds installation
   sleep 2m
 
-  oc apply -f /tmp/cluster${i}-import.yaml
+  oc apply -f /tmp/cluster${cluster_counter}-import.yaml
   info "$(oc get pod -n open-cluster-management-agent)"
 
-done
+}
+
+# ------------------------------------------
+
+function import_managed_cluster_a() {
+  PROMPT "Import ACM CRDs for managed cluster A"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  import_managed_cluster "1"
+}
+
+# ------------------------------------------
+
+function import_managed_cluster_c() {
+  PROMPT "Import ACM CRDs for managed cluster C"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  import_managed_cluster "1"
+}
+
+# ------------------------------------------
 
 ### Prepare Submariner
 for i in {1..3}; do
   export LOG_TITLE="cluster${i}"
   export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
-  oc login -u ${USER} -p ${PASSWORD}
+  oc login -u ${OCP_USR} -p ${OCP_PWD}
 
   # Install the submariner custom catalog source
   export VERSION="${SUBMARINER_VERSION}"
@@ -212,7 +258,7 @@ sleep 3m
 # Run on the hub
 export LOG_TITLE="cluster1"
 export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
-oc login -u ${USER} -p ${PASSWORD}
+oc login -u ${OCP_USR} -p ${OCP_PWD}
 
 ### Install Submariner
 for i in {1..3}; do
