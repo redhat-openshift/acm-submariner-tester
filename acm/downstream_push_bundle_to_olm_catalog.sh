@@ -7,6 +7,36 @@ source ${wd:?}/debug.sh
 
 trap_to_debug_commands; # Trap commands (should be called only after sourcing debug.sh)
 
+############ FUNCTIONS ############
+
+### Function to import the clusters to the clusterSet
+function get_latest_iib() {
+  trap_to_debug_commands;
+
+  local version="${1}"
+  local bundle_name="${2}"
+
+  local ocp_version="$(oc version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)"
+  local num_of_latest_builds=5
+  local num_of_days=15
+
+  rows=$((num_of_latest_builds * 5))
+  delta=$((num_of_days * 86400))
+
+  #curl -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.index.built&rows_per_page=3&delta=${delta}&contains=${bundle_name}-container-${version}" | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .index.index_image, ocp_version: .index.ocp_version}]'
+
+  # curl -Ls -o latest_iib.txt "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+
+  curl -o latest_iib.txt -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+
+  cat latest_iib.txt \
+  | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
+  | jq -r '.index_image."v'"${ocp_version}"'"'
+
+}
+
+############ End of FUNCTIONS ############
+
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
 # OPERATORS_NAMESPACE="openshift-operators"
@@ -36,7 +66,7 @@ SUBSCRIBE=${SUBSCRIBE:-true}
 oc login -u "${OCP_USR}" -p "${OCP_PWD}"
 OCP_REGISTRY_URL=$(oc registry info --internal)
 OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${MARKETPLACE_NAMESPACE}/${BUNDLE_NAME}-index:${VERSION}"
-OCP_VERSION=$(oc version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)
+# OCP_VERSION=$(oc version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)
 
 # Create/switch project
 oc new-project "${NAMESPACE}" 2>/dev/null || oc project "${NAMESPACE}" -q
@@ -57,7 +87,8 @@ oc patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disab
 oc delete sub/my-subscription -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
 oc delete catalogsource/my-catalog-source -n "${MARKETPLACE_NAMESPACE}" --wait > /dev/null 2>&1 || :
 
-SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${VERSION}" "${BUNDLE_NAME}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
+# SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${VERSION}" "${BUNDLE_NAME}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
+SRC_IMAGE_INDEX="$(get_latest_iib "${VERSION}" "${BUNDLE_NAME}")"
 if [ -z "${SRC_IMAGE_INDEX}" ]; then
   if [ -z "${1}" ]; then
     error "SRC_IMAGE_INDEX was not provided" && exit 4
