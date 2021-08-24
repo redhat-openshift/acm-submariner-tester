@@ -10,15 +10,17 @@ wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 source ${wd:?}/debug.sh
 
-# export ACM_VERSION="${ACM_VERSION}"
-# export OPERATOR_NAME="advanced-cluster-management"
-# export BUNDLE_NAME="acm-operator-bundle"
-# export ACM_NAMESPACE="open-cluster-management"
-# export CHANNEL="${ACM_CHANNEL}"
-# SUBMARINER_NAMESPACE="submariner-operator"
+export VERSION="${ACM_VERSION}"
+export OPERATOR_NAME="${ACM_OPERATOR_NAME}"
+export BUNDLE_NAME="${ACM_BUNDLE_NAME}"
+export NAMESPACE="${ACM_NAMESPACE}"
+export CHANNEL="${ACM_CHANNEL}"
+export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
+# export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-${BUNDLE_NAME}:${VERSION},${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-submariner-operator-bundle:${SUBMARINER_VERSION}"
+# export OPERATOR_RELATED_IMAGE=''
+# export SUBSCRIBE=false
 
 ### For building the iib
-export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-${BUNDLE_NAME}:${ACM_VERSION},${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-submariner-operator-bundle:${SUBMARINER_VERSION}"
 export BUILD_IIB=false
 
 USER=''
@@ -45,20 +47,20 @@ apiVersion: operator.open-cluster-management.io/v1
 kind: MultiClusterHub
 metadata:
   name: multiclusterhub
-  namespace: ${ACM_NAMESPACE}
+  namespace: ${NAMESPACE}
 spec:
   disableHubSelfManagement: true
 EOF
 
 # Wait for the console url
-if ! (timeout 15m bash -c "until oc get routes -n ${ACM_NAMESPACE} multicloud-console > /dev/null 2>&1; do sleep 10; done"); then
+if ! (timeout 15m bash -c "until oc get routes -n ${NAMESPACE} multicloud-console > /dev/null 2>&1; do sleep 10; done"); then
   error "ACM Console url was not found."
   exit 1
 fi
 
 # Print ACM console url
 echo ""
-info "ACM Console URL: $(oc get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
+info "ACM Console URL: $(oc get routes -n ${NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 echo ""
 
 # Wait for multiclusterhub to be ready
