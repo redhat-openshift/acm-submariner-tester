@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# source debug.sh
+source debug.sh
 #
 # source /usr/local/etc/SUBMARINER_VERSION
 # source /usr/local/etc/brew-auth.config
@@ -15,13 +15,7 @@ export OPERATOR_NAME="${ACM_OPERATOR_NAME}"
 export BUNDLE_NAME="${ACM_BUNDLE_NAME}"
 export NAMESPACE="${ACM_NAMESPACE}"
 export CHANNEL="${ACM_CHANNEL}"
-export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
-# export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-${BUNDLE_NAME}:${VERSION},${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-submariner-operator-bundle:${SUBMARINER_VERSION}"
-# export OPERATOR_RELATED_IMAGE=''
 # export SUBSCRIBE=false
-
-### For building the iib
-export BUILD_IIB=false
 
 # Run on the Hub
 
@@ -240,8 +234,6 @@ for i in {1..3}; do
   export BUNDLE_NAME="submariner-operator-bundle"
   export NAMESPACE="${SUBMARINER_NAMESPACE}"
   export CHANNEL="${SUBMARINER_CHANNEL}"
-  export OPERATOR_BUNDLE_SNAPSHOT_IMAGES="${REGISTRY_MIRROR}/rh-osbs/rhacm2-tech-preview-${BUNDLE_NAME}:${VERSION}"
-  export OPERATOR_RELATED_IMAGE="submariner-rhel8-operator"
   export SUBSCRIBE=false
   ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
