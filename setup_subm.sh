@@ -4713,7 +4713,7 @@ function env_teardown() {
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
   fi
-  
+
 }
 
 # ------------------------------------------
@@ -5270,6 +5270,18 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
 
   else
+
+    ### INSTALL ACM - TEMPORARY here - It should be run at END of ALL OCP Clusters Setup ###
+
+    # Downloading and installing subctl
+    if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} install_acm_with_submariner "$ACM_VER_TAG"
+
+      exit # Temporary exit after ACM INSTALL
+
+    fi
+
     # Verify clusters status even if OCP setup/cleanup was skipped
 
     ${junit_cmd} test_kubeconfig_cluster_a
@@ -5281,17 +5293,6 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
-
-  ### INSTALL ACM ###
-
-  # Downloading and installing subctl
-  if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
-
-    ${junit_cmd} install_acm_with_submariner "$ACM_VER_TAG"
-
-    exit # Temporary exit after ACM INSTALL
-
-  fi
 
   # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then

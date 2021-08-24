@@ -14,14 +14,14 @@ if [ -z "${LOG_LEVEL}" ]; then
 fi
 
 PS4="${GREEN}[DEBUG]${LOG_TITLE} ${ESC}"
-set -e            # exit immediately.
-#set -E            # any trap on ERR is inherited.
-set +E            # turn off this option
-set -u            # treat unset variables and parameters as an error.
-set -o pipefail   # set the exit code of a pipeline to that of the rightmost command to exit with a non-zero status.
-
-#trap 'catch $? $LINENO $LASTNO "$BASH_COMMAND"' SIGHUP SIGINT SIGTERM SIGQUIT ERR EXIT
-trap 'catch $? $LINENO "$BASH_COMMAND"' SIGHUP SIGINT SIGTERM SIGQUIT ERR EXIT
+# set -e            # exit immediately.
+# #set -E            # any trap on ERR is inherited.
+# set +E            # turn off this option
+# set -u            # treat unset variables and parameters as an error.
+# set -o pipefail   # set the exit code of a pipeline to that of the rightmost command to exit with a non-zero status.
+#
+# #trap 'catch $? $LINENO $LASTNO "$BASH_COMMAND"' SIGHUP SIGINT SIGTERM SIGQUIT ERR EXIT
+# trap 'catch $? $LINENO "$BASH_COMMAND"' SIGHUP SIGINT SIGTERM SIGQUIT ERR EXIT
 
 catch() {
   if [ "$1" != "0" ]; then

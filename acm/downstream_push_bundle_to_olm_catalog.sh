@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # Set working dir
-wd="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+wd="$(dirname "$(realpath -s $0)")"
 
 source ${wd:?}/debug.sh
+
+trap_to_debug_commands; # Trap commands (should be called only after sourcing debug.sh)
 
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
