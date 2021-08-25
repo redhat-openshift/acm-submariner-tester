@@ -5027,8 +5027,6 @@ cd ${SCRIPT_DIR}
 # ${junit_cmd} test_debug_pass
 # ${junit_cmd} test_debug_fatal
 
-export_active_clusters_kubeconfig
-
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
@@ -5558,70 +5556,73 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 ) |& tee -a "$SYS_LOG"
 
 
-#####################################################################################
-#   End Main - Now publish to Polarion, Create HTML report, and archive artifacts   #
-#####################################################################################
+#######################################################################################################
+#   End (or exit) of Main - Now publishing to Polarion, Creating HTML report, and archive artifacts   #
+#######################################################################################################
 
-# ------------------------------------------
+# Printing output both to stdout and to $SYS_LOG with tee
+(
+  set +e # To reach script end, even on error, to create report and save artifacts
 
-cd ${SCRIPT_DIR}
+  trap '' DEBUG # DONT trap_to_debug_commands
 
-# Get test exit status (from file $TEST_STATUS_FILE)
-test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
-echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
+  cd ${SCRIPT_DIR}
 
-if [[ -n "$test_status" ]] ; then
-  # Update the script exit code according to system tests status
-  export SCRIPT_RC="$test_status"
+  # ------------------------------------------
+  
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+  echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
 
-  ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
-  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
-    # Redirecting output both to stdout and SYS_LOG
-    create_all_test_results_in_polarion |& tee -a "$SYS_LOG" || :
+  if [[ -n "$test_status" ]] ; then
+    # Update the script exit code according to system tests status
+    export SCRIPT_RC="$test_status"
+
+    ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
+    if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+      create_all_test_results_in_polarion || :
+    fi
   fi
-fi
 
-# ------------------------------------------
+  # ------------------------------------------
 
-### Creating HTML report from console output ###
+  ### Creating HTML report from console output ###
 
-echo "# Creating HTML Report from:
-# SYS_LOG = $SYS_LOG
-# REPORT_NAME = $REPORT_NAME
-# REPORT_FILE = $REPORT_FILE
-"
+  message="Creating HTML Report"
 
-# prompt message (this is the last print into $SYS_LOG)
-message="Creating HTML Report"
+  # If $TEST_STATUS_FILE is not 0 (all Tests passed) or 2 (some tests passed) - it means that system tests have failed
+  if [[ "$test_status" != @(0|2) ]] ; then
+    message="$message - System tests failed with exit status $test_status"
+    color="$RED"
+  fi
+  PROMPT "$message" "$color"
 
-# If $TEST_STATUS_FILE is not 0 (all Tests passed) or 2 (some tests passed) - it means that system tests have failed
-if [[ "$test_status" != @(0|2) ]] ; then
-  message="$message - System tests failed with exit status: $test_status"
-  color="$RED"
-fi
-PROMPT "$message" "$color" |& tee -a "$SYS_LOG"
+  echo "# Creating HTML Report from:
+  # SYS_LOG = $SYS_LOG
+  # REPORT_NAME = $REPORT_NAME
+  # REPORT_FILE = $REPORT_FILE
+  "
+
+  if [[ -n "$REPORT_FILE" ]] ; then
+    echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
+    REPORT_FILE="$(basename ${REPORT_FILE// /_})"
+  fi
+
+  if [[ -s "$POLARION_REPORTS" ]] ; then
+    echo "# set REPORT_DESCRIPTION for html report:"
+    cat "$POLARION_REPORTS"
+
+    REPORT_DESCRIPTION="Polarion results:
+    $(< "$POLARION_REPORTS")"
+  fi
+
+) |& tee -a "$SYS_LOG"
 
 # Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
-
-### Run log_to_html() to create REPORT_FILE (html) from SYS_LOG
-
-if [[ -n "$REPORT_FILE" ]] ; then
-  echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
-  REPORT_FILE="$(basename ${REPORT_FILE// /_})"
-fi
-
-if [[ -s "$POLARION_REPORTS" ]] ; then
-  echo "# set REPORT_DESCRIPTION for html report:"
-  cat "$POLARION_REPORTS"
-
-  REPORT_DESCRIPTION="Polarion results:
-  $(< "$POLARION_REPORTS")"
-fi
-
+# Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
 log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
-
 
 # ------------------------------------------
 
