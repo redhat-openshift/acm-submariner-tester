@@ -1473,7 +1473,7 @@ function watch_polarion_job_status() {
 # ------------------------------------------
 
 function log_to_html() {
-  trap_to_debug_commands;
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # Input params:
 

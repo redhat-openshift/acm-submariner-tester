@@ -5267,11 +5267,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-    fi
+    fi # End of configure custom images in OCP registry
 
-  else
+  else  # When using --skip-ocp-setup :
 
-    ### INSTALL ACM - TEMPORARY here - It should be run at END of ALL OCP Clusters Setup ###
+    ### INSTALL ACM - TEMPORARY here (It should be run at END of ALL OCP Clusters Setup) ###
 
     # Downloading and installing subctl
     if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
