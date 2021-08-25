@@ -10,13 +10,14 @@ trap_to_debug_commands; # Trap commands (should be called only after sourcing de
 ############ FUNCTIONS ############
 
 ### Function to import the clusters to the clusterSet
-function get_latest_iib() {
+function export_LATEST_IIB() {
   trap_to_debug_commands;
 
   local version="${1}"
   local bundle_name="${2}"
 
-  local ocp_version="$(${OC} version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)"
+  # local ocp_version="$(${OC} version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)"
+  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
   local num_of_latest_builds=5
   local num_of_days=15
 
@@ -29,9 +30,9 @@ function get_latest_iib() {
 
   curl -o latest_iib.txt -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-  cat latest_iib.txt \
+  export LATEST_IIB=$(cat latest_iib.txt \
   | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
-  | jq -r '.index_image."v'"${ocp_version}"'"'
+  | jq -r '.index_image."v'"${ocp_version}"'"' )
 
 }
 
@@ -88,18 +89,23 @@ ${OC} delete sub/my-subscription -n "${subscriptionNamespace}" --wait > /dev/nul
 ${OC} delete catalogsource/my-catalog-source -n "${MARKETPLACE_NAMESPACE}" --wait > /dev/null 2>&1 || :
 
 # SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${VERSION}" "${BUNDLE_NAME}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
-SRC_IMAGE_INDEX="$(get_latest_iib "${VERSION}" "${BUNDLE_NAME}")"
-if [ -z "${SRC_IMAGE_INDEX}" ]; then
-  if [ -z "${1}" ]; then
-    error "SRC_IMAGE_INDEX was not provided" && exit 4
-  fi
-  SRC_IMAGE_INDEX=${1}
-else
-  SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
-fi
+# if [ -z "${SRC_IMAGE_INDEX}" ]; then
+#   if [ -z "${1}" ]; then
+#     error "SRC_IMAGE_INDEX was not provided" && exit 4
+#   fi
+#   SRC_IMAGE_INDEX=${1}
+# else
+#   SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
+# fi
+
+export_LATEST_IIB "${VERSION}" "${BUNDLE_NAME}"
+
+SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
+
 if ${OC} get is "${BUNDLE_NAME}-index" -n "${MARKETPLACE_NAMESPACE}" > /dev/null 2>&1; then
   ${OC} delete is "${BUNDLE_NAME}-index" -n "${MARKETPLACE_NAMESPACE}" --wait
 fi
+
 ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${MARKETPLACE_NAMESPACE}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
