@@ -5017,7 +5017,8 @@ fi
 
 cd ${SCRIPT_DIR}
 
-# # Debug functions
+# # Script debug calls (should be left as comment)
+#
 # ${junit_cmd} test_debug_pass
 #
 # ${junit_cmd} test_debug_fail
@@ -5026,6 +5027,7 @@ cd ${SCRIPT_DIR}
 # "If RC $rc = 5 - junit_cmd should continue execution"
 # ${junit_cmd} test_debug_pass
 # ${junit_cmd} test_debug_fatal
+
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
@@ -5040,6 +5042,9 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   set_trap_functions
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
+
+  # Exporting active clusters KUBECONFIGs
+  export_active_clusters_kubeconfig
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
@@ -5569,7 +5574,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   cd ${SCRIPT_DIR}
 
   # ------------------------------------------
-  
+
   # Get test exit status (from file $TEST_STATUS_FILE)
   test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
   echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
