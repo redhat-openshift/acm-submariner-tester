@@ -16,8 +16,7 @@ function export_LATEST_IIB() {
   local version="${1}"
   local bundle_name="${2}"
 
-  # local ocp_version="$(${OC} version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)"
-  local ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
+  local ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
   local num_of_latest_builds=5
   local num_of_days=15
 
@@ -32,7 +31,7 @@ function export_LATEST_IIB() {
 
   export LATEST_IIB=$(cat latest_iib.txt \
   | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
-  | jq -r '.index_image."v'"${ocp_version}"'"' )
+  | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
 
 }
 
