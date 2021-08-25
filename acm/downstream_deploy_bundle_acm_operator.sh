@@ -29,9 +29,9 @@ ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 #   exit 1
 # fi
 
-echo "# Wait for MultiClusterHub CRD to be ready"
+TITLE "Wait for MultiClusterHub CRD to be ready"
 cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
-watch_and_retry "$cmd" 10m || FATAL "MultiClusterHub CRD was not created"
+watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
 
 # Create the MultiClusterHub instance
 cat <<EOF | ${OC} apply -f -
@@ -55,9 +55,9 @@ EOF
 # info "ACM Console URL: $(${OC} get routes -n ${NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 # echo ""
 
-echo "# Wait for ACM console url to be available"
+TITLE "Wait for ACM console url to be available"
 cmd="${OC} get routes -n ${NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
-watch_and_retry "$cmd" 10m || FATAL "ACM Console url is not ready"
+watch_and_retry "$cmd" 15m || FATAL "ACM Console url is not ready"
 
 # # Wait for multiclusterhub to be ready
 # ${OC} get mch -o=jsonpath='{.items[0].status.phase}' # should be running
@@ -66,9 +66,10 @@ watch_and_retry "$cmd" 10m || FATAL "ACM Console url is not ready"
 #   exit 1
 # fi
 
-echo "# Wait for multiclusterhub to be ready"
-cmd="${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}') -eq 'RUNNING'"
-watch_and_retry "$cmd" 10m || FATAL "ACM Hub is not ready"
+TITLE "Wait for multiclusterhub to be ready"
+
+cmd="${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}'"
+watch_and_retry "$cmd" 5m "RUNNING" || FATAL "ACM Hub is not ready"
 
 # Create the cluster-set
 cat <<EOF | ${OC} apply -f -

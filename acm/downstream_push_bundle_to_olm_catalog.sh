@@ -108,7 +108,8 @@ fi
 ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${MARKETPLACE_NAMESPACE}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
-# create the CatalogSource
+TITLE "Create the CatalogSource"
+
 cat <<EOF | ${OC} apply -n ${MARKETPLACE_NAMESPACE} -f -
 apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
@@ -131,9 +132,10 @@ EOF
 #     exit 1
 # fi
 
-echo "# Wait for CatalogSource to be created"
-cmd="${OC} get catalogsource -n ${MARKETPLACE_NAMESPACE} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}') -eq 'READY'"
-watch_and_retry "$cmd" 10m || FATAL "ACM CatalogSource was not created"
+TITLE "Wait for CatalogSource to be created"
+
+cmd="${OC} get catalogsource -n ${MARKETPLACE_NAMESPACE} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}'"
+watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource was not created"
 
 # test
 info "$(${OC} -n ${MARKETPLACE_NAMESPACE} get catalogsource --ignore-not-found)"
