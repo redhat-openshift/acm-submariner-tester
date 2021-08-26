@@ -25,9 +25,7 @@ function export_LATEST_IIB() {
 
   #curl -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.index.built&rows_per_page=3&delta=${delta}&contains=${bundle_name}-container-${version}" | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .index.index_image, ocp_version: .index.ocp_version}]'
 
-  # curl -Ls -o latest_iib.txt "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
-
-  curl -o latest_iib.txt -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+  curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
   export LATEST_IIB=$(cat latest_iib.txt \
   | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
