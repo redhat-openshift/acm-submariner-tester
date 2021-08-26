@@ -37,13 +37,6 @@ function export_LATEST_IIB() {
 
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
-# OPERATORS_NAMESPACE="openshift-operators"
-# MARKETPLACE_NAMESPACE=${NAMESPACE:-openshift-marketplace}
-INSTALL_MODE=${installModes[1]}
-BREW_SECRET_NAME='brew-registry'
-
-#SRC_IMAGE_INDEX="https://brew.registry.redhat.io/rh-osbs/iib:5801"
-
 if [[ -z "${VERSION}" ]] ||
    [[ -z "${OPERATOR_NAME}" ]] ||
    [[ -z "${BUNDLE_NAME}" ]] ||
@@ -58,12 +51,19 @@ if [[ -z "${VERSION}" ]] ||
     exit 3
 fi
 
+# OPERATORS_NAMESPACE="openshift-operators"
+marketplace_namespace=${NAMESPACE:-openshift-marketplace}
+INSTALL_MODE=${installModes[1]}
+BREW_SECRET_NAME='brew-registry'
+
+#SRC_IMAGE_INDEX="https://brew.registry.redhat.io/rh-osbs/iib:5801"
+
 SUBSCRIBE=${SUBSCRIBE:-true}
 
 # login
 ${OC} login -u "${OCP_USR}" -p "${OCP_PWD}"
 OCP_REGISTRY_URL=$(${OC} registry info --internal)
-OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${MARKETPLACE_NAMESPACE}/${BUNDLE_NAME}-index:${VERSION}"
+OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${marketplace_namespace}/${BUNDLE_NAME}-index:${VERSION}"
 # OCP_VERSION=$(${OC} version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)
 
 # Create/switch project
@@ -83,7 +83,7 @@ ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/di
 
 # Delete previous catalogSource and Subscription
 ${OC} delete sub/my-subscription -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
-${OC} delete catalogsource/my-catalog-source -n "${MARKETPLACE_NAMESPACE}" --wait > /dev/null 2>&1 || :
+${OC} delete catalogsource/my-catalog-source -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
 # SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${VERSION}" "${BUNDLE_NAME}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
 # if [ -z "${SRC_IMAGE_INDEX}" ]; then
@@ -99,21 +99,21 @@ export_LATEST_IIB "${VERSION}" "${BUNDLE_NAME}"
 
 SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
-if ${OC} get is "${BUNDLE_NAME}-index" -n "${MARKETPLACE_NAMESPACE}" > /dev/null 2>&1; then
-  ${OC} delete is "${BUNDLE_NAME}-index" -n "${MARKETPLACE_NAMESPACE}" --wait
+if ${OC} get is "${BUNDLE_NAME}-index" -n "${marketplace_namespace}" > /dev/null 2>&1; then
+  ${OC} delete is "${BUNDLE_NAME}-index" -n "${marketplace_namespace}" --wait
 fi
 
-${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${MARKETPLACE_NAMESPACE}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${marketplace_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
 TITLE "Create the CatalogSource"
 
-cat <<EOF | ${OC} apply -n ${MARKETPLACE_NAMESPACE} -f -
+cat <<EOF | ${OC} apply -n ${marketplace_namespace} -f -
 apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
   name: my-catalog-source
-  namespace: ${MARKETPLACE_NAMESPACE}
+  namespace: ${marketplace_namespace}
 spec:
   sourceType: grpc
   image: ${OCP_IMAGE_INDEX}
@@ -125,20 +125,20 @@ spec:
 EOF
 
 # # wait
-# if ! (timeout 5m bash -c "until [[ $(${OC} get catalogsource -n ${MARKETPLACE_NAMESPACE} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}') -eq 'READY' ]]; do sleep 10; done"); then
+# if ! (timeout 5m bash -c "until [[ $(${OC} get catalogsource -n ${marketplace_namespace} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}') -eq 'READY' ]]; do sleep 10; done"); then
 #     error "CatalogSource is not ready"
 #     exit 1
 # fi
 
 TITLE "Wait for CatalogSource to be created"
 
-cmd="${OC} get catalogsource -n ${MARKETPLACE_NAMESPACE} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}'"
+cmd="${OC} get catalogsource -n ${marketplace_namespace} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}'"
 watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource was not created"
 
 # test
-info "$(${OC} -n ${MARKETPLACE_NAMESPACE} get catalogsource --ignore-not-found)"
-info "$(${OC} -n ${MARKETPLACE_NAMESPACE} get pods --ignore-not-found)"
-info "$( (${OC} -n ${MARKETPLACE_NAMESPACE} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true)"
+info "$(${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found)"
+info "$(${OC} -n ${marketplace_namespace} get pods --ignore-not-found)"
+info "$( (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true)"
 
 if [ "${SUBSCRIBE}" = true ]; then
   if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
@@ -170,7 +170,7 @@ spec:
   installPlanApproval: Manual
   name: ${OPERATOR_NAME}
   source: my-catalog-source
-  sourceNamespace: ${MARKETPLACE_NAMESPACE}
+  sourceNamespace: ${marketplace_namespace}
   startingCSV: ${OPERATOR_NAME}.${VERSION}
 EOF
 
