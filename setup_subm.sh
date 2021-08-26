@@ -622,7 +622,7 @@ function show_test_plan() {
   if [[ "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_ocp_setup \n"
   else
-    echo "### Will execute: Openshift clusters creation/cleanup before Submariner deployment:
+    echo "### Execution plan: Openshift clusters creation/cleanup before Submariner deployment:
 
     - download_ocp_installer: $get_ocp_installer $OCP_VERSION
 
@@ -649,9 +649,9 @@ function show_test_plan() {
   if [[ "$skip_install" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Skipping deployment and preparations: $skip_install \n"
   else
-    echo "### Will execute: Submariner deployment and environment preparations:
+    TITLE "Execution plan: Submariner deployment and environment preparations"
 
-    OCP and Submariner setup and test tools:
+    echo -e "# OCP and Submariner setup and test tools:
     - config_golang: $config_golang
     - config_aws_cli: $config_aws_cli
     - build_ocpup_tool_latest: $get_ocpup_tool
@@ -659,7 +659,7 @@ function show_test_plan() {
     - build_submariner_repos: $build_go_tests
     "
 
-    TITLE "Submariner deployment and environment setup for the tests:
+    echo -e "# Submariner deployment and environment setup for the tests:
 
     - update_kubeconfig_context_cluster_a
     - update_kubeconfig_context_cluster_b / c
@@ -711,8 +711,8 @@ function show_test_plan() {
   if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
   else
-  echo -e "\n### Will execute: High-level (System) tests of Submariner:
-
+  TITLE "Execution plan: High-level (System) tests of Submariner"
+  echo -e "
     - test_submariner_resources_cluster_a
     - test_submariner_resources_cluster_b / c
     - test_public_ip_on_gateway_node
@@ -747,7 +747,7 @@ function show_test_plan() {
   if [[ "$skip_tests" =~ ((pkg|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
   else
-    echo -e "\n### Will execute: Unit-tests (Ginkgo Packages) of Submariner:
+    echo -e "\n### Execution plan: Unit-tests (Ginkgo Packages) of Submariner:
 
     - test_submariner_packages
     "
@@ -756,14 +756,14 @@ function show_test_plan() {
   if [[ "$skip_tests" =~ ((e2e|all)(,|$))+ ]]; then
     echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
   else
-    echo -e "\n### Will execute: End-to-End (Ginkgo E2E) tests of Submariner:
+    echo -e "\n### Execution plan: End-to-End (Ginkgo E2E) tests of Submariner:
 
     - test_submariner_e2e_with_go: $([[ "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     - test_submariner_e2e_with_subctl: $([[ ! "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
-  echo -e "\n\n### All environment parameters: \n"
+  TITLE "All environment variables"
   # List all variables
   compgen -v | sort | \
   while read var_name; do
@@ -796,10 +796,12 @@ function setup_workspace() {
   # # CD to main working directory
   # cd ${WORKDIR}
 
+  TITLE "Installing Anaconda (virtual environment)"
+  install_anaconda "${WORKDIR}"
+
   # Installing GoLang with Anaconda, if $config_golang = yes/y
   if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
-    install_anaconda "${WORKDIR}"
-
+    TITLE "Installing GoLang with Anaconda"
     install_local_golang "${WORKDIR}"
 
     # Set GOBIN to local directory in ${WORKDIR}
@@ -815,6 +817,7 @@ function setup_workspace() {
     fi
   fi
 
+  TITLE "Installing Terraform with Anaconda"
   # # Installing Terraform
   # install_local_terraform "${WORKDIR}"
   BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
@@ -1023,8 +1026,8 @@ function destroy_aws_cluster() {
   AWS_DNS_ALIAS1="api.${cluster_name}.${AWS_ZONE_NAME}."
   AWS_DNS_ALIAS2="\052.apps.${cluster_name}.${AWS_ZONE_NAME}."
 
-  TITLE "Deleting AWS DNS record sets from Route53:
-  # $AWS_DNS_ALIAS1
+  TITLE "Deleting AWS DNS record sets from Route53"
+  echo -e "# $AWS_DNS_ALIAS1
   # $AWS_DNS_ALIAS2
   "
 
@@ -2981,8 +2984,8 @@ function create_docker_registry_secret() {
   local secret_name="${registry_server}-${registry_usr}"
   local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
 
-  TITLE "Creating new docker-registry in '$namespace' namespace:
-  \n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+  TITLE "Creating new docker-registry in '$namespace' namespace"
+  echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
 
   create_namespace "${namespace}"
 
@@ -3027,7 +3030,8 @@ function add_acm_registry_mirror_to_ocp_node() {
   if [[ -z "$local_registry_path" ]] || [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
     FATAL "Expected Openshift Registry values are missing: $reg_values"
   else
-    TITLE "Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
+    TITLE "Adding Submariner registry mirror to all OCP cluster nodes"
+    echo -e "$reg_values"
   fi
 
   config_source=$(cat <<EOF | raw_to_url_encode
@@ -3199,8 +3203,8 @@ function upload_custom_images_to_registry() {
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   local image_tag="$(subctl version | awk '{print $3}')"
 
-  TITLE "Overriding submariner images with custom images from ${REGISTRY_URL} \
-  \n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
+  TITLE "Overriding submariner images with custom images from ${REGISTRY_URL}"
+  echo -e "\n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
   \n# Version tag: ${image_tag}"
 
   create_namespace "$SUBM_NAMESPACE"
@@ -5390,8 +5394,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Deploy Submariner on the clusters (if not requested to skip_install) ###
 
-  TITLE "OCP clusters and environment setup is ready.
-  \n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
+  TITLE "OCP clusters and environment setup is ready"
+  echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
   \n# ($TEST_STATUS_FILE with exit code 1)"
 
   echo 1 > $TEST_STATUS_FILE
@@ -5543,8 +5547,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi # END of System tests that uses Cluster B (OSP)
 
-    TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion.
-    \n# ($TEST_STATUS_FILE with exit code 2)"
+    TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
+    echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
 
     echo 2 > $TEST_STATUS_FILE
 
@@ -5674,8 +5678,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   PROMPT "$message" "$color"
 
-  TITLE "Creating HTML Report from:
-  # SYS_LOG = $SYS_LOG
+  TITLE "Creating HTML Report"
+  echo -e "# SYS_LOG = $SYS_LOG
   # REPORT_NAME = $REPORT_NAME
   # REPORT_FILE = $REPORT_FILE
   "
