@@ -263,13 +263,20 @@ function TITLE() {
   local message="$1"
   local color="${2:-${YELLOW}}"
 
-  local line_length=$(( ${#message} + 15 ))
+  local first_line="$(echo -e "${message}" | head -1)"
+
+  local line_length=$(( ${#first_line} + 15 ))
   local color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
   local color_char="${color}#${NO_COLOR}"
 
+  # Print first line of message in color # box
   echo -e "$color_line"
-  echo -e "$color_char       $message      $color_char"
+  echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
+
+  # Print rest of message (from line 2)
+  echo -e "${message}" | tail -n +2
+
 }
 
 # ------------------------------------------
