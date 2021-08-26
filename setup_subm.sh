@@ -2955,8 +2955,11 @@ function configure_cluster_custom_registry_mirror() {
 
   create_docker_registry_secret "$REGISTRY_MIRROR" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
 
-  add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
-  add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
+  # add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
+  # add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
+
+  add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
+  add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
@@ -3008,22 +3011,20 @@ function create_docker_registry_secret() {
 
 # ------------------------------------------
 
-function add_submariner_registry_mirror_to_ocp_node() {
-### Helper function to add OCP registry mirror for Submariner on all master or all worker nodes
+function add_acm_registry_mirror_to_ocp_node() {
+### Helper function to add OCP registry mirror for ACM and Submariner on all master or all worker nodes
   trap_to_debug_commands
 
   # set registry variables
   local node_type="$1" # master or worker
-  local registry_url="$2"
-  local registry_mirror="$3"
+  # local registry_url="$2"
+  local local_registry_path="$2"
 
   reg_values="
   node_type = $node_type
-  registry_url = $registry_url
-  registry_mirror = $registry_mirror"
+  local_registry_path = $local_registry_path"
 
-  if [[ -z "$registry_url" ]] || [[ -z "$registry_mirror" ]] || \
-  [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
+  if [[ -z "$local_registry_path" ]] || [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
     FATAL "Expected Openshift Registry values are missing: $reg_values"
   else
     TITLE "Adding Submariner registry mirror to all OCP cluster nodes: $reg_values"
@@ -3032,13 +3033,84 @@ function add_submariner_registry_mirror_to_ocp_node() {
   config_source=$(cat <<EOF | raw_to_url_encode
   [[registry]]
     prefix = ""
-    location = "${registry_url}"
+    location = "${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
     mirror-by-digest-only = false
     insecure = false
     blocked = false
 
     [[registry.mirror]]
-      location = "${registry_mirror}"
+      location = "${local_registry_path}"
+      insecure = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      insecure = false
+
+  [[registry]]
+    prefix = ""
+    location = "${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${local_registry_path}"
+      insecure = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      insecure = false
+
+  [[registry]]
+    prefix = ""
+    location = "${VPN_REGISTRY}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}"
+      insecure = false
+
+  [[registry]]
+    prefix = ""
+    location = "${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${local_registry_path}"
+      insecure = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      insecure = false
+
+  [[registry]]
+    prefix = ""
+    location = "${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${local_registry_path}"
+      insecure = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      insecure = false
+
+  [[registry]]
+    prefix = ""
+    location = "registry.access.redhat.com/openshift4/ose-oauth-proxy"
+    mirror-by-digest-only = true
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "registry.redhat.io/openshift4/ose-oauth-proxy"
       insecure = false
 EOF
   )

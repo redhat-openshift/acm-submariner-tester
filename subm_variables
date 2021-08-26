@@ -62,10 +62,18 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
-export REGISTRY_URL="registry-server" # without " https:// "
-export REGISTRY_MIRROR="images-mirror-server" # without " https:// "
-export SUBCTL_REGISTRY_MIRROR="subctl-mirror-server" # without " https:// "
-export REGISTRY_IMAGE_PREFIX="dir/img-prefix-"
+export OFFICIAL_REGISTRY="registry.redhat.io"
+export STAGING_REGISTRY="registry.stage.redhat.io"
+export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
+export BREW_REGISTRY="brew.registry.redhat.io"
+export REGISTRY_IMAGE_PREFIX="rhacm2"
+export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview"
+
+# To be deprecated: export REGISTRY_URL="registry.redhat.io/rhacm2-tech-preview"
+# To be deprecated: export REGISTRY_MIRROR="brew.registry.redhat.io"
+# To be deprecated: export SUBCTL_REGISTRY_MIRROR="registry-proxy.engineering.redhat.com"
+# To be deprecated: export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
+
 export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
 
 # Wrap credentials with single quotes:
