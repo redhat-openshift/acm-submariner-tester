@@ -68,19 +68,28 @@ BREW_SECRET_NAME='brew-registry'
 SUBSCRIBE=${SUBSCRIBE:-true}
 
 # login
-${OC} login -u "${OCP_USR}" -p "${OCP_PWD}"
-OCP_REGISTRY_URL=$(${OC} registry info --internal)
-OCP_IMAGE_INDEX="${OCP_REGISTRY_URL}/${marketplace_namespace}/${BUNDLE_NAME}-index:${VERSION}"
-# OCP_VERSION=$(${OC} version | grep "Server Version: " | tr -s ' ' | cut -d ' ' -f3 | cut -d '.' -f1,2)
+( # subshell to hide commands
+  cmd="${OC} login -u ${OCP_USR} -p ${OCP_PWD}"
+  # Attempt to login up to 3 minutes
+  watch_and_retry "$cmd" 3m
+)
+
+ocp_registry_url=$(${OC} registry info --internal)
 
 # Create/switch project
 ${OC} new-project "${NAMESPACE}" 2>/dev/null || ${OC} project "${NAMESPACE}" -q
 
-### Access to private repository
-if ${OC} get secret ${BREW_SECRET_NAME} -n "${NAMESPACE}" > /dev/null 2>&1; then
-  ${OC} delete secret ${BREW_SECRET_NAME} -n "${NAMESPACE}" --wait
-fi
-${OC} create secret -n "${NAMESPACE}" docker-registry ${BREW_SECRET_NAME} --docker-server=${REGISTRY_MIRROR} --docker-username="${REGISTRY_USR}" --docker-password="${REGISTRY_PWD}" --docker-email=${BREW_REGISTRY_EMAIL}
+# ### Access to private repository
+# if ${OC} get secret ${BREW_SECRET_NAME} -n "${NAMESPACE}" > /dev/null 2>&1; then
+#   ${OC} delete secret ${BREW_SECRET_NAME} -n "${NAMESPACE}" --wait
+# fi
+# ${OC} create secret -n "${NAMESPACE}" docker-registry ${BREW_SECRET_NAME} --docker-server=${BREW_REGISTRY} --docker-username="${REGISTRY_USR}" --docker-password="${REGISTRY_PWD}" --docker-email=${BREW_REGISTRY_EMAIL}
+
+( # subshell to hide commands
+  TITLE "Configure OCP registry local secret"
+  ocp_token=$(${OC} whoami -t)
+  create_docker_registry_secret "$ocp_registry_url" "$OCP_USR" "$ocp_token" "$NAMESPACE"
+)
 
 # Set the subscription namespace
 subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${NAMESPACE}")
@@ -99,16 +108,18 @@ ${OC} delete catalogsource/my-catalog-source -n "${marketplace_namespace}" --wai
 #   fi
 #   SRC_IMAGE_INDEX=${1}
 # else
-#   SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
+#   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
 # fi
 
 export_LATEST_IIB "${VERSION}" "${BUNDLE_NAME}"
 
-SRC_IMAGE_INDEX="${REGISTRY_MIRROR}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
+SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
 if ${OC} get is "${BUNDLE_NAME}-index" -n "${marketplace_namespace}" > /dev/null 2>&1; then
   ${OC} delete is "${BUNDLE_NAME}-index" -n "${marketplace_namespace}" --wait
 fi
+
+OCP_IMAGE_INDEX="${ocp_registry_url}/${marketplace_namespace}/${BUNDLE_NAME}-index:${VERSION}"
 
 ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${marketplace_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
