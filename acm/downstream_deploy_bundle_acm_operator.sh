@@ -7,20 +7,23 @@ source ${wd:?}/debug.sh
 
 trap_to_debug_commands; # Trap commands (should be called only after sourcing debug.sh)
 
-export VERSION="${ACM_VERSION}"
-export OPERATOR_NAME="${ACM_OPERATOR_NAME}"
-export BUNDLE_NAME="${ACM_BUNDLE_NAME}"
-export NAMESPACE="${ACM_NAMESPACE}"
-export CHANNEL="${ACM_CHANNEL}"
-# export SUBSCRIBE=false
 
-# Run on the Hub
 
 export LOG_TITLE="cluster1"
 # export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
 export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
-# Deploy the operator
+# TODO: variables should be passed from main function
+export ACM_VERSION="v2.4.0"
+
+export VERSION="${ACM_VERSION}"
+export OPERATOR_NAME="${ACM_OPERATOR_NAME}"
+export BUNDLE_NAME="${ACM_BUNDLE_NAME}"
+export NAMESPACE="${ACM_NAMESPACE}"
+export CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
+# export SUBSCRIBE=false
+
+# Run on the Hub install
 ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
 # # Wait

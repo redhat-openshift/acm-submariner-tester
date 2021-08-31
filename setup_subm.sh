@@ -1866,7 +1866,7 @@ function delete_old_submariner_images_from_current_cluster() {
   done
 
   # # Delete images
-  # ${OC} get images | grep "${REGISTRY_MIRROR}" | while read -r line ; do
+  # ${OC} get images | grep "${BREW_REGISTRY}" | while read -r line ; do
   #   set -- $(echo $line | awk '{ print $1, $2 }')
   #   local img_sha="$1"
   #   local img_name="$2"
@@ -2120,7 +2120,7 @@ function download_subctl_by_tag() {
 
     cd ${WORKDIR}
 
-    # Downloading SubCtl from SUBCTL_REGISTRY_MIRROR (downstream)
+    # Downloading SubCtl from VPN_REGISTRY (downstream)
     # if using --registry-images and if $subctl_branch_tag is not devel
     if [[ ! "$subctl_branch_tag" =~ devel ]] && \
         [[ "$registry_images" =~ ^(y|yes)$ ]] && \
@@ -2135,7 +2135,7 @@ function download_subctl_by_tag() {
       # Fix the $subctl_branch_tag value for custom images
       set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${SUBCTL_REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       # Check if $subctl_xz exists in $subctl_image_url
@@ -2388,19 +2388,28 @@ function append_custom_images_to_join_cmd_file() {
   "No workaround" \
   "https://github.com/submariner-io/submariner-operator/issues/1018"
 
+
+  export REGISTRY_IMAGE_PREFIX="rhacm2"
+  export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview"
+
+
+
+  # To be deprecated:
+  export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
+
   TITLE "Append \"--image-override\" for custom images to subctl join command"
-  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${image_tag}"
+  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag}"
 
   # BUG ? : this is a potential bug - overriding with comma separated:
   # JOIN_CMD="${JOIN_CMD} --image-override \
-  # submariner=${REGISTRY_URL}/${SUBM_IMG_GATEWAY}:${image_tag},\
-  # submariner-route-agent=${REGISTRY_URL}/${SUBM_IMG_ROUTE}:${image_tag}, \
-  # submariner-networkplugin-syncer=${REGISTRY_URL}/${SUBM_IMG_NETWORK}:${image_tag},\
-  # lighthouse-agent=${REGISTRY_URL}/${SUBM_IMG_LIGHTHOUSE}:${image_tag},\
-  # lighthouse-coredns=${REGISTRY_URL}/${SUBM_IMG_COREDNS}:${image_tag},\
-  # submariner-globalnet=${REGISTRY_URL}/${SUBM_IMG_GLOBALNET}:${image_tag},\
-  # submariner-operator=${REGISTRY_URL}/${SUBM_IMG_OPERATOR}:${image_tag},\
-  # submariner-bundle=${REGISTRY_URL}/${SUBM_IMG_BUNDLE}:${image_tag}"
+  # submariner=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GATEWAY}:${image_tag},\
+  # submariner-route-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_ROUTE}:${image_tag}, \
+  # submariner-networkplugin-syncer=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_NETWORK}:${image_tag},\
+  # lighthouse-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_LIGHTHOUSE}:${image_tag},\
+  # lighthouse-coredns=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_COREDNS}:${image_tag},\
+  # submariner-globalnet=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GLOBALNET}:${image_tag},\
+  # submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag},\
+  # submariner-bundle=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_BUNDLE}:${image_tag}"
 
   echo -e "# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
   echo "$JOIN_CMD" > "$join_cmd_file"
@@ -2872,7 +2881,7 @@ EOF
 # ------------------------------------------
 
 function configure_custom_registry_cluster_a() {
-  PROMPT "Using custom Registry for Submariner images on AWS cluster A"
+  PROMPT "Using custom Registry for ACM and Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
@@ -2886,7 +2895,7 @@ function configure_custom_registry_cluster_a() {
 # ------------------------------------------
 
 function configure_custom_registry_cluster_b() {
-  PROMPT "Using custom Registry for Submariner images on OSP cluster B"
+  PROMPT "Using custom Registry for ACM and Submariner images on OSP cluster B"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
@@ -2900,7 +2909,7 @@ function configure_custom_registry_cluster_b() {
 # ------------------------------------------
 
 function configure_custom_registry_cluster_c() {
-  PROMPT "Using custom Registry for Submariner images on cluster C"
+  PROMPT "Using custom Registry for ACM and Submariner images on cluster C"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
@@ -2936,8 +2945,8 @@ function configure_cluster_custom_registry_secrets() {
     # Do not ${OC} logout - it will cause authentication error pulling images during join command
   )
 
-  TITLE "Prune old registry images associated with Mirror url: https://${REGISTRY_MIRROR}"
-  oc adm prune images --registry-url=https://${REGISTRY_MIRROR} --force-insecure --confirm || :
+  TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
+  oc adm prune images --registry-url=https://${BREW_REGISTRY} --force-insecure --confirm || :
 
 }
 
@@ -2954,18 +2963,21 @@ function configure_cluster_custom_registry_mirror() {
   local ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
-  TITLE "Add OCP Registry mirror for Submariner:"
+  TITLE "Add OCP Registry mirror for ACM and Submariner:"
 
-  create_docker_registry_secret "$REGISTRY_MIRROR" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
-
-  # add_submariner_registry_mirror_to_ocp_node "master" "$REGISTRY_URL" "${local_registry_path}" || :
-  # add_submariner_registry_mirror_to_ocp_node "worker" "$REGISTRY_URL" "${local_registry_path}" || :
+  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
 
   add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
   add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
+
+  TITLE "Show OCP Registry (machine-config encoded) on master nodes:"
+  ${OC} get mc 99-master-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+
+  TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
+  ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
 
 }
 
@@ -3203,9 +3215,9 @@ function upload_custom_images_to_registry() {
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   local image_tag="$(subctl version | awk '{print $3}')"
 
-  TITLE "Overriding submariner images with custom images from ${REGISTRY_URL}"
-  echo -e "\n# Mirror path: ${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX} \
-  \n# Version tag: ${image_tag}"
+  TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
+  \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
+  \n# Images version tag: ${image_tag}"
 
   create_namespace "$SUBM_NAMESPACE"
 
@@ -3219,7 +3231,7 @@ function upload_custom_images_to_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${REGISTRY_MIRROR}/${REGISTRY_IMAGE_PREFIX}${img}:${image_tag}"
+      local img_source="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${img}:${image_tag}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
       local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"
@@ -4846,8 +4858,8 @@ function test_products_versions() {
   # Show image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
 
-  # # Show REGISTRY_MIRROR images
-  # ${OC} get images | grep "${REGISTRY_MIRROR}" |\
+  # # Show BREW_REGISTRY images
+  # ${OC} get images | grep "${BREW_REGISTRY}" |\
   # grep "$SUBM_IMG_GATEWAY|\
   #     $SUBM_IMG_ROUTE|\
   #     $SUBM_IMG_NETWORK|\

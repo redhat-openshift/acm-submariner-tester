@@ -37,6 +37,13 @@ function export_LATEST_IIB() {
 
 declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
+TITLE "Deploy the operator using defined variables:
+\n# VERSION=${VERSION}
+\n# OPERATOR_NAME=${OPERATOR_NAME}
+\n# BUNDLE_NAME=${BUNDLE_NAME}
+\n# NAMESPACE=${NAMESPACE}
+\n# CHANNEL=${CHANNEL}"
+
 if [[ -z "${VERSION}" ]] ||
    [[ -z "${OPERATOR_NAME}" ]] ||
    [[ -z "${BUNDLE_NAME}" ]] ||
@@ -52,7 +59,7 @@ if [[ -z "${VERSION}" ]] ||
 fi
 
 # OPERATORS_NAMESPACE="openshift-operators"
-marketplace_namespace=${NAMESPACE:-openshift-marketplace}
+marketplace_namespace=${NAMESPACE:-$MARKETPLACE_NAMESPACE}
 INSTALL_MODE=${installModes[1]}
 BREW_SECRET_NAME='brew-registry'
 

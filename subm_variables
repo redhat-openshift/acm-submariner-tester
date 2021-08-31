@@ -62,18 +62,22 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 
+### Define the submariner-registries.conf
+# When mirroring from registry.redhat.io to OCP_REGISTRY_URL the user is not identical
+# In this case we must specify the user/namespace in the location
+#
+# The official and staging Redhat products registry, that is accessible on the internet (external)
 export OFFICIAL_REGISTRY="registry.redhat.io"
 export STAGING_REGISTRY="registry.stage.redhat.io"
+#
+# Snapshot registry for Redhat product container images that can be accessed within Redhat's internal network (internal, vpn)
 export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
+#
+# Snapshot registry for redhat product container images that is accessible on the internet (external)
 export BREW_REGISTRY="brew.registry.redhat.io"
 export REGISTRY_IMAGE_PREFIX="rhacm2"
-export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview"
-
-# To be deprecated: export REGISTRY_URL="registry.redhat.io/rhacm2-tech-preview"
-# To be deprecated: export REGISTRY_MIRROR="brew.registry.redhat.io"
-# To be deprecated: export SUBCTL_REGISTRY_MIRROR="registry-proxy.engineering.redhat.com"
-# To be deprecated: export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
-
+export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
+export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
 
 # Wrap credentials with single quotes:
@@ -99,13 +103,13 @@ export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
 # ACM vars
 export OPERATORS_NAMESPACE="openshift-operators"
-export MARKETPLACE_NAMESPACE=${NAMESPACE:-openshift-marketplace}
+export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export ACM_NAMESPACE="open-cluster-management"
 export ACM_OPERATOR_NAME="advanced-cluster-management"
 export ACM_BUNDLE_NAME="acm-operator-bundle"
 
-export ACM_VERSION=v2.4.0
-export ACM_CHANNEL=release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+# export ACM_VERSION="v2.4.0"
+# export ACM_CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
 
 export SUBMARINER_VERSION=v0.11.0
 export SUBMARINER_CHANNEL=alpha-$(echo ${SUBMARINER_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
