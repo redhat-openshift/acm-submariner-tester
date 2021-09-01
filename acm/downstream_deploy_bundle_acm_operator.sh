@@ -62,17 +62,26 @@ TITLE "Wait for ACM console url to be available"
 cmd="${OC} get routes -n ${NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
 watch_and_retry "$cmd" 15m || FATAL "ACM Console url is not ready"
 
-# # Wait for multiclusterhub to be ready
-# ${OC} get mch -o=jsonpath='{.items[0].status.phase}' # should be running
-# if ! (timeout 5m bash -c "until [[ $(${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}') -eq 'RUNNING' ]]; do sleep 10; done"); then
-#   error "ACM Hub is not ready."
-#   exit 1
-# fi
-
 TITLE "Wait for multiclusterhub to be ready"
 
+BUG "ACM multiclusterhub install get stuck due to:
+3 Insufficient cpu, 3 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate." \
+"Remove taint from all master nodes" \
+"TODO: Report a new bug"
+
+for node in $(kubectl get nodes --selector='node-role.kubernetes.io/master' | awk 'NR>1 {print $1}' ) ; do
+  echo -e "\n### Remove taint from master node $node ###"
+  kubectl taint node $node node-role.kubernetes.io/master-
+done
+
 cmd="${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}'"
-watch_and_retry "$cmd" 5m "RUNNING" || FATAL "ACM Hub is not ready"
+duration=15m
+watch_and_retry "$cmd" "$duration" "RUNNING" || acm_status=FAILED
+
+if [[ "$acm_status" = FAILED ]] ; then
+  ${OC} get MultiClusterHub multiclusterhub
+  FATAL "ACM Hub is not ready after $duration"
+fi
 
 # Create the cluster-set
 cat <<EOF | ${OC} apply -f -
