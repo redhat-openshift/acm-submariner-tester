@@ -5736,7 +5736,7 @@ export_active_clusters_kubeconfig
 
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
   # Artifact kubeconfig
-  cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}"
+  cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}" || :
 
   # Artifact cluster logs
   find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
@@ -5745,7 +5745,7 @@ fi
 
 if [[ -s "$CLUSTER_B_YAML" ]] ; then
   # Artifact kubeconfig
-  cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}"
+  cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}" || :
 
   # Artifact cluster logs
   find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
@@ -5754,7 +5754,7 @@ fi
 
 if [[ -s "$CLUSTER_C_YAML" ]] ; then
   # Artifact kubeconfig
-  cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}"
+  cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}" || :
 
   # Artifact cluster logs
   find ${CLUSTER_C_DIR} -type f -name "*.log" -exec \
