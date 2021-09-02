@@ -21,7 +21,7 @@ export OPERATOR_NAME="${ACM_OPERATOR_NAME}"
 export BUNDLE_NAME="${ACM_BUNDLE_NAME}"
 export NAMESPACE="${ACM_NAMESPACE}"
 export CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
-# export SUBSCRIBE=false
+export SUBSCRIBE=false
 
 # Run on the Hub install
 ${wd:?}/downstream_push_bundle_to_olm_catalog.sh

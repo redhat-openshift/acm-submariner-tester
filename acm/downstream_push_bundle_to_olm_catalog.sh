@@ -63,9 +63,7 @@ marketplace_namespace=${NAMESPACE:-$MARKETPLACE_NAMESPACE}
 INSTALL_MODE=${installModes[1]}
 BREW_SECRET_NAME='brew-registry'
 
-#SRC_IMAGE_INDEX="https://brew.registry.redhat.io/rh-osbs/iib:5801"
-
-SUBSCRIBE=${SUBSCRIBE:-true}
+SUBSCRIBE=${SUBSCRIBE:-false} # Deprecated since ACM 2.3
 
 # login
 ( # subshell to hide commands
@@ -159,6 +157,7 @@ info "$(${OC} -n ${marketplace_namespace} get pods --ignore-not-found)"
 info "$( (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true)"
 
 if [ "${SUBSCRIBE}" = true ]; then
+  # Deprecated since ACM 2.3
   if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
     # create the OperatorGroup
 cat <<EOF | ${OC} apply -f -
