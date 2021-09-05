@@ -389,3 +389,35 @@ EOF
 }
 
 # ------------------------------------------
+
+function clean_acm_namespace_and_resources_cluster_a() {
+### Run cleanup of previous ACM on cluster A ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_acm_namespace_and_resources_cluster_c() {
+### Run cleanup of previous ACM on cluster C ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster C"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_acm_namespace_and_resources() {
+  trap_to_debug_commands;
+
+  oc delete multiclusterhub --all || :
+  oc delete subs --all || :
+  oc delete clusterserviceversion --all || :
+  oc delete namespace $ACM_NAMESPACE || :
+
+}

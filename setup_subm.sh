@@ -2056,17 +2056,6 @@ function test_clusters_disconnected_before_submariner() {
     # command terminated with exit code 28
 }
 
-# # ------------------------------------------
-#
-# function install_acm_with_submariner() {
-#   ### Install ACM operator and Submariner operator ###
-#     PROMPT "Install ACM operator $ACM_VER_TAG and Submariner operator $SUBM_VER_TAG"
-#
-#     # TODO: Run function with args instead of calling sh script, e.g. deploy_acm_operator "$ACM_VER_TAG"
-#     ./acm/downstream_deploy_bundle_acm_operator.sh
-#
-# }
-
 # ------------------------------------------
 
 function download_and_install_subctl() {
@@ -5262,6 +5251,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
+      ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
+
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
       ${junit_cmd} clean_node_labels_and_machines_cluster_a
@@ -5274,6 +5265,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} clean_acm_namespace_and_resources_cluster_b
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
@@ -5288,6 +5281,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
@@ -5382,6 +5377,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### INSTALL ACM - TEMPORARY here (It should be run at END of ALL OCP Clusters Setup) ###
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
+
+    # Temporary - Force clean ACM resources:
+    ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
+    ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
+    #####
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
