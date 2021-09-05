@@ -142,6 +142,11 @@ source "$SCRIPT_DIR/subm_variables"
 ### Import General Helpers Function ###
 source "$SCRIPT_DIR/helper_functions"
 
+### Import ACM Functions ###
+source "$SCRIPT_DIR/acm/debug.sh"
+source "$SCRIPT_DIR/acm/downstream_push_bundle_to_olm_catalog.sh"
+source "$SCRIPT_DIR/acm/downstream_deploy_bundle_acm_operator.sh"
+
 # To exit on errors and extended trap
 # set -Eeo pipefail
 set -Ee
@@ -480,7 +485,7 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_acm and ACM_VER_TAG - to install_acm_with_submariner
+  # User input: $install_acm and ACM_VER_TAG - to install_acm_operator
   if [[ "$install_acm" =~ ^(yes|y)$ ]]; then
     while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
@@ -2051,16 +2056,16 @@ function test_clusters_disconnected_before_submariner() {
     # command terminated with exit code 28
 }
 
-# ------------------------------------------
-
-function install_acm_with_submariner() {
-  ### Install ACM operator and Submariner operator ###
-    PROMPT "Install ACM operator $ACM_VER_TAG and Submariner operator $SUBM_VER_TAG"
-
-    # TODO: Run function with args instead of calling sh script, e.g. deploy_acm_operator "$ACM_VER_TAG"
-    ./acm/downstream_deploy_bundle_acm_operator.sh
-
-}
+# # ------------------------------------------
+#
+# function install_acm_with_submariner() {
+#   ### Install ACM operator and Submariner operator ###
+#     PROMPT "Install ACM operator $ACM_VER_TAG and Submariner operator $SUBM_VER_TAG"
+#
+#     # TODO: Run function with args instead of calling sh script, e.g. deploy_acm_operator "$ACM_VER_TAG"
+#     ./acm/downstream_deploy_bundle_acm_operator.sh
+#
+# }
 
 # ------------------------------------------
 
@@ -5378,7 +5383,17 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
-    ${junit_cmd} install_acm_with_submariner "$ACM_VER_TAG"
+    ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
+
+    ${junit_cmd} create_acm_multiclusterhub
+
+    ${junit_cmd} create_acm_clusterset_for_submariner
+
+    ${junit_cmd} import_managed_cluster_a
+
+    ${junit_cmd} import_managed_cluster_c
+
+    ${junit_cmd} prepare_acm_for_submariner
 
     exit # Temporary exit after ACM INSTALL
 
