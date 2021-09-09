@@ -16,6 +16,7 @@ export LOG_TITLE="cluster1"
 function install_acm_operator() {
   ### Install ACM operator ###
   PROMPT "Install ACM operator $ACM_VER_TAG"
+  trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
@@ -37,12 +38,15 @@ function install_acm_operator() {
   #   exit 1
   # fi
 
+  set -x
   TITLE "Wait for MultiClusterHub CRD to be ready"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
 
   echo "Install ACM operator completed"
   return 0
+  set -x
+
 }
 
 # ------------------------------------------
@@ -50,6 +54,7 @@ function install_acm_operator() {
 function create_acm_multiclusterhub() {
   ### Create ACM MultiClusterHub instance ###
   PROMPT "Create ACM MultiClusterHub instance"
+  trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
@@ -86,10 +91,10 @@ EOF
   "Remove taint from all master nodes" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2000511"
 
-  for node in $(kubectl get nodes --selector='node-role.kubernetes.io/master' | awk 'NR>1 {print $1}' ) ; do
-    echo -e "\n### Remove taint from master node $node ###"
-    kubectl taint node $node node-role.kubernetes.io/master-
-  done
+  # for node in $(kubectl get nodes --selector='node-role.kubernetes.io/master' | awk 'NR>1 {print $1}' ) ; do
+  #   echo -e "\n### Remove taint from master node $node ###"
+  #   kubectl taint node $node node-role.kubernetes.io/master-
+  # done
 
   cmd="${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}'"
   duration=15m
@@ -107,6 +112,7 @@ EOF
 function create_acm_clusterset_for_submariner() {
   ### Create ACM cluster-set ###
   PROMPT "Create ACM cluster-set"
+  trap_to_debug_commands;
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
@@ -420,6 +426,7 @@ function clean_acm_namespace_and_resources() {
   oc delete multiclusterhub --all || :
   oc delete subs --all || :
   oc delete clusterserviceversion --all || :
+  oc delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
   oc delete namespace $ACM_NAMESPACE || :
 
 }
