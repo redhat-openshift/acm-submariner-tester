@@ -162,9 +162,9 @@ EOF
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource was not created"
 
   # test
-  info "$(${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found)"
-  info "$(${OC} -n ${marketplace_namespace} get pods --ignore-not-found)"
-  info "$( (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true)"
+  ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
+  ${OC} -n ${marketplace_namespace} get pods --ignore-not-found
+  (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true
 
   if [ "${SUBSCRIBE}" = true ]; then
     # Deprecated since ACM 2.3
@@ -182,7 +182,7 @@ EOF
 EOF
 
       # test
-      info "$(${OC} get og -n ${namespace} --ignore-not-found)"
+      ${OC} get og -n ${namespace} --ignore-not-found
     fi
 
   TITLE "Create the Subscription (Approval should be Manual not Automatic in order to pin the bundle version)"
@@ -210,13 +210,13 @@ EOF
     fi
 
     # test
-    info "$(${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found)"
-    info "$(${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found)"
-    info "$(${OC} get csv -n "${subscriptionNamespace}" --ignore-not-found)"
-    info "$(${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found)"
-    info "$(${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found)"
-    debug "$(${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0')"
-    debug "$(${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0')"
+    ${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found
+    ${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found
+    ${OC} get csv -n "${subscriptionNamespace}" --ignore-not-found
+    ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
+    ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0'
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0'
   fi
 
 }

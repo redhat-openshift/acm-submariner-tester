@@ -41,6 +41,8 @@ function install_acm_operator() {
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
 
+  echo "Install ACM operator completed"
+  return 0
 }
 
 # ------------------------------------------
@@ -255,16 +257,16 @@ function import_managed_cluster() {
     watch_and_retry "$cmd" 3m
   )
 
-  # Install klusterlet (addon) on the managed clusters
+  TITLE "Install klusterlet (addon) on the managed clusters"
   # Import the managed clusters
-  info "install the agent"
+  # info "install the agent"
   ${OC} apply -f /tmp/cluster${cluster_counter}-klusterlet-crd.yaml
 
   # TODO: Wait for klusterlet crds installation
   sleep 2m
 
   ${OC} apply -f /tmp/cluster${cluster_counter}-import.yaml
-  info "$(${OC} get pod -n open-cluster-management-agent)"
+  ${OC} get pod -n open-cluster-management-agent
 
 }
 
@@ -377,13 +379,13 @@ EOF
   done
 
   for i in {1..3}; do
-    debug "$(${OC} get submarinerconfig submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe submarinerconfig submariner -n cluster${i})"
-    debug "$(${OC} get managedclusteraddons submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe managedclusteraddons submariner -n cluster${i})"
-    debug "$(${OC} get manifestwork -n cluster${i} --ignore-not-found)"
+    ${OC} get submarinerconfig submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe submarinerconfig submariner -n cluster${i}
+    ${OC} get managedclusteraddons submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe managedclusteraddons submariner -n cluster${i}
+    ${OC} get manifestwork -n cluster${i} --ignore-not-found
   done
 
   export LOG_TITLE=""
-  info "All done"
+  echo "All done"
   exit 0
 
 }
