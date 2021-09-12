@@ -96,9 +96,10 @@ EOF
   #   kubectl taint node $node node-role.kubernetes.io/master-
   # done
 
-  cmd="${OC} get MultiClusterHub multiclusterhub -o=jsonpath='{.items[0].status.phase}'"
+  # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
+  cmd="${OC} get MultiClusterHub multiclusterhub"
   duration=15m
-  watch_and_retry "$cmd" "$duration" "RUNNING" || acm_status=FAILED
+  watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
     ${OC} get MultiClusterHub multiclusterhub
