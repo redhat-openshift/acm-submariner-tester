@@ -117,6 +117,17 @@ function create_acm_clusterset_for_submariner() {
   PROMPT "Create ACM cluster-set"
   trap_to_debug_commands;
 
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+
+  cmd="${OC} api-resources | grep ManagedClusterSet"
+  duration=5m
+  watch_and_retry "$cmd" "$duration" || acm_status=FAILED
+
+  if [[ "$acm_status" = FAILED ]] ; then
+    ${OC} api-resources
+    FATAL "ManagedClusterSet resource type is missing"
+  fi
+
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1alpha1
@@ -125,8 +136,18 @@ function create_acm_clusterset_for_submariner() {
     name: submariner
 EOF
 
-  # TODO: wait for managedclusterset to be ready
-  sleep 2m
+  TITLE "Checking 'ManagedClusterSet' resource for Submariner"
+
+  local acm_resource="`mktemp`_acm_resource"
+  local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
+  local regex="Status:\s*True"
+
+  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
+
+  if [[ "$acm_status" = FAILED ]] ; then
+    cat $acm_resource
+    FATAL "ManagedClusterSet resource for Submariner was not created after $duration"
+  fi
 
   # Bind the namespace
   cat <<EOF | ${OC} apply -f -
