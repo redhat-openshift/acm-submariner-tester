@@ -106,6 +106,8 @@ EOF
     FATAL "ACM Hub is not ready after $duration"
   fi
 
+  ${OC} get routes -A | highlight "multicloud-console"
+
 }
 
 # ------------------------------------------

@@ -4838,7 +4838,9 @@ function test_products_versions() {
   ${OC} config get-contexts
 
   echo -e "\n### OCP Cluster ${cluster_name} ###"
-  ${OC} version
+  ${OC} version || :
+
+  ${OC} get routes -A || :
 
   echo -e "\n### Submariner components ###\n"
 
