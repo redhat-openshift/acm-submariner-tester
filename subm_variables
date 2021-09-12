@@ -88,9 +88,6 @@ export REGISTRY_PWD='mirror-pass'
 export OCP_USR='ocp_user'
 export OCP_PWD='ocp_pass'
 
-export SUBCTL_PRIVATE_URL=""
-export SUBCTL_PRIVATE_TOKEN=''
-
 export SUBM_IMG_SUBCTL="${SUBM_IMG_SUBCTL:-subctl-rhel8}"
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"

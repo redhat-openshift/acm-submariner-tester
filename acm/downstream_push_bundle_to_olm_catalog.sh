@@ -215,8 +215,8 @@ EOF
     ${OC} get csv -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0'
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0'
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0' || :
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0' || :
   fi
 
 }
