@@ -433,6 +433,17 @@ function clean_acm_namespace_and_resources_cluster_a() {
 
 # ------------------------------------------
 
+function clean_acm_namespace_and_resources_cluster_b() {
+### Run cleanup of previous ACM on cluster A ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster B"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
 function clean_acm_namespace_and_resources_cluster_c() {
 ### Run cleanup of previous ACM on cluster C ###
   PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster C"
