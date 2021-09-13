@@ -112,21 +112,26 @@ EOF
 
 # ------------------------------------------
 
-function create_acm_clusterset_for_submariner() {
+function create_clusterset_for_submariner_in_acm_hub() {
   ### Create ACM cluster-set ###
-  PROMPT "Create ACM cluster-set"
+  PROMPT "Create cluster-set for Submariner on ACM"
   trap_to_debug_commands;
 
+  local acm_resource="`mktemp`_acm_resource"
+  local duration=5m
+
+  # Run on ACM hub cluster
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   cmd="${OC} api-resources | grep ManagedClusterSet"
-  duration=5m
   watch_and_retry "$cmd" "$duration" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
     ${OC} api-resources
     FATAL "ManagedClusterSet resource type is missing"
   fi
+
+  TITLE "Creating 'ManagedClusterSet' resource for Submariner"
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
@@ -136,9 +141,6 @@ function create_acm_clusterset_for_submariner() {
     name: submariner
 EOF
 
-  TITLE "Checking 'ManagedClusterSet' resource for Submariner"
-
-  local acm_resource="`mktemp`_acm_resource"
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
   local regex="Status:\s*True"
 
@@ -148,6 +150,9 @@ EOF
     cat $acm_resource
     FATAL "ManagedClusterSet resource for Submariner was not created after $duration"
   fi
+
+
+  TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner"
 
   # Bind the namespace
   cat <<EOF | ${OC} apply -f -
@@ -160,25 +165,83 @@ EOF
     clusterSet: submariner
 EOF
 
+  local cmd="${OC} describe ManagedClusterSetBinding &> '$acm_resource'"
+  local regex="Status:\s*True"
+
+  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
+
+  if [[ "$acm_status" = FAILED ]] ; then
+    cat $acm_resource
+    FATAL "ManagedClusterSetBinding resource for Submariner was not created after $duration"
+  fi
+
+}
+
+# ------------------------------------------
+
+function import_managed_cluster_a() {
+  PROMPT "Import ACM CRDs for managed cluster A"
+  trap_to_debug_commands;
+
+  # export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  # local cluster_id="$(print_current_cluster_name)"
+  local cluster_id="1"
+  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  import_managed_cluster "$cluster_id"
+}
+
+# ------------------------------------------
+
+function import_managed_cluster_c() {
+  PROMPT "Import ACM CRDs for managed cluster C"
+  trap_to_debug_commands;
+
+  # export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  # local cluster_id="$(print_current_cluster_name)"
+  local cluster_id="3"
+  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  import_managed_cluster "$cluster_id"
+}
+
+# ------------------------------------------
+
+function create_new_managed_cluster_in_acm_hub() {
+  ### Create ACM managed cluster by cluster ID ###
+  trap_to_debug_commands;
+
+  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
+  local cluster_id="cluster${1}" # temporarily add "cluster" before id
+  local cluster_type="${2:-Amazon}" # temporarily use Amazon as default cluster type
+
+  # Run on ACM hub cluster
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+
+  echo "# Create the namespace for the managed cluster"
+  ${OC} new-project ${cluster_id} || :
+  ${OC} label namespace ${cluster_id} cluster.open-cluster-management.io/managedCluster=${cluster_id} --overwrite
+
+  # TODO: wait for namespace
+  sleep 30s
+
+  TITLE "Create ACM managed cluster by ID: $cluster_id, Type: $cluster_type"
+
   # Define the managed Clusters
-  for i in {1..3}; do
+  # for i in {1..3}; do
 
-    ### Create the namespace for the managed cluster
-    ${OC} new-project cluster${i} || :
-    ${OC} label namespace cluster${i} cluster.open-cluster-management.io/managedCluster=cluster${i} --overwrite
+  echo "# Create the managed cluster"
 
-    # TODO: wait for namespace
-    sleep 2m
-
-    ### Create the managed cluster
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
   kind: ManagedCluster
   metadata:
-    name: cluster${i}
+    name: ${cluster_id}
     labels:
-      cloud: Amazon
-      name: cluster${i}
+      cloud: ${cluster_type}
+      name: ${cluster_id}
       vendor: OpenShift
       cluster.open-cluster-management.io/clusterset: submariner
   spec:
@@ -186,16 +249,18 @@ EOF
     leaseDurationSeconds: 60
 EOF
 
-    ### TODO: Wait for managedcluster
-    sleep 1m
+  ### TODO: Wait for managedcluster
+  sleep 1m
+
+  TITLE "Create ACM klusterlet addon config for cluster '$cluster_id'"
 
   ### Create the klusterlet addon config
   cat <<EOF | ${OC} apply -f -
   apiVersion: agent.open-cluster-management.io/v1
   kind: KlusterletAddonConfig
   metadata:
-    name: cluster${i}
-    namespace: cluster${i}
+    name: ${cluster_id}
+    namespace: ${cluster_id}
     labels:
       cluster.open-cluster-management.io/submariner-agent: "true"
   spec:
@@ -207,10 +272,10 @@ EOF
     clusterLabels:
       cloud: auto-detect
       cluster.open-cluster-management.io/clusterset: submariner
-      name: cluster${i}
+      name: ${cluster_id}
       vendor: auto-detect
-    clusterName: cluster${i}
-    clusterNamespace: cluster${i}
+    clusterName: ${cluster_id}
+    clusterNamespace: ${cluster_id}
     iamPolicyController:
       enabled: true
     policyController:
@@ -220,10 +285,15 @@ EOF
     version: 2.2.0
 EOF
 
-    ### Save the yamls to be applied on the managed clusters
-    ${OC} get secret cluster${i}-import -n cluster${i} -o jsonpath={.data.crds\\.yaml} | base64 --decode > /tmp/cluster${i}-klusterlet-crd.yaml
-    ${OC} get secret cluster${i}-import -n cluster${i} -o jsonpath={.data.import\\.yaml} | base64 --decode > /tmp/cluster${i}-import.yaml
-  done
+  local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
+  local kluster_import="./${cluster_id}-import.yaml"
+
+  TITLE "Save the yamls to be applied on the managed clusters: '${kluster_crd}' and '${kluster_import}'"
+
+  ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath={.data.crds\\.yaml} | base64 --decode > ${kluster_crd}
+  ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath={.data.import\\.yaml} | base64 --decode > ${kluster_import}
+
+  # done
 
   # TODO: wait for kluserlet addon
   sleep 1m
@@ -253,33 +323,17 @@ EOF
 #
 # done
 
-function import_managed_cluster_a() {
-  PROMPT "Import ACM CRDs for managed cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  import_managed_cluster "1"
-}
-
-# ------------------------------------------
-
-function import_managed_cluster_c() {
-  PROMPT "Import ACM CRDs for managed cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  import_managed_cluster "3"
-}
-
 # ------------------------------------------
 
 ### Function to import the clusters to the clusterSet
 function import_managed_cluster() {
   trap_to_debug_commands;
 
-  local cluster_name="$(print_current_cluster_name)"
-  # TODO: cluster counter should rather not be used. Need to create crd with function
-  local cluster_counter="$1"
+  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
+  local cluster_id="cluster${1}" # temporarily add "cluster" before id
+
+  local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
+  local kluster_import="./${cluster_id}-import.yaml"
 
   ( # subshell to hide commands
     local cmd="${OC} login -u ${OCP_USR} -p ${OCP_PWD}"
@@ -290,12 +344,12 @@ function import_managed_cluster() {
   TITLE "Install klusterlet (addon) on the managed clusters"
   # Import the managed clusters
   # info "install the agent"
-  ${OC} apply -f /tmp/cluster${cluster_counter}-klusterlet-crd.yaml
+  ${OC} apply -f ${kluster_crd}
 
   # TODO: Wait for klusterlet crds installation
   sleep 2m
 
-  ${OC} apply -f /tmp/cluster${cluster_counter}-import.yaml
+  ${OC} apply -f ${kluster_import}
   ${OC} get pod -n open-cluster-management-agent
 
 }
