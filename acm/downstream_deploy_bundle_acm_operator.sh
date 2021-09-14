@@ -38,14 +38,11 @@ function install_acm_operator() {
   #   exit 1
   # fi
 
-  set -x
   TITLE "Wait for MultiClusterHub CRD to be ready"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
 
   echo "Install ACM operator completed"
-  return 0
-  set -x
 
 }
 
@@ -69,32 +66,11 @@ function create_acm_multiclusterhub() {
     disableHubSelfManagement: true
 EOF
 
-  # # Wait for the console url
-  # if ! (timeout 15m bash -c "until ${OC} get routes -n ${ACM_NAMESPACE} multicloud-console > /dev/null 2>&1; do sleep 10; done"); then
-  #   error "ACM Console url was not found."
-  #   exit 1
-  # fi
-  #
-  # # Print ACM console url
-  # echo ""
-  # info "ACM Console URL: $(${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
-  # echo ""
-
   TITLE "Wait for ACM console url to be available"
   cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
   watch_and_retry "$cmd" 15m || FATAL "ACM Console url is not ready"
 
   TITLE "Wait for multiclusterhub to be ready"
-
-  BUG "ACM multiclusterhub install get stuck due to:
-  3 Insufficient cpu, 3 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate." \
-  "Remove taint from all master nodes" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=2000511"
-
-  # for node in $(kubectl get nodes --selector='node-role.kubernetes.io/master' | awk 'NR>1 {print $1}' ) ; do
-  #   echo -e "\n### Remove taint from master node $node ###"
-  #   kubectl taint node $node node-role.kubernetes.io/master-
-  # done
 
   # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
   cmd="${OC} get MultiClusterHub multiclusterhub"
@@ -106,7 +82,7 @@ EOF
     FATAL "ACM Hub is not ready after $duration"
   fi
 
-  ${OC} get routes -A | highlight "multicloud-console"
+  TITLE "ACM console url: $(${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
 
