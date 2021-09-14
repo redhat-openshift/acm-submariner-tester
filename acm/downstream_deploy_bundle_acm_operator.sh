@@ -183,10 +183,7 @@ function import_managed_cluster_a() {
   PROMPT "Import ACM CRDs for managed cluster A"
   trap_to_debug_commands;
 
-  # export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
-  local cluster_id="acm_cluster_a"
-
+  local cluster_id="acm-${CLUSTER_A_NAME}"
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
@@ -199,9 +196,7 @@ function import_managed_cluster_b() {
   PROMPT "Import ACM CRDs for managed cluster B"
   trap_to_debug_commands;
 
-  # export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
-  local cluster_id="acm_cluster_b"
+  local cluster_id="acm-${CLUSTER_B_NAME}"
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Openstack"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
@@ -214,9 +209,7 @@ function import_managed_cluster_c() {
   PROMPT "Import ACM CRDs for managed cluster C"
   trap_to_debug_commands;
 
-  # export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
-  local cluster_id="acm_cluster_c"
+  local cluster_id="acm-${CLUSTER_C_NAME}"
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
