@@ -512,10 +512,10 @@ function clean_acm_namespace_and_resources_cluster_c() {
 function clean_acm_namespace_and_resources() {
   trap_to_debug_commands;
 
-  oc delete multiclusterhub --all || :
-  oc delete subs --all || :
-  oc delete clusterserviceversion --all || :
-  oc delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
-  oc delete namespace $ACM_NAMESPACE || :
+  ${OC} delete multiclusterhub --all || :
+  ${OC} delete subs --all || :
+  ${OC} delete clusterserviceversion --all || :
+  ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
+  delete_namespace_and_crds "${ACM_NAMESPACE}"
 
 }
