@@ -184,11 +184,27 @@ function import_managed_cluster_a() {
   trap_to_debug_commands;
 
   # export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  # local cluster_id="$(print_current_cluster_name)"
-  local cluster_id="1"
+  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
+  local cluster_id="acm_cluster_a"
+
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  import_managed_cluster "$cluster_id"
+}
+
+# ------------------------------------------
+
+function import_managed_cluster_b() {
+  PROMPT "Import ACM CRDs for managed cluster B"
+  trap_to_debug_commands;
+
+  # export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
+  local cluster_id="acm_cluster_b"
+  create_new_managed_cluster_in_acm_hub "$cluster_id" "Openstack"
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   import_managed_cluster "$cluster_id"
 }
 
@@ -199,8 +215,8 @@ function import_managed_cluster_c() {
   trap_to_debug_commands;
 
   # export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  # local cluster_id="$(print_current_cluster_name)"
-  local cluster_id="3"
+  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
+  local cluster_id="acm_cluster_c"
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
@@ -213,8 +229,7 @@ function create_new_managed_cluster_in_acm_hub() {
   ### Create ACM managed cluster by cluster ID ###
   trap_to_debug_commands;
 
-  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
-  local cluster_id="cluster${1}" # temporarily add "cluster" before id
+  local cluster_id="${1}"
   local cluster_type="${2:-Amazon}" # temporarily use Amazon as default cluster type
 
   # Run on ACM hub cluster
@@ -329,8 +344,7 @@ EOF
 function import_managed_cluster() {
   trap_to_debug_commands;
 
-  # TODO: cluster id should rather be: cluster_name="$(print_current_cluster_name)" after exporting cluster kubeconfig
-  local cluster_id="cluster${1}" # temporarily add "cluster" before id
+  local cluster_id="${1}"
 
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"

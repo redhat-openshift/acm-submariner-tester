@@ -5393,7 +5393,9 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} import_managed_cluster_a
 
-    ${junit_cmd} import_managed_cluster_c
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} import_managed_cluster_b
+
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} import_managed_cluster_c
 
     ${junit_cmd} prepare_acm_for_submariner
 
