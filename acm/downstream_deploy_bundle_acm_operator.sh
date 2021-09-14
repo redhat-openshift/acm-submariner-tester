@@ -138,16 +138,16 @@ function create_clusterset_for_submariner_in_acm_hub() {
   apiVersion: cluster.open-cluster-management.io/v1alpha1
   kind: ManagedClusterSet
   metadata:
-    name: submariner
+    name: ${SUBM_OPERATOR}
 EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
-  local regex="Status:\s*True"
+  local regex="Cluster Set:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
+  cat $acm_resource
 
   if [[ "$acm_status" = FAILED ]] ; then
-    cat $acm_resource
     FATAL "ManagedClusterSet resource for Submariner was not created after $duration"
   fi
 
@@ -159,19 +159,19 @@ EOF
   apiVersion: cluster.open-cluster-management.io/v1alpha1
   kind: ManagedClusterSetBinding
   metadata:
-    name: submariner
+    name: ${SUBM_OPERATOR}
     namespace: ${SUBMARINER_NAMESPACE}
   spec:
-    clusterSet: submariner
+    clusterSet: ${SUBM_OPERATOR}
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding &> '$acm_resource'"
   local regex="Status:\s*True"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
+  cat $acm_resource
 
   if [[ "$acm_status" = FAILED ]] ; then
-    cat $acm_resource
     FATAL "ManagedClusterSetBinding resource for Submariner was not created after $duration"
   fi
 
@@ -243,7 +243,7 @@ function create_new_managed_cluster_in_acm_hub() {
       cloud: ${cluster_type}
       name: ${cluster_id}
       vendor: OpenShift
-      cluster.open-cluster-management.io/clusterset: submariner
+      cluster.open-cluster-management.io/clusterset: ${SUBM_OPERATOR}
   spec:
     hubAcceptsClient: true
     leaseDurationSeconds: 60
@@ -262,7 +262,7 @@ EOF
     name: ${cluster_id}
     namespace: ${cluster_id}
     labels:
-      cluster.open-cluster-management.io/submariner-agent: "true"
+      cluster.open-cluster-management.io/${SUBM_AGENT}: "true"
   spec:
     applicationManager:
       argocdCluster: false
@@ -271,7 +271,7 @@ EOF
       enabled: true
     clusterLabels:
       cloud: auto-detect
-      cluster.open-cluster-management.io/clusterset: submariner
+      cluster.open-cluster-management.io/clusterset: ${SUBM_OPERATOR}
       name: ${cluster_id}
       vendor: auto-detect
     clusterName: ${cluster_id}
@@ -379,13 +379,13 @@ function prepare_acm_for_submariner() {
 
     # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
-    deploy_ocp_bundle "${SUBMARINER_VERSION}" "${SUBM_OPERATOR_NAME}" "${SUBM_BUNDLE_NAME}" "${SUBMARINER_NAMESPACE}" "${SUBMARINER_CHANNEL}"
+    deploy_ocp_bundle "${SUBMARINER_VERSION}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${SUBMARINER_CHANNEL}"
 
     ### Apply the Submariner scc
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:submariner-gateway
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:submariner-routeagent
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:submariner-globalnet
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:submariner-lighthouse-coredns
+    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GATEWAY}
+    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_ROUTE_AGENT}
+    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GLOBALNET}
+    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_LH_COREDNS}
   done
 
   # TODO: Wait for acm agent installation on the managed clusters
@@ -423,7 +423,7 @@ EOF
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
-    name: submariner
+    name: ${SUBM_OPERATOR}
     namespace: cluster${i}
   spec:
     IPSecIKEPort: 501
@@ -444,7 +444,7 @@ EOF
       channel: ${SUBMARINER_CHANNEL}
       source: my-catalog-source
       sourceNamespace: ${SUBMARINER_NAMESPACE}
-      startingCSV: submariner.${SUBMARINER_VERSION}
+      startingCSV: ${SUBM_OPERATOR}.${SUBMARINER_VERSION}
 EOF
 
     ### Create the Submariner addon to start the deployment
@@ -452,19 +452,19 @@ EOF
   apiVersion: addon.open-cluster-management.io/v1alpha1
   kind: ManagedClusterAddOn
   metadata:
-    name: submariner
+    name: ${SUBM_OPERATOR}
     namespace: cluster${i}
   spec:
     installNamespace: ${SUBMARINER_NAMESPACE}
 EOF
 
     ### Label the managed clusters and klusterletaddonconfigs to deploy submariner
-    ${OC} label managedclusters.cluster.open-cluster-management.io cluster${i} "cluster.open-cluster-management.io/submariner-agent=true" --overwrite
+    ${OC} label managedclusters.cluster.open-cluster-management.io cluster${i} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
   done
 
   for i in {1..3}; do
-    ${OC} get submarinerconfig submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe submarinerconfig submariner -n cluster${i}
-    ${OC} get managedclusteraddons submariner -n cluster${i} >/dev/null 2>&1 && ${OC} describe managedclusteraddons submariner -n cluster${i}
+    ${OC} get submarinerconfig ${SUBM_OPERATOR} -n cluster${i} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n cluster${i}
+    ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n cluster${i} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n cluster${i}
     ${OC} get manifestwork -n cluster${i} --ignore-not-found
   done
 

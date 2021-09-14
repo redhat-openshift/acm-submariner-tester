@@ -88,6 +88,14 @@ export REGISTRY_PWD='mirror-pass'
 export OCP_USR='ocp_user'
 export OCP_PWD='ocp_pass'
 
+export SUBM_OPERATOR="submariner"
+export SUBM_BUNDLE="submariner-operator-bundle"
+export SUBM_AGENT="submariner-agent"
+export SUBM_GATEWAY="submariner-gateway"
+export SUBM_ROUTE_AGENT="submariner-routeagent"
+export SUBM_GLOBALNET="submariner-globalnet"
+export SUBM_LH_COREDNS="submariner-lighthouse-coredns"
+
 export SUBM_IMG_SUBCTL="${SUBM_IMG_SUBCTL:-subctl-rhel8}"
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
@@ -107,9 +115,6 @@ export ACM_BUNDLE_NAME="acm-operator-bundle"
 
 # export ACM_VERSION="v2.4.0"
 # export ACM_CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
-
-export SUBM_OPERATOR_NAME="submariner"
-export SUBM_BUNDLE_NAME="submariner-operator-bundle"
 
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
