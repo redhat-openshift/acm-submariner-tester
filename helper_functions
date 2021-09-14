@@ -112,7 +112,7 @@ function print_current_dir_and_cmd() {
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_to_debug_commands() {
   trap '
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
       print_current_dir_and_cmd "$BASH_COMMAND" 2>/dev/null || :
    fi
   ' DEBUG
