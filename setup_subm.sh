@@ -5380,10 +5380,10 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
-    # Temporary - Force clean ACM resources:
-    ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
-    ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
-    #####
+    # # Temporary - Force clean ACM resources:
+    # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
+    # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
+    # #####
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 

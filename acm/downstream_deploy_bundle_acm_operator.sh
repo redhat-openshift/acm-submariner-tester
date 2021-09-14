@@ -142,7 +142,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
 EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
-  local regex="Cluster Set:\s*${SUBM_OPERATOR}"
+  local regex="Status:\s*True"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
   cat $acm_resource
@@ -166,7 +166,7 @@ EOF
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding &> '$acm_resource'"
-  local regex="Status:\s*True"
+  local regex="Cluster Set:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
   cat $acm_resource
