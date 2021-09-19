@@ -77,7 +77,8 @@ function deploy_ocp_bundle() {
 
   # login
   ( # subshell to hide commands
-    cmd="${OC} login -u ${OCP_USR} -p ${OCP_PWD}"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )

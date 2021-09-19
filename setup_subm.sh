@@ -1510,7 +1510,8 @@ function add_elevated_user() {
   TITLE "Create an HTPasswd file for OCP user '$ocp_usr'"
 
   ( # subshell to hide commands
-    local ocp_pwd="${2:-$OCP_PWD}"
+    openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.secret"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
     printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
   )
 
@@ -1549,7 +1550,7 @@ EOF
   watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
 
   ( # subshell to hide commands
-    local ocp_pwd="${3:-$OCP_PWD}"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
@@ -5780,13 +5781,15 @@ if [[ -s "$CLUSTER_C_YAML" ]] ; then
   sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \;
 fi
 
-# Artifact broker info
-[[ ! -s "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
+# Artifact other WORKDIR files
+[[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
+[[ ! -f "${WORKDIR}/${OCP_USR}.secret" ]] || cp -f "${WORKDIR}/${OCP_USR}.secret" "${OCP_USR}.secret"
 
 # Compress all artifacts
 tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$SYS_LOG" \
+ "${OCP_USR}.secret" \
  kubconf_* \
  subm_* \
  *.xml \

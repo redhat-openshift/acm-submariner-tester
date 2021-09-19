@@ -83,10 +83,7 @@ export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z
 # Wrap credentials with single quotes:
 export REGISTRY_USR='mirror-user'
 export REGISTRY_PWD='mirror-pass'
-
-# Wrap credentials with single quotes:
 export OCP_USR='ocp_user'
-export OCP_PWD='ocp_pass'
 
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"

@@ -319,7 +319,8 @@ function import_managed_cluster() {
   local kluster_import="./${cluster_id}-import.yaml"
 
   ( # subshell to hide commands
-    local cmd="${OC} login -u ${OCP_USR} -p ${OCP_PWD}"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
@@ -349,7 +350,13 @@ function prepare_acm_for_submariner() {
   for i in {1..3}; do
     export LOG_TITLE="cluster${i}"
     export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
-    ${OC} login -u ${OCP_USR} -p ${OCP_PWD}
+
+    ( # subshell to hide commands
+      local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+      local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+      # Attempt to login up to 3 minutes
+      watch_and_retry "$cmd" 3m
+    )
 
     # Install the submariner custom catalog source
 
@@ -384,7 +391,13 @@ function prepare_acm_for_submariner() {
   # Run on the hub
   export LOG_TITLE="cluster1"
   export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
-  ${OC} login -u ${OCP_USR} -p ${OCP_PWD}
+
+  ( # subshell to hide commands
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    # Attempt to login up to 3 minutes
+    watch_and_retry "$cmd" 3m
+  )
 
   ### Install Submariner
   for i in {1..3}; do
