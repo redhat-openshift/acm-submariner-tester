@@ -274,6 +274,8 @@ EOF
 
   TITLE "Save the yamls to be applied on the managed clusters: '${kluster_crd}' and '${kluster_import}'"
 
+  ${OC} get secrets -n ${cluster_id} |& highlight "${cluster_id}-import"
+
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath={.data.crds\\.yaml} | base64 --decode > ${kluster_crd}
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath={.data.import\\.yaml} | base64 --decode > ${kluster_import}
 
