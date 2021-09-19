@@ -513,5 +513,6 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete clusterserviceversion --all || :
   ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
   delete_namespace_and_crds "${ACM_NAMESPACE}"
+  delete_namespace_and_crds "ocm" || : # TEMPORARY WORKAROUND
 
 }
