@@ -1505,21 +1505,21 @@ function add_elevated_user() {
   trap_to_debug_commands;
 
   local ocp_usr="${1:-$OCP_USR}"
-  local secret_filename="${3:-http.secret}"
+  local http_sec_name="http.sec"
 
   TITLE "Create an HTPasswd file for OCP user '$ocp_usr'"
 
   ( # subshell to hide commands
-    openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.secret"
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
-    printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${secret_filename}"
+    [[ -s "${WORKDIR}/${OCP_USR}.sec" ]] || openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    printf "${ocp_usr}:$(openssl passwd -apr1 ${ocp_pwd})\n" > "${WORKDIR}/${http_sec_name}"
   )
 
   TITLE "Create secret from the HTPasswd file"
 
-  ${OC} delete secret $secret_filename -n openshift-config --ignore-not-found || :
+  ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
-  ${OC} create secret generic ${secret_filename} --from-file=htpasswd=${secret_filename} -n openshift-config
+  ${OC} create secret generic ${http_sec_name} --from-file=htpasswd=${WORKDIR}/${http_sec_name} -n openshift-config
 
   TITLE "Add the HTPasswd identity provider to the registry"
 
@@ -1535,7 +1535,7 @@ function add_elevated_user() {
        type: HTPasswd
        htpasswd:
          fileData:
-           name: ${secret_filename}
+           name: ${http_sec_name}
 EOF
 
   ${OC} describe oauth.config.openshift.io/cluster
@@ -1550,7 +1550,7 @@ EOF
   watch_and_retry "$cmd" 5m "^${ocp_usr}$" || BUG "WARNING: User \"${ocp_usr}\" may not be cluster admin"
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
@@ -5783,15 +5783,15 @@ fi
 
 # Artifact other WORKDIR files
 [[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
-[[ ! -f "${WORKDIR}/${OCP_USR}.secret" ]] || cp -f "${WORKDIR}/${OCP_USR}.secret" "${OCP_USR}.secret"
+[[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
 
 # Compress all artifacts
 tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  "$REPORT_FILE" \
  "$SYS_LOG" \
- "${OCP_USR}.secret" \
  kubconf_* \
  subm_* \
+ *.sec \
  *.xml \
  *.log \
  2>/dev/null)

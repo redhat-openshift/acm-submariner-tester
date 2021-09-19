@@ -319,7 +319,7 @@ function import_managed_cluster() {
   local kluster_import="./${cluster_id}-import.yaml"
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
@@ -352,7 +352,7 @@ function prepare_acm_for_submariner() {
     export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
 
     ( # subshell to hide commands
-      local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+      local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
       local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
       # Attempt to login up to 3 minutes
       watch_and_retry "$cmd" 3m
@@ -393,7 +393,7 @@ function prepare_acm_for_submariner() {
   export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.secret)"
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
