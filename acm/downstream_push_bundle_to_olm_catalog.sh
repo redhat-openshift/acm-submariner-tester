@@ -107,7 +107,7 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   # Delete previous catalogSource and Subscription
-  ${OC} delete sub/my-subscription -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
   ${OC} delete catalogsource/my-catalog-source -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
   # SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${version}" "${bundle_name}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
@@ -192,7 +192,7 @@ EOF
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
-    name: my-subscription
+    name: ${ACM_SUBSCRIPTION}
     namespace: ${subscriptionNamespace}
   spec:
     channel: ${channel}
@@ -204,8 +204,21 @@ EOF
 EOF
 
     # Manual Approve
-    ${OC} wait --for condition=InstallPlanPending --timeout=5m -n "${subscriptionNamespace}" subs/my-subscription || (error "InstallPlan not found."; exit 1)
-    installPlan=$(${OC} get subscriptions.operators.coreos.com my-subscription -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
+    # ${OC} wait --for condition=InstallPlanPending --timeout=5m -n "${subscriptionNamespace}" subs/${ACM_SUBSCRIPTION} || (error "InstallPlan not found."; exit 1)
+
+    local acm_subscription="`mktemp`_acm_subscription"
+    local cmd="${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" &> '$acm_subscription'"
+    local duration=5m
+    local regex="Healthy:\s*true"
+
+    watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
+    cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
+
+    if [[ "$subscription_status" = FAILED ]] ; then
+      FATAL "InstallPlan for '${ACM_SUBSCRIPTION}' subscription in ${subscriptionNamespace} is not ready after $duration"
+    fi
+
+    installPlan=$(${OC} get subscriptions.operators.coreos.com ${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
     if [ -n "${installPlan}" ]; then
       ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
     fi
