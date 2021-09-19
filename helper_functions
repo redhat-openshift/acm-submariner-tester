@@ -852,6 +852,49 @@ function force_delete_namespace() {
 
 # ------------------------------------------
 
+function create_docker_registry_secret() {
+### Helper function to add new Docker registry
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  # input variables
+  local registry_server="$1"
+  local registry_usr=$2
+  local registry_pwd=$3
+  local namespace="$4"
+
+  local secret_name="${registry_server}-${registry_usr}"
+  local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+
+  TITLE "Creating new docker-registry in '$namespace' namespace"
+  echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+
+  create_namespace "${namespace}"
+
+  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
+
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace || :
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
+}
+
+# ------------------------------------------
+
 # Function to install and expose Nginx service on the current KUBECONFIG cluster
 function install_nginx_service() {
   trap_to_debug_commands;

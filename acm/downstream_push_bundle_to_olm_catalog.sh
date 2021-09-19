@@ -94,11 +94,11 @@ function deploy_ocp_bundle() {
   # fi
   # ${OC} create secret -n "${namespace}" docker-registry ${BREW_SECRET_NAME} --docker-server=${BREW_REGISTRY} --docker-username="${REGISTRY_USR}" --docker-password="${REGISTRY_PWD}" --docker-email=${BREW_REGISTRY_EMAIL}
 
-  ( # subshell to hide commands
-    TITLE "Configure OCP registry local secret"
-    ocp_token=$(${OC} whoami -t)
-    create_docker_registry_secret "$ocp_registry_url" "$OCP_USR" "$ocp_token" "$namespace"
-  )
+  # ( # subshell to hide commands
+  #   TITLE "Configure OCP registry local secret"
+  #   ocp_token=$(${OC} whoami -t)
+  #   create_docker_registry_secret "$ocp_registry_url" "$OCP_USR" "$ocp_token" "$namespace"
+  # )
 
   # Set the subscription namespace
   subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${namespace}")

@@ -2962,6 +2962,8 @@ function configure_cluster_custom_registry_mirror() {
 
   create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
 
+  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
+
   add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
   add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
 
@@ -2973,49 +2975,6 @@ function configure_cluster_custom_registry_mirror() {
 
   TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
   ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
-
-}
-
-# ------------------------------------------
-
-function create_docker_registry_secret() {
-### Helper function to add new Docker registry
-  trap '' DEBUG # DONT trap_to_debug_commands
-
-  # input variables
-  local registry_server="$1"
-  local registry_usr=$2
-  local registry_pwd=$3
-  local namespace="$4"
-
-  local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
-
-  TITLE "Creating new docker-registry in '$namespace' namespace"
-  echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
-
-  create_namespace "${namespace}"
-
-  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
-
-  ( # subshell to hide commands
-    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
-  )
-
-  echo "# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace || :
-
-  ( # update the cluster global pull-secret
-    ${OC} patch secret/pull-secret -n openshift-config -p \
-    '{"data":{".dockerconfigjson":"'"$( \
-    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
-    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
-  )
-
-  ${OC} describe secret/pull-secret -n openshift-config
 
 }
 
