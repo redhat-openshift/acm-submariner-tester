@@ -118,13 +118,13 @@ function create_clusterset_for_submariner_in_acm_hub() {
 EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
-  local regex="Status:\s*True"
+  local regex="Reason:\s*ClustersSelected"
 
-  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
-  cat $acm_resource
+  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
+  cat $acm_resource |& highlight "$regex" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
-    FATAL "ManagedClusterSet resource for Submariner was not created after $duration"
+    FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
   fi
 
 
@@ -144,11 +144,11 @@ EOF
   local cmd="${OC} describe ManagedClusterSetBinding &> '$acm_resource'"
   local regex="Cluster Set:\s*${SUBM_OPERATOR}"
 
-  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || acm_status=FAILED
-  cat $acm_resource
+  watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
+  cat $acm_resource |& highlight "$regex" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
-    FATAL "ManagedClusterSetBinding resource for Submariner was not created after $duration"
+    FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created after $duration"
   fi
 
 }
