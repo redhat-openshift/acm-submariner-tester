@@ -118,15 +118,16 @@ function create_clusterset_for_submariner_in_acm_hub() {
 EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
-  local regex="Reason:\s*ClustersSelected"
+  # local regex="Reason:\s*ClustersSelected" # Only later it includes "ManagedClusterSet"
+  local regex="Manager:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   cat $acm_resource |& highlight "$regex" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
-    FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
+    # FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
+    FATAL "'${SUBM_OPERATOR}' was not added to ManagedClusterSet after $duration"
   fi
-
 
   TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner"
 
