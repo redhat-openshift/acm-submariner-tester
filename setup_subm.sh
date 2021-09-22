@@ -1552,8 +1552,8 @@ EOF
   ( # subshell to hide commands
     local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     local cmd="${OC} login -u ${ocp_usr} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
+    # Attempt to login up to 5 minutes
+    watch_and_retry "$cmd" 5m
   )
 
   local cur_context="$(${OC} config current-context)"
