@@ -4908,7 +4908,7 @@ function print_resources_and_pod_logs() {
   trap_to_debug_commands;
   local cluster_name="$1"
 
-  PROMPT "Submariner logs and OCP events on ${cluster_name}"
+  PROMPT "OCP, ACM and Submariner logs in ${cluster_name}"
 
   TITLE "Openshift Nodes on ${cluster_name}"
 
@@ -4918,11 +4918,15 @@ function print_resources_and_pod_logs() {
 
   ${OC} get pod -A |  grep -Ev '([1-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
 
+  TITLE "ACM and Submariner resources in ${cluster_name}"
+
+  ${OC} get all -n ${ACM_NAMESPACE} || :
+
+  ${OC} get all -n ${SUBM_NAMESPACE} || :
+
   TITLE "Submariner Gateway and Deployments on ${cluster_name}"
 
   ${OC} get nodes --selector=submariner.io/gateway=true --show-labels || :
-
-  ${OC} get all -n ${SUBM_NAMESPACE} || :
 
   ${OC} describe Submariner -n ${SUBM_NAMESPACE} || :
   # ${OC} get Submariner -o yaml -n ${SUBM_NAMESPACE} || :
