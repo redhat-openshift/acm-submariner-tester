@@ -205,7 +205,7 @@ function create_new_managed_cluster_in_acm_hub() {
   local cluster_id="${1}"
   local cluster_type="${2:-Amazon}" # temporarily use Amazon as default cluster type
 
-  # Run on ACM hub cluster
+  # Run on ACM hub cluster (Manager)
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Create the namespace for the managed cluster"
@@ -292,29 +292,6 @@ EOF
 
 # ------------------------------------------
 
-# Run on the managed clusters
-
-# -### Import the clusters to the clusterSet
-# for i in {1..3}; do
-#   export LOG_TITLE="cluster${i}"
-#   export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
-#   ${OC} login -u ${OCP_USR} -p ${OCP_PWD}
-#
-#   # Install klusterlet (addon) on the managed clusters
-#   # Import the managed clusters
-#   info "install the agent"
-#   ${OC} apply -f /tmp/cluster${i}-klusterlet-crd.yaml
-#
-#   # TODO: Wait for klusterlet crds installation
-#   sleep 2m
-#
-#   ${OC} apply -f /tmp/cluster${i}-import.yaml
-#   info "$(${OC} get pod -n open-cluster-management-agent)"
-#
-# done
-
-# ------------------------------------------
-
 ### Function to import the clusters to the clusterSet
 function import_managed_cluster() {
   trap_to_debug_commands;
@@ -346,57 +323,91 @@ function import_managed_cluster() {
 
 # ------------------------------------------
 
-function prepare_acm_for_submariner() {
-  PROMPT "Prepare ACM for Submariner $SUBM_VER_TAG"
+function install_submariner_on_managed_cluster_a() {
+  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster A"
   trap_to_debug_commands;
 
-  FAILURE "Prepare ACM for Submariner (TODO)"
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  install_submariner_operator_on_managed_cluster
+}
 
-  ### Prepare Submariner
-  for i in {1..3}; do
-    export LOG_TITLE="cluster${i}"
-    export KUBECONFIG=/opt/openshift-aws/smattar-cluster${i}/auth/kubeconfig
+# ------------------------------------------
 
-    ( # subshell to hide commands
-      local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-      local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-      # Attempt to login up to 3 minutes
-      watch_and_retry "$cmd" 3m
-    )
+function install_submariner_on_managed_cluster_b() {
+  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster B"
+  trap_to_debug_commands;
 
-    # Install the submariner custom catalog source
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  install_submariner_operator_on_managed_cluster
+}
 
-    # TODO: Run function with args ($SUBM_VER_TAG) instead of using exported variables
+# ------------------------------------------
 
-    export SUBMARINER_VERSION=v0.11.0 # TODO use $SUBM_VER_TAG
-    export SUBMARINER_CHANNEL=alpha-$(echo ${SUBMARINER_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+function install_submariner_on_managed_cluster_c() {
+  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster C"
+  trap_to_debug_commands;
 
-    export SUBSCRIBE=false
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  install_submariner_operator_on_managed_cluster
+}
 
-    # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
+# ------------------------------------------
 
-    deploy_ocp_bundle "${SUBMARINER_VERSION}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${SUBMARINER_CHANNEL}"
+function install_submariner_operator_on_managed_cluster() {
+  trap_to_debug_commands;
 
-    ### Apply the Submariner scc
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GATEWAY}
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_ROUTE_AGENT}
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GLOBALNET}
-    ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_LH_COREDNS}
-  done
+  # export SUBMARINER_VERSION=v0.11.0 # TODO use $SUBM_VER_TAG
+  # Get variable name (default is "SUBM_VER_TAG")
+  export SUBMARINER_VERSION="${1:-SUBM_VER_TAG}"
+
+  # Fix the $SUBMARINER_VERSION value for custom images (the function is defined in main setup_subm.sh)
+  set_subm_version_tag_var "SUBMARINER_VERSION"
+
+  export SUBMARINER_CHANNEL=alpha-$(echo ${SUBMARINER_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+
+  local cluster_name="$(print_current_cluster_name)"
+
+  TITLE "Install custom catalog source for Submariner version $SUBMARINER_VERSION (channel $SUBMARINER_CHANNEL) on cluster $cluster_name"
+
+  export SUBSCRIBE=false
+
+  ( # subshell to hide commands
+    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    # Attempt to login up to 3 minutes
+    watch_and_retry "$cmd" 3m
+  )
+
+  # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
+
+  deploy_ocp_bundle "${SUBMARINER_VERSION}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${SUBMARINER_CHANNEL}"
+
+  TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GATEWAY}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_ROUTE_AGENT}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GLOBALNET}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_LH_COREDNS}
 
   # TODO: Wait for acm agent installation on the managed clusters
-  sleep 3m
+  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
+  watch_and_retry "$cmd" 5m || BUG "WARNING: Submariner users may not be scc privileged"
 
-# }
+  ${OC} get clusterrolebindings
+
+}
+
 # ------------------------------------------
-#
-# function ttt() {
-#   PROMPT "Prepare ACM for Submariner"
-#
+
+function configure_submariner_addon_in_acm() {
+  PROMPT "Configure Submariner Addon on ACM Hub"
+
+  FAILURE "TODO: Configure Submariner Addon on ACM Hub"
 
   # Run on the hub
-  export LOG_TITLE="cluster1"
-  export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
+  # export LOG_TITLE="cluster1"
+  # export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   ( # subshell to hide commands
     local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"

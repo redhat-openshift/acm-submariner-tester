@@ -204,6 +204,7 @@ EOF
 EOF
 
     # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
+    #
     # # local duration=5m
     # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${ACM_SUBSCRIPTION} || subscription_status=FAILED
     #

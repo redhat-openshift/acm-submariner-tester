@@ -2063,10 +2063,13 @@ function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    # Fix the $SUBM_VER_TAG value for custom images
-    set_subm_version_tag_var
+    # Get variable name (default is "SUBM_VER_TAG")
+    local subctl_version="${1:-SUBM_VER_TAG}"
 
-    download_subctl_by_tag "$SUBM_VER_TAG"
+    # Fix the $subctl_version value for custom images
+    set_subm_version_tag_var "subctl_version"
+
+    download_subctl_by_tag "$subctl_version"
 
 }
 
@@ -5361,7 +5364,13 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} import_managed_cluster_c
 
-    ${junit_cmd} prepare_acm_for_submariner
+    ${junit_cmd} install_submariner_on_managed_cluster_a
+
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} install_submariner_on_managed_cluster_b
+
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} install_submariner_on_managed_cluster_c
+
+    ${junit_cmd} configure_submariner_addon_in_acm
 
     exit # Temporary exit after ACM INSTALL
 
