@@ -106,8 +106,7 @@ export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 # ACM vars
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
-# export ACM_NAMESPACE="ocm"
-export ACM_NAMESPACE="open-cluster-management" # TEMPORARY WORKAROUND
+export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR_NAME="advanced-cluster-management"
 export ACM_BUNDLE_NAME="acm-operator-bundle"
 export ACM_SUBSCRIPTION="my-acm-subscription"
