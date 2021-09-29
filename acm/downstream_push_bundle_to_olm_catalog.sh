@@ -85,7 +85,7 @@ function deploy_ocp_bundle() {
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  # Create/switch project
+  echo "# Create/switch project"
   ${OC} new-project "${namespace}" 2>/dev/null || ${OC} project "${namespace}" -q
 
   # ### Access to private repository
@@ -100,13 +100,13 @@ function deploy_ocp_bundle() {
   #   create_docker_registry_secret "$ocp_registry_url" "$OCP_USR" "$ocp_token" "$namespace"
   # )
 
-  # Set the subscription namespace
+  echo "# Set the subscription namespace"
   subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${namespace}")
 
-  # Disable the default remote OperatorHub sources for OLM
+  echo "# Disable the default remote OperatorHub sources for OLM"
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
-  # Delete previous catalogSource and Subscription
+  echo "# Delete previous catalogSource and Subscription"
   ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
   ${OC} delete catalogsource/my-catalog-source -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
@@ -203,16 +203,19 @@ EOF
     startingCSV: ${operator_name}.${version}
 EOF
 
-    # Manual Approve
-    # ${OC} wait --for condition=InstallPlanPending --timeout=5m -n "${subscriptionNamespace}" subs/${ACM_SUBSCRIPTION} || (error "InstallPlan not found."; exit 1)
+    echo "# InstallPlan Manual Approve"
+    # local duration=5m
+    # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${ACM_SUBSCRIPTION} || subscription_status=FAILED
 
     local acm_subscription="`mktemp`_acm_subscription"
     local cmd="${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" &> '$acm_subscription'"
     local duration=5m
-    local regex="Healthy:\s*true"
+    local regex="State:\s*AtLatestKnown|UpgradePending"
 
     watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
     cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
+
+    ${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}"
 
     if [[ "$subscription_status" = FAILED ]] ; then
       FATAL "InstallPlan for '${ACM_SUBSCRIPTION}' subscription in ${subscriptionNamespace} is not ready after $duration"

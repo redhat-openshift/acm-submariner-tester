@@ -30,6 +30,9 @@ function install_acm_operator() {
   # Run on the Hub install
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
+  local cmd="${OC} get MultiClusterHub multiclusterhub"
+  local retries=3
+  watch_and_retry "$cmd" "$retries" "Running" || \
   deploy_ocp_bundle "${ACM_VERSION}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${ACM_CHANNEL}"
 
   # # Wait
