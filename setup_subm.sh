@@ -2064,7 +2064,7 @@ function download_and_install_subctl() {
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
     # Get variable name (default is "SUBM_VER_TAG")
-    local subctl_version="${1:-SUBM_VER_TAG}"
+    local subctl_version="${1:-$SUBM_VER_TAG}"
 
     # Fix the $subctl_version value for custom images
     set_subm_version_tag_var "subctl_version"
@@ -3159,12 +3159,14 @@ function upload_custom_images_to_registry() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
 
-  # Fix the $SUBM_VER_TAG value for custom images
-  # set_subm_version_tag_var
-  # local image_tag=${SUBM_VER_TAG}"
+  # Get variable name (default is "SUBM_VER_TAG")
+  local image_tag="${1:-$SUBM_VER_TAG}"
 
-  [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-  local image_tag="$(subctl version | awk '{print $3}')"
+  # Fix the $image_tag value for custom images
+  set_subm_version_tag_var "image_tag"
+
+  # [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
+  # local image_tag="$(subctl version | awk '{print $3}')"
 
   TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
   \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
