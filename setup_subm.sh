@@ -5293,15 +5293,6 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    ### Getting Submariner installation binary and images ###
-
-    # Downloading and installing subctl
-    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-    fi
-
     # Overriding Submariner images with custom images from registry, if requested with --registry-images
     if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
@@ -5407,6 +5398,14 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   echo 1 > $TEST_STATUS_FILE
 
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
+
+    # Downloading and installing subctl binary
+    
+    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+    fi
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
