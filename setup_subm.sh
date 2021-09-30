@@ -5326,14 +5326,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
 
-  ### INSTALL ACM - TEMPORARY here (It should be run at END of ALL OCP Clusters Setup) ###
+  ### INSTALL ACM with Submariner on all Clusters ###
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
-    # # Temporary - Force clean ACM resources:
-    # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
-    # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
-    # #####
+    # Setup ACM Hub
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
@@ -5343,17 +5340,31 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} import_managed_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} import_managed_cluster_b
-
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} import_managed_cluster_c
+    # Setup Submariner Addon on the managed clusters
 
     ${junit_cmd} install_submariner_on_managed_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} install_submariner_on_managed_cluster_b
+    ${junit_cmd} configure_submariner_for_managed_cluster_a
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} install_submariner_on_managed_cluster_c
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-    ${junit_cmd} configure_submariner_addon_in_acm
+      ${junit_cmd} import_managed_cluster_b
+
+      ${junit_cmd} install_submariner_on_managed_cluster_b
+
+      ${junit_cmd} configure_submariner_for_managed_cluster_b
+
+    fi
+
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} import_managed_cluster_c
+
+      ${junit_cmd} install_submariner_on_managed_cluster_c
+
+      ${junit_cmd} configure_submariner_for_managed_cluster_c
+
+    fi
 
     exit # Temporary exit after ACM INSTALL
 

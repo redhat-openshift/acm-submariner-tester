@@ -13,6 +13,53 @@ export LOG_TITLE="cluster1"
 
 # ------------------------------------------
 
+function clean_acm_namespace_and_resources_cluster_a() {
+### Run cleanup of previous ACM on cluster A ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_acm_namespace_and_resources_cluster_b() {
+### Run cleanup of previous ACM on cluster A ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster B"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_acm_namespace_and_resources_cluster_c() {
+### Run cleanup of previous ACM on cluster C ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster C"
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
+  clean_acm_namespace_and_resources
+}
+
+# ------------------------------------------
+
+function clean_acm_namespace_and_resources() {
+  trap_to_debug_commands;
+
+  ${OC} delete multiclusterhub --all || :
+  ${OC} delete subs --all || :
+  ${OC} delete clusterserviceversion --all || :
+  ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
+  delete_namespace_and_crds "${ACM_NAMESPACE}"
+  delete_namespace_and_crds "open-cluster-management" || : # TEMPORARY WORKAROUND
+
+}
+
+# ------------------------------------------
+
 function install_acm_operator() {
   ### Install ACM operator ###
   trap_to_debug_commands;
@@ -397,10 +444,43 @@ function install_submariner_operator_on_managed_cluster() {
 
 # ------------------------------------------
 
-function configure_submariner_addon_in_acm() {
+function configure_submariner_for_managed_cluster_a() {
+  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster A"
   trap_to_debug_commands;
 
-  local submariner_version="${1:-$SUBM_VER_TAG}"
+  local cluster_id="acm-${CLUSTER_A_NAME}"
+  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
+}
+
+# ------------------------------------------
+
+function configure_submariner_for_managed_cluster_b() {
+  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster B"
+  trap_to_debug_commands;
+
+  local cluster_id="acm-${CLUSTER_B_NAME}"
+  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
+}
+
+# ------------------------------------------
+
+function configure_submariner_for_managed_cluster_c() {
+  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster C"
+  trap_to_debug_commands;
+
+  local cluster_id="acm-${CLUSTER_C_NAME}"
+  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
+}
+
+# ------------------------------------------
+
+function configure_submariner_version_for_managed_cluster() {
+  ### Create ACM managed cluster by cluster ID ###
+  trap_to_debug_commands;
+
+  local cluster_id="${1}"
+
+  local submariner_version="${2:-$SUBM_VER_TAG}"
 
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
@@ -408,9 +488,7 @@ function configure_submariner_addon_in_acm() {
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  PROMPT "Configure Submariner ${submariner_version} Addon on ACM Hub"
-
-  FAILURE "TODO: Configure Submariner Addon on ACM Hub"
+  PROMPT "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
 
   # Run on the hub
   # export LOG_TITLE="cluster1"
@@ -425,34 +503,37 @@ function configure_submariner_addon_in_acm() {
     watch_and_retry "$cmd" 3m
   )
 
-  ### Install Submariner
-  for i in {1..3}; do
-    ### Create the aws creds secret
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: v1
-  kind: Secret
-  metadata:
-      name: cluster${i}-aws-creds
-      namespace: cluster${i}
-  type: Opaque
-  data:
-      aws_access_key_id: $(echo ${AWS_KEY} | base64 -w0)
-      aws_secret_access_key: $(echo ${AWS_SECRET} | base64 -w0)
-EOF
+  echo "# Configure Submariner credentials"
 
-    ### Create the Submariner Subscription config
+  ( # subshell to hide commands
+    ### Create the aws creds secret
+    cat <<EOF | ${OC} apply -f -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+        name: ${cluster_id}-aws-creds
+        namespace: ${cluster_id}
+    type: Opaque
+    data:
+        aws_access_key_id: $(echo ${AWS_KEY} | base64 -w0)
+        aws_secret_access_key: $(echo ${AWS_SECRET} | base64 -w0)
+EOF
+  )
+
+  echo "# Create the Submariner Subscription config"
+
   cat <<EOF | ${OC} apply -f -
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
     name: ${SUBM_OPERATOR}
-    namespace: cluster${i}
+    namespace: ${cluster_id}
   spec:
-    IPSecIKEPort: 501
-    IPSecNATTPort: 4501
+    IPSecIKEPort: ${IPSEC_IKE_PORT}
+    IPSecNATTPort: ${IPSEC_NATT_PORT}
     cableDriver: libreswan
     credentialsSecret:
-      name: cluster${i}-aws-creds
+      name: ${cluster_id}-aws-creds
     gatewayConfig:
       aws:
         instanceType: m5.xlarge
@@ -469,76 +550,29 @@ EOF
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
-    ### Create the Submariner addon to start the deployment
+
+  echo "# Create the Submariner addon to start the deployment"
+
   cat <<EOF | ${OC} apply -f -
   apiVersion: addon.open-cluster-management.io/v1alpha1
   kind: ManagedClusterAddOn
   metadata:
     name: ${SUBM_OPERATOR}
-    namespace: cluster${i}
+    namespace: ${cluster_id}
   spec:
     installNamespace: ${SUBMARINER_NAMESPACE}
 EOF
 
-    ### Label the managed clusters and klusterletaddonconfigs to deploy submariner
-    ${OC} label managedclusters.cluster.open-cluster-management.io cluster${i} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-  done
+  echo "# Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
-  for i in {1..3}; do
-    ${OC} get submarinerconfig ${SUBM_OPERATOR} -n cluster${i} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n cluster${i}
-    ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n cluster${i} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n cluster${i}
-    ${OC} get manifestwork -n cluster${i} --ignore-not-found
-  done
+  ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
 
-  export LOG_TITLE=""
-  echo "All done"
-  exit 0
+  ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id}
+  ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
+  ${OC} get manifestwork -n ${cluster_id} --ignore-not-found
 
-}
-
-# ------------------------------------------
-
-function clean_acm_namespace_and_resources_cluster_a() {
-### Run cleanup of previous ACM on cluster A ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  clean_acm_namespace_and_resources
-}
-
-# ------------------------------------------
-
-function clean_acm_namespace_and_resources_cluster_b() {
-### Run cleanup of previous ACM on cluster A ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  clean_acm_namespace_and_resources
-}
-
-# ------------------------------------------
-
-function clean_acm_namespace_and_resources_cluster_c() {
-### Run cleanup of previous ACM on cluster C ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  clean_acm_namespace_and_resources
-}
-
-# ------------------------------------------
-
-function clean_acm_namespace_and_resources() {
-  trap_to_debug_commands;
-
-  ${OC} delete multiclusterhub --all || :
-  ${OC} delete subs --all || :
-  ${OC} delete clusterserviceversion --all || :
-  ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
-  delete_namespace_and_crds "${ACM_NAMESPACE}"
-  delete_namespace_and_crds "open-cluster-management" || : # TEMPORARY WORKAROUND
+  # export LOG_TITLE=""
+  # echo "All done"
+  # exit 0
 
 }

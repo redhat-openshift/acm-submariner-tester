@@ -78,7 +78,6 @@ export BREW_REGISTRY="brew.registry.redhat.io"
 export REGISTRY_IMAGE_PREFIX="rhacm2"
 export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
 export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
-export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
 
 # Wrap credentials with single quotes:
 export REGISTRY_USR='mirror-user'
