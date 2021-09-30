@@ -85,6 +85,9 @@ export REGISTRY_USR='mirror-user'
 export REGISTRY_PWD='mirror-pass'
 export OCP_USR='ocp_user'
 
+export ACM_VER_TAG=${ACM_VER_TAG:-latest}
+export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
+
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"
 export SUBM_AGENT="submariner-agent"

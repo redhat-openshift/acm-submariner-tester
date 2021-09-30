@@ -15,16 +15,14 @@ export LOG_TITLE="cluster1"
 
 function install_acm_operator() {
   ### Install ACM operator ###
-  PROMPT "Install ACM operator $ACM_VER_TAG"
   trap_to_debug_commands;
 
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
+  local acm_channel="release-$(echo ${acm_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
+
+  PROMPT "Install ACM operator $acm_version (Channel ${acm_channel})"
+
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-
-  # TODO: Run function with args ("$ACM_VER_TAG") instead of calling sh script with exported variables
-
-  export ACM_VERSION="v${ACM_VER_TAG}" # e.g. v2.4.0
-  export ACM_CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
-
   export SUBSCRIBE=true
 
   # Run on the Hub install
@@ -33,7 +31,7 @@ function install_acm_operator() {
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
   watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${ACM_VERSION}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${ACM_CHANNEL}"
+  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${acm_channel}"
 
   # # Wait
   # if ! (timeout 5m bash -c "until ${OC} get crds multiclusterhubs.operator.open-cluster-management.io > /dev/null 2>&1; do sleep 10; done"); then
@@ -45,7 +43,7 @@ function install_acm_operator() {
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
 
-  echo "Install ACM operator completed"
+  echo "# Install ACM operator completed"
 
 }
 
@@ -328,7 +326,7 @@ function install_submariner_on_managed_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  install_submariner_operator_on_managed_cluster
+  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
 }
 
 # ------------------------------------------
@@ -338,7 +336,7 @@ function install_submariner_on_managed_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  install_submariner_operator_on_managed_cluster
+  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
 }
 
 # ------------------------------------------
@@ -348,7 +346,7 @@ function install_submariner_on_managed_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  install_submariner_operator_on_managed_cluster
+  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
 }
 
 # ------------------------------------------
@@ -356,18 +354,16 @@ function install_submariner_on_managed_cluster_c() {
 function install_submariner_operator_on_managed_cluster() {
   trap_to_debug_commands;
 
-  # export SUBMARINER_VERSION=v0.11.0 # TODO use $SUBM_VER_TAG
-  # Get variable name (default is "SUBM_VER_TAG")
-  export SUBMARINER_VERSION="${1:-SUBM_VER_TAG}"
+  local submariner_version="${1:-$SUBM_VER_TAG}"
 
-  # Fix the $SUBMARINER_VERSION value for custom images (the function is defined in main setup_subm.sh)
-  set_subm_version_tag_var "SUBMARINER_VERSION"
+  # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
+  set_subm_version_tag_var "submariner_version"
 
-  export SUBMARINER_CHANNEL=alpha-$(echo ${SUBMARINER_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+  local submariner_channel=alpha-$(echo ${submariner_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
 
   local cluster_name="$(print_current_cluster_name)"
 
-  TITLE "Install custom catalog source for Submariner version $SUBMARINER_VERSION (channel $SUBMARINER_CHANNEL) on cluster $cluster_name"
+  TITLE "Install custom catalog source for Submariner version $submariner_version (channel $submariner_channel) on cluster $cluster_name"
 
   export SUBSCRIBE=false
 
@@ -380,7 +376,7 @@ function install_submariner_operator_on_managed_cluster() {
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
-  deploy_ocp_bundle "${SUBMARINER_VERSION}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${SUBMARINER_CHANNEL}"
+  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${submariner_channel}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GATEWAY}
@@ -399,7 +395,16 @@ function install_submariner_operator_on_managed_cluster() {
 # ------------------------------------------
 
 function configure_submariner_addon_in_acm() {
-  PROMPT "Configure Submariner Addon on ACM Hub"
+  trap_to_debug_commands;
+
+  local submariner_version="${1:-$SUBM_VER_TAG}"
+
+  # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
+  set_subm_version_tag_var "submariner_version"
+
+  local submariner_channel=alpha-$(echo ${submariner_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+
+  PROMPT "Configure Submariner ${submariner_version} Addon on ACM Hub"
 
   FAILURE "TODO: Configure Submariner Addon on ACM Hub"
 
@@ -454,10 +459,10 @@ EOF
       submarinerImagePullSpec: ''
       submarinerRouteAgentImagePullSpec: ''
     subscriptionConfig:
-      channel: ${SUBMARINER_CHANNEL}
+      channel: ${submariner_channel}
       source: my-catalog-source
       sourceNamespace: ${SUBMARINER_NAMESPACE}
-      startingCSV: ${SUBM_OPERATOR}.${SUBMARINER_VERSION}
+      startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
     ### Create the Submariner addon to start the deployment

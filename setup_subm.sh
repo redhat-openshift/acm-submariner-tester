@@ -587,8 +587,6 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 build_go_tests=${build_go_tests:-NO}
 install_acm=${install_acm:-NO}
 download_subctl=${download_subctl:-NO}
-# ACM_VER_TAG=${SUBM_VER_TAG}
-# SUBM_VER_TAG=${SUBM_VER_TAG}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
 create_cluster_a=${create_cluster_a:-NO}
@@ -697,6 +695,7 @@ function show_test_plan() {
     - install_nginx_svc_on_cluster_b / c
     - test_basic_cluster_connectivity_before_submariner
     - test_clusters_disconnected_before_submariner
+    - install_acm_operator "$ACM_VER_TAG"
     - download_and_install_subctl "$SUBM_VER_TAG"
     - test_subctl_command
     - set_join_parameters_for_cluster_a
@@ -2063,7 +2062,6 @@ function download_and_install_subctl() {
   ### Download SubCtl - Submariner installer - Latest RC release ###
     PROMPT "Testing \"getsubctl.sh\" to download and use SubCtl version $SUBM_VER_TAG"
 
-    # Get variable name (default is "SUBM_VER_TAG")
     local subctl_version="${1:-$SUBM_VER_TAG}"
 
     # Fix the $subctl_version value for custom images
@@ -3159,7 +3157,6 @@ function upload_custom_images_to_registry() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
 
-  # Get variable name (default is "SUBM_VER_TAG")
   local image_tag="${1:-$SUBM_VER_TAG}"
 
   # Fix the $image_tag value for custom images
