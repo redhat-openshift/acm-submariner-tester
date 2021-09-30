@@ -2095,11 +2095,11 @@ function set_subm_version_tag_var() {
     subm_version_tag=v${subm_version_tag}
   fi
 
-  if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
-    echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
-    subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
-    echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
-  fi
+  # if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
+  #   echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
+  #   subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
+  #   echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
+  # fi
 
   # Reevaluate $tag_var_name value
   local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
@@ -5400,7 +5400,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
 
     # Downloading and installing subctl binary
-    
+
     if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
