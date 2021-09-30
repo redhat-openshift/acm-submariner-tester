@@ -2133,7 +2133,7 @@ function download_subctl_by_tag() {
       # Fix the $subctl_branch_tag value for custom images
       set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_PREFIX}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       # Check if $subctl_xz exists in $subctl_image_url
@@ -2385,12 +2385,6 @@ function append_custom_images_to_join_cmd_file() {
   BUG "Overriding images with wrong keys should fail first in join command" \
   "No workaround" \
   "https://github.com/submariner-io/submariner-operator/issues/1018"
-
-
-  export REGISTRY_IMAGE_PREFIX="rhacm2"
-  export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview"
-
-
 
   # To be deprecated:
   export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
