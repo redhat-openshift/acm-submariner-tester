@@ -18,7 +18,9 @@ function install_acm_operator() {
   trap_to_debug_commands;
 
   local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
-  local acm_channel="release-$(echo ${acm_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
+
+  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
+  local acm_channel=release-$(echo $acm_version | grep -Po "$regex_to_major_minor")
 
   PROMPT "Install ACM operator $acm_version (Channel ${acm_channel})"
 
@@ -359,7 +361,8 @@ function install_submariner_operator_on_managed_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local submariner_channel=alpha-$(echo ${submariner_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
+  local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
   local cluster_name="$(print_current_cluster_name)"
 
@@ -402,7 +405,8 @@ function configure_submariner_addon_in_acm() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local submariner_channel=alpha-$(echo ${submariner_version} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)
+  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
+  local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
   PROMPT "Configure Submariner ${submariner_version} Addon on ACM Hub"
 

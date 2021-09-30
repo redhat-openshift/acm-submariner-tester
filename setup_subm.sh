@@ -2093,11 +2093,10 @@ function set_subm_version_tag_var() {
     subm_version_tag=v${subm_version_tag}
   fi
 
-  # if [[ -n "$REGISTRY_TAG_MATCH" ]] ; then
-  #   echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
-  #   subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
-  #   echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
-  # fi
+  # export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
+  # echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
+  # subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
+  # echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
 
   # Reevaluate $tag_var_name value
   local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
