@@ -82,12 +82,6 @@ function install_acm_operator() {
   watch_and_retry "$cmd" "$retries" "Running" || \
   deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${acm_channel}"
 
-  # # Wait
-  # if ! (timeout 5m bash -c "until ${OC} get crds multiclusterhubs.operator.open-cluster-management.io > /dev/null 2>&1; do sleep 10; done"); then
-  #   error "MultiClusterHub CRD was not found."
-  #   exit 1
-  # fi
-
   TITLE "Wait for MultiClusterHub CRD to be ready"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
@@ -256,11 +250,8 @@ function create_new_managed_cluster_in_acm_hub() {
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   echo "# Create the namespace for the managed cluster"
-  ${OC} new-project ${cluster_id} || :
+  create_namespace "${cluster_id}"
   ${OC} label namespace ${cluster_id} cluster.open-cluster-management.io/managedCluster=${cluster_id} --overwrite
-
-  # TODO: wait for namespace
-  sleep 30s
 
   TITLE "Create ACM managed cluster by ID: $cluster_id, Type: $cluster_type"
 
@@ -285,7 +276,7 @@ function create_new_managed_cluster_in_acm_hub() {
 EOF
 
   ### TODO: Wait for managedcluster
-  sleep 1m
+  # sleep 1m
 
   TITLE "Create ACM klusterlet addon config for cluster '$cluster_id'"
 
@@ -333,7 +324,7 @@ EOF
   # done
 
   # TODO: wait for kluserlet addon
-  sleep 1m
+  # sleep 1m
 
 }
 
@@ -361,7 +352,7 @@ function import_managed_cluster() {
   ${OC} apply -f ${kluster_crd}
 
   # TODO: Wait for klusterlet crds installation
-  sleep 2m
+  # sleep 2m
 
   ${OC} apply -f ${kluster_import}
   ${OC} get pod -n open-cluster-management-agent

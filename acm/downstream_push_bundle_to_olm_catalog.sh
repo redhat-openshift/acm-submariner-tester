@@ -7,7 +7,7 @@
 
 # source ${wd:?}/debug.sh
 
-### Function to import the clusters to the clusterSet
+### Function to find latest index image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
   trap_to_debug_commands;
 
@@ -16,18 +16,26 @@ function export_LATEST_IIB() {
 
   local ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
   local num_of_latest_builds=5
-  local num_of_days=15
+  local num_of_days=60
 
   rows=$((num_of_latest_builds * 5))
-  delta=$((num_of_days * 86400))
+  delta=$((num_of_days * 86400)) # 5184000 = 60 days * 86400
 
-  #curl -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.index.built&rows_per_page=3&delta=${delta}&contains=${bundle_name}-container-${version}" | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .index.index_image, ocp_version: .index.ocp_version}]'
-
-  curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls "https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+  curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
 
   export LATEST_IIB=$(cat latest_iib.txt \
   | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+
+  # Index Image example:
+  # {
+  # "nvr": "submariner-operator-bundle-container-v0.11.0-6",
+  # "index_image": {
+  #   "v4.6": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105099",
+  #   "v4.7": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105101",
+  #   "v4.8": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105104",
+  #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
+  # }
 
 }
 
@@ -120,7 +128,8 @@ function deploy_ocp_bundle() {
   #   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
   # fi
 
-  export_LATEST_IIB "${version}" "${bundle_name}"
+  # export_LATEST_IIB "${version}" "${bundle_name}"
+  export LATEST_IIB="registry-proxy.engineering.redhat.com/rh-osbs/iib:116138"
 
   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
