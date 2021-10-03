@@ -5366,12 +5366,17 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    exit # Temporary exit after ACM INSTALL
-
   fi
   ### END of ACM Install ###
 
-  # Running basic pre-submariner tests (only required for sys tests on new/cleaned clusters)
+  ### Download and install SUBCTL ###
+  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+
+    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+  fi
+
+  # Running basic pre-tests for submariner (only required for sys tests on new/cleaned clusters)
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then
 
     echo -e "# TODO: Need to add tests for cluster C"
@@ -5389,8 +5394,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_clusters_disconnected_before_submariner
 
   fi
-  ### END of skip_tests for sys|all ###
-
+  ### END of pre-tests for submariner for sys|all ###
 
   ### Deploy Submariner on the clusters (if not requested to skip_install) ###
 
@@ -5401,14 +5405,6 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   echo 1 > $TEST_STATUS_FILE
 
   if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
-
-    # Downloading and installing subctl binary
-
-    if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-
-      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-    fi
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest

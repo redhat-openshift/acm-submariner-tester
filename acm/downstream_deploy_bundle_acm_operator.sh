@@ -187,7 +187,7 @@ EOF
   kind: ManagedClusterSetBinding
   metadata:
     name: ${SUBM_OPERATOR}
-    namespace: ${SUBMARINER_NAMESPACE}
+    namespace: ${SUBM_NAMESPACE}
   spec:
     clusterSet: ${SUBM_OPERATOR}
 EOF
@@ -426,13 +426,13 @@ function install_submariner_operator_on_managed_cluster() {
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
-  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBMARINER_NAMESPACE}" "${submariner_channel}"
+  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GATEWAY}
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_ROUTE_AGENT}
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_GLOBALNET}
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBMARINER_NAMESPACE}:${SUBM_LH_COREDNS}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}
+  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}
 
   # TODO: Wait for acm agent installation on the managed clusters
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
@@ -488,7 +488,7 @@ function configure_submariner_version_for_managed_cluster() {
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  PROMPT "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
+  TITLE "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
 
   # Run on the hub
   # export LOG_TITLE="cluster1"
@@ -546,7 +546,7 @@ EOF
     subscriptionConfig:
       channel: ${submariner_channel}
       source: my-catalog-source
-      sourceNamespace: ${SUBMARINER_NAMESPACE}
+      sourceNamespace: ${SUBM_NAMESPACE}
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
@@ -560,7 +560,7 @@ EOF
     name: ${SUBM_OPERATOR}
     namespace: ${cluster_id}
   spec:
-    installNamespace: ${SUBMARINER_NAMESPACE}
+    installNamespace: ${SUBM_NAMESPACE}
 EOF
 
   echo "# Label the managed clusters and klusterletaddonconfigs to deploy submariner"
@@ -570,9 +570,5 @@ EOF
   ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id}
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
   ${OC} get manifestwork -n ${cluster_id} --ignore-not-found
-
-  # export LOG_TITLE=""
-  # echo "All done"
-  # exit 0
 
 }
