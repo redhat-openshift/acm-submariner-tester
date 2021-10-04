@@ -79,11 +79,11 @@ Running with pre-defined parameters (optional):
 
 - Submariner installation options:
 
-  * Install ACM and Submariner:                        --acm-version [x.y.z]
-  * Download SubCtl version:                           --subctl-version [latest / x.y.z / {tag}]
+  * Install ACM operator version:                      --acm-version [x.y.z]
+  * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
-  * Skip Submariner installation on all clusters:      --skip-install
+  * Install Submariner with SubCtl:                    --subctl-install
 
 - Submariner test options:
 
@@ -109,10 +109,11 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --subctl-version 0.8.1 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.0 --subctl-version 0.11.0 --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install Submariner 0.8.1 release
+  * Install ACM 2.4.0 release
+  * Install Submariner 0.11.0 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
@@ -322,6 +323,9 @@ while [[ $# -gt 0 ]]; do
   --clean-cluster-c)
     clean_cluster_c=YES
     shift ;;
+  --subctl-install)
+    install_with_subctl=YES
+    shift ;;
   --globalnet)
     globalnet=YES
     shift ;;
@@ -331,9 +335,6 @@ while [[ $# -gt 0 ]]; do
     shift 2 ;;
   --skip-ocp-setup)
     skip_ocp_setup=YES
-    shift ;;
-  --skip-install)
-    skip_install=YES
     shift ;;
   --skip-tests)
     check_cli_args "$2"
@@ -521,12 +522,12 @@ if [[ -z "$got_user_input" ]]; then
     build_go_tests=${input:-YES}
   done
 
-  # User input: $skip_install - to skip submariner deployment
-  while [[ ! "$skip_install" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without deploying Submariner ? ${NO_COLOR}
+  # User input: $install_with_subctl - to install using SUBCTL tool
+  while [[ ! "$install_with_subctl" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to install Submariner with SubCtl tool ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    skip_install=${input:-NO}
+    install_with_subctl=${input:-NO}
   done
 
   # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
@@ -600,12 +601,12 @@ destroy_cluster_c=${destroy_cluster_c:-NO}
 create_cluster_c=${create_cluster_c:-NO}
 reset_cluster_c=${reset_cluster_c:-NO}
 clean_cluster_c=${clean_cluster_c:-NO}
+install_with_subctl=${install_with_subctl:-NO}
 globalnet=${globalnet:-NO}
 # subm_cable_driver=${subm_cable_driver:-libreswan} [Deprecated]
 config_golang=${config_golang:-NO}
 config_aws_cli=${config_aws_cli:-NO}
 skip_ocp_setup=${skip_ocp_setup:-NO}
-skip_install=${skip_install:-NO}
 skip_tests=${skip_tests:-NO}
 print_logs=${print_logs:-NO}
 create_junit_xml=${create_junit_xml:-NO}
@@ -649,54 +650,57 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_install" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping deployment and preparations: $skip_install \n"
-  else
-    TITLE "Execution plan: Submariner deployment and environment preparations"
+  TITLE "Execution plan: Submariner deployment and environment preparations"
 
-    echo -e "# OCP and Submariner setup and test tools:
-    - config_golang: $config_golang
-    - config_aws_cli: $config_aws_cli
-    - build_ocpup_tool_latest: $get_ocpup_tool
-    - build_operator_latest: $build_operator # [DEPRECATED]
-    - build_submariner_repos: $build_go_tests
-    "
+  echo -e "# OCP and Submariner setup and test tools:
+  - config_golang: $config_golang
+  - config_aws_cli: $config_aws_cli
+  - build_ocpup_tool_latest: $get_ocpup_tool
+  - build_operator_latest: $build_operator # [DEPRECATED]
+  - build_submariner_repos: $build_go_tests
+  "
 
-    echo -e "# Submariner deployment and environment setup for the tests:
+  echo -e "# Submariner deployment and environment setup for the tests:
 
-    - update_kubeconfig_context_cluster_a
-    - update_kubeconfig_context_cluster_b / c
-    - test_kubeconfig_cluster_a
-    - test_kubeconfig_cluster_b / c
-    - add_elevated_user_to_cluster_a
-    - add_elevated_user_to_cluster_b / c
-    - clean_submariner_namespace_and_resources_cluster_a
-    - clean_node_labels_and_machines_cluster_a
-    - delete_old_submariner_images_from_cluster_a
-    - clean_submariner_namespace_and_resources_cluster_b / c
-    - clean_node_labels_and_machines_cluster_b / c
-    - delete_old_submariner_images_from_cluster_b / c
-    - open_firewall_ports_on_aws_cluster_a
-    - configure_images_prune_cluster_a
-    - open_firewall_ports_on_openstack_cluster_b
-    - label_gateway_on_broker_nodes_with_external_ip
-    - open_firewall_ports_on_aws_cluster_c
-    - label_first_gateway_cluster_b / c
-    - configure_images_prune_cluster_b / c
-    - configure_custom_registry_cluster_a: $registry_images
-    - configure_custom_registry_cluster_b / c: $registry_images
-    - upload_custom_images_to_registry_cluster_a: $registry_images
-    - upload_custom_images_to_registry_cluster_b / c: $registry_images
-    - configure_namespace_for_submariner_tests_on_cluster_a
-    - configure_namespace_for_submariner_tests_on_cluster_b
-    - test_kubeconfig_cluster_a
-    - test_kubeconfig_cluster_b / c
-    - install_netshoot_app_on_cluster_a
-    - install_nginx_svc_on_cluster_b / c
-    - test_basic_cluster_connectivity_before_submariner
-    - test_clusters_disconnected_before_submariner
-    - install_acm_operator "$ACM_VER_TAG"
-    - download_and_install_subctl "$SUBM_VER_TAG"
+  - update_kubeconfig_context_cluster_a
+  - update_kubeconfig_context_cluster_b / c
+  - test_kubeconfig_cluster_a
+  - test_kubeconfig_cluster_b / c
+  - add_elevated_user_to_cluster_a
+  - add_elevated_user_to_cluster_b / c
+  - clean_submariner_namespace_and_resources_cluster_a
+  - clean_node_labels_and_machines_cluster_a
+  - delete_old_submariner_images_from_cluster_a
+  - clean_submariner_namespace_and_resources_cluster_b / c
+  - clean_node_labels_and_machines_cluster_b / c
+  - delete_old_submariner_images_from_cluster_b / c
+  - open_firewall_ports_on_aws_cluster_a
+  - configure_images_prune_cluster_a
+  - open_firewall_ports_on_openstack_cluster_b
+  - label_gateway_on_broker_nodes_with_external_ip
+  - open_firewall_ports_on_aws_cluster_c
+  - label_first_gateway_cluster_b / c
+  - configure_images_prune_cluster_b / c
+  - configure_custom_registry_cluster_a: $registry_images
+  - configure_custom_registry_cluster_b / c: $registry_images
+  - upload_custom_images_to_registry_cluster_a: $registry_images
+  - upload_custom_images_to_registry_cluster_b / c: $registry_images
+  - configure_namespace_for_submariner_tests_on_cluster_a
+  - configure_namespace_for_submariner_tests_on_cluster_b
+  - test_kubeconfig_cluster_a
+  - test_kubeconfig_cluster_b / c
+  - install_netshoot_app_on_cluster_a
+  - install_nginx_svc_on_cluster_b / c
+  - test_basic_cluster_connectivity_before_submariner
+  - test_clusters_disconnected_before_submariner
+  - install_acm_operator $ACM_VER_TAG
+  - download_and_install_subctl $SUBM_VER_TAG
+  "
+
+  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
+    TITLE "Installing Submariner with SubCtl tool"
+
+    echo -e "
     - test_subctl_command
     - set_join_parameters_for_cluster_a
     - set_join_parameters_for_cluster_b / c
@@ -5323,6 +5327,13 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
 
   fi
+
+  TITLE "OCP clusters and environment setup is ready"
+  echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
+  \n# ($TEST_STATUS_FILE with exit code 1)"
+
+  echo 1 > $TEST_STATUS_FILE
+
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
 
@@ -5367,6 +5378,12 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
 
   fi
+
+  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
+  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
+
+  echo 2 > $TEST_STATUS_FILE
+
   ### END of ACM Install ###
 
   ### Download and install SUBCTL ###
@@ -5396,15 +5413,9 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of pre-tests for submariner for sys|all ###
 
-  ### Deploy Submariner on the clusters (if not requested to skip_install) ###
+  ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
-  TITLE "OCP clusters and environment setup is ready"
-  echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
-  \n# ($TEST_STATUS_FILE with exit code 1)"
-
-  echo 1 > $TEST_STATUS_FILE
-
-  if [[ ! "$skip_install" =~ ^(y|yes)$ ]]; then
+  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
@@ -5439,7 +5450,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
 
   fi
-  ### END of skip_install for subctl ###
+  ### END of install_with_subctl ###
 
   ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
 
@@ -5552,10 +5563,6 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi # END of System tests that uses Cluster B (OSP)
 
-    TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
-    echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
-
-    echo 2 > $TEST_STATUS_FILE
 
     ### Running benchmark tests with subctl
 
