@@ -16,15 +16,19 @@ function export_LATEST_IIB() {
 
   local ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
   local num_of_latest_builds=5
-  local num_of_days=60
+  local num_of_days=15
 
   rows=$((num_of_latest_builds * 5))
-  delta=$((num_of_days * 86400)) # 5184000 = 60 days * 86400
+  delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
   curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
 
+  # export LATEST_IIB=$(cat latest_iib.txt \
+  # | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
+  # | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+
   export LATEST_IIB=$(cat latest_iib.txt \
-  | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
+  | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
 
   # Index Image example:
@@ -116,7 +120,7 @@ function deploy_ocp_bundle() {
 
   echo "# Delete previous catalogSource and Subscription"
   ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
-  ${OC} delete catalogsource/my-catalog-source -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete catalogsource/${ACM_CATALOG} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
   # SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${version}" "${bundle_name}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
   # if [ -z "${SRC_IMAGE_INDEX}" ]; then
@@ -128,8 +132,7 @@ function deploy_ocp_bundle() {
   #   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
   # fi
 
-  # export_LATEST_IIB "${version}" "${bundle_name}"
-  export LATEST_IIB="registry-proxy.engineering.redhat.com/rh-osbs/iib:116138"
+  export_LATEST_IIB "${version}" "${bundle_name}"
 
   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
@@ -148,7 +151,7 @@ function deploy_ocp_bundle() {
   apiVersion: operators.coreos.com/v1alpha1
   kind: CatalogSource
   metadata:
-    name: my-catalog-source
+    name: ${ACM_CATALOG}
     namespace: ${marketplace_namespace}
   spec:
     sourceType: grpc
@@ -160,21 +163,24 @@ function deploy_ocp_bundle() {
         interval: 5m
 EOF
 
-  # # wait
-  # if ! (timeout 5m bash -c "until [[ $(${OC} get catalogsource -n ${marketplace_namespace} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}') -eq 'READY' ]]; do sleep 10; done"); then
-  #     error "CatalogSource is not ready"
-  #     exit 1
-  # fi
 
-  TITLE "Wait for CatalogSource to be created"
+  TITLE "Wait for CatalogSource '${ACM_CATALOG}' to be created"
 
-  cmd="${OC} get catalogsource -n ${marketplace_namespace} my-catalog-source -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource was not created"
+  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${ACM_CATALOG} -o jsonpath='{.status.connectionState.lastObservedState}'"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${ACM_CATALOG}' was not created"
 
   # test
   ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
   ${OC} -n ${marketplace_namespace} get pods --ignore-not-found
-  (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || true
+  (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || :
+
+  ${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json \
+  | jq -r '(.status.channels[].currentCSVDesc.version)' \
+  |& highlight "${version//[a-zA-Z]}" || catalog_status=FAILED
+
+  if [[ "$catalog_status" = FAILED ]] ; then
+    FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${ACM_CATALOG}'"
+  fi
 
   if [ "${SUBSCRIBE}" = true ]; then
     # Deprecated since ACM 2.3
@@ -192,7 +198,7 @@ EOF
 EOF
 
       # test
-      ${OC} get og -n ${namespace} --ignore-not-found
+      ${OC} get operatorgroup -n ${namespace} --ignore-not-found
     fi
 
   TITLE "Create the Subscription (Automatic Approval)"
@@ -207,7 +213,7 @@ EOF
     channel: ${channel}
     installPlanApproval: Automatic
     name: ${operator_name}
-    source: my-catalog-source
+    source: ${ACM_CATALOG}
     sourceNamespace: ${marketplace_namespace}
     startingCSV: ${operator_name}.${version}
 EOF
