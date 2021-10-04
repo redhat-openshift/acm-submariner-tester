@@ -172,15 +172,11 @@ EOF
   # test
   ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
   ${OC} -n ${marketplace_namespace} get pods --ignore-not-found
-  (${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source') || :
+  ${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source' || :
 
-  ${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json \
-  | jq -r '(.status.channels[].currentCSVDesc.version)' \
-  |& highlight "${version//[a-zA-Z]}" || catalog_status=FAILED
-
-  if [[ "$catalog_status" = FAILED ]] ; then
-    FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${ACM_CATALOG}'"
-  fi
+  cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+  regex="${version//[a-zA-Z]}"
+  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${ACM_CATALOG}'"
 
   if [ "${SUBSCRIBE}" = true ]; then
     # Deprecated since ACM 2.3
