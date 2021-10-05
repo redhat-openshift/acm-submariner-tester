@@ -3364,13 +3364,20 @@ function test_disaster_recovery_of_gateway_nodes() {
   # Should be run on the Broker cluster
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
-  TITLE "Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
-  gateway_aws_instance_ids="$(aws ec2 describe-instances \
-  --filters Name=tag:Name,Values=${CLUSTER_A_NAME}-*-submariner-gw-* Name=instance-state-name,Values=running \
-  --output text --query Reservations[*].Instances[*].InstanceId \
-  | tr '\r\n' ' ')"
+  local ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
+  # e.g. nmanos-aws-devcluster-dzzxk
 
-  [[ -n "$gateway_aws_instance_ids" ]] || FATAL "No running VM instances of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME"
+  TITLE "Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME (InfraID '${ocp_infra_id}')"
+
+  local gateway_aws_instance_ids=$(aws ec2 describe-instances --filters \
+  Name=tag:Name,Values=${ocp_infra_id}-submariner-gw-* \
+  Name=instance-state-name,Values=running \
+  --output text --query Reservations[*].Instances[*].InstanceId \
+   | tr '\r\n' ' ')
+
+  [[ -n "$gateway_aws_instance_ids" ]] || \
+  FATAL "No running VM instances of '${ocp_infra_id}-submariner-gw' in OCP cluster $CLUSTER_A_NAME. \n\
+  Did you skip OCP preparations with --skip-ocp-setup ?"
 
   echo -e "\n# Stopping all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [${gateway_aws_instance_ids}]"
   aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids || :
@@ -5085,7 +5092,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Set script trap functions
   set_trap_functions
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to skip_ocp_setup) ###
+  ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
 
   # Exporting active clusters KUBECONFIGs
   export_active_clusters_kubeconfig
@@ -5449,7 +5456,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of install_with_subctl ###
 
-  ### Running High-level / E2E / Unit Tests (if not requested to skip sys / all tests) ###
+  ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
