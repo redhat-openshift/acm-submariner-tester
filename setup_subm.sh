@@ -191,11 +191,8 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 
 ### Store dynamic variable values in local files
 
-# The default script exit code is 1 (later it is updated)
-export SCRIPT_RC=1
-
 # File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
-export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.out"
+export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
 > $TEST_STATUS_FILE
 
 # File to store OCP cluster A version
@@ -5667,14 +5664,9 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
   echo -e "\n# Publishing to Polarion should be run only if $TEST_STATUS_FILE is not empty: [${test_status}] \n"
 
-  if [[ -n "$test_status" ]] ; then
-    # Update the script exit code according to system tests status
-    export SCRIPT_RC="$test_status"
-
-    ### Upload Junit xmls to Polarion (if requested by user CLI)  ###
-    if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $test_status is set ###
+  if [[ -n "$test_status" ]] && [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
       create_all_test_results_in_polarion || :
-    fi
   fi
 
   # ------------------------------------------
@@ -5778,7 +5770,8 @@ tar tvf $report_archive
 
 TITLE "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
 
-TITLE "Exiting script with \$SCRIPT_RC return code: [$SCRIPT_RC]"
-exit $SCRIPT_RC
+test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
+exit $test_status
 
 # ------------------------------------------
