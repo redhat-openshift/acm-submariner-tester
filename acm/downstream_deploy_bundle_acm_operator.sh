@@ -82,9 +82,9 @@ function install_acm_operator() {
   watch_and_retry "$cmd" "$retries" "Running" || \
   deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${acm_channel}"
 
-  TITLE "Wait for MultiClusterHub CRD to be ready"
+  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE_NAME}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created"
+  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE_NAME}"
 
   echo "# Install ACM operator completed"
 
@@ -155,7 +155,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
-  apiVersion: cluster.open-cluster-management.io/v1alpha1
+  apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSet
   metadata:
     name: ${SUBM_OPERATOR}
@@ -177,7 +177,7 @@ EOF
 
   # Bind the namespace
   cat <<EOF | ${OC} apply -f -
-  apiVersion: cluster.open-cluster-management.io/v1alpha1
+  apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSetBinding
   metadata:
     name: ${SUBM_OPERATOR}
@@ -186,14 +186,14 @@ EOF
     clusterSet: ${SUBM_OPERATOR}
 EOF
 
-  local cmd="${OC} describe ManagedClusterSetBinding &> '$acm_resource'"
+  local cmd="${OC} describe ManagedClusterSetBinding -n ${SUBM_NAMESPACE} &> '$acm_resource'"
   local regex="Cluster Set:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   cat $acm_resource |& highlight "$regex" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
-    FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created after $duration"
+    FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created in ${SUBM_NAMESPACE} after $duration"
   fi
 
 }
