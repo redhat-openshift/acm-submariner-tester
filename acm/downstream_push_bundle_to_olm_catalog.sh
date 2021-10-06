@@ -1,11 +1,7 @@
 #!/bin/bash
 
-############ OCP Operators Functions ############
+############ OCP Operators functions ############
 
-# Set working dir
-# wd="$(dirname "$(realpath -s $0)")"
-
-# source ${wd:?}/debug.sh
 
 ### Function to find latest index image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
@@ -14,7 +10,8 @@ function export_LATEST_IIB() {
   local version="${1}"
   local bundle_name="${2}"
 
-  local ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
+  local ocp_version_x_y
+  ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
   local num_of_latest_builds=5
   local num_of_days=15
 
@@ -27,9 +24,11 @@ function export_LATEST_IIB() {
   # | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   # | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
 
-  export LATEST_IIB=$(cat latest_iib.txt \
+  LATEST_IIB=$(cat latest_iib.txt \
   | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+
+  export LATEST_IIB
 
   # Index Image example:
   # {
@@ -80,17 +79,15 @@ function deploy_ocp_bundle() {
       exit 3
   fi
 
-  # OPERATORS_NAMESPACE="openshift-operators"
   marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
   INSTALL_MODE=${installModes[1]}
-  # BREW_SECRET_NAME='brew-registry'
 
   SUBSCRIBE=${SUBSCRIBE:-false}
 
   # login
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
@@ -99,18 +96,6 @@ function deploy_ocp_bundle() {
 
   echo "# Create/switch project"
   ${OC} new-project "${namespace}" 2>/dev/null || ${OC} project "${namespace}" -q
-
-  # ### Access to private repository
-  # if ${OC} get secret ${BREW_SECRET_NAME} -n "${namespace}" > /dev/null 2>&1; then
-  #   ${OC} delete secret ${BREW_SECRET_NAME} -n "${namespace}" --wait
-  # fi
-  # ${OC} create secret -n "${namespace}" docker-registry ${BREW_SECRET_NAME} --docker-server=${BREW_REGISTRY} --docker-username="${REGISTRY_USR}" --docker-password="${REGISTRY_PWD}" --docker-email=${BREW_REGISTRY_EMAIL}
-
-  # ( # subshell to hide commands
-  #   TITLE "Configure OCP registry local secret"
-  #   ocp_token=$(${OC} whoami -t)
-  #   create_docker_registry_secret "$ocp_registry_url" "$OCP_USR" "$ocp_token" "$namespace"
-  # )
 
   echo "# Set the subscription namespace"
   subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${namespace}")
@@ -121,16 +106,6 @@ function deploy_ocp_bundle() {
   echo "# Delete previous catalogSource and Subscription"
   ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
   ${OC} delete catalogsource/${ACM_CATALOG} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
-
-  # SRC_IMAGE_INDEX=$(${wd:?}/downstream_get_latest_iib.sh "${version}" "${bundle_name}" | jq -r '.index_image."v'"${OCP_VERSION}"'"')
-  # if [ -z "${SRC_IMAGE_INDEX}" ]; then
-  #   if [ -z "${1}" ]; then
-  #     error "SRC_IMAGE_INDEX was not provided" && exit 4
-  #   fi
-  #   SRC_IMAGE_INDEX=${1}
-  # else
-  #   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${SRC_IMAGE_INDEX} | cut -d'/' -f2-)"
-  # fi
 
   export_LATEST_IIB "${version}" "${bundle_name}"
 
@@ -193,9 +168,9 @@ EOF
       - ${namespace}
 EOF
 
-      # test
-      ${OC} get operatorgroup -n ${namespace} --ignore-not-found
-    fi
+    # Display operator group
+    ${OC} get operatorgroup -n ${namespace} --ignore-not-found
+  fi
 
   TITLE "Create the Subscription (Automatic Approval)"
 
@@ -238,14 +213,19 @@ EOF
     #   ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
     # fi
 
-    # test
+    TITLE "Display ${subscriptionNamespace} resources"
+
     ${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get csv -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0' || :
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0' || :
+
+    TITLE "Display Operator deployments logs"
+
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
+    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
+    
   fi
 
 }

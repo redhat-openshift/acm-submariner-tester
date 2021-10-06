@@ -67,7 +67,8 @@ function install_acm_operator() {
   local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
 
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
-  local acm_channel=release-$(echo $acm_version | grep -Po "$regex_to_major_minor")
+  local acm_channel
+  acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
 
   PROMPT "Install ACM operator $acm_version (Channel ${acm_channel})"
 
@@ -137,7 +138,8 @@ function create_clusterset_for_submariner_in_acm_hub() {
   PROMPT "Create cluster-set for Submariner on ACM"
   trap_to_debug_commands;
 
-  local acm_resource="`mktemp`_acm_resource"
+  local acm_resource
+  acm_resource="`mktemp`_acm_resource"
   local duration=5m
 
   # Run on ACM hub cluster
@@ -340,8 +342,8 @@ function import_managed_cluster() {
   local kluster_import="./${cluster_id}-import.yaml"
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
@@ -400,17 +402,19 @@ function install_submariner_operator_on_managed_cluster() {
   set_subm_version_tag_var "submariner_version"
 
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
-  local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  local submariner_channel
+  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  local cluster_name="$(print_current_cluster_name)"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
 
   TITLE "Install custom catalog source for Submariner version $submariner_version (channel $submariner_channel) on cluster $cluster_name"
 
   export SUBSCRIBE=false
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
@@ -477,7 +481,8 @@ function configure_submariner_version_for_managed_cluster() {
   set_subm_version_tag_var "submariner_version"
 
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
-  local submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  local submariner_channel
+  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
   TITLE "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
 
@@ -488,8 +493,8 @@ function configure_submariner_version_for_managed_cluster() {
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
   ( # subshell to hide commands
-    local ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
+    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 3 minutes
     watch_and_retry "$cmd" 3m
   )
