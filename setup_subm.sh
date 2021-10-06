@@ -4450,7 +4450,10 @@ function test_lighthouse_e2e_with_go() {
   trap_to_debug_commands;
 
   local test_params
-  test_params=$([[ "$globalnet" =~ ^(y|yes)$ ]] && echo "--globalnet")
+
+  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    test_params="--globalnet"
+  fi
 
   test_project_e2e_with_go \
   "$GOPATH/src/github.com/submariner-io/lighthouse" \
@@ -5671,18 +5674,18 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Lighthouse End-to-End Ginkgo tests FAILED"
+          BUG "Submariner End-to-End Ginkgo tests FAILED"
         else
-          echo "### Lighthouse End-to-End Ginkgo tests PASSED ###"
+          echo "### Submariner End-to-End Ginkgo tests PASSED ###"
         fi
 
         ${junit_cmd} test_lighthouse_e2e_with_go
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Submariner End-to-End Ginkgo tests FAILED"
+          BUG "Lighthouse End-to-End Ginkgo tests FAILED"
         else
-          echo "### Submariner End-to-End Ginkgo tests PASSED ###"
+          echo "### Lighthouse End-to-End Ginkgo tests PASSED ###"
         fi
 
       else
