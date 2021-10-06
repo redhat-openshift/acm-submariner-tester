@@ -800,7 +800,7 @@ function setup_workspace() {
   mkdir -p $HOME/.local/bin
 
   # Add local BIN dir to PATH
-  [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"
+  [[ ":$PATH:" = *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
 
   # # CD to main working directory
   # cd ${WORKDIR}
@@ -2556,7 +2556,8 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   local target_path="${ocp_install_dir}/${github_dir}"
   local terraform_script="prep_for_subm.sh"
 
-  mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
+  mkdir -p "${git_project}_scripts"
+  cd "${git_project}_scripts"
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
 
@@ -2639,7 +2640,8 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   local target_path="${ocp_install_dir}/${github_dir}"
   local terraform_script="configure_osp.sh"
 
-  mkdir -p "${git_project}_scripts" && cd "${git_project}_scripts"
+  mkdir -p "${git_project}_scripts"
+  cd "${git_project}_scripts"
 
   # Temporary, until merged to upstream
   # download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
