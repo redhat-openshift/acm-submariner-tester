@@ -1538,20 +1538,26 @@ function add_elevated_user() {
 
   TITLE "Add the HTPasswd identity provider to the registry"
 
-  cat <<EOF | ${OC} apply -f -
-    apiVersion: config.openshift.io/v1
-    kind: OAuth
-    metadata:
-     name: cluster
-    spec:
-     identityProviders:
-     - name: htpasswd_provider
-       mappingMethod: claim
-       type: HTPasswd
-       htpasswd:
-         fileData:
-           name: ${http_sec_name}
+  local cluster_auth="${WORKDIR}/cluster_auth.yaml"
+
+  cat <<-EOF > $cluster_auth
+  apiVersion: config.openshift.io/v1
+  kind: OAuth
+  metadata:
+   name: cluster
+  spec:
+   identityProviders:
+   - name: htpasswd_provider
+     mappingMethod: claim
+     type: HTPasswd
+     htpasswd:
+       fileData:
+         name: ${http_sec_name}
 EOF
+
+  ${OC} apply set-last-applied --create-annotation=true -f $cluster_auth || :
+
+  ${OC} apply -f $cluster_auth
 
   ${OC} describe oauth.config.openshift.io/cluster
 
@@ -1559,7 +1565,11 @@ EOF
 
   ### Give user admin privileges
   # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${OCP_USR}
-  ${OC} adm policy add-cluster-role-to-user cluster-admin ${OCP_USR}
+  ${OC} adm policy add-cluster-role-to-user cluster-admin ${OCP_USR} --rolebinding-name cluster-admin
+
+  ${OC} describe clusterrolebindings system:${OCP_USR}
+
+  ${OC} describe clusterrole system:${OCP_USR}
 
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
   watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
@@ -1569,7 +1579,7 @@ EOF
     ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
     # Attempt to login up to 5 minutes
-    watch_and_retry "$cmd" 5m
+    watch_and_retry "$cmd" 10m
   )
 
   local cur_context
@@ -5834,6 +5844,7 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  subm_* \
  *.sec \
  *.xml \
+ *.yaml \
  *.log \
  2>/dev/null)
 
