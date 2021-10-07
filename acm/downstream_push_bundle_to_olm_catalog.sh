@@ -28,6 +28,12 @@ function export_LATEST_IIB() {
   | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
 
+  echo "# LATEST_IIB = $LATEST_IIB"
+
+  if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    FATAL "Failed to retrieve latest index image of bundle '${bundle_name}' from datagrepper.engineering.redhat"
+  fi
+
   export LATEST_IIB
 
   # Index Image example:
@@ -225,7 +231,7 @@ EOF
 
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
-    
+
   fi
 
 }
