@@ -1085,7 +1085,7 @@ function wait_for_all_machines_ready() {
 # Function to return (print) the all worker node ids, that have an external ip (nothing if none)
 function get_worker_nodes_with_external_ip() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
-  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' | grep .
 }
 
 # ------------------------------------------
