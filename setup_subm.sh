@@ -2162,7 +2162,7 @@ function download_subctl_by_tag() {
       # Fix the $subctl_branch_tag value for custom images
       set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_PREFIX}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
       # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
 
       # Check if $subctl_xz exists in $subctl_image_url
