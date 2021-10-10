@@ -191,7 +191,7 @@ SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding 
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
-export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_B service
+export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
 ### Store dynamic variable values in local files
 
@@ -687,11 +687,11 @@ function show_test_plan() {
   - upload_submariner_images_to_registry_cluster_a: $registry_images
   - upload_submariner_images_to_registry_cluster_b / c: $registry_images
   - configure_namespace_for_submariner_tests_on_cluster_a
-  - configure_namespace_for_submariner_tests_on_cluster_b
+  - configure_namespace_for_submariner_tests_on_managed_cluster
   - test_kubeconfig_cluster_a
   - test_kubeconfig_cluster_b / c
   - install_netshoot_app_on_cluster_a
-  - install_nginx_svc_on_cluster_b / c
+  - install_nginx_svc_on_managed_cluster
   - test_basic_cluster_connectivity_before_submariner
   - test_clusters_disconnected_before_submariner
   - install_acm_operator $ACM_VER_TAG
@@ -736,16 +736,16 @@ function show_test_plan() {
     - test_submariner_connection_cluster_b / c
     - test_globalnet_status_cluster_a: $globalnet
     - test_globalnet_status_cluster_b / c: $globalnet
-    - export_nginx_default_namespace_cluster_b / c
-    - export_nginx_headless_namespace_cluster_b / c
+    - export_nginx_default_namespace_managed_cluster
+    - export_nginx_headless_namespace_managed_cluster
     - test_lighthouse_status_cluster_a
     - test_lighthouse_status_cluster_b / c
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
-    - install_nginx_headless_namespace_cluster_b / c
+    - install_nginx_headless_namespace_managed_cluster
     - test_clusters_connected_overlapping_cidrs: $globalnet
     - test_new_netshoot_global_ip_cluster_a: $globalnet
-    - test_nginx_headless_global_ip_cluster_b / c: $globalnet
+    - test_nginx_headless_global_ip_managed_cluster: $globalnet
     - test_clusters_connected_full_domain_name
     - test_clusters_cannot_connect_short_service_name
     - test_clusters_connected_headless_service_on_new_namespace
@@ -1949,22 +1949,12 @@ function configure_namespace_for_submariner_tests_on_cluster_a() {
 
 # ------------------------------------------
 
-function configure_namespace_for_submariner_tests_on_cluster_b() {
-  PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on OSP cluster B"
+function configure_namespace_for_submariner_tests_on_managed_cluster() {
+  PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on managed cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  configure_namespace_for_submariner_tests
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
-}
-
-# ------------------------------------------
-
-function configure_namespace_for_submariner_tests_on_cluster_c() {
-  PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_namespace_for_submariner_tests
 
 }
@@ -2019,15 +2009,15 @@ function install_netshoot_app_on_cluster_a() {
 
 # ------------------------------------------
 
-function install_nginx_svc_on_cluster_b() {
-  PROMPT "Install Nginx service on OSP cluster B${TEST_NS:+ (Namespace $TEST_NS)}"
+function install_nginx_svc_on_managed_cluster() {
+  PROMPT "Install Nginx service on managed cluster ${TEST_NS:+ (Namespace $TEST_NS)}"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
-  TITLE "Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
+  TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${TEST_NS}" "--port=${NGINX_PORT}" || :
+  install_nginx_service "${NGINX_CLUSTER_BC}" "${NGINX_IMAGE}" "${TEST_NS}" "--port=${NGINX_PORT}" || :
 }
 
 # ------------------------------------------
@@ -2037,25 +2027,26 @@ function test_basic_cluster_connectivity_before_submariner() {
   PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster"
   trap_to_debug_commands;
 
-  # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
+  export KUBECONFIG="${MANAGED_KUBECONF}"
+
+  # Trying to connect from cluster A to cluster B/C will fail (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  echo -e "\n# Get IP of ${NGINX_CLUSTER_B} on OSP cluster B${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
+  echo -e "\n# Get IP of ${NGINX_CLUSTER_BC} on managed cluster ${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
 
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS}
-  nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS}
+  nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
     # nginx_cluster_b_ip: 100.96.43.129
 
-  local netshoot_pod=netshoot-cl-b-new # A new Netshoot pod on cluster b
-  TITLE "Install $netshoot_pod on OSP cluster B, and verify connectivity on the SAME cluster, to ${nginx_IP_cluster_b}:${NGINX_PORT}"
+  local netshoot_pod=netshoot-cl-bc-new # A new Netshoot pod on cluster B/C
+  TITLE "Install $netshoot_pod on OSP managed cluster, and verify connectivity in the SAME cluster, to ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
   [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=3m --request-timeout=3m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT}"
+  ${TEST_NS:+-n $TEST_NS} --image ${NETSHOOT_IMAGE} -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 }
 
 # ------------------------------------------
@@ -2063,17 +2054,18 @@ function test_basic_cluster_connectivity_before_submariner() {
 function test_clusters_disconnected_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   PROMPT "Before Submariner is installed:
-  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on OSP cluster B (on-prem)"
+  Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on managed cluster"
   trap_to_debug_commands;
+
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
-  nginx_IP_cluster_b="$(< $TEMP_FILE)"
-    # nginx_cluster_b_ip: 100.96.43.129
+  # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  nginx_IP_cluster_bc="$(< $TEMP_FILE)"
+    # nginx_cluster_bc_ip: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
@@ -2083,7 +2075,7 @@ function test_clusters_disconnected_before_submariner() {
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
   ${OC} exec $netshoot_pod_cluster_a ${TEST_NS:+-n $TEST_NS} -- \
-  curl --output /dev/null --max-time 20 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT} \
+  curl --output /dev/null --max-time 20 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT} \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 }
@@ -3833,30 +3825,30 @@ function test_globalnet_status() {
 
 # ------------------------------------------
 
-function export_nginx_default_namespace_cluster_b() {
-  PROMPT "Create ServiceExport for $NGINX_CLUSTER_B on OSP cluster B, without specifying Namespace"
+function export_nginx_default_namespace_managed_cluster() {
+  PROMPT "Create ServiceExport for $NGINX_CLUSTER_BC on OSP cluster B, without specifying Namespace"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
   echo -e "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
-  \n# $KUBECONF_CLUSTER_B : ${TEST_NS:-default}"
+  \n# $KUBECONFIG : ${TEST_NS:-default}"
 
-  export_service_in_lighthouse "$NGINX_CLUSTER_B"
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC"
 }
 
 # ------------------------------------------
 
-function export_nginx_headless_namespace_cluster_b() {
-  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_B on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
+function export_nginx_headless_namespace_managed_cluster() {
+  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_BC on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
-  \n# $KUBECONF_CLUSTER_B : ${HEADLESS_TEST_NS}"
+  \n# $KUBECONFIG : ${HEADLESS_TEST_NS}"
 
-  export_service_in_lighthouse "$NGINX_CLUSTER_B" "$HEADLESS_TEST_NS"
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$HEADLESS_TEST_NS"
 }
 
 # ------------------------------------------
@@ -3996,7 +3988,7 @@ function test_global_ip_created_for_svc_or_pod() {
 
 function test_clusters_connected_by_service_ip() {
   PROMPT "After Submariner is installed:
-  Identify Netshoot pod on cluster A, and Nginx service on cluster B"
+  Identify Netshoot pod on cluster A, and Nginx service on managed cluster"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
@@ -4007,19 +3999,19 @@ function test_clusters_connected_by_service_ip() {
   echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  echo "${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')"
-  # nginx_IP_cluster_b=$(${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
-  ${OC} get svc -l app=${NGINX_CLUSTER_B} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
-  nginx_IP_cluster_b="$(< $TEMP_FILE)"
-  TITLE "Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_b}:${NGINX_PORT}"
-    # nginx_IP_cluster_b: 100.96.43.129
+  export KUBECONFIG="${MANAGED_KUBECONF}"
+  echo "${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')"
+  # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
+  ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
+  nginx_IP_cluster_bc="$(< $TEMP_FILE)"
+  TITLE "Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+    # nginx_IP_cluster_bc: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_b}:${NGINX_PORT}"
+  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
-    PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on OSP cluster B (on-prem)"
+    PROMPT "Testing connection without GlobalNet: From Netshoot on AWS cluster A (public), to Nginx service IP on managed cluster"
 
     if ! ${OC} exec ${CURL_CMD} ; then
       FAILURE "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
@@ -4051,7 +4043,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 
     msg="# Negative Test - Clusters have Overlapping CIDRs:
-    \n# Nginx internal IP (${nginx_IP_cluster_b}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
+    \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
 
     ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
   fi
@@ -4062,15 +4054,15 @@ function test_clusters_connected_by_service_ip() {
 function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  PROMPT "Testing GlobalNet annotation - Nginx service on OSP cluster B (on-prem) should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster should get a GlobalNet IP"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
-  # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
+  # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_B" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_B}${TEST_NS:+.$TEST_NS})"
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $TEST_NS
+  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS})"
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
@@ -4102,19 +4094,19 @@ function test_clusters_connected_overlapping_cidrs() {
 
 function test_clusters_connected_full_domain_name() {
 ### Nginx service on cluster B, will be identified by its Domain Name ###
-# This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_B service, on the default namespace
+# This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_BC service, on the default namespace
 
   trap_to_debug_commands;
 
   # Set FQDN on clusterset.local when using Service-Discovery (lighthouse)
-  local nginx_cl_b_dns="${NGINX_CLUSTER_B}${TEST_NS:+.$TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
+  local nginx_cl_b_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
   To the default Nginx service on cluster B${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
-  TITLE "Try to ping ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
+  TITLE "Try to ping ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
@@ -4144,7 +4136,7 @@ function test_clusters_cannot_connect_short_service_name() {
 
   trap_to_debug_commands;
 
-  local nginx_cl_b_short_dns="${NGINX_CLUSTER_B}${TEST_NS:+.$TEST_NS}"
+  local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
@@ -4201,26 +4193,26 @@ function test_new_netshoot_global_ip_cluster_a() {
 
 # ------------------------------------------
 
-function install_nginx_headless_namespace_cluster_b() {
-### Install $NGINX_CLUSTER_B on the $HEADLESS_TEST_NS namespace ###
-
+function install_nginx_headless_namespace_managed_cluster() {
+### Install $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS namespace ###
   trap_to_debug_commands;
+
   PROMPT "Install HEADLESS Nginx service on OSP cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
-  TITLE "Creating ${NGINX_CLUSTER_B}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
+  TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
-  install_nginx_service "${NGINX_CLUSTER_B}" "${NGINX_IMAGE}" "${HEADLESS_TEST_NS}" "--port=${NGINX_PORT} --cluster-ip=None" || :
+  install_nginx_service "${NGINX_CLUSTER_BC}" "${NGINX_IMAGE}" "${HEADLESS_TEST_NS}" "--port=${NGINX_PORT} --cluster-ip=None" || :
 }
 
 # ------------------------------------------
 
-function test_nginx_headless_global_ip_cluster_b() {
-### Check that $NGINX_CLUSTER_B on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
+function test_nginx_headless_global_ip_managed_cluster() {
+### Check that $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
 
   trap_to_debug_commands;
 
-  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on OSP cluster B should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster should get a GlobalNet IP"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     BUG "HEADLESS Service is not supported with GlobalNet" \
@@ -4230,12 +4222,12 @@ function test_nginx_headless_global_ip_cluster_b() {
     FAILURE "Mark this test as failed, but continue"
   fi
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
+  export KUBECONFIG="${MANAGED_KUBECONF}"
 
-  # Should fail if NGINX_CLUSTER_B was not annotated with GlobalNet IP
+  # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_B" $HEADLESS_TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   echo -e "# TODO: Ping to the new_nginx_global_ip"
   # new_nginx_global_ip="$GLOBAL_IP"
@@ -4249,7 +4241,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
   trap_to_debug_commands;
 
   # Set FQDN on clusterset.local when using Service-Discovery (lighthouse)
-  local nginx_headless_cl_b_dns="${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
+  local nginx_headless_cl_b_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
   To the HEADLESS Nginx service on cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
@@ -4266,7 +4258,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
 
     export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
-    TITLE "Try to ping HEADLESS ${NGINX_CLUSTER_B} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
+    TITLE "Try to ping HEADLESS ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
     echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
         # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
         # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
@@ -4297,7 +4289,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
   trap_to_debug_commands;
 
-  local nginx_cl_b_short_dns="${NGINX_CLUSTER_B}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}"
+  local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
@@ -5410,6 +5402,35 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
 
+  # Running basic pre-tests for submariner (only required for sys tests on new/cleaned clusters)
+  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] ; then
+
+    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+
+    ${junit_cmd} install_netshoot_app_on_cluster_a
+
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
+
+    elif [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
+
+    fi
+
+  ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
+
+  ${junit_cmd} install_nginx_svc_on_managed_cluster
+
+  ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+
+  ${junit_cmd} test_clusters_disconnected_before_submariner
+
+  fi
+
+  ### END of pre-tests for submariner for sys|all ###
+
   TITLE "OCP clusters and environment setup is ready"
   echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
   \n# ($TEST_STATUS_FILE with exit code 1)"
@@ -5474,26 +5495,6 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
 
   fi
-
-  # Running basic pre-tests for submariner (only required for sys tests on new/cleaned clusters)
-  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]] && [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-    echo -e "# TODO: Need to add tests for cluster C"
-
-    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
-
-    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_b
-
-    ${junit_cmd} install_netshoot_app_on_cluster_a
-
-    ${junit_cmd} install_nginx_svc_on_cluster_b
-
-    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
-
-    ${junit_cmd} test_clusters_disconnected_before_submariner
-
-  fi
-  ### END of pre-tests for submariner for sys|all ###
 
   ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
@@ -5600,50 +5601,55 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      echo -e "# TODO: Add tests for Cluster C"
+      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} test_clusters_connected_by_service_ip
+    elif [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      ${junit_cmd} install_new_netshoot_cluster_a
+      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} install_nginx_headless_namespace_cluster_b
+    fi
 
-      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} test_clusters_connected_by_service_ip
 
-        ${junit_cmd} test_new_netshoot_global_ip_cluster_a
+    ${junit_cmd} install_new_netshoot_cluster_a
 
-        ${junit_cmd} test_nginx_headless_global_ip_cluster_b
-      fi
+    ${junit_cmd} install_nginx_headless_namespace_managed_cluster
 
-      # Test the default (pre-installed) netshoot and nginx with service-discovery
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} export_nginx_default_namespace_cluster_b
+      ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
-      ${junit_cmd} test_clusters_connected_full_domain_name
+      ${junit_cmd} test_nginx_headless_global_ip_managed_cluster
+    fi
 
-      ${junit_cmd} test_clusters_cannot_connect_short_service_name
+    # Test the default (pre-installed) netshoot and nginx with service-discovery
 
-      # Test the new netshoot and headless nginx service discovery
+    ${junit_cmd} export_nginx_default_namespace_managed_cluster
 
-      if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    ${junit_cmd} test_clusters_connected_full_domain_name
 
-          ${junit_cmd} test_clusters_connected_overlapping_cidrs
+    ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
-          echo -e "# TODO: Test headless service with GLobalnet - when the feature of is supported"
-          BUG "HEADLESS Service is not supported with GlobalNet" \
-           "No workaround yet - Skip the whole test" \
-          "https://github.com/submariner-io/lighthouse/issues/273"
-          # No workaround yet
+    # Test the new netshoot and headless nginx service discovery
 
-      else
-        ${junit_cmd} export_nginx_headless_namespace_cluster_b
+    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+        ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-        ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
-      fi
+        echo -e "# TODO: Test headless service with GLobalnet - when the feature of is supported"
+        BUG "HEADLESS Service is not supported with GlobalNet" \
+         "No workaround yet - Skip the whole test" \
+        "https://github.com/submariner-io/lighthouse/issues/273"
+        # No workaround yet
 
-    fi # END of System tests that uses Cluster B (OSP)
+    else
+      ${junit_cmd} export_nginx_headless_namespace_managed_cluster
+
+      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+
+      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+    fi
+
 
 
     ### Running benchmark tests with subctl

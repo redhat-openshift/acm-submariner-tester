@@ -25,7 +25,7 @@ export SUBM_NAMESPACE="submariner-operator"
 
 export CLUSTER_B_NAME="user-cloud-project-b" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
-export NGINX_CLUSTER_B="nginx-cl-b"
+export NGINX_CLUSTER_BC="nginx-cl-bc"
 
 export CLUSTER_C_NAME="user-cloud-project-c" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_C_YAML="${CLUSTER_C_YAML:-${WORKDIR}/setup-cluster-c.yaml}"
