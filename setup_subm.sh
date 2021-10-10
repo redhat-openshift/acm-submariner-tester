@@ -2770,12 +2770,14 @@ function gateway_label_all_nodes_external_ip() {
 ### Adding submariner gateway label to all worker nodes with an External-IP ###
   trap_to_debug_commands;
 
+  local external_ips
+  external_ips="`mktemp`_external_ips"
+
   ${OC} wait --timeout=3m --for=condition=ready nodes -l node-role.kubernetes.io/worker
 
-  # Filter all node names that have External-IP (column 7 is not none), and ignore header fields
-  # Run 200 attempts, and wait for output to include regex of IPv4
-  watch_and_retry "${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}'" \
-  200 '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || external_ips=NONE
+  # Run up to 5m, and wait for output to include regex of IPv4 in the EXTERNAL-IP (column 7)
+  cmd="${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '{print \$7}' &> '$external_ips'"
+  watch_and_retry "$cmd ; grep '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' $external_ips" 5m || external_ips=NONE
 
   if [[ "$external_ips" = NONE ]] ; then
     ${OC} get nodes -o wide
@@ -2786,11 +2788,12 @@ function gateway_label_all_nodes_external_ip() {
     ${failed_machines:+ Failed Machines: \n$(${OC} get Machine -A -o wide)}"
   fi
 
-  # [[ -n "$gw_nodes" ]] || FATAL "External-IP was not created yet (by \"prep_for_subm.sh\" script)."
-
+  local gw_nodes
   gw_nodes=$(get_worker_nodes_with_external_ip)
   # ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' > "$TEMP_FILE"
   # gw_nodes="$(< $TEMP_FILE)"
+
+  # [[ -n "$gw_nodes" ]] || FATAL "External-IP was not created yet (by \"prep_for_subm.sh\" script)."
 
   TITLE "Adding submariner gateway label to all worker nodes with an External-IP: $gw_nodes"
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
