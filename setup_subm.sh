@@ -729,7 +729,7 @@ function show_test_plan() {
     - test_renewal_of_gateway_and_public_ip
     - test_cable_driver_cluster_a
     - test_cable_driver_cluster_b / c
-    - test_subctl_show_and_diagnose_on_merged_kubeconfigs
+    - test_subctl_show_on_merged_kubeconfigs
     - test_ha_status_cluster_a
     - test_ha_status_cluster_b / c
     - test_submariner_connection_cluster_a
@@ -4310,13 +4310,12 @@ function test_clusters_cannot_connect_headless_short_service_name() {
 
 # ------------------------------------------
 
-function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
-### Test subctl show commands on merged kubeconfig ###
-  PROMPT "Testing SubCtl show and diagnose on merged kubeconfig of multiple clusters"
+function test_subctl_show_on_merged_kubeconfigs() {
+### Test subctl show command on merged kubeconfig ###
+  PROMPT "Testing SubCtl show on merged kubeconfig of multiple clusters"
   trap_to_debug_commands;
 
   local subctl_info
-  local subctl_diagnose
 
   export_active_clusters_kubeconfig
 
@@ -4331,31 +4330,6 @@ function test_subctl_show_and_diagnose_on_merged_kubeconfigs() {
   subctl show connections || subctl_info=ERROR
 
   subctl show gateways || subctl_info=ERROR
-
-  # For SubCtl > 0.8 : Run subctl diagnose:
-  if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
-
-    subctl diagnose all || subctl_diagnose=ERROR
-
-    echo -e "# TODO: report bug of missing --kubecontexts option"
-    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
-    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
-    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
-
-    subctl diagnose firewall vxlan --validation-timeout 120 --verbose || subctl_diagnose=ERROR
-    subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
-
-    echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
-    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_diagnose=ERROR
-    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
-
-    if [[ "$subctl_diagnose" = ERROR ]] ; then
-      BUG "subctl diagnose exit with non-zero exit code, while output has no error message" \
-      "Ignore subctl diagnose exit code" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=1988836"
-    fi
-
-  fi
 
   if [[ "$subctl_info" = ERROR ]] ; then
     FAILURE "SubCtl show failed when using merged kubeconfig"
@@ -4539,6 +4513,46 @@ function test_project_e2e_with_go() {
   ${junit_params} \
   -ginkgo.skip "\[redundancy\]" \
   -args $test_params | tee -a "$E2E_LOG"
+
+}
+
+# ------------------------------------------
+
+function test_subctl_diagnose_on_merged_kubeconfigs() {
+### Test subctl diagnose command on merged kubeconfig ###
+  PROMPT "Testing SubCtl diagnose on merged kubeconfig of multiple clusters"
+  trap_to_debug_commands;
+
+  local subctl_diagnose
+
+  export_active_clusters_kubeconfig
+
+  export_merged_kubeconfigs
+
+  # For SubCtl > 0.8 : Run subctl diagnose:
+  if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
+
+    subctl diagnose all || subctl_diagnose=ERROR
+
+    echo -e "# TODO: report bug of missing --kubecontexts option"
+    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+
+    subctl diagnose firewall vxlan --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+    subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+
+    echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
+    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_diagnose=ERROR
+    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+
+    if [[ "$subctl_diagnose" = ERROR ]] ; then
+      FAILURE "SubCtl diagnose failed when using merged kubeconfig"
+    fi
+
+  else
+    TITLE "Subctl diagnose command is not supported in $(subctl version)"
+  fi
 
 }
 
@@ -5574,7 +5588,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_c
 
-    ${junit_cmd} test_subctl_show_and_diagnose_on_merged_kubeconfigs
+    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
 
     ${junit_cmd} test_ipsec_status_cluster_a
 
@@ -5654,8 +5668,9 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
 
 
+    ### Running diagnose and benchmark tests with subctl
 
-    ### Running benchmark tests with subctl
+    ${junit_cmd} test_subctl_diagnose_on_merged_kubeconfigs
 
     ${junit_cmd} test_subctl_benchmarks
 
