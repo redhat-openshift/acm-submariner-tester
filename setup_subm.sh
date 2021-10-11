@@ -1322,49 +1322,53 @@ function export_active_clusters_kubeconfig() {
 # ------------------------------------------
 
 function update_kubeconfig_context_cluster_a() {
-  PROMPT "Updating kubeconfig context on cluster A"
+  PROMPT "Updating kubeconfig to the default context on cluster A"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
-  update_kubeconfig_context "$CLUSTER_A_NAME"
+  update_kubeconfig_default_context
 
 }
 
 # ------------------------------------------
 
 function update_kubeconfig_context_cluster_b() {
-  PROMPT "Updating kubeconfig context on cluster B"
+  PROMPT "Updating kubeconfig to the default context on cluster B"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  update_kubeconfig_context "$CLUSTER_B_NAME"
+  update_kubeconfig_default_context
 
 }
 
 # ------------------------------------------
 
 function update_kubeconfig_context_cluster_c() {
-  PROMPT "Updating kubeconfig context on cluster C"
+  PROMPT "Updating kubeconfig to the default context on cluster C"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  update_kubeconfig_context "$CLUSTER_C_NAME"
+  update_kubeconfig_default_context
 
 }
 
 # ------------------------------------------
 
-function update_kubeconfig_context() {
+function update_kubeconfig_default_context() {
   # Add new elevated user and set new kubeconfig context
   trap_to_debug_commands;
 
-  local cluster_name="$1"
-  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
+  # Get the default cluster name of the admin user
+  local cluster_name
+  cluster_name="$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')" || :
 
-  TITLE "Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  TITLE "Set current context of cluster '$cluster_name' to the default admin context"
+
+  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${KUBECONFIG}"
+
+  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  TITLE "Set current context back to the default one"
   local admin_context
   admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}' | awk '{print $1}')
   ${OC} config use-context "$admin_context"
@@ -3820,13 +3824,18 @@ function test_globalnet_status() {
 # ------------------------------------------
 
 function export_nginx_default_namespace_managed_cluster() {
-  PROMPT "Create ServiceExport for $NGINX_CLUSTER_BC on OSP cluster B, without specifying Namespace"
+  PROMPT "Create ServiceExport for $NGINX_CLUSTER_BC on managed cluster, without specifying Namespace"
   trap_to_debug_commands;
 
   export KUBECONFIG="${MANAGED_KUBECONF}"
 
-  echo -e "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
-  \n# $KUBECONFIG : ${TEST_NS:-default}"
+  configure_namespace_for_submariner_tests
+
+  local current_namespace
+  current_namespace="$(${OC} config view -o jsonpath='{.contexts[].context.namespace}')"
+
+  TITLE "# The ServiceExport should be created on the default Namespace '${current_namespace}', as configured in KUBECONFIG:
+  \n# $KUBECONFIG"
 
   export_service_in_lighthouse "$NGINX_CLUSTER_BC"
 }
@@ -3834,7 +3843,7 @@ function export_nginx_default_namespace_managed_cluster() {
 # ------------------------------------------
 
 function export_nginx_headless_namespace_managed_cluster() {
-  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_BC on OSP cluster B, in the Namespace '$HEADLESS_TEST_NS'"
+  PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_BC on managed cluster, in the Namespace '$HEADLESS_TEST_NS'"
   trap_to_debug_commands;
 
   export KUBECONFIG="${MANAGED_KUBECONF}"
@@ -4191,7 +4200,7 @@ function install_nginx_headless_namespace_managed_cluster() {
 ### Install $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS namespace ###
   trap_to_debug_commands;
 
-  PROMPT "Install HEADLESS Nginx service on OSP cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
+  PROMPT "Install HEADLESS Nginx service on managed cluster${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
   export KUBECONFIG="${MANAGED_KUBECONF}"
 
   TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
@@ -5413,13 +5422,13 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-  ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
+    ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
 
-  ${junit_cmd} install_nginx_svc_on_managed_cluster
+    ${junit_cmd} install_nginx_svc_on_managed_cluster
 
-  ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
 
-  ${junit_cmd} test_clusters_disconnected_before_submariner
+    ${junit_cmd} test_clusters_disconnected_before_submariner
 
   fi
 
