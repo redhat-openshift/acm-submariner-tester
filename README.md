@@ -18,23 +18,24 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--clean-cluster-b
   * Clean existing AWS cluster C:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--clean-cluster-c
   * Download OCP Installer version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--get-ocp-installer [latest / x.y.z / nightly]
-  * Download latest OCPUP Tool: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--get-ocpup-tool
-  * Install Golang if missing:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp; --config-golang
-  * Install AWS-CLI and configure access:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--config-aws-cli
+  * Download latest OCPUP Tool:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--get-ocpup-tool
+  * Install Golang if missing: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp; --config-golang
+  * Install AWS-CLI and configure access: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--config-aws-cli
   * Skip OCP clusters setup (destroy/create/clean): &ensp;--skip-ocp-setup
 
 
 - Submariner installation options:
 
-  * Download SubCtl version:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--subctl-version [latest / x.y.z / {tag}]
+  * Install ACM operator version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--acm-version [x.y.z]
+  * Install Submariner operator version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--registry-images
-  * Configure and test GlobalNet: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--globalnet
-  * Skip Submariner installation on all clusters: &ensp;&ensp;&ensp;&ensp;&ensp;--skip-install
+  * Configure and test GlobalNet:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--globalnet
+  * Install Submariner with SubCtl:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--subctl-install
 
 
 - Submariner test options:
 
-  * Skip tests execution (by type):&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--skip-tests [sys / e2e / pkg / all]
+  * Skip tests execution (by type): &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--skip-tests [sys / e2e / pkg / all]
   * Update Git and test with GO (instead of subctl): &ensp;--build-tests
   * Create Junit test results (xml):&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--junit
   * Upload Junit results to Polarion: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--polarion
@@ -57,16 +58,17 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --install-version 0.8.1 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.0 --subctl-version 0.11.0 --registry-images --globalnet`
 
   * Reuse (clean) existing clusters
-  * Install Submariner 0.8.1 release
+  * Install ACM 2.4.0 release
+  * Install Submariner 0.11.0 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --install-version subctl-devel --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
 
   * Download OCP installer version 4.5.1
   * Recreate new cluster on AWS (cluster A)
