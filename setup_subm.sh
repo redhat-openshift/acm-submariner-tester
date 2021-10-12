@@ -1300,6 +1300,7 @@ function export_active_clusters_kubeconfig() {
     export CLUSTER_B_DIR
     KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     export KUBECONF_CLUSTER_B
+    export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
   else
     echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
     unset KUBECONF_CLUSTER_B
@@ -1311,6 +1312,7 @@ function export_active_clusters_kubeconfig() {
     # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
     export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
+    export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
   else
     echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
     unset KUBECONF_CLUSTER_C
@@ -4532,19 +4534,11 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
   # For SubCtl > 0.8 : Run subctl diagnose:
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
 
-    subctl diagnose all || subctl_diagnose=ERROR
+    subctl diagnose all --verbose || subctl_diagnose=ERROR
 
-    echo -e "# TODO: report bug of missing --kubecontexts option"
-    # subctl diagnose firewall vxlan --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
-    # subctl diagnose firewall metrics --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
-    # subctl diagnose firewall tunnel --validation-timeout 120 --kubecontexts ${e2e_subctl_context} || subctl_diagnose=ERROR
+    subctl diagnose firewall intra-cluster ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
-    subctl diagnose firewall vxlan --validation-timeout 120 --verbose || subctl_diagnose=ERROR
     subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
-
-    echo -e "# TODO: report bug that diagnose does not work with merged kubeconfigs"
-    # subctl diagnose firewall tunnel --validation-timeout 120 || subctl_diagnose=ERROR
-    subctl diagnose firewall tunnel ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
     if [[ "$subctl_diagnose" = ERROR ]] ; then
       FAILURE "SubCtl diagnose failed when using merged kubeconfig"
@@ -4572,9 +4566,9 @@ function test_subctl_benchmarks() {
   "Put the --verbose at the end" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1974378"
 
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --verbose || benchmark_status=ERROR
+  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --verbose || benchmark_status=ERROR
 
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} --verbose || benchmark_status=ERROR
+  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --verbose || benchmark_status=ERROR
 
   if [[ "$benchmark_status" = ERROR ]] ; then
     FAILURE "Submariner benchmark tests have ended with failures. \n\
