@@ -112,7 +112,7 @@ function print_current_dir_and_cmd() {
 # Function to print each bash command before it is executed (using with "set -T" might have issues)
 function trap_to_debug_commands() {
   trap '
-   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|BUG|FATAL) ]] ; then
+   if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
       print_current_dir_and_cmd "$BASH_COMMAND" 2>/dev/null || :
    fi
   ' DEBUG
@@ -263,13 +263,20 @@ function TITLE() {
   local message="$1"
   local color="${2:-${YELLOW}}"
 
-  local line_length=$(( ${#message} + 15 ))
+  local first_line="$(echo -e "${message}" | head -1)"
+
+  local line_length=$(( ${#first_line} + 15 ))
   local color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
   local color_char="${color}#${NO_COLOR}"
 
+  # Print first line of message in color # box
   echo -e "$color_line"
-  echo -e "$color_char       $message      $color_char"
+  echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
+
+  # Print rest of message (from line 2)
+  echo -e "${message}" | tail -n +2
+
 }
 
 # ------------------------------------------
@@ -845,6 +852,49 @@ function force_delete_namespace() {
 
 # ------------------------------------------
 
+function create_docker_registry_secret() {
+### Helper function to add new Docker registry
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  # input variables
+  local registry_server="$1"
+  local registry_usr=$2
+  local registry_pwd=$3
+  local namespace="$4"
+
+  local secret_name="${registry_server}-${registry_usr}"
+  local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+
+  TITLE "Creating new docker-registry in '$namespace' namespace"
+  echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+
+  create_namespace "${namespace}"
+
+  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
+
+  ( # subshell to hide commands
+    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
+    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+  )
+
+  echo "# Adding '$secret_name' secret:"
+  ${OC} describe secret $secret_name -n $namespace || :
+
+  ( # update the cluster global pull-secret
+    ${OC} patch secret/pull-secret -n openshift-config -p \
+    '{"data":{".dockerconfigjson":"'"$( \
+    ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths |= . + '"$( \
+    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
+  )
+
+  ${OC} describe secret/pull-secret -n openshift-config
+
+}
+
+# ------------------------------------------
+
 # Function to install and expose Nginx service on the current KUBECONFIG cluster
 function install_nginx_service() {
   trap_to_debug_commands;
@@ -1035,7 +1085,7 @@ function wait_for_all_machines_ready() {
 # Function to return (print) the all worker node ids, that have an external ip (nothing if none)
 function get_worker_nodes_with_external_ip() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
-  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}'
+  ${OC} get nodes -l node-role.kubernetes.io/worker -o wide | awk '$7!="<none>" && NR>1 {print $1}' | grep .
 }
 
 # ------------------------------------------
@@ -1473,7 +1523,7 @@ function watch_polarion_job_status() {
 # ------------------------------------------
 
 function log_to_html() {
-  trap_to_debug_commands;
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # Input params:
 
