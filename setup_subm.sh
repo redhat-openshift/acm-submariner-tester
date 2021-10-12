@@ -1288,10 +1288,9 @@ function export_active_clusters_kubeconfig() {
 
   TITLE "Exporting all active clusters kubeconfig (and unset inactive kubeconfigs)"
 
-  # Setting Cluster A and Broker config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
-  export KUBECONF_BROKER=${WORKDIR}/${BROKER_CLUSTER_NAME}/auth/kubeconfig
+  # Setting HUB (Cluster A) config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
-  export KUBECONF_CLUSTER_A=${CLUSTER_A_DIR}/auth/kubeconfig
+  export KUBECONF_HUB=${CLUSTER_A_DIR}/auth/kubeconfig
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
     echo "# Exporting \$KUBECONF_CLUSTER_B"
@@ -1300,7 +1299,7 @@ function export_active_clusters_kubeconfig() {
     export CLUSTER_B_DIR
     KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     export KUBECONF_CLUSTER_B
-    export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
+    export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
   else
     echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
     unset KUBECONF_CLUSTER_B
@@ -1312,7 +1311,7 @@ function export_active_clusters_kubeconfig() {
     # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
     export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
-    export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
+    export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
   else
     echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
     unset KUBECONF_CLUSTER_C
@@ -1327,7 +1326,7 @@ function update_kubeconfig_context_cluster_a() {
   PROMPT "Updating kubeconfig to the default context on cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   update_kubeconfig_default_context
 
 }
@@ -1417,7 +1416,7 @@ function update_kubeconfig_default_context() {
 function test_kubeconfig_cluster_a() {
 # Check that AWS cluster A (public) is up and running
   trap_to_debug_commands;
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   # Get OCP cluster A version
   cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
@@ -1490,7 +1489,7 @@ function add_elevated_user_to_cluster_a() {
   PROMPT "Adding elevated user to cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   add_elevated_user
 
 }
@@ -1616,7 +1615,7 @@ function clean_submariner_namespace_and_resources_cluster_a() {
   PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   clean_submariner_namespace_and_resources
 }
 
@@ -1768,7 +1767,7 @@ function clean_node_labels_and_machines_cluster_a() {
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   remove_submariner_gateway_labels
 
@@ -1870,7 +1869,7 @@ function delete_old_submariner_images_from_cluster_a() {
   PROMPT "Delete previous Submariner images in AWS cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   delete_old_submariner_images_from_current_cluster
 }
 
@@ -1948,7 +1947,7 @@ function configure_namespace_for_submariner_tests_on_cluster_a() {
   PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   configure_namespace_for_submariner_tests
 
 }
@@ -1959,7 +1958,7 @@ function configure_namespace_for_submariner_tests_on_managed_cluster() {
   PROMPT "Configure namespace '${TEST_NS:-default}' for running tests on managed cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   configure_namespace_for_submariner_tests
 
@@ -1995,7 +1994,7 @@ function install_netshoot_app_on_cluster_a() {
   PROMPT "Install Netshoot application on AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
 
@@ -2019,7 +2018,7 @@ function install_nginx_svc_on_managed_cluster() {
   PROMPT "Install Nginx service on managed cluster ${TEST_NS:+ (Namespace $TEST_NS)}"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
@@ -2033,7 +2032,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   # Trying to connect from cluster A to cluster B/C will fail (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
@@ -2063,7 +2062,7 @@ function test_clusters_disconnected_before_submariner() {
   Verifying that Netshoot pod on AWS cluster A (public), cannot reach Nginx service on managed cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
@@ -2073,7 +2072,7 @@ function test_clusters_disconnected_before_submariner() {
   nginx_IP_cluster_bc="$(< $TEMP_FILE)"
     # nginx_cluster_bc_ip: 100.96.43.129
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -2301,7 +2300,7 @@ function set_join_parameters_for_cluster_a() {
   PROMPT "Set parameters of SubCtl Join command for AWS cluster A (public)"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   create_subctl_join_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
@@ -2472,7 +2471,7 @@ function install_broker_cluster_a() {
   PROMPT "Deploying Submariner Broker on AWS cluster A (public)"
   # Deploys Submariner CRDs, creates the SA for the broker, the role and role bindings
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   DEPLOY_CMD="${DEPLOY_CMD} --kubecontext $(${OC} config current-context)"
 
   cd ${WORKDIR}
@@ -2498,7 +2497,7 @@ function test_broker_before_join() {
   PROMPT "Verify Submariner resources on the Broker cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_BROKER}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   # Now looking at Broker cluster, it should show that CRDs, but no pods in namespace
   ${OC} get crds | grep 'submariner.io'
@@ -2530,7 +2529,7 @@ function open_firewall_ports_on_aws_cluster_a() {
   PROMPT "Open firewall ports for the gateway node on AWS cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   open_firewall_ports_on_aws_gateway_nodes "$CLUSTER_A_DIR"
 }
 
@@ -2701,7 +2700,7 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   "Make sure one node with External-IP has a gateway label" \
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   echo -e "# TODO: Check that the Gateway label was created with prep_for_subm.sh on AWS cluster A (public) ?"
   gateway_label_all_nodes_external_ip
 }
@@ -2811,7 +2810,7 @@ function configure_images_prune_cluster_a() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on AWS cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   configure_ocp_garbage_collection_and_images_prune
 }
 
@@ -2915,10 +2914,10 @@ function configure_custom_registry_cluster_a() {
   PROMPT "Using custom Registry for ACM and Submariner images on AWS cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   configure_cluster_custom_registry_secrets
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   configure_cluster_custom_registry_mirror
 
 }
@@ -3167,7 +3166,7 @@ function upload_submariner_images_to_registry_cluster_a() {
   PROMPT "Upload custom images to the registry of cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   upload_submariner_images_to_registry "$SUBM_VER_TAG"
 }
@@ -3241,7 +3240,7 @@ function run_subctl_join_on_cluster_a() {
   PROMPT "Joining cluster A to Submariner Broker"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   run_subctl_join_cmd_from_file "${SUBCTL_JOIN_CLUSTER_A_FILE}"
 }
 
@@ -3300,7 +3299,7 @@ function run_subctl_join_cmd_from_file() {
   # --repository local --version local broker-info.subm
   #
 
-  # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_BROKER}"
+  # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_HUB}"
   ${OC} config view
 
   local cluster_name
@@ -3316,7 +3315,7 @@ function run_subctl_join_cmd_from_file() {
 function test_submariner_resources_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_submariner_resources_status
 }
 
@@ -3385,7 +3384,7 @@ function test_public_ip_on_gateway_node() {
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   local public_ip
   public_ip=$(get_external_ips_of_worker_nodes)
@@ -3409,7 +3408,7 @@ function test_disaster_recovery_of_gateway_nodes() {
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Should be run on the Broker cluster
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   local ocp_infra_id
   ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
@@ -3456,7 +3455,7 @@ function test_renewal_of_gateway_and_public_ip() {
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   TITLE "Watching Submariner Gateway pod - It should create new Gateway:"
 
@@ -3555,7 +3554,7 @@ function verify_gateway_public_ip() {
 function test_cable_driver_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_submariner_cable_driver
 }
 
@@ -3600,7 +3599,7 @@ function test_submariner_cable_driver() {
 function test_ha_status_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_ha_status
 }
 
@@ -3666,7 +3665,7 @@ function test_ha_status() {
 function test_submariner_connection_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_submariner_connection_established
 }
 
@@ -3717,7 +3716,7 @@ function test_submariner_connection_established() {
 function test_ipsec_status_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_ipsec_status
 }
 
@@ -3772,7 +3771,7 @@ function test_ipsec_status() {
 function test_globalnet_status_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_globalnet_status
 }
 
@@ -3829,7 +3828,7 @@ function export_nginx_default_namespace_managed_cluster() {
   PROMPT "Create ServiceExport for $NGINX_CLUSTER_BC on managed cluster, without specifying Namespace"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   configure_namespace_for_submariner_tests
 
@@ -3848,7 +3847,7 @@ function export_nginx_headless_namespace_managed_cluster() {
   PROMPT "Create ServiceExport for the HEADLESS $NGINX_CLUSTER_BC on managed cluster, in the Namespace '$HEADLESS_TEST_NS'"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
   \n# $KUBECONFIG : ${HEADLESS_TEST_NS}"
@@ -3918,7 +3917,7 @@ function export_service_in_lighthouse() {
 function test_lighthouse_status_cluster_a() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_lighthouse_status
 }
 
@@ -3996,7 +3995,7 @@ function test_clusters_connected_by_service_ip() {
   Identify Netshoot pod on cluster A, and Nginx service on managed cluster"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -4004,7 +4003,7 @@ function test_clusters_connected_by_service_ip() {
   echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
   echo "${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')"
   # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
@@ -4012,7 +4011,7 @@ function test_clusters_connected_by_service_ip() {
   TITLE "Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
     # nginx_IP_cluster_bc: 100.96.43.129
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
   if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
@@ -4062,7 +4061,7 @@ function test_clusters_connected_overlapping_cidrs() {
   PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster should get a GlobalNet IP"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -4071,7 +4070,7 @@ function test_clusters_connected_overlapping_cidrs() {
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
@@ -4088,7 +4087,7 @@ function test_clusters_connected_overlapping_cidrs() {
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
   To Nginx service on cluster B, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
   -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:${NGINX_PORT}
 
@@ -4109,7 +4108,7 @@ function test_clusters_connected_full_domain_name() {
   PROMPT "Testing Service-Discovery: From Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
   To the default Nginx service on cluster B${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   TITLE "Try to ping ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
   echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
@@ -4146,7 +4145,7 @@ function test_clusters_cannot_connect_short_service_name() {
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
@@ -4163,7 +4162,7 @@ function install_new_netshoot_cluster_a() {
 
   trap_to_debug_commands;
   PROMPT "Install NEW Netshoot pod on AWS cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
+  export KUBECONFIG="${KUBECONF_HUB}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
   [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS"
 
@@ -4184,7 +4183,7 @@ function test_new_netshoot_global_ip_cluster_a() {
 
   trap_to_debug_commands;
   PROMPT "Testing GlobalNet annotation - NEW Netshoot pod on AWS cluster A (public) should get a GlobalNet IP"
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   # netshoot_pod=$(${OC} get pods -l run=${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
@@ -4203,7 +4202,7 @@ function install_nginx_headless_namespace_managed_cluster() {
   trap_to_debug_commands;
 
   PROMPT "Install HEADLESS Nginx service on managed cluster${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}"
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${HEADLESS_TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
@@ -4227,7 +4226,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
     FAILURE "Mark this test as failed, but continue"
   fi
 
-  export KUBECONFIG="${MANAGED_KUBECONF}"
+  export KUBECONFIG="${KUBECONF_MANAGED}"
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -4261,7 +4260,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
 
   else
 
-    export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+    export KUBECONFIG="${KUBECONF_HUB}"
 
     TITLE "Try to ping HEADLESS ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
     echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
@@ -4299,7 +4298,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
   PROMPT "Testing Service-Discovery:
   There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   msg="# Negative Test - ${nginx_cl_b_short_dns}:${NGINX_PORT} should not be reachable (FQDN without \"clusterset\")."
 
@@ -4347,7 +4346,7 @@ function export_merged_kubeconfigs() {
 
   TITLE "Exporting all active clusters kubeconfig at once (merged)"
 
-  local merged_kubeconfigs="${KUBECONF_CLUSTER_A}"
+  local merged_kubeconfigs="${KUBECONF_HUB}"
   # local active_context_names="${CLUSTER_A_NAME}"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -4461,7 +4460,7 @@ function test_project_e2e_with_go() {
   pwd
 
   TITLE "Set E2E context for the active clusters"
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   local e2e_dp_context
   e2e_dp_context="--dp-context $(${OC} config current-context)"
 
@@ -4536,7 +4535,7 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
     subctl diagnose all --verbose || subctl_diagnose=ERROR
 
-    subctl diagnose firewall intra-cluster ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+    subctl diagnose firewall intra-cluster ${KUBECONF_HUB} ${KUBECONF_MANAGED} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
     subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
@@ -4558,17 +4557,9 @@ function test_subctl_benchmarks() {
 
   export_active_clusters_kubeconfig
 
-  # subctl benchmark --verbose latency ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} || benchmark_status=ERROR
-  #
-  # subctl benchmark --verbose throughput ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C}  || benchmark_status=ERROR
+  subctl benchmark latency ${KUBECONF_HUB} ${KUBECONF_MANAGED} --verbose || benchmark_status=ERROR
 
-  BUG "subctl benchmark --verbose cannot be placed before the sub-commands" \
-  "Put the --verbose at the end" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1974378"
-
-  subctl benchmark latency ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --verbose || benchmark_status=ERROR
-
-  subctl benchmark throughput ${KUBECONF_CLUSTER_A} ${MANAGED_KUBECONF} --verbose || benchmark_status=ERROR
+  subctl benchmark throughput ${KUBECONF_HUB} ${KUBECONF_MANAGED} --verbose || benchmark_status=ERROR
 
   if [[ "$benchmark_status" = ERROR ]] ; then
     FAILURE "Submariner benchmark tests have ended with failures. \n\
@@ -4688,7 +4679,7 @@ function test_submariner_e2e_with_subctl() {
   subctl version
 
   TITLE "Set SubCtl E2E context for the active clusters"
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   local e2e_subctl_context
   e2e_subctl_context="$(${OC} config current-context)"
 
@@ -4719,8 +4710,8 @@ function test_submariner_e2e_with_subctl() {
     subctl verify --only service-discovery,connectivity --verbose --kubecontexts ${e2e_subctl_context} | tee -a "$E2E_LOG"
   else
     # For SubCtl <= 0.8:
-    # subctl verify --disruptive-tests --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
-    subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_CLUSTER_A} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+    # subctl verify --disruptive-tests --verbose ${KUBECONF_HUB} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
+    subctl verify --only service-discovery,connectivity --verbose ${KUBECONF_HUB} ${KUBECONF_CLUSTER_B} ${KUBECONF_CLUSTER_C} | tee -a "$E2E_LOG"
   fi
 
 }
@@ -4846,7 +4837,7 @@ function env_teardown() {
 function test_products_versions_cluster_a() {
   PROMPT "Show products versions on cluster A"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   test_products_versions
 }
 
@@ -4969,7 +4960,7 @@ function collect_submariner_info() {
 
     subctl diagnose all || :
 
-    export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+    export KUBECONFIG="${KUBECONF_HUB}"
     print_resources_and_pod_logs "$CLUSTER_A_NAME"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -5422,11 +5413,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
+      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
 
     elif [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
+      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
 
     fi
 
@@ -5612,11 +5603,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_B}"
+      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
 
     elif [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      export MANAGED_KUBECONF="${KUBECONF_CLUSTER_C}"
+      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
 
     fi
 
@@ -5828,7 +5819,7 @@ export_active_clusters_kubeconfig
 
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
   # Artifact kubeconfig
-  cp -f "$KUBECONF_CLUSTER_A" "kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "$KUBECONF_HUB" "kubconf_${CLUSTER_A_NAME}" || :
 
   # Artifact cluster logs
   find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
