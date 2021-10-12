@@ -4533,14 +4533,24 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
   # For SubCtl > 0.8 : Run subctl diagnose:
   if [[ $(subctl version | grep --invert-match "v0.8") ]] ; then
 
-    subctl diagnose all --verbose || subctl_diagnose=ERROR
+    subctl diagnose deployment || subctl_diagnose=ERROR
 
-    subctl diagnose firewall intra-cluster ${KUBECONF_HUB} ${KUBECONF_MANAGED} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+    subctl diagnose connections || subctl_diagnose=ERROR
+
+    subctl diagnose k8s-version || subctl_diagnose=ERROR
+
+    subctl diagnose kube-proxy-mode ${TEST_NS:+--namespace $TEST_NS} || subctl_diagnose=ERROR
+
+    subctl diagnose cni || subctl_diagnose=ERROR
+
+    subctl diagnose firewall intra-cluster --validation-timeout 120 || subctl_diagnose=ERROR
 
     subctl diagnose firewall metrics --validation-timeout 120 --verbose || subctl_diagnose=ERROR
 
+    subctl diagnose firewall inter-cluster ${KUBECONF_HUB} ${KUBECONF_MANAGED} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+
     if [[ "$subctl_diagnose" = ERROR ]] ; then
-      FAILURE "SubCtl diagnose failed when using merged kubeconfig"
+      FAILURE "SubCtl diagnose had some failed checks, please investigate"
     fi
 
   else
