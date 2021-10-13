@@ -18,7 +18,7 @@ function clean_acm_namespace_and_resources_cluster_a() {
   PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   clean_acm_namespace_and_resources
 }
 
@@ -71,7 +71,7 @@ function install_acm_operator() {
 
   PROMPT "Install ACM operator $acm_version (Channel ${acm_channel})"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   export SUBSCRIBE=true
 
   # Run on the Hub install
@@ -97,7 +97,7 @@ function create_acm_multiclusterhub() {
   PROMPT "Create ACM MultiClusterHub instance"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   # Create the MultiClusterHub instance
   cat <<EOF | ${OC} apply -f -
@@ -142,7 +142,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
   local duration=5m
 
   # Run on ACM hub cluster
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   cmd="${OC} api-resources | grep ManagedClusterSet"
   watch_and_retry "$cmd" "$duration" || acm_status=FAILED
@@ -208,7 +208,7 @@ function import_managed_cluster_a() {
   local cluster_id="acm-${CLUSTER_A_NAME}"
   create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   import_managed_cluster "$cluster_id"
 }
 
@@ -248,7 +248,7 @@ function create_new_managed_cluster_in_acm_hub() {
   local cluster_type="${2:-Amazon}" # temporarily use Amazon as default cluster type
 
   # Run on ACM hub cluster (Manager)
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   echo "# Create the namespace for the managed cluster"
   create_namespace "${cluster_id}"
@@ -340,12 +340,7 @@ function import_managed_cluster() {
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   TITLE "Install klusterlet (addon) on the managed clusters"
   # Import the managed clusters
@@ -366,7 +361,7 @@ function install_submariner_on_managed_cluster_a() {
   PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster A"
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
   install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
 }
 
@@ -411,12 +406,7 @@ function install_submariner_operator_on_managed_cluster() {
 
   export SUBSCRIBE=false
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
@@ -489,14 +479,9 @@ function configure_submariner_version_for_managed_cluster() {
   # export LOG_TITLE="cluster1"
   # export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_A}"
+  export KUBECONFIG="${KUBECONF_HUB}"
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   echo "# Configure Submariner credentials"
 
