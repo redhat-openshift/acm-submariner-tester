@@ -4538,9 +4538,15 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
     subctl diagnose firewall intra-cluster --validation-timeout 120 || subctl_diagnose=ERROR
 
-    subctl diagnose firewall metrics --validation-timeout 120 --verbose || : # Temporarily ignore error
-
     subctl diagnose firewall inter-cluster ${KUBECONF_HUB} ${KUBECONF_MANAGED} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+
+    BUG "subctl diagnose firewall metrics does not work on merged kubeconfig" \
+    "Ignore 'subctl diagnose firewall metrics' output" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=2013711"
+    # workaround:
+    export KUBECONFIG="${KUBECONF_HUB}"
+
+    subctl diagnose firewall metrics --validation-timeout 120 --verbose || :
 
     if [[ "$subctl_diagnose" = ERROR ]] ; then
       FAILURE "SubCtl diagnose had some failed checks, please investigate"
