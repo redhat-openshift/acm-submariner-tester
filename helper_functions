@@ -790,7 +790,32 @@ function delete_aws_dns_records() {
 
 # ------------------------------------------
 
-# Function to delete selcted namespace and CRDs on the current KUBECONFIG cluster
+# Function to login to OCP server
+function ocp_login() {
+
+  # Optional inputs: $ocp_usr, $ocp_pwd, $ocp_server
+
+  local ocp_usr
+  ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
+
+  local ocp_pwd
+
+  local ocp_server
+  ocp_server="${3:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
+
+  TITLE "Login with user ${ocp_usr} to OCP server: ${ocp_server}"
+
+  ( # subshell to hide commands
+    ocp_pwd="${2:-$(${OC} whoami -t)}"
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p ${ocp_pwd}"
+    # Attempt to login up to 10 minutes
+    watch_and_retry "$cmd" 10m
+  )
+}
+
+# ------------------------------------------
+
+# Function to delete selected namespace and CRDs on the current KUBECONFIG cluster
 function delete_namespace_and_crds() {
   trap_to_debug_commands;
   # Input $1 : Namespace to delete

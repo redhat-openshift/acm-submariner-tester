@@ -340,12 +340,7 @@ function import_managed_cluster() {
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   TITLE "Install klusterlet (addon) on the managed clusters"
   # Import the managed clusters
@@ -411,12 +406,7 @@ function install_submariner_operator_on_managed_cluster() {
 
   export SUBSCRIBE=false
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
@@ -491,12 +481,7 @@ function configure_submariner_version_for_managed_cluster() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_A}"
 
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   echo "# Configure Submariner credentials"
 

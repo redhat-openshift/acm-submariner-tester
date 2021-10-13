@@ -902,18 +902,18 @@ function download_ocp_installer() {
 
   cd ${WORKDIR}
 
-  ocp_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
-  ocp_install_gz=$(curl $ocp_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
-  oc_client_gz=$(curl $ocp_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+  oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+  ocp_install_gz=$(curl $oc_installer_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+  oc_client_gz=$(curl $oc_installer_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
-  [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $ocp_url"
+  [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $oc_installer_url"
 
   TITLE "Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
   delete_old_files_or_dirs "openshift-*.tar.gz"
 
-  download_file ${ocp_url}${ocp_install_gz}
-  download_file ${ocp_url}${oc_client_gz}
+  download_file ${oc_installer_url}${ocp_install_gz}
+  download_file ${oc_installer_url}${oc_client_gz}
 
   tar -xvf ${ocp_install_gz} -C ${WORKDIR}
   tar -xvf ${oc_client_gz} -C ${WORKDIR}
@@ -1566,7 +1566,7 @@ EOF
 
   ${OC} describe oauth.config.openshift.io/cluster
 
-  TITLE "Adding the new user '${OCP_USR}' to cluster roles, and verify that the user can login"
+  TITLE "Adding the new user '${OCP_USR}' to OCP cluster roles"
 
   ### Give user admin privileges
   # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${OCP_USR}
@@ -1579,13 +1579,7 @@ EOF
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
   watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
 
-  ( # subshell to hide commands
-    local ocp_pwd
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    local cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 5 minutes
-    watch_and_retry "$cmd" 10m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -2961,7 +2955,6 @@ function configure_cluster_custom_registry_secrets() {
 
   (
     # ocp_usr=$(${OC} whoami | tr -d ':')
-    # ocp_pwd=$(${OC} whoami -t)
     ocp_token=$(${OC} whoami -t)
 
     TITLE "Configure OCP registry local secret"

@@ -91,12 +91,7 @@ function deploy_ocp_bundle() {
   SUBSCRIBE=${SUBSCRIBE:-false}
 
   # login
-  ( # subshell to hide commands
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    cmd="${OC} login -u ${OCP_USR} -p ${ocp_pwd}"
-    # Attempt to login up to 3 minutes
-    watch_and_retry "$cmd" 3m
-  )
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
