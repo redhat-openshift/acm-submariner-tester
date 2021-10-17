@@ -14,7 +14,8 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 export CONDA_ENV_NAME="conda-test"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
-export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+export SCRIPT_DIR
 
 # include sh2ju library
 source "$SCRIPT_DIR/lib/sh2ju.sh"
@@ -40,7 +41,8 @@ function highlight()
   # 3 = Match not found
   # 4 = Empty string or file
 
-  local tmp_file="`mktemp`_highlight"
+  local tmp_file
+  tmp_file="`mktemp`_highlight"
   # Save all output to temp file
   #grep -E "$pattern|$" "$@" > $tmp_file
   grep -Ei "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
@@ -72,7 +74,8 @@ function highlight()
 
 function print_current_dir_and_cmd() {
   # Get command to print, but skip printing if it's empty
-  local cmd="$(echo -e "$1" | xargs)"
+  local cmd
+  cmd="$(echo -e "$1" | xargs)"
   [[ -n "$cmd" ]] || return
 
   # Print PS1 prompt (and trim trailing and leading spaces)
@@ -92,7 +95,8 @@ function print_current_dir_and_cmd() {
   var_list+=( $(echo "$cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
   for variable in "${var_list[@]}" ; do
-     local var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+     local var_name
+     var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
      local var_value="${!var_name}"
      if [[ "$variable" =~ [:/] ]] ; then
        # For complex variables - add it to $all_vars_output
@@ -263,10 +267,12 @@ function TITLE() {
   local message="$1"
   local color="${2:-${YELLOW}}"
 
-  local first_line="$(echo -e "${message}" | head -1)"
+  local first_line
+  first_line="$(echo -e "${message}" | head -1)"
 
   local line_length=$(( ${#first_line} + 15 ))
-  local color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
+  local color_line
+  color_line="${color}$( printf '%0.s#' "$(seq 1 $line_length)" )${NO_COLOR}"
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
@@ -328,11 +334,14 @@ function record_junit() {
   #          This is because the command runs in subshell.
 
   # $1 => $output_file and $output_dir for junit results
-  local output_file=$(basename "$1")
-  local output_dir=$(dirname "$1")
+  local output_file
+  output_file=$(basename "$1")
+  local output_dir
+  output_dir=$(dirname "$1")
 
   # Set junit_suite as the base directory name of $output_dir
-  local junit_suite="$(basename "$output_dir")"
+  local junit_suite
+  junit_suite="$(basename "$output_dir")"
 
   # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
   shift
@@ -439,10 +448,12 @@ function verify_golang() {
   go version
 
   # export GOROOT=/usr/local/go
-  export GOROOT=$(go env GOROOT)
+  GOROOT=$(go env GOROOT)
+  export GOROOT
 
   # export GOPATH=~/go
-  export GOPATH=$(go env GOPATH)
+  GOPATH=$(go env GOPATH)
+  export GOPATH
 
   # Optional: exporting $1 as GOBIN path
   # export GOBIN="${1:-$GOROOT/bin}"
@@ -515,7 +526,8 @@ function install_local_jq() {
 # Function to convert raw text (e.g. yaml) to encoded url format
 function raw_to_url_encode() {
 
-  local string="$(cat < /dev/stdin)"
+  local string
+  string="$(cat < /dev/stdin)"
   local strlen=${#string}
   local encoded=""
   local pos c o
@@ -764,7 +776,8 @@ function delete_aws_dns_records() {
   trap_to_debug_commands;
   local hosted_zone_id="$1"
   local dns_record_set="$2"
-  local tmp_file="`mktemp`_aws_records"
+  local tmp_file
+  tmp_file="`mktemp`_aws_records"
 
   echo -e "\n# Searching in Hosted Zone [$hosted_zone_id] - for a DNS record set: [$dns_record_set]"
   aws route53 list-resource-record-sets --hosted-zone-id $hosted_zone_id --query "ResourceRecordSets[?Name == '$dns_record_set']" --out json > "$tmp_file"
@@ -968,7 +981,8 @@ function create_namespace() {
 function print_current_cluster_name() {
   # Do not trap_to_debug_commands
 
-  local current_context=$(${OC} config current-context)
+  local current_context
+  current_context=$(${OC} config current-context)
   ${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}"
 
 }
@@ -1041,7 +1055,8 @@ function get_running_pod_by_label() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
-  local tmp_file="`mktemp`_pod_status"
+  local tmp_file
+  tmp_file="`mktemp`_pod_status"
 
   # Wait up to 3 minutes for the pod to be ready
   ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file || :
@@ -1134,7 +1149,8 @@ function watch_pod_logs() {
   # Optional params:
   local retries=${4:-5}
   local interval=${5:-20s} # time between each retry attempt
-  local tmp_file="`mktemp`_pod_log"
+  local tmp_file
+  tmp_file="`mktemp`_pod_log"
   local search_exit_code=0
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
@@ -1272,7 +1288,8 @@ function get_latest_repository_version_by_tag() {
   local tag_to_search="$2"
 
   local regex="tags/\K.*${tag_to_search}.*"
-  local branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+  local branch_tag
+  branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
 
   [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
 
@@ -1296,7 +1313,8 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_component_id="$7"
     local polarion_testcases_doc=${8//[^a-zA-Z0-9 -]/_} # Replace special characters with underscore
 
-    local tc_list="`mktemp`_testcases"
+    local tc_list
+    tc_list="`mktemp`_testcases"
 
     echo -e "### Creating Polarion test-cases document for Junit results: $junit_xml
     \n# Polarion project: ${polarion_project_id}
@@ -1307,7 +1325,8 @@ function create_polarion_testcases_doc_from_junit() {
 
     echo "# Set output xml for Polarion test-cases"
 
-    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
+    local testsuite_name
+    testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
     local polarion_testcases_file="${testsuite_name}polarion_testcases.xml" # Append "polarion_testcases.xml"
     polarion_testcases_file="$(dirname ${junit_xml})/${polarion_testcases_file}" # Append full directory path of the original junit_xml file
@@ -1394,7 +1413,8 @@ function create_polarion_testrun_result_from_junit() {
 
     echo "# Set output xml for Polarion test-run results"
 
-    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
+    local testsuite_name
+    testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
     local polarion_testrun_file="${testsuite_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
     polarion_testrun_file="$(dirname $junit_xml)/${polarion_testrun_file}" # Append full directory path of the original junit_xml file
@@ -1475,7 +1495,8 @@ function create_polarion_testrun_result_from_junit() {
     watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
 
     local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
-    local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
+    local testrun_url
+    testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
     # Set link for all templates:
     all_templates_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A\"${polarion_testrun_template// /%20}\""
@@ -1499,7 +1520,8 @@ function generate_suite_title_from_junit_filename() {
     # Do not trap_to_debug_commands or echo, so it will not be printed as return value
 
     # Get file name without path and extension
-    local testsuite_title="$(basename ${1%.*})"
+    local testsuite_title
+    testsuite_title="$(basename ${1%.*})"
 
     # Remove all 'junit' substring from testsuite title
     testsuite_title="${testsuite_title//junit/}"
@@ -1522,10 +1544,12 @@ function watch_polarion_job_status() {
 
   echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
 
-  local polarion_log="`mktemp`_polarion_log"
+  local polarion_log
+  polarion_log="`mktemp`_polarion_log"
   curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_import_file} ${polarion_url}/import/${polarion_import_type} |& tee $polarion_log
 
-  local polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
+  local polarion_job_id
+  polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
 
   if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
     echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
@@ -1566,7 +1590,8 @@ function log_to_html() {
 
   local repo_url=https://github.com/theZiz/aha.git
   local repo_branch=0.5.1
-  local repo_dir=$(basename $repo_url .git)
+  local repo_dir
+  repo_dir=$(basename $repo_url .git)
 
   # Get AHA binary
   if [[ ! -f ./$repo_dir/aha ]]; then
