@@ -5094,6 +5094,18 @@ function test_debug_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
+  # Set Polarion access if $upload_to_polarion = yes/y
+  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+    TITLE "Set Polarion access for the user [$POLARION_USR]"
+    ( # subshell to hide commands
+      local polauth
+      polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+      echo "--header \"Authorization: Basic ${polauth}\"" > "$POLARION_AUTH"
+    )
+  fi
+
+  echo 1 > $TEST_STATUS_FILE
+
   if [[ -n "TRUE" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
@@ -5149,21 +5161,20 @@ fi
 
 cd ${SCRIPT_DIR}
 
-# # Script debug calls (should be left as comment)
-#
-# ${junit_cmd} test_debug_pass
-#
-# ${junit_cmd} test_debug_fail
-# rc=$?
-# BUG "test_debug_fail - Exit code: $rc" \
-# "If RC $rc = 5 - junit_cmd should continue execution"
-# ${junit_cmd} test_debug_pass
-# ${junit_cmd} test_debug_fatal
-
-
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+
+  ### Script debug calls (should be left as comment) ###
+    # ${junit_cmd} test_debug_pass
+    # ${junit_cmd} test_debug_fail
+    # rc=$?
+    # BUG "test_debug_fail - Exit code: $rc" \
+    # "If RC $rc = 5 - junit_cmd should continue execution"
+    # ${junit_cmd} test_debug_pass
+    # ${junit_cmd} test_debug_fatal
+  ### END Script debug ###
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
@@ -5870,4 +5881,4 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  2>/dev/null)
 
 TITLE "Archive \"$report_archive\" now contains:"
-tar tvf 
+tar tvf
