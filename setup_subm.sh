@@ -232,8 +232,8 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 > $POLARION_AUTH
 
 # File to store Polarion test-run report link
-export POLARION_REPORTS="$SCRIPT_DIR/polarion.reports"
-> $POLARION_REPORTS
+export POLARION_TEST_RUNS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
+> $POLARION_TEST_RUNS
 
 
 ####################################################################################
@@ -4736,7 +4736,7 @@ function upload_junit_xml_to_polarion() {
   "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC"
 
   create_polarion_testrun_result_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
-  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE"
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE" "$POLARION_TESTPLAN_ID"
 
 }
 
@@ -4747,18 +4747,18 @@ function create_all_test_results_in_polarion() {
   trap_to_debug_commands;
 
   # Temp file to store Polarion output
-  local polarion_testrun_import_result
-  polarion_testrun_import_result="`mktemp`_polarion"
+  local polarion_testrun_import_log
+  polarion_testrun_import_log="`mktemp`_polarion_import_log"
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
   TITLE "Upload Junit results of SYSTEM (Shell) tests to Polarion:"
 
-  # Redirect output to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+  # Redirect output to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
   # Add Polarion link to the HTML report
-  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$SHELL_JUNIT_XML"
+  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
 
 
   # Upload Ginkgo E2E tests to Polarion
@@ -4766,19 +4766,19 @@ function create_all_test_results_in_polarion() {
 
     TITLE "Upload Junit results of Submariner E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$E2E_JUNIT_XML"
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
 
     TITLE "Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$LIGHTHOUSE_JUNIT_XML"
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
 
   fi
 
@@ -4801,25 +4801,25 @@ function add_polarion_testrun_url_to_report_description() {
 # Helper function to search polarion testrun url in the testrun import output, in order to add later to the HTML report
   trap_to_debug_commands;
 
-  local polarion_testrun_import_result="$1"
+  local polarion_testrun_import_log="$1"
   local polarion_test_run_file="$2"
 
   TITLE "Add new Polarion Test run results to the Html report description: "
-  local results_link
-  results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_result" | sed -z 's/\.\n.* to:/:\n/' || :)
+  local polarion_testrun_result_page
+  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" | sed -z 's/\.\n.* to:/:\n/' || :)
 
-  if [[ -n "$results_link" ]] ; then
-    echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
+  if [[ -n "$polarion_testrun_result_page" ]] ; then
+    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_TEST_RUNS" || :
 
     local polarion_testrun_name
     polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
     polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
     polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
-    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_REPORTS" || :
+    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_TEST_RUNS" || :
 
   else
-    echo "Error reading Polarion Test results link [${results_link}]" 1>&2
+    echo "Error reading Polarion Test results link [${polarion_testrun_result_page}]" 1>&2
   fi
 
 }
@@ -5796,12 +5796,12 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     REPORT_FILE="$(basename ${REPORT_FILE// /_})"
   fi
 
-  if [[ -s "$POLARION_REPORTS" ]] ; then
+  if [[ -s "$POLARION_TEST_RUNS" ]] ; then
     echo "# set REPORT_DESCRIPTION for html report:"
-    cat "$POLARION_REPORTS"
+    cat "$POLARION_TEST_RUNS"
 
     REPORT_DESCRIPTION="Polarion results:
-    $(< "$POLARION_REPORTS")"
+    $(< "$POLARION_TEST_RUNS")"
   fi
 
 ) |& tee -a "$SYS_LOG"

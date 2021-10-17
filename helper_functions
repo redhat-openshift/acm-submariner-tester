@@ -1382,7 +1382,8 @@ function create_polarion_testcases_doc_from_junit() {
       echo "</testcases>" >> "$polarion_testcases_file"
 
       # Watch testcase-log web page
-      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_file"
+      local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
+      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_file" "$polarion_job_urls"
 }
 
 
@@ -1400,11 +1401,12 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
+    local polarion_test_plan_id="$7"
 
     local sed_expression
 
     echo -e "### Creating Polarion test-run (xml) for Junit results: $junit_xml
-    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1430,7 +1432,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}, test plan: [${polarion_test_plan_id}]"
 
     # Remove first <testsuiteS> tag (if exists):
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_file"
@@ -1445,6 +1447,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
+            <property name=\"plannedin\" value=\"$polarion_test_plan_id\" /> \n\
         </properties> \n\
     <testsuite "
 
@@ -1492,11 +1495,18 @@ function create_polarion_testrun_result_from_junit() {
     # ------------------------------------------------------------------------ #
 
     # Watch testcase-log web page
-    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
+    local polarion_job_urls="$SCRIPT_DIR/polarion_testruns.url"
+    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file" "$polarion_job_urls"
 
-    local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
-    local testrun_url
-    testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
+    local latest_job_url
+    # Get the last non empty/whitespace row from $polarion_job_urls file
+    latest_job_url="$(awk 'NF{p=$0}END{print p}' $polarion_job_urls)"
+
+    local cmd
+    cmd="curl --config $polarion_auth_file -k ${latest_job_url}"
+
+    local polarion_testrun_result_page
+    polarion_testrun_result_page="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
     # Set link for all templates:
     all_templates_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A\"${polarion_testrun_template// /%20}\""
@@ -1504,8 +1514,8 @@ function create_polarion_testrun_result_from_junit() {
     # Set links for all titles:
     all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${testsuite_name// /%20}\""
 
-    echo -e "\n### The new test-run was successfully added to Polarion ###
-    \n# $testrun_url \n
+    echo -e "\n### The new test-run result was successfully added to Polarion ###
+    \n# $polarion_testrun_result_page \n
     \n# All test-runs by template-id '${polarion_testrun_template}':
     \n# ${all_templates_link}
     \n# All test-runs by title '${testsuite_name}':
@@ -1541,6 +1551,7 @@ function watch_polarion_job_status() {
   local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
   local polarion_import_type="$3" # "xunit" or "testcase"
   local polarion_import_file="$4" # filepath to import
+  local polarion_job_urls="$5" # filepath to store all Polarion jobs' urls
 
   echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
 
@@ -1558,6 +1569,7 @@ function watch_polarion_job_status() {
 
   local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
   echo -e "\n# Checking Polarion ${polarion_import_type} import job status at: $polarion_job_url"
+  echo "$polarion_job_url" >> "$polarion_job_urls"
 
   local cmd="curl --config $polarion_auth_file -k $polarion_job_url | sed -r 's/&#034;|&#039;/\"/g' |& tee $polarion_log"
   local regex='Import.+Message sent'
