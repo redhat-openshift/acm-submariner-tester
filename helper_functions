@@ -1302,7 +1302,7 @@ function get_latest_repository_version_by_tag() {
 function create_polarion_testcases_doc_from_junit() {
     trap_to_debug_commands;
 
-    # Input (5 params) :
+    # Input (9 params) :
 
     local polarion_url="$1"
     local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
@@ -1312,6 +1312,7 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_user_name="$6"
     local polarion_component_id="$7"
     local polarion_testcases_doc=${8//[^a-zA-Z0-9 -]/_} # Replace special characters with underscore
+    local polarion_test_plan_id="$9"
 
     local tc_list
     tc_list="`mktemp`_testcases"
@@ -1328,7 +1329,7 @@ function create_polarion_testcases_doc_from_junit() {
     local testsuite_name
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
-    local polarion_testcases_file="${testsuite_name}polarion_testcases.xml" # Append "polarion_testcases.xml"
+    local polarion_testcases_file="${testsuite_name}_polarion_testcases.xml" # Append "polarion_testcases.xml"
     polarion_testcases_file="$(dirname ${junit_xml})/${polarion_testcases_file}" # Append full directory path of the original junit_xml file
 
     echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
@@ -1350,9 +1351,10 @@ function create_polarion_testcases_doc_from_junit() {
 
     while read testcase_name ; do
       local testcase_title="${testsuite_name}.${testcase_name#*.}"
+      # local testcase_title="${testcase_name#*.}"
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
           <title>${testcase_title}</title>
-            <description>${testcase_title}</description>
+            <description>${testsuite_name} : ${testcase_title}</description>
             <custom-fields>
 
               <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
@@ -1362,6 +1364,7 @@ function create_polarion_testcases_doc_from_junit() {
               <custom-field id=\"caseposneg\" content=\"positive\" />
               <custom-field id=\"legacytest\" content=\"true\" />
               <custom-field id=\"caseautomation\" content=\"automated\" />
+              <custom-field id=\"tcmsplan\" content=\"${polarion_test_plan_id}\" />
               <custom-field id=\"automation_script\" content=\"$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})\" />
             </custom-fields>
         </testcase>
@@ -1393,7 +1396,7 @@ function create_polarion_testcases_doc_from_junit() {
 function create_polarion_testrun_result_from_junit() {
     trap_to_debug_commands;
 
-    # Input (6 params) :
+    # Input (7 params) :
 
     local polarion_url="$1"
     local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
@@ -1418,7 +1421,7 @@ function create_polarion_testrun_result_from_junit() {
     local testsuite_name
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
-    local polarion_testrun_file="${testsuite_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
+    local polarion_testrun_file="${testsuite_name}_polarion_testrun.xml" # Append "polarion_testrun.xml"
     polarion_testrun_file="$(dirname $junit_xml)/${polarion_testrun_file}" # Append full directory path of the original junit_xml file
 
     # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"

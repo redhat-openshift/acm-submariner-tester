@@ -4733,7 +4733,7 @@ function upload_junit_xml_to_polarion() {
   echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
 
   create_polarion_testcases_doc_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" "$junit_file" \
-  "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC"
+  "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC" "$POLARION_TESTPLAN_ID"
 
   create_polarion_testrun_result_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
   "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE" "$POLARION_TESTPLAN_ID"
@@ -5870,18 +5870,4 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  2>/dev/null)
 
 TITLE "Archive \"$report_archive\" now contains:"
-tar tvf $report_archive
-
-TITLE "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
-
-test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
-TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
-
-if [[ -z "$test_status" ]] ; then
-  exit 3
-else
-  exit $test_status
-fi
-
-
-# ------------------------------------------
+tar tvf 
