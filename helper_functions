@@ -272,7 +272,7 @@ function TITLE() {
 
   local line_length=$(( ${#first_line} + 15 ))
   local color_line
-  color_line="${color}$( printf '%0.s#' "$(seq 1 $line_length)" )${NO_COLOR}"
+  color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
@@ -1316,7 +1316,7 @@ function create_polarion_testcases_doc_from_junit() {
     local tc_list
     tc_list="`mktemp`_testcases"
 
-    echo -e "### Creating Polarion test-cases document for Junit results: $junit_xml
+    TITLE "Creating Polarion test-cases document for Junit results: $junit_xml
     \n# Polarion project: ${polarion_project_id}
     \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
@@ -1405,7 +1405,7 @@ function create_polarion_testrun_result_from_junit() {
 
     local sed_expression
 
-    echo -e "### Creating Polarion test-run (xml) for Junit results: $junit_xml
+    TITLE "Creating Polarion test-run (xml) for Junit results: $junit_xml
     \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
 
     # Verify junit file exists
@@ -1422,7 +1422,7 @@ function create_polarion_testrun_result_from_junit() {
     polarion_testrun_file="$(dirname $junit_xml)/${polarion_testrun_file}" # Append full directory path of the original junit_xml file
 
     # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
-    echo -e "### Polarion Test-run title: [${testsuite_name}],
+    TITLE "Polarion Test-run title: [${testsuite_name}]
     \n# Polarion Test-run file [${polarion_testrun_file}] \n"
 
     cp "$junit_xml" "$polarion_testrun_file"

@@ -5796,21 +5796,21 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     REPORT_FILE="$(basename ${REPORT_FILE// /_})"
   fi
 
-  if [[ -s "$POLARION_TEST_RUNS" ]] ; then
-    echo "# set REPORT_DESCRIPTION for html report:"
-    cat "$POLARION_TEST_RUNS"
-
-    REPORT_DESCRIPTION="Polarion results:
-    $(< "$POLARION_TEST_RUNS")"
-  fi
-
 ) |& tee -a "$SYS_LOG"
 
 # Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
+if [[ -s "$POLARION_TEST_RUNS" ]] ; then
+  echo "# set Html report description with Polarion test run links:"
+  cat "$POLARION_TEST_RUNS"
+
+  html_report_description="Polarion results:
+  $(< "$POLARION_TEST_RUNS")"
+fi
+
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_description"
 
 # ------------------------------------------
 
