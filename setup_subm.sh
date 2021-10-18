@@ -5881,4 +5881,18 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  2>/dev/null)
 
 TITLE "Archive \"$report_archive\" now contains:"
-tar tvf
+tar tvf $report_archive
+
+TITLE "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
+
+test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
+
+if [[ -z "$test_status" ]] ; then
+  exit 3
+else
+  exit $test_status
+fi
+
+
+# ------------------------------------------
