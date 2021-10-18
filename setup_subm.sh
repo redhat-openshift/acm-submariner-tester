@@ -5090,9 +5090,9 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
-function test_debug_pass() {
+function test_debug_polarion() {
   trap_to_debug_commands;
-  PROMPT "PASS test for DEBUG"
+  PROMPT "DEBUG Polarion setup"
 
   # Set Polarion access if $upload_to_polarion = yes/y
   if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
@@ -5106,16 +5106,27 @@ function test_debug_pass() {
 
   echo 1 > $TEST_STATUS_FILE
 
+}
+
+function test_debug_pass() {
+  trap_to_debug_commands;
+  PROMPT "PASS test for DEBUG"
+
   if [[ -n "TRUE" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
-
-    # Test FAILURE() that should not break script
-    FAILURE "PASS_HERE"
   fi
 
-  echo "should not get here..."
+  local msg="
+    & (ampersand) <br>
+    < (lower) <br>
+    > (greater) <br>
+    ‘ (single quotes) <br>
+    \" (double quotes) <br>
+    "
+
+  TITLE "PRINT TEST: \n $msg"
 
 }
 
@@ -5127,14 +5138,18 @@ function test_debug_fail() {
 
   local TEST=1
   if [[ -n "$TEST" ]] ; then
-    return 1
+    TITLE "Test FAILURE() function, that should not break whole script, but just this test"
+    FAILURE "MARK TEST FAILURE, BUT CONTINUE"
   fi
+
+  echo "It should NOT print this"
+
 }
 
 function test_debug_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
-  FATAL "Terminating script since test_debug_fail() did not"
+  FATAL "Terminating script here"
 }
 
 # ------------------------------------------
@@ -5165,15 +5180,16 @@ cd ${SCRIPT_DIR}
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
-  ### Script debug calls (should be left as comment) ###
-    # ${junit_cmd} test_debug_pass
-    # ${junit_cmd} test_debug_fail
-    # rc=$?
-    # BUG "test_debug_fail - Exit code: $rc" \
-    # "If RC $rc = 5 - junit_cmd should continue execution"
-    # ${junit_cmd} test_debug_pass
-    # ${junit_cmd} test_debug_fatal
-  ### END Script debug ###
+  # ## Script debug calls (should be left as comment) ###
+  #   ${junit_cmd} test_debug_polarion
+  #   ${junit_cmd} test_debug_pass
+  #   ${junit_cmd} test_debug_fail
+  #   rc=$?
+  #   BUG "test_debug_fail - Exit code: $rc" \
+  #   "If RC $rc = 5 - junit_cmd should continue execution"
+  #   ${junit_cmd} test_debug_pass
+  #   ${junit_cmd} test_debug_fatal
+  # ## END Script debug ###
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
