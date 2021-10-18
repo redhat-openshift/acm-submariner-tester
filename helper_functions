@@ -1474,23 +1474,23 @@ function create_polarion_testrun_result_from_junit() {
 
     # Define Polarion <testcase> property (it is passed into SED), make sure new lines ends with " \n\ ")
 
-    # sed_expression="\n\
-    #     <properties> \n\
-    #         <property name=\"polarion-testcase-comment\" value=\""
-
     sed_expression="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" > \n\
-            "
+            <property name=\"polarion-testcase-comment\" value=\""
+
+    # sed_expression="\n\
+    #     <properties> \n\
+    #         <property name=\"polarion-testcase-comment\" > \n\
+    #         "
 
     sed -r "s:<system-out>:$sed_expression:g" -i "$polarion_testrun_file"
 
-    # sed_expression="\" /> \n\
-    #     </properties> \n"
+    sed_expression="\" /> \n\
+        </properties> \n"
 
-    sed_expression="</property> \n\
-        </properties> \n\
-        "
+    # sed_expression="</property> \n\
+    #     </properties> \n\
+    #     "
 
     sed -r "s:</system-out>:$sed_expression:g" -i "$polarion_testrun_file"
 

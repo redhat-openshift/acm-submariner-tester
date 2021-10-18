@@ -77,9 +77,16 @@ function juLogClean() {
 }
 
 # Function to remove special characters and ansi colors from a text file
-function ConvertToPlainTextFile() {
+function convertToPlainTextFile() {
   local filePath="$1"
   ${SED} -r -e 's:\[[0-9;]+[mK]::g' -e 's/[^[:print:]\t\n]//g' -i "$filePath"
+}
+
+
+# Function to escape XML special characters from a text file
+function excapeXML() {
+  local filePath="$1"
+  ${SED} -e 's/&/\&amp;/g' -e "s/\"/\&quot;/g" -e "s/'/\&apos;/g"  -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -i "$filePath"
 }
 
 
@@ -181,9 +188,11 @@ EOF
   # Save datetime after executing the command
   testEndTime="$(${dateTime} +%s.%N)"
 
-  # Convert $outf (stdout file) and $errf (stderr file) to plain text files without special characters (e.g. ansi colors)
-  ConvertToPlainTextFile "${outf}" || :
-  ConvertToPlainTextFile "${errf}" || :
+  # Convert $outf (stdout file) and $errf (stderr file) to plain text for XML data (e.g. without ansi colors)
+  convertToPlainTextFile "${outf}" || :
+  convertToPlainTextFile "${errf}" || :
+  excapeXML "${outf}" || :
+  excapeXML "${errf}" || :
 
   # Set the appropriate error, based in the exit code and the regex
   [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
@@ -221,24 +230,31 @@ EOF
 
   # system-out tag if testcase passed
   if [[ ${testStatus} = PASSED ]] ; then
-    echo '    <system-out> <![CDATA[' >> ${newTestCaseTag}
+    # echo '    <system-out> <![CDATA[' >> ${newTestCaseTag}
+    # cat ${outf} >> ${newTestCaseTag}
+    # echo '    ]]> </system-out>' >> ${newTestCaseTag}
+    echo '    <system-out>' >> ${newTestCaseTag}
     cat ${outf} >> ${newTestCaseTag}
-    echo '    ]]> </system-out>' >> ${newTestCaseTag}
+    echo '    </system-out>' >> ${newTestCaseTag}
 
   # Or failure tag if testcase failed
   else
-    # Get failure summary from $errf as one line, by:
-    # Removing empty lines + getting last line + replacing invalid xml characters
-    failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e "s/\"/'/g" -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
+    # Get failure summary from $errf, by removing empty lines from $errf + getting last 2 lines
+    # failure_summary=$(grep "\S" "$errf" | tail -2 | sed -e "s/\"/'/g" -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
+    failure_summary=$(grep "\S" "$errf" | tail -2)
 
-    echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\"> <![CDATA[" >> ${newTestCaseTag}
+    # echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\"> <![CDATA[" >> ${newTestCaseTag}
+    echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\">" >> ${newTestCaseTag}
     cat ${outf} >> ${newTestCaseTag}
-    echo '    ]]> </failure>' >> ${newTestCaseTag}
+    # echo '    ]]> </failure>' >> ${newTestCaseTag}
+    echo '    </failure>' >> ${newTestCaseTag}
 
     ## system-err tag in addition to failure tag
-    echo '    <system-err> <![CDATA[' >> ${newTestCaseTag}
+    # echo '    <system-err> <![CDATA[' >> ${newTestCaseTag}
+    echo '    <system-err>' >> ${newTestCaseTag}
     cat ${errf} >> ${newTestCaseTag}
-    echo '    ]]> </system-err>' >> ${newTestCaseTag}
+    # echo '    ]]> </system-err>' >> ${newTestCaseTag}
+    echo '    </system-err>' >> ${newTestCaseTag}
 
   fi
 
