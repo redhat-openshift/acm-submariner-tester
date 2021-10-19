@@ -1375,12 +1375,22 @@ function create_polarion_testcases_doc_from_junit() {
         $(tail -n 50 $temp_test_output)" > $temp_test_output
       fi
 
+      # # Replace all end of lines with <br>
+      # sed -e 's/$/<br>/' -i $temp_test_output
+
+      # Remove everything before the <system-out>, and save as testcase_output
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
-      testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
+      # # Add pre-wrap
+      # testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
 
-      testcase_output="$(echo "$testcase_output" | sed -e 's/&/\&amp;/g' -e "s/\"/\&quot;/g" -e "s/'/\&apos;/g"  -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+      # Replace all end of lines with <br>
+      testcase_output="<br><br> ${testcase_output//$'\n'/<br />}"
+
+      # Escape all XML special chars
+      # testcase_output="$(echo "<br> $testcase_output" | sed -e 's/&/\&amp;/g' -e "s/\"/\&quot;/g" -e "s/'/\&apos;/g"  -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+      testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
 
       echo "$testcase_output"
 
@@ -1399,9 +1409,6 @@ function create_polarion_testcases_doc_from_junit() {
               <custom-field id=\"automation_script\">
                 ${current_script} : ${testcase_output}
               </custom-field>
-              <custom-field id=\"setup\">
-                ${current_script} : <![CDATA[ ${testcase_output} ]]>
-              </custom-field>
             </custom-fields>
         </testcase>
         " >> "$polarion_testcases_file"
@@ -1414,6 +1421,11 @@ function create_polarion_testcases_doc_from_junit() {
       #    <![CDATA[ ${testcase_output} ]]>
       #   &lt;/span&gt;
       # </custom-field>
+      #
+      # <custom-field id=\"setup\">
+      #   ${current_script} : <![CDATA[ ${testcase_output} ]]>
+      # </custom-field>
+      #
       #
       # <custom-field id=\"products\" content=\"ocp\" />
       # <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
