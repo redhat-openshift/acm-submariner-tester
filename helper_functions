@@ -1317,6 +1317,9 @@ function create_polarion_testcases_doc_from_junit() {
     local tc_list
     tc_list="`mktemp`_testcases"
 
+    local temp_test_output
+    temp_test_output="`mktemp`_test_output"
+
     TITLE "Creating Polarion test-cases document for Junit results: $junit_xml
     \n# Polarion project: ${polarion_project_id}
     \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
@@ -1349,14 +1352,34 @@ function create_polarion_testcases_doc_from_junit() {
     echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
     # TODO: This should rather be defined on external properties file:
 
-    while read testcase_name ; do
-      local testcase_title="${testsuite_name}.${testcase_name#*.}"
-      # local testcase_title="${testcase_name#*.}"
-      echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
-          <title>${testcase_title}</title>
-            <description>${testsuite_name} : ${testcase_title}</description>
-            <custom-fields>
+    local current_script
+    current_script="$(echo "$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})" )"
 
+    while read full_testcase_name ; do
+
+      local class_name="${full_testcase_name%.*}" # text before the dot
+      # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
+      local test_name="${full_testcase_name#*.}" # text after the dot
+
+      TITLE "Setting Polarion schema for Test class [${class_name}] : Test name [${test_name}]"
+
+      # Save <system-output> of specific junit testcase, as text for the "automation_script" field
+      grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
+
+      local testcase_output
+      testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
+
+      echo "$testcase_output"
+
+      echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
+          <title>${testsuite_name}.${test_name}</title>
+            <description>
+              ${class_name} : ${test_name} :
+              &lt;span style=&quot;white-space: pre-wrap; color: black&quot;&gt;
+               <![CDATA[ ${testcase_output} ]]>
+              &lt;/span&gt;
+            </description>
+            <custom-fields>
               <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
               <custom-field id=\"testtype\" content=\"functional\" />
               <custom-field id=\"caseimportance\" content=\"medium\" />
@@ -1365,7 +1388,7 @@ function create_polarion_testcases_doc_from_junit() {
               <custom-field id=\"legacytest\" content=\"true\" />
               <custom-field id=\"caseautomation\" content=\"automated\" />
               <custom-field id=\"tcmsplan\" content=\"${polarion_test_plan_id}\" />
-              <custom-field id=\"automation_script\" content=\"$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})\" />
+              <custom-field id=\"automation_script\" content=\"${current_script}\" />
             </custom-fields>
         </testcase>
         " >> "$polarion_testcases_file"
@@ -1373,14 +1396,20 @@ function create_polarion_testcases_doc_from_junit() {
 
       # More options:
       #
+      # <custom-field id=\"setup\">
+      #   &lt;span style=&quot;font-family: Verdana, Helvetica, sans serif; font-size: 11px; white-space: pre-line; color: black&quot;&gt;
+      #    <![CDATA[ ${testcase_output} ]]>
+      #   &lt;/span&gt;
+      # </custom-field>
+      #
       # <custom-field id=\"products\" content=\"ocp\" />
       # <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
       #
       # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
       # <linked-work-items>
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"verifies\" />
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"refines\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"verifies\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"refines\" />
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_file"
 
