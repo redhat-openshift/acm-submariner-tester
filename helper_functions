@@ -1366,19 +1366,27 @@ function create_polarion_testcases_doc_from_junit() {
       # Save <system-output> of specific junit testcase, as text for the "automation_script" field
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
 
+      # Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100
+      local num_of_lines
+      num_of_lines=$(wc -l < "$temp_test_output")
+      if (( num_of_lines > 100 )) ; then
+        echo -e "$(head -n 50 $temp_test_output) \
+        \n...\n \
+        $(tail -n 50 $temp_test_output)" > $temp_test_output
+      fi
+
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
+
+      testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
+
+      testcase_output="$(echo "$testcase_output" | sed -e 's/&/\&amp;/g' -e "s/\"/\&quot;/g" -e "s/'/\&apos;/g"  -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
 
       echo "$testcase_output"
 
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
           <title>${testsuite_name}.${test_name}</title>
-            <description>
-              ${class_name} : ${test_name} :
-              &lt;span style=&quot;white-space: pre-wrap; color: black&quot;&gt;
-               <![CDATA[ ${testcase_output} ]]>
-              &lt;/span&gt;
-            </description>
+            <description>${class_name} : ${test_name}</description>
             <custom-fields>
               <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
               <custom-field id=\"testtype\" content=\"functional\" />
@@ -1388,7 +1396,12 @@ function create_polarion_testcases_doc_from_junit() {
               <custom-field id=\"legacytest\" content=\"true\" />
               <custom-field id=\"caseautomation\" content=\"automated\" />
               <custom-field id=\"tcmsplan\" content=\"${polarion_test_plan_id}\" />
-              <custom-field id=\"automation_script\" content=\"${current_script}\" />
+              <custom-field id=\"automation_script\">
+                ${current_script} : ${testcase_output}
+              </custom-field>
+              <custom-field id=\"setup\">
+                ${current_script} : <![CDATA[ ${testcase_output} ]]>
+              </custom-field>
             </custom-fields>
         </testcase>
         " >> "$polarion_testcases_file"
