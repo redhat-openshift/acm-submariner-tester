@@ -232,8 +232,8 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 > $POLARION_AUTH
 
 # File to store Polarion test-run report link
-export POLARION_TEST_RUNS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-> $POLARION_TEST_RUNS
+export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
+> $POLARION_RESULTS
 
 
 ####################################################################################
@@ -4809,14 +4809,14 @@ function add_polarion_testrun_url_to_report_description() {
   polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" | sed -z 's/\.\n.* to:/:\n/' || :)
 
   if [[ -n "$polarion_testrun_result_page" ]] ; then
-    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_TEST_RUNS" || :
+    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
 
     local polarion_testrun_name
     polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
     polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
     polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
-    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_TEST_RUNS" || :
+    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
 
   else
     echo "Error reading Polarion Test results link [${polarion_testrun_result_page}]" 1>&2
@@ -5180,7 +5180,8 @@ cd ${SCRIPT_DIR}
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
-  # ## Script debug calls (should be left as comment) ###
+  ### Script debug calls (should be left as a comment) ###
+  #
   #   ${junit_cmd} test_debug_polarion
   #   ${junit_cmd} test_debug_pass
   #   ${junit_cmd} test_debug_fail
@@ -5189,7 +5190,8 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   #   "If RC $rc = 5 - junit_cmd should continue execution"
   #   ${junit_cmd} test_debug_pass
   #   ${junit_cmd} test_debug_fatal
-  # ## END Script debug ###
+  #
+  ### END Script debug ###
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
@@ -5828,12 +5830,12 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 # Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
-if [[ -s "$POLARION_TEST_RUNS" ]] ; then
+if [[ -s "$POLARION_RESULTS" ]] ; then
   echo "# set Html report description with Polarion test run links:"
-  cat "$POLARION_TEST_RUNS"
+  cat "$POLARION_RESULTS"
 
   html_report_description="Polarion results:
-  $(< "$POLARION_TEST_RUNS")"
+  $(< "$POLARION_RESULTS")"
 fi
 
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
