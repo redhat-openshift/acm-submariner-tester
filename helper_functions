@@ -1532,21 +1532,23 @@ function create_polarion_testrun_result_from_junit() {
         <properties> \n\
             <property name=\"polarion-testcase-comment\" value=\""
 
-    # sed_expression="\n\
-    #     <properties> \n\
-    #         <property name=\"polarion-testcase-comment\" > \n\
-    #         "
-
     sed -r "s:<system-out>:$sed_expression:g" -i "$polarion_testrun_file"
 
     sed_expression="\" /> \n\
         </properties> \n"
 
-    # sed_expression="</property> \n\
-    #     </properties> \n\
-    #     "
-
     sed -r "s:</system-out>:$sed_expression:g" -i "$polarion_testrun_file"
+
+    # ------------------------------------------------------------------------ #
+
+    echo "# Add escaped HTML <br> tags at the end of all textual lines in $polarion_testrun_file"
+
+    local temp_testrun
+    temp_testrun="`mktemp`_testrun"
+
+    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_file" > temp_testrun
+
+    mv temp_testrun "$polarion_testrun_file"
 
     # ------------------------------------------------------------------------ #
 
