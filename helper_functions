@@ -1586,7 +1586,7 @@ function create_polarion_testrun_result_from_junit() {
     sed_expression="s:</testcase>:$polarion_testcase_content:g"
 
     # Insert the property instead of EACH testcase tag
-    sed -r "$sed_expression" -i "$polarion_testrun_file"
+    sed -r "$sed_expression" -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
