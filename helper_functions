@@ -1553,21 +1553,40 @@ function create_polarion_testrun_result_from_junit() {
     sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
+    #
+    # This is commented out since Polarion Testcase verdict does not support rich text output
+    #
+    # echo "# Add rich text into each Test Case Verdict in $polarion_testrun_xml (change 'system-out' to 'polarion-testcase-comment')"
+    #
+    # # Define Polarion <testcase> property (it is passed into SED), make sure new lines ends with " \n\ ")
+    #
+    # sed_expression="\n\
+    #     <properties> \n\
+    #         <property name=\"polarion-testcase-comment\" value=\""
+    #
+    # sed -r "s:<system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    #
+    # sed_expression="\" /> \n\
+    #     </properties> \n"
+    #
+    # sed -r "s:</system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    #
 
-    echo "# Add 'polarion-testcase-comment' (instead of 'system-out') to each Testcase in $polarion_testrun_xml"
+    # ------------------------------------------------------------------------ #
 
-    # Define Polarion <testcase> property (it is passed into SED), make sure new lines ends with " \n\ ")
+    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment')"
 
-    sed_expression="\n\
+    # Define Polarion <testcase> property (it is passed into SED, make sure new lines ends with " \n\ ")
+    polarion_testcase_content="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" value=\""
+            <property name=\"polarion-testcase-comment\" value=\"Auto generated from $junit_xml\" /> \n\
+        </properties> \n\
+    </testcase>"
 
-    sed -r "s:<system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    sed_expression="s:</testcase>:$polarion_testcase_content:g"
 
-    sed_expression="\" /> \n\
-        </properties> \n"
-
-    sed -r "s:</system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    # Insert the property instead of EACH testcase tag
+    sed -r "$sed_expression" -i "$polarion_testrun_file"
 
     # ------------------------------------------------------------------------ #
 
