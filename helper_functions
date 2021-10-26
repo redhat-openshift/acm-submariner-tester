@@ -14,7 +14,8 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 export CONDA_ENV_NAME="conda-test"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
-export SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+export SCRIPT_DIR
 
 # include sh2ju library
 source "$SCRIPT_DIR/lib/sh2ju.sh"
@@ -40,7 +41,8 @@ function highlight()
   # 3 = Match not found
   # 4 = Empty string or file
 
-  local tmp_file="`mktemp`_highlight"
+  local tmp_file
+  tmp_file="`mktemp`_highlight"
   # Save all output to temp file
   #grep -E "$pattern|$" "$@" > $tmp_file
   grep -Ei "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
@@ -72,7 +74,8 @@ function highlight()
 
 function print_current_dir_and_cmd() {
   # Get command to print, but skip printing if it's empty
-  local cmd="$(echo -e "$1" | xargs)"
+  local cmd
+  cmd="$(echo -e "$1" | xargs)"
   [[ -n "$cmd" ]] || return
 
   # Print PS1 prompt (and trim trailing and leading spaces)
@@ -92,7 +95,8 @@ function print_current_dir_and_cmd() {
   var_list+=( $(echo "$cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
   for variable in "${var_list[@]}" ; do
-     local var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+     local var_name
+     var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
      local var_value="${!var_name}"
      if [[ "$variable" =~ [:/] ]] ; then
        # For complex variables - add it to $all_vars_output
@@ -263,10 +267,12 @@ function TITLE() {
   local message="$1"
   local color="${2:-${YELLOW}}"
 
-  local first_line="$(echo -e "${message}" | head -1)"
+  local first_line
+  first_line="$(echo -e "${message}" | head -1)"
 
   local line_length=$(( ${#first_line} + 15 ))
-  local color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
+  local color_line
+  color_line="${color}$( printf '%0.s#' $(seq 1 $line_length) )${NO_COLOR}"
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
@@ -328,11 +334,14 @@ function record_junit() {
   #          This is because the command runs in subshell.
 
   # $1 => $output_file and $output_dir for junit results
-  local output_file=$(basename "$1")
-  local output_dir=$(dirname "$1")
+  local output_file
+  output_file=$(basename "$1")
+  local output_dir
+  output_dir=$(dirname "$1")
 
   # Set junit_suite as the base directory name of $output_dir
-  local junit_suite="$(basename "$output_dir")"
+  local junit_suite
+  junit_suite="$(basename "$output_dir")"
 
   # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
   shift
@@ -439,10 +448,12 @@ function verify_golang() {
   go version
 
   # export GOROOT=/usr/local/go
-  export GOROOT=$(go env GOROOT)
+  GOROOT=$(go env GOROOT)
+  export GOROOT
 
   # export GOPATH=~/go
-  export GOPATH=$(go env GOPATH)
+  GOPATH=$(go env GOPATH)
+  export GOPATH
 
   # Optional: exporting $1 as GOBIN path
   # export GOBIN="${1:-$GOROOT/bin}"
@@ -515,7 +526,8 @@ function install_local_jq() {
 # Function to convert raw text (e.g. yaml) to encoded url format
 function raw_to_url_encode() {
 
-  local string="$(cat < /dev/stdin)"
+  local string
+  string="$(cat < /dev/stdin)"
   local strlen=${#string}
   local encoded=""
   local pos c o
@@ -764,7 +776,8 @@ function delete_aws_dns_records() {
   trap_to_debug_commands;
   local hosted_zone_id="$1"
   local dns_record_set="$2"
-  local tmp_file="`mktemp`_aws_records"
+  local tmp_file
+  tmp_file="`mktemp`_aws_records"
 
   echo -e "\n# Searching in Hosted Zone [$hosted_zone_id] - for a DNS record set: [$dns_record_set]"
   aws route53 list-resource-record-sets --hosted-zone-id $hosted_zone_id --query "ResourceRecordSets[?Name == '$dns_record_set']" --out json > "$tmp_file"
@@ -968,7 +981,8 @@ function create_namespace() {
 function print_current_cluster_name() {
   # Do not trap_to_debug_commands
 
-  local current_context=$(${OC} config current-context)
+  local current_context
+  current_context=$(${OC} config current-context)
   ${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}"
 
 }
@@ -1041,7 +1055,8 @@ function get_running_pod_by_label() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
-  local tmp_file="`mktemp`_pod_status"
+  local tmp_file
+  tmp_file="`mktemp`_pod_status"
 
   # Wait up to 3 minutes for the pod to be ready
   ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file || :
@@ -1134,7 +1149,8 @@ function watch_pod_logs() {
   # Optional params:
   local retries=${4:-5}
   local interval=${5:-20s} # time between each retry attempt
-  local tmp_file="`mktemp`_pod_log"
+  local tmp_file
+  tmp_file="`mktemp`_pod_log"
   local search_exit_code=0
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
@@ -1272,7 +1288,8 @@ function get_latest_repository_version_by_tag() {
   local tag_to_search="$2"
 
   local regex="tags/\K.*${tag_to_search}.*"
-  local branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+  local branch_tag
+  branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
 
   [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
 
@@ -1285,7 +1302,7 @@ function get_latest_repository_version_by_tag() {
 function create_polarion_testcases_doc_from_junit() {
     trap_to_debug_commands;
 
-    # Input (5 params) :
+    # Input (9 params) :
 
     local polarion_url="$1"
     local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
@@ -1295,10 +1312,15 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_user_name="$6"
     local polarion_component_id="$7"
     local polarion_testcases_doc=${8//[^a-zA-Z0-9 -]/_} # Replace special characters with underscore
+    local polarion_test_plan_id="$9"
 
-    local tc_list="`mktemp`_testcases"
+    local tc_list
+    tc_list="`mktemp`_testcases"
 
-    echo -e "### Creating Polarion test-cases document for Junit results: $junit_xml
+    local temp_test_output
+    temp_test_output="`mktemp`_test_output"
+
+    TITLE "Creating Polarion test-cases document for Junit results: $junit_xml
     \n# Polarion project: ${polarion_project_id}
     \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
@@ -1307,10 +1329,11 @@ function create_polarion_testcases_doc_from_junit() {
 
     echo "# Set output xml for Polarion test-cases"
 
-    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
+    local testsuite_name
+    testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
-    local polarion_testcases_file="${testsuite_name}polarion_testcases.xml" # Append "polarion_testcases.xml"
-    polarion_testcases_file="$(dirname ${junit_xml})/${polarion_testcases_file}" # Append full directory path of the original junit_xml file
+    local polarion_testcases_xml="${testsuite_name}_polarion_testcases.xml" # Append "polarion_testcases.xml"
+    polarion_testcases_xml="$(dirname ${junit_xml})/${polarion_testcases_xml}" # Append full directory path of the original junit_xml file
 
     echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
     grep '<testcase ' "$junit_xml" | \
@@ -1323,47 +1346,136 @@ function create_polarion_testcases_doc_from_junit() {
     <testcases project-id=\"${polarion_project_id}\" document-relative-path=\"${polarion_team_name}/${polarion_testcases_doc}\">  \n\
       <properties>  \n\
           <property name=\"lookup-method\" value=\"name\"/>  \n\
-      </properties>" > "$polarion_testcases_file"
+      </properties>" > "$polarion_testcases_xml"
       # Maybe required: <response-property name="${polarion_team_name}" value="testcase_importer"/>
 
-    echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_file"
+    echo -e "\n# Injecting Polarion custom-fields for each test-case, into $polarion_testcases_xml"
     # TODO: This should rather be defined on external properties file:
 
-    while read testcase_name ; do
-      local testcase_title="${testsuite_name}.${testcase_name#*.}"
-      echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
-          <title>${testcase_title}</title>
-            <description>${testcase_title}</description>
-            <custom-fields>
+    local current_script
+    current_script="$(echo "$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})" )"
 
-              <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
-              <custom-field id=\"testtype\" content=\"functional\" />
-              <custom-field id=\"caseimportance\" content=\"medium\" />
-              <custom-field id=\"caselevel\" content=\"system\" />
-              <custom-field id=\"caseposneg\" content=\"positive\" />
-              <custom-field id=\"legacytest\" content=\"true\" />
-              <custom-field id=\"caseautomation\" content=\"automated\" />
-              <custom-field id=\"automation_script\" content=\"$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})\" />
-            </custom-fields>
-        </testcase>
-        " >> "$polarion_testcases_file"
-      done < "$tc_list"
+    while read full_testcase_name ; do
+
+      local class_name="${full_testcase_name%.*}" # text before the dot
+      # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
+      local test_name="${full_testcase_name#*.}" # text after the dot
+
+      TITLE "Setting Polarion schema from Junit file [$junit_xml] : Test class [${class_name}] : Test name [${test_name}]"
+
+      echo "# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
+      grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
+
+      echo "# Get testcase description headline, if defined within '###' tags"
+      local testcase_headline
+      testcase_headline="$(grep -ozP '(?<=### ).+\n?.*(?= ###)' "$temp_test_output")"
+      [[ -n "$testcase_headline" ]] || testcase_headline="${testsuite_name}.${test_name}"
+
+      echo "# Save all output lines starting with # as testcase description"
+      local testcase_description
+      testcase_description=$(sed -nr 's/^#+\s*([A-Z][^#]*)[\s#]*/\1/p' "$temp_test_output" | sed 's/\://g')
+
+      echo "# Save all output lines starting with $ as testcase steps"
+      local testcase_steps
+      testcase_steps=$(sed -nr '/^\$ .*/p' "$temp_test_output")
+
+      echo "# Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100"
+      local num_of_lines
+      num_of_lines=$(wc -l < "$temp_test_output")
+      if (( num_of_lines > 100 )) ; then
+        echo -e "$(head -n 50 $temp_test_output) \
+        \n...\n \
+        $(tail -n 50 $temp_test_output)" > $temp_test_output
+      fi
+
+      echo "# Remove everything before the <system-out>, and save as testcase_output"
+      local testcase_output
+      testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
+
+      # # Add pre-wrap
+      # testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
+
+      echo "# Replace all end of lines with <br>"
+      testcase_output="<br><br> ${testcase_output//$'\n'/<br />}"
+
+      echo "# Escape all < and > in testcase output"
+      testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+
+      echo "# Create testcase title and description"
+
+      echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
+          <title>${testsuite_name}.${test_name}</title>
+          <description>
+            &lt;span style=\"font-size: 12pt; font-weight: bold;\"&gt; $testcase_headline &lt;/span&gt;
+            &lt;ul&gt;
+              " >> "$polarion_testcases_xml"
+
+      echo "$testcase_description" | while read line ; do
+        echo "&lt;li&gt; $line &lt;/li&gt;" >> "$polarion_testcases_xml"
+      done
+
+      echo "&lt;/ul&gt;
+      </description>
+      <test-steps>" >> "$polarion_testcases_xml"
+
+      echo "# Create testcase steps"
+
+      echo "$testcase_steps" | while read step ; do
+        # echo "<test-step>
+        # <test-step-column id=\"expectedResult\">...</test-step-column>
+        echo "<test-step>
+        <test-step-column id=\"step\"> $step </test-step-column>
+        </test-step>
+        " >> "$polarion_testcases_xml"
+      done
+
+      echo "# Close steps, and create testcase custom fields"
+
+      echo "</test-steps>
+      <custom-fields>
+          <custom-field id=\"casecomponent\" content=\"${polarion_component_id}\" />
+          <custom-field id=\"testtype\" content=\"functional\" />
+          <custom-field id=\"caseimportance\" content=\"medium\" />
+          <custom-field id=\"caselevel\" content=\"system\" />
+          <custom-field id=\"caseposneg\" content=\"positive\" />
+          <custom-field id=\"legacytest\" content=\"true\" />
+          <custom-field id=\"caseautomation\" content=\"automated\" />
+          <custom-field id=\"tcmsplan\" content=\"${polarion_test_plan_id}\" />
+          <custom-field id=\"automation_script\">
+            ${current_script} : ${testcase_output}
+          </custom-field>
+        </custom-fields>
+    </testcase>
+    " >> "$polarion_testcases_xml"
+  done < "$tc_list"
 
       # More options:
+      #
+      # <custom-field id=\"setup\">
+      #   &lt;span style=&quot;font-family: Verdana, Helvetica, sans serif; font-size: 11px; white-space: pre-line; color: black&quot;&gt;
+      #    <![CDATA[ ${testcase_output} ]]>
+      #   &lt;/span&gt;
+      # </custom-field>
+      #
+      # <custom-field id=\"setup\">
+      #   ${current_script} : <![CDATA[ ${testcase_output} ]]>
+      # </custom-field>
+      #
       #
       # <custom-field id=\"products\" content=\"ocp\" />
       # <custom-field id=\"subteam\" content=\"${polarion_team_name}\" />
       #
       # <custom-field id=\"legacytest\" content=\"true\" /> # Test needs at least one linked work item of type Requirement or be marked as a Legacy Test Case
       # <linked-work-items>
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"verifies\" />
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
-      #   <linked-work-item workitem-id=\"${testcase_name}\" lookup-method=\"name\" role-id=\"refines\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"verifies\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"derived_from\" />
+      #   <linked-work-item workitem-id=\"${full_testcase_name}\" lookup-method=\"name\" role-id=\"refines\" />
       # </linked-work-items>
-      echo "</testcases>" >> "$polarion_testcases_file"
+      echo "</testcases>" >> "$polarion_testcases_xml"
 
-      # Watch testcase-log web page
-      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_file"
+      echo "# Watch Polarion testcase-log status"
+      local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
+      watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
 
 
@@ -1373,7 +1485,7 @@ function create_polarion_testcases_doc_from_junit() {
 function create_polarion_testrun_result_from_junit() {
     trap_to_debug_commands;
 
-    # Input (6 params) :
+    # Input (7 params) :
 
     local polarion_url="$1"
     local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
@@ -1381,11 +1493,12 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
+    local polarion_test_plan_id="$7"
 
     local sed_expression
 
-    echo -e "### Creating Polarion test-run (xml) for Junit results: $junit_xml
-    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    TITLE "Creating Polarion test-run (xml) for Junit results: $junit_xml
+    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1394,27 +1507,28 @@ function create_polarion_testrun_result_from_junit() {
 
     echo "# Set output xml for Polarion test-run results"
 
-    local testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
+    local testsuite_name
+    testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
-    local polarion_testrun_file="${testsuite_name}polarion_testrun.xml" # Append "polarion_testrun.xml"
-    polarion_testrun_file="$(dirname $junit_xml)/${polarion_testrun_file}" # Append full directory path of the original junit_xml file
+    local polarion_testrun_xml="${testsuite_name}_polarion_testrun.xml" # Append "polarion_testrun.xml"
+    polarion_testrun_xml="$(dirname $junit_xml)/${polarion_testrun_xml}" # Append full directory path of the original junit_xml file
 
-    # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_file%%.*})"
-    echo -e "### Polarion Test-run title: [${testsuite_name}],
-    \n# Polarion Test-run file [${polarion_testrun_file}] \n"
+    # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_xml%%.*})"
+    TITLE "Polarion Test-run title: [${testsuite_name}]
+    \n# Polarion Test-run file [${polarion_testrun_xml}] \n"
 
-    cp "$junit_xml" "$polarion_testrun_file"
+    cp "$junit_xml" "$polarion_testrun_xml"
 
     echo "# Remove Test-Cases Junit index (if added within sh2ju): "
-    sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_file"
+    sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}]"
+    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}, test plan: [${polarion_test_plan_id}]"
 
     # Remove first <testsuiteS> tag (if exists):
-    sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_file"
-    # sed -r "s:<testsuites>::" -i "$polarion_testrun_file"
+    sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_xml"
+    # sed -r "s:<testsuites>::" -i "$polarion_testrun_xml"
 
     # Define Polarion <testsuites> properties (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_suite_content="<testsuites> \n\
@@ -1425,6 +1539,8 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
+            <property name=\"plannedin\" value=\"$polarion_test_plan_id\" /> \n\
+            <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
         </properties> \n\
     <testsuite "
 
@@ -1433,49 +1549,88 @@ function create_polarion_testrun_result_from_junit() {
     sed_expression="0,/<testsuite /s,<testsuite ,$polarion_suite_content,"
 
     # Insert this <testsuiteS> properties instead of the first <testsuite> tag:
-    sed -r "$sed_expression" -i "$polarion_testrun_file"
+    sed -r "$sed_expression" -i "$polarion_testrun_xml"
 
     # Remove last </testsuiteS> tag (if exists):
-    sed -r -z "s:(.*)</testsuites>(.*):\1\2:" -i "$polarion_testrun_file"
+    sed -r -z "s:(.*)</testsuites>(.*):\1\2:" -i "$polarion_testrun_xml"
 
     # Add </testsuiteS> tag, after the last </testsuite> tag:
-    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$polarion_testrun_file"
+    sed -r -z 's:(.*</testsuite>):\1\n</testsuites>:' -i "$polarion_testrun_xml"
+
+    # ------------------------------------------------------------------------ #
+    #
+    # This is commented out since Polarion Testcase verdict does not support rich text output
+    #
+    # echo "# Add rich text into each Test Case Verdict in $polarion_testrun_xml (change 'system-out' to 'polarion-testcase-comment')"
+    #
+    # # Define Polarion <testcase> property (it is passed into SED), make sure new lines ends with " \n\ ")
+    #
+    # sed_expression="\n\
+    #     <properties> \n\
+    #         <property name=\"polarion-testcase-comment\" value=\""
+    #
+    # sed -r "s:<system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    #
+    # sed_expression="\" /> \n\
+    #     </properties> \n"
+    #
+    # sed -r "s:</system-out>:$sed_expression:g" -i "$polarion_testrun_xml"
+    #
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add <testcase> properties comment: $polarion_testrun_file"
+    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment')"
 
-    # Define Polarion <testcase> property  (it is passed into SED, make sure new lines ends with " \n\ ")
+    # Define Polarion <testcase> property (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_testcase_content="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" value=\"$polarion_testrun_file\" /> \n\
+            <property name=\"polarion-testcase-comment\" value=\"Auto generated from $junit_xml\" /> \n\
         </properties> \n\
     </testcase>"
 
     sed_expression="s:</testcase>:$polarion_testcase_content:g"
 
     # Insert the property instead of EACH testcase tag
-    sed -r "$sed_expression" -i "$polarion_testrun_file"
+    sed -r "$sed_expression" -i "$polarion_testrun_xml"
+
+    # ------------------------------------------------------------------------ #
+
+    echo "# Add escaped HTML <br> tags at the end of all textual lines in $polarion_testrun_xml"
+
+    local temp_testrun
+    temp_testrun="`mktemp`_testrun"
+
+    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_xml" > temp_testrun
+
+    mv temp_testrun "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
     echo "# Update <testsuite name> to: $testsuite_name"
 
-    sed -r "s/(testsuite name=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_file"
+    sed -r "s/(testsuite name=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
     echo "# Update <classname> to: $testsuite_name"
 
-    sed -r "s/(classname=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_file"
+    sed -r "s/(classname=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
     # Watch testcase-log web page
-    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_file"
+    local polarion_job_urls="$SCRIPT_DIR/polarion_testruns.url"
+    watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_xml" "$polarion_job_urls"
 
-    local cmd="curl --config $polarion_auth_file -k ${polarion_url}/import/xunit-log?jobId=${xunit_jobid}"
-    local testrun_url="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
+    local latest_job_url
+    # Get the last non empty/whitespace row from $polarion_job_urls file
+    latest_job_url="$(awk 'NF{p=$0}END{print p}' $polarion_job_urls)"
+
+    local cmd
+    cmd="curl --config $polarion_auth_file -k ${latest_job_url}"
+
+    local polarion_testrun_result_page
+    polarion_testrun_result_page="$($cmd | awk -F'&#034;' '/testrun-url/ { print $4 }')"
 
     # Set link for all templates:
     all_templates_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=template.id%3A\"${polarion_testrun_template// /%20}\""
@@ -1483,8 +1638,8 @@ function create_polarion_testrun_result_from_junit() {
     # Set links for all titles:
     all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${testsuite_name// /%20}\""
 
-    echo -e "\n### The new test-run was successfully added to Polarion ###
-    \n# $testrun_url \n
+    echo -e "\n### The new test-run result was successfully added to Polarion ###
+    \n# $polarion_testrun_result_page \n
     \n# All test-runs by template-id '${polarion_testrun_template}':
     \n# ${all_templates_link}
     \n# All test-runs by title '${testsuite_name}':
@@ -1499,7 +1654,8 @@ function generate_suite_title_from_junit_filename() {
     # Do not trap_to_debug_commands or echo, so it will not be printed as return value
 
     # Get file name without path and extension
-    local testsuite_title="$(basename ${1%.*})"
+    local testsuite_title
+    testsuite_title="$(basename ${1%.*})"
 
     # Remove all 'junit' substring from testsuite title
     testsuite_title="${testsuite_title//junit/}"
@@ -1519,13 +1675,16 @@ function watch_polarion_job_status() {
   local polarion_auth_file="$2" # Includes Polarion 'user:password' | base64 --wrap 0
   local polarion_import_type="$3" # "xunit" or "testcase"
   local polarion_import_file="$4" # filepath to import
+  local polarion_job_urls="$5" # filepath to store all Polarion jobs' urls
 
   echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
 
-  local polarion_log="`mktemp`_polarion_log"
+  local polarion_log
+  polarion_log="`mktemp`_polarion_log"
   curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_import_file} ${polarion_url}/import/${polarion_import_type} |& tee $polarion_log
 
-  local polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
+  local polarion_job_id
+  polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
 
   if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
     echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
@@ -1534,6 +1693,7 @@ function watch_polarion_job_status() {
 
   local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
   echo -e "\n# Checking Polarion ${polarion_import_type} import job status at: $polarion_job_url"
+  echo "$polarion_job_url" >> "$polarion_job_urls"
 
   local cmd="curl --config $polarion_auth_file -k $polarion_job_url | sed -r 's/&#034;|&#039;/\"/g' |& tee $polarion_log"
   local regex='Import.+Message sent'
@@ -1566,7 +1726,8 @@ function log_to_html() {
 
   local repo_url=https://github.com/theZiz/aha.git
   local repo_branch=0.5.1
-  local repo_dir=$(basename $repo_url .git)
+  local repo_dir
+  repo_dir=$(basename $repo_url .git)
 
   # Get AHA binary
   if [[ ! -f ./$repo_dir/aha ]]; then

@@ -24,19 +24,12 @@ function export_LATEST_IIB() {
   # | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
   # | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
 
-  LATEST_IIB=$(cat latest_iib.txt \
-  | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
-  | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+  local index_images
+  index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
 
-  echo "# LATEST_IIB = $LATEST_IIB"
+  TITLE "Image indexes for bundle '${bundle_name}' version '${ocp_version_x_y}' \n $index_images"
 
-  if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-    FATAL "Failed to retrieve latest index image of bundle '${bundle_name}' from datagrepper.engineering.redhat"
-  fi
-
-  export LATEST_IIB
-
-  # Index Image example:
+  # Index Images example:
   # {
   # "nvr": "submariner-operator-bundle-container-v0.11.0-6",
   # "index_image": {
@@ -45,6 +38,26 @@ function export_LATEST_IIB() {
   #   "v4.8": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105104",
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
+
+  LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+
+  if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    BUG "Failed to retrieve index image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
+
+    ocp_version_x_y="$(echo "$index_images" | jq -r '.index_image' | jq '[.][] | keys | last')"
+
+    TITLE "Getting Image index for bundle '${bundle_name}' of latest version '${ocp_version_x_y}'"
+
+    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'${ocp_version_x_y} )
+
+    if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+      FATAL "Failed to retrieve index image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
+    fi
+  fi
+
+  echo "# Exporting LATEST_IIB as: $LATEST_IIB"
+
+  export LATEST_IIB
 
 }
 

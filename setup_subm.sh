@@ -232,8 +232,8 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 > $POLARION_AUTH
 
 # File to store Polarion test-run report link
-export POLARION_REPORTS="$SCRIPT_DIR/polarion.reports"
-> $POLARION_REPORTS
+export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
+> $POLARION_RESULTS
 
 
 ####################################################################################
@@ -4538,9 +4538,15 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
     subctl diagnose firewall intra-cluster --validation-timeout 120 || subctl_diagnose=ERROR
 
-    subctl diagnose firewall metrics --validation-timeout 120 --verbose || : # Temporarily ignore error
-
     subctl diagnose firewall inter-cluster ${KUBECONF_HUB} ${KUBECONF_MANAGED} --validation-timeout 120 --verbose || subctl_diagnose=ERROR
+
+    BUG "subctl diagnose firewall metrics does not work on merged kubeconfig" \
+    "Ignore 'subctl diagnose firewall metrics' output" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=2013711"
+    # workaround:
+    export KUBECONFIG="${KUBECONF_HUB}"
+
+    subctl diagnose firewall metrics --validation-timeout 120 --verbose || :
 
     if [[ "$subctl_diagnose" = ERROR ]] ; then
       FAILURE "SubCtl diagnose had some failed checks, please investigate"
@@ -4727,10 +4733,10 @@ function upload_junit_xml_to_polarion() {
   echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
 
   create_polarion_testcases_doc_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" "$junit_file" \
-  "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC"
+  "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC" "$POLARION_TESTPLAN_ID"
 
   create_polarion_testrun_result_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
-  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE"
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE" "$POLARION_TESTPLAN_ID"
 
 }
 
@@ -4741,18 +4747,18 @@ function create_all_test_results_in_polarion() {
   trap_to_debug_commands;
 
   # Temp file to store Polarion output
-  local polarion_testrun_import_result
-  polarion_testrun_import_result="`mktemp`_polarion"
+  local polarion_testrun_import_log
+  polarion_testrun_import_log="`mktemp`_polarion_import_log"
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
   TITLE "Upload Junit results of SYSTEM (Shell) tests to Polarion:"
 
-  # Redirect output to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+  # Redirect output to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
   # Add Polarion link to the HTML report
-  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$SHELL_JUNIT_XML"
+  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
 
 
   # Upload Ginkgo E2E tests to Polarion
@@ -4760,19 +4766,19 @@ function create_all_test_results_in_polarion() {
 
     TITLE "Upload Junit results of Submariner E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$E2E_JUNIT_XML"
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
 
     TITLE "Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
 
-    # Redirecting with TEE to stdout and to $polarion_testrun_import_result, in order to get polarion testrun url into report
-    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_result" || polarion_rc=1
+    # Redirecting with TEE to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
+    upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_result" "$LIGHTHOUSE_JUNIT_XML"
+    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
 
   fi
 
@@ -4795,25 +4801,25 @@ function add_polarion_testrun_url_to_report_description() {
 # Helper function to search polarion testrun url in the testrun import output, in order to add later to the HTML report
   trap_to_debug_commands;
 
-  local polarion_testrun_import_result="$1"
+  local polarion_testrun_import_log="$1"
   local polarion_test_run_file="$2"
 
   TITLE "Add new Polarion Test run results to the Html report description: "
-  local results_link
-  results_link=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_result" | sed -z 's/\.\n.* to:/:\n/' || :)
+  local polarion_testrun_result_page
+  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" | sed -z 's/\.\n.* to:/:\n/' || :)
 
-  if [[ -n "$results_link" ]] ; then
-    echo "$results_link" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_REPORTS" || :
+  if [[ -n "$polarion_testrun_result_page" ]] ; then
+    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
 
     local polarion_testrun_name
     polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
     polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
     polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
-    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_REPORTS" || :
+    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
 
   else
-    echo "Error reading Polarion Test results link [${results_link}]" 1>&2
+    echo "Error reading Polarion Test results link [${polarion_testrun_result_page}]" 1>&2
   fi
 
 }
@@ -5084,6 +5090,24 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
+function test_debug_polarion() {
+  trap_to_debug_commands;
+  PROMPT "DEBUG Polarion setup"
+
+  # Set Polarion access if $upload_to_polarion = yes/y
+  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+    TITLE "Set Polarion access for the user [$POLARION_USR]"
+    ( # subshell to hide commands
+      local polauth
+      polauth=$(echo "${POLARION_USR}:${POLARION_PWD}" | base64 --wrap 0)
+      echo "--header \"Authorization: Basic ${polauth}\"" > "$POLARION_AUTH"
+    )
+  fi
+
+  echo 1 > $TEST_STATUS_FILE
+
+}
+
 function test_debug_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
@@ -5092,12 +5116,17 @@ function test_debug_pass() {
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
-
-    # Test FAILURE() that should not break script
-    FAILURE "PASS_HERE"
   fi
 
-  echo "should not get here..."
+  local msg="
+    & (ampersand) <br>
+    < (lower) <br>
+    > (greater) <br>
+    ‘ (single quotes) <br>
+    \" (double quotes) <br>
+    "
+
+  TITLE "PRINT TEST: \n $msg"
 
 }
 
@@ -5109,14 +5138,18 @@ function test_debug_fail() {
 
   local TEST=1
   if [[ -n "$TEST" ]] ; then
-    return 1
+    TITLE "Test FAILURE() function, that should not break whole script, but just this test"
+    FAILURE "MARK TEST FAILURE, BUT CONTINUE"
   fi
+
+  echo "It should NOT print this"
+
 }
 
 function test_debug_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
-  FATAL "Terminating script since test_debug_fail() did not"
+  FATAL "Terminating script here"
 }
 
 # ------------------------------------------
@@ -5143,21 +5176,23 @@ fi
 
 cd ${SCRIPT_DIR}
 
-# # Script debug calls (should be left as comment)
-#
-# ${junit_cmd} test_debug_pass
-#
-# ${junit_cmd} test_debug_fail
-# rc=$?
-# BUG "test_debug_fail - Exit code: $rc" \
-# "If RC $rc = 5 - junit_cmd should continue execution"
-# ${junit_cmd} test_debug_pass
-# ${junit_cmd} test_debug_fatal
-
-
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+
+  ### Script debug calls (should be left as a comment) ###
+  #
+  #   ${junit_cmd} test_debug_polarion
+  #   ${junit_cmd} test_debug_pass
+  #   ${junit_cmd} test_debug_fail
+  #   rc=$?
+  #   BUG "test_debug_fail - Exit code: $rc" \
+  #   "If RC $rc = 5 - junit_cmd should continue execution"
+  #   ${junit_cmd} test_debug_pass
+  #   ${junit_cmd} test_debug_fatal
+  #
+  ### END Script debug ###
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
@@ -5790,21 +5825,21 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     REPORT_FILE="$(basename ${REPORT_FILE// /_})"
   fi
 
-  if [[ -s "$POLARION_REPORTS" ]] ; then
-    echo "# set REPORT_DESCRIPTION for html report:"
-    cat "$POLARION_REPORTS"
-
-    REPORT_DESCRIPTION="Polarion results:
-    $(< "$POLARION_REPORTS")"
-  fi
-
 ) |& tee -a "$SYS_LOG"
 
 # Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
+if [[ -s "$POLARION_RESULTS" ]] ; then
+  echo "# set Html report description with Polarion test run links:"
+  cat "$POLARION_RESULTS"
+
+  html_report_description="Polarion results:
+  $(< "$POLARION_RESULTS")"
+fi
+
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$REPORT_DESCRIPTION"
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_description"
 
 # ------------------------------------------
 
