@@ -1361,20 +1361,25 @@ function create_polarion_testcases_doc_from_junit() {
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
       local test_name="${full_testcase_name#*.}" # text after the dot
 
-      TITLE "Setting Polarion schema for Test class [${class_name}] : Test name [${test_name}]"
+      TITLE "Setting Polarion schema from Junit file [$junit_xml] : Test class [${class_name}] : Test name [${test_name}]"
 
-      # Save <system-output> of specific junit testcase, as text for the "automation_script" field
+      echo "# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
 
-      # Save all output lines starting with # as testcase description
+      echo "# Get testcase description headline, if defined within '###' tags"
+      local testcase_headline
+      testcase_headline="$(grep -ozP '(?<=### ).+\n?.*(?= ###)' "$temp_test_output")"
+      [[ -n "$testcase_headline" ]] || testcase_headline="${testsuite_name}.${test_name}"
+
+      echo "# Save all output lines starting with # as testcase description"
       local testcase_description
       testcase_description=$(sed -nr 's/^#+\s*([A-Z][^#]*)[\s#]*/\1/p' "$temp_test_output" | sed 's/\://g')
 
-      # Save all output lines starting with $ as testcase steps
+      echo "# Save all output lines starting with $ as testcase steps"
       local testcase_steps
-      testcase_steps=$(sed -nr '/^\$ [a-z].*/p' "$temp_test_output")
+      testcase_steps=$(sed -nr '/^\$ .*/p' "$temp_test_output")
 
-      # Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100
+      echo "# Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100"
       local num_of_lines
       num_of_lines=$(wc -l < "$temp_test_output")
       if (( num_of_lines > 100 )) ; then
@@ -1383,27 +1388,27 @@ function create_polarion_testcases_doc_from_junit() {
         $(tail -n 50 $temp_test_output)" > $temp_test_output
       fi
 
-      # Remove everything before the <system-out>, and save as testcase_output
+      echo "# Remove everything before the <system-out>, and save as testcase_output"
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
       # # Add pre-wrap
       # testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
 
-      # Replace all end of lines with <br>
+      echo "# Replace all end of lines with <br>"
       testcase_output="<br><br> ${testcase_output//$'\n'/<br />}"
 
-      # Escape all XML special chars
-      # testcase_output="$(echo "<br> $testcase_output" | sed -e 's/&/\&amp;/g' -e "s/\"/\&quot;/g" -e "s/'/\&apos;/g"  -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+      echo "# Escape all < and > in testcase output"
       testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
 
-      # Create testcase title and description
+      echo "# Create testcase title and description"
 
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
           <title>${testsuite_name}.${test_name}</title>
-          <description>${class_name} : ${test_name}
-          &lt;ul&gt;
-            " >> "$polarion_testcases_xml"
+          <description>
+            &lt;span style=\"font-size: 12pt; font-weight: bold;\"&gt; $testcase_headline &lt;/span&gt;
+            &lt;ul&gt;
+              " >> "$polarion_testcases_xml"
 
       echo "$testcase_description" | while read line ; do
         echo "&lt;li&gt; $line &lt;/li&gt;" >> "$polarion_testcases_xml"
@@ -1413,7 +1418,7 @@ function create_polarion_testcases_doc_from_junit() {
       </description>
       <test-steps>" >> "$polarion_testcases_xml"
 
-      # Create testcase steps
+      echo "# Create testcase steps"
 
       echo "$testcase_steps" | while read step ; do
         # echo "<test-step>
@@ -1424,7 +1429,7 @@ function create_polarion_testcases_doc_from_junit() {
         " >> "$polarion_testcases_xml"
       done
 
-      # Close steps, and create testcase custom fields
+      echo "# Close steps, and create testcase custom fields"
 
       echo "</test-steps>
       <custom-fields>
@@ -1468,7 +1473,7 @@ function create_polarion_testcases_doc_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_xml"
 
-      # Watch testcase-log web page
+      echo "# Watch Polarion testcase-log status"
       local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
       watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
