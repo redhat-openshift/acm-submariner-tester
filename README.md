@@ -1,4 +1,4 @@
-# ocp-multi-cluster-tester
+# acm-submariner-tester
 Interactive script to create Openshift multi-clusters on private and public clouds, and test inter-connectivity with Submariner.
 
 Running with pre-defined parameters (optional):
