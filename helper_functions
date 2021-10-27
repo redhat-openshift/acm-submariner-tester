@@ -1797,6 +1797,9 @@ EOF
   # Create HTML content with AHA
   ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
 
+  # Trim sh2ju debug lines starting with +++ from the html report
+  sed -r '/^\s*\+\+\+/d' -i $html_output
+
   # Make all urls as hyperlinks
   sed -r "s|(^[^<]*)(https?://[^> \t]+)([^>]*$)|\1<a href='\2'>\2</a>\3|" -i $html_output
 
