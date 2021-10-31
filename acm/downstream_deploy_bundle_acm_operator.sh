@@ -49,11 +49,20 @@ function clean_acm_namespace_and_resources_cluster_c() {
 function clean_acm_namespace_and_resources() {
   trap_to_debug_commands;
 
-  ${OC} delete multiclusterhub --all || :
-  ${OC} delete subs --all || :
-  ${OC} delete clusterserviceversion --all || :
-  ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
-  delete_namespace_and_crds "${ACM_NAMESPACE}" "open-cluster-management" || :
+  # ${OC} delete multiclusterhub --all || :
+  # ${OC} delete subs --all || :
+  # ${OC} delete clusterserviceversion --all || :
+  # ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
+  # delete_namespace_and_crds "${ACM_NAMESPACE}" "open-cluster-management" || :
+
+  local acm_uninstaller_url="https://raw.githubusercontent.com/open-cluster-management/deploy/master/multiclusterhub/uninstall.sh"
+  local acm_uninstaller_file="./acm_cleanup.sh"
+
+  download_file "${acm_uninstaller_url}" "${acm_uninstaller_file}"
+  chmod +x "${acm_uninstaller_file}"
+
+  export TARGET_NAMESPACE="${ACM_NAMESPACE}"
+  ${acm_uninstaller_file} || FAILURE "Uninstalling ACM Hub did not complete successfully"
 
 }
 

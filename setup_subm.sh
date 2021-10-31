@@ -5,7 +5,7 @@
 # By Noam Manos, nmanos@redhat.com                                                                    #
 #                                                                                                     #
 # You can find latest script here:                                                                    #
-# https://github.com/manosnoam/ocp-multi-cluster-tester                                               #
+# https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
 # for both cluster A (AWS) and cluster B (OSP), in the current directory.                             #
