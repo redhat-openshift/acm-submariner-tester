@@ -950,7 +950,7 @@ function build_ocpup_tool_latest() {
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  git_reset_local_repo "master" "https://github.com/manosnoam/ocpup.git"
+  git_reset_local_repo "master" "https://github.com/redhat-openshift/ocpup.git"
 
   echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
@@ -2634,7 +2634,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   command -v terraform || FATAL "Terraform is required in order to run 'configure_osp.sh'"
 
   local ocp_install_dir="$1"
-  local git_user="manosnoam"
+  local git_user="redhat-openshift"
   local git_project="configure-osp-for-subm"
   local commit_or_branch="main"
   local github_dir="osp-scripts"
