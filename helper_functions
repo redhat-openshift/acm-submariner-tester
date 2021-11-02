@@ -1493,7 +1493,7 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
-    local polarion_test_plan_id="$7"
+    local polarion_test_plan_id="$7" # Optional - To set test plan (instead of the test plan from the testrun template)
 
     local sed_expression
 
@@ -1538,8 +1538,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
-            <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
-            <property name=\"plannedin\" value=\"$polarion_test_plan_id\" /> \n\
+            ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
             <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
         </properties> \n\
     <testsuite "
