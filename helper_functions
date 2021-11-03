@@ -73,42 +73,45 @@ function highlight()
 # ------------------------------------------
 
 function print_current_dir_and_cmd() {
-  # Get command to print, but skip printing if it's empty
-  local cmd
-  cmd="$(echo -e "$1" | xargs)"
-  [[ -n "$cmd" ]] || return
+  # Print called command and current directory
+  # Important: Use _unique_ variables for safer evaluation
 
-  # Print PS1 prompt (and trim trailing and leading spaces)
-  local new_location="[$0] $PS1 [${PWD##*/}]" && \
-  if [[ "$new_location" != "$current_location" ]]; then
-    export current_location="$new_location"
-    echo -e "\n${YELLOW}$current_location${NO_COLOR}\n"
+  local _bash_cmd
+  _bash_cmd="$(echo -e "$1" | xargs)"
+  # Skip printing if it's an empty command
+  [[ -n "$_bash_cmd" ]] || return
+
+  # Print PS1 prompt with location (if it's new location), and trim trailing and leading spaces
+  local _new_location="[$0] $PS1 [${PWD##*/}]" && \
+  if [[ "$_new_location" != "$_current_location" ]]; then
+    export _current_location="$_new_location"
+    echo -e "\n${YELLOW}$_current_location${NO_COLOR}\n"
   fi
 
-  # Save all command variables' values inside $all_vars_output
-  local all_vars_output="\n"
+  # Save all command variables' values inside $_all_vars_output
+  local _all_vars_output="\n"
 
   # List simple variables ($v or ${v}) first
-  local var_list=( $(echo "$cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
+  local _var_list=( $(echo "$_bash_cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
 
   # List complex variables (with parameter expansion) next
-  var_list+=( $(echo "$cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
+  _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
-  for variable in "${var_list[@]}" ; do
-     local var_name
-     var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
-     local var_value="${!var_name}"
+  for variable in "${_var_list[@]}" ; do
+     local _var_name
+     _var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+     local _var_value="${!_var_name}"
      if [[ "$variable" =~ [:/] ]] ; then
-       # For complex variables - add it to $all_vars_output
-       all_vars_output+="# ${var_name}=${var_value} \n"
+       # For complex variables - add it to $_all_vars_output
+       _all_vars_output+="+ ${_var_name}=${_var_value} \n"
      else
-       # For simple variables - replace them with their values within $cmd
-       cmd="${cmd//$variable/$var_value}"
+       # For simple variables - replace them with their values within $_bash_cmd
+       _bash_cmd="${_bash_cmd//$variable/$_var_value}"
      fi
    done
 
-  # Print $all_vars_output (after # sign), and $cmd (after $ sign)
-  echo -e "${CYAN}${all_vars_output}\$ ${cmd}${NO_COLOR}"
+  # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
+  echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
 }
 
 # ------------------------------------------
