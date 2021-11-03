@@ -1668,10 +1668,12 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
+  force_delete_namespace "${SUBM_NAMESPACE}"
+
+  delete_crds_by_name "submariner"
 
   # Required if Broker cluster is not a Dataplane cluster as well:
-  delete_namespace_and_crds "${BROKER_NAMESPACE}"
+  force_delete_namespace "${BROKER_NAMESPACE}"
 
 }
 
@@ -1720,7 +1722,7 @@ function delete_submariner_test_namespaces() {
 
   for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
     if [[ -n "$ns" ]]; then
-      delete_namespace_and_crds "$ns"
+      force_delete_namespace "$ns"
       # create_namespace "$ns"
     fi
   done
@@ -1929,8 +1931,8 @@ function delete_old_submariner_images_from_current_cluster() {
     $SUBM_IMG_BUNDLE \
     ; do
     TITLE "Deleting image stream: $img_stream"
-    oc delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
-    # oc tag -d submariner-operator/${img_stream}
+    ${OC} delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
+    # ${OC} tag -d submariner-operator/${img_stream}
   done
 
 }
@@ -2968,7 +2970,7 @@ function configure_cluster_custom_registry_secrets() {
   )
 
   TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
-  oc adm prune images --registry-url=https://${BREW_REGISTRY} --force-insecure --confirm || :
+  ${OC} adm prune images --registry-url=https://${BREW_REGISTRY} --force-insecure --confirm || :
 
 }
 
