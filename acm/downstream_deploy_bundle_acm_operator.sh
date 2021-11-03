@@ -58,11 +58,27 @@ function clean_acm_namespace_and_resources() {
   export TARGET_NAMESPACE="${ACM_NAMESPACE}"
   ${acm_uninstaller_file} || FAILURE "Uninstalling ACM Hub did not complete successfully"
 
-  ${OC} delete multiclusterhub --all || :
-  ${OC} delete subs --all || :
-  ${OC} delete clusterserviceversion --all || :
-  ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
+  BUG "ACM uninstaller script does not delete all resources" \
+  "Delete ACM resources directly" \
+  "https://github.com/open-cluster-management/deploy/issues/218"
+  # Workaround:
+
+  TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM"
+
   delete_crds_by_name "open-cluster-management" || :
+  ${OC} delete managedcluster --all --wait || :
+  ${OC} delete validatingwebhookconfiguration --all --wait || :
+
+  TITLE "Delete all ACM resources in Namespace '${ACM_NAMESPACE}'"
+
+  ${OC} delete subs --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete catalogsource --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete is --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete multiclusterhub --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete clusterserviceversion --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete cm --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete service --all -n ${ACM_NAMESPACE} --wait || :
+
   force_delete_namespace "${ACM_NAMESPACE}" 10m || :
 
 }
