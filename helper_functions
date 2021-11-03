@@ -1392,11 +1392,8 @@ function create_polarion_testcases_doc_from_junit() {
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
-      # # Add pre-wrap
-      # testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
-
-      echo "# Replace all end of lines with <br>"
-      testcase_output="<br><br> ${testcase_output//$'\n'/<br />}"
+      echo "# Add pre-line and replace all end of lines with <br> in testcase output"
+      testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/<br />} </span>"
 
       echo "# Escape all < and > in testcase output"
       testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
