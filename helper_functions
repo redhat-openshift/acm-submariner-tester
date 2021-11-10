@@ -1396,7 +1396,7 @@ function create_polarion_testcases_doc_from_junit() {
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
       echo "# Add pre-line and replace all end of lines with <br> in testcase output"
-      testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/<br />} </span>"
+      testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/ <br>} </span>"
 
       echo "# Escape all < and > in testcase output"
       testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
@@ -1719,9 +1719,8 @@ function log_to_html() {
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
-  # Set description div
-  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
-  </div></h3>"
+  # Set description headline
+  [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
 
   local repo_url=https://github.com/theZiz/aha.git
   local repo_branch=0.5.1
@@ -1784,8 +1783,10 @@ function log_to_html() {
   </style>
   </head>
   <body style="background-color:LightSkyBlue">
-  <h1>${title}</h1>
-  ${description}
+  <header>
+    <h1>${title}</h1>
+    ${description}
+  </header>
   <pre>
 EOF
 
@@ -1800,7 +1801,7 @@ EOF
   sed -r '/^\s*\+\+\+/d' -i $html_output
 
   # Make all urls as hyperlinks
-  sed -r "s|(^[^<]*)(https?://[^> \t]+)([^>]*$)|\1<a href='\2'>\2</a>\3|" -i $html_output
+  sed -r "s#(^|\s)(https?://[^<> \t]+)($|\s)#<a href='\2'>&</a>#g" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output

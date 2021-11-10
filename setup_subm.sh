@@ -4808,20 +4808,19 @@ function add_polarion_testrun_url_to_report_description() {
 
   TITLE "Add new Polarion Test run results to the Html report description: "
   local polarion_testrun_result_page
-  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" | sed -z 's/\.\n.* to:/:\n/' || :)
+  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
+  | sed -z 's/\.\n.* to:/:\n/' || :)
+
+  local polarion_testrun_name
+  polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
+  polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
+  polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
   if [[ -n "$polarion_testrun_result_page" ]] ; then
     echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
-
-    local polarion_testrun_name
-    polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
-    polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
-    polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
-
-    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
-
+    # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
-    echo "Error reading Polarion Test results link [${polarion_testrun_result_page}]" 1>&2
+    echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
   fi
 
 }
@@ -5092,7 +5091,7 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
-function test_debug_polarion() {
+function debug_test_polarion() {
   trap_to_debug_commands;
   PROMPT "DEBUG Polarion setup"
 
@@ -5110,7 +5109,7 @@ function test_debug_polarion() {
 
 }
 
-function test_debug_pass() {
+function debug_test_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
@@ -5132,7 +5131,7 @@ function test_debug_pass() {
 
 }
 
-function test_debug_fail() {
+function debug_test_fail() {
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -5148,7 +5147,7 @@ function test_debug_fail() {
 
 }
 
-function test_debug_fatal() {
+function debug_test_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
   FATAL "Terminating script here"
@@ -5183,16 +5182,16 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
   ### Script debug calls (should be left as a comment) ###
-  #
-  #   ${junit_cmd} test_debug_polarion
-  #   ${junit_cmd} test_debug_pass
-  #   ${junit_cmd} test_debug_fail
-  #   rc=$?
-  #   BUG "test_debug_fail - Exit code: $rc" \
-  #   "If RC $rc = 5 - junit_cmd should continue execution"
-  #   ${junit_cmd} test_debug_pass
-  #   ${junit_cmd} test_debug_fatal
-  #
+
+    # ${junit_cmd} debug_test_polarion
+    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_fail
+    # rc=$?
+    # BUG "debug_test_fail - Exit code: $rc" \
+    # "If RC $rc = 5 - junit_cmd should continue execution"
+    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_fatal
+
   ### END Script debug ###
 
   # Print planned steps according to CLI/User inputs
