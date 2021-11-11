@@ -235,6 +235,10 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 > $POLARION_RESULTS
 
+# File to store Submariner CSVs (Cluster service versions)
+export SUBMARINER_VERSIONS="$SCRIPT_DIR/submariner_csv.ver"
+> $SUBMARINER_VERSIONS
+
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -4760,7 +4764,7 @@ function create_all_test_results_in_polarion() {
   upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
   # Add Polarion link to the HTML report
-  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
+  add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
 
 
   # Upload Ginkgo E2E tests to Polarion
@@ -4772,7 +4776,7 @@ function create_all_test_results_in_polarion() {
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
+    add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
 
     TITLE "Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
 
@@ -4780,7 +4784,7 @@ function create_all_test_results_in_polarion() {
     upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
+    add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
 
   fi
 
@@ -4799,14 +4803,14 @@ function create_all_test_results_in_polarion() {
 
 # ------------------------------------------
 
-function add_polarion_testrun_url_to_report_description() {
+function add_polarion_testrun_url_to_report_headlines() {
 # Helper function to search polarion testrun url in the testrun import output, in order to add later to the HTML report
   trap_to_debug_commands;
 
   local polarion_testrun_import_log="$1"
   local polarion_test_run_file="$2"
 
-  TITLE "Add new Polarion Test run results to the Html report description: "
+  TITLE "Add new Polarion Test run results to the Html report headlines: "
   local polarion_testrun_result_page
   polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
   | sed -z 's/\.\n.* to:/:\n/' || :)
@@ -4849,6 +4853,11 @@ function test_products_versions_cluster_a() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
   test_products_versions
+
+  local submariner_csvs
+  submariner_csvs="$(${OC} get csv -n $SUBM_NAMESPACE -o name)"
+  ${OC} get -n $SUBM_NAMESPACE $submariner_csvs -o json \
+  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-' > $SUBMARINER_VERSIONS
 }
 
 # ------------------------------------------
@@ -5828,19 +5837,66 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 ) |& tee -a "$SYS_LOG"
 
-# Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
+
+# ------------------------------------------
+
+
+echo "# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
+TITLE "Set Html report headlines with important test and environment info"
+html_report_headlines=""
+
 if [[ -s "$POLARION_RESULTS" ]] ; then
-  echo "# set Html report description with Polarion test run links:"
+  headline="Polarion results:"
+  echo "# ${headline}"
   cat "$POLARION_RESULTS"
 
-  html_report_description="Polarion results:
+  html_report_headlines+="<b>${headline}</b>
   $(< "$POLARION_RESULTS")"
 fi
 
+if [[ -s "$CLUSTER_A_VERSION_FILE" ]] ; then
+  headline="OCP cluster A version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_A_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_A_VERSION_FILE")"
+fi
+
+if [[ -s "$CLUSTER_B_VERSION_FILE" ]] ; then
+  headline="OCP cluster B version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_B_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_B_VERSION_FILE")"
+fi
+
+if [[ -s "$CLUSTER_C_VERSION_FILE" ]] ; then
+  headline="OCP cluster C version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_C_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_C_VERSION_FILE")"
+fi
+
+if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
+  headline="Submariner services versions:"
+  echo "# ${headline}"
+  cat "$SUBMARINER_VERSIONS"
+
+  html_report_headlines+="
+  <b>${headline}</b>
+  $(< "$SUBMARINER_VERSIONS")"
+fi
+
+
+
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_description"
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
 
 # ------------------------------------------
 

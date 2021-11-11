@@ -1784,7 +1784,7 @@ function log_to_html() {
   </head>
   <body style="background-color:LightSkyBlue">
   <header>
-    <h1>${title}</h1>
+    <h1><b>${title}</b></h1>
     ${description}
   </header>
   <pre>
