@@ -235,6 +235,10 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 > $POLARION_RESULTS
 
+# File to store Submariner CSVs (Cluster service versions)
+export SUBMARINER_VERSIONS="$SCRIPT_DIR/submariner_csv.ver"
+> $SUBMARINER_VERSIONS
+
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -950,7 +954,7 @@ function build_ocpup_tool_latest() {
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
 
-  git_reset_local_repo "master" "https://github.com/manosnoam/ocpup.git"
+  git_reset_local_repo "master" "https://github.com/redhat-openshift/ocpup.git"
 
   echo -e "\n# Build OCPUP and install it to $GOBIN/"
   export GO111MODULE=on
@@ -1668,10 +1672,12 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  delete_namespace_and_crds "${SUBM_NAMESPACE}" "submariner"
+  force_delete_namespace "${SUBM_NAMESPACE}"
+
+  delete_crds_by_name "submariner"
 
   # Required if Broker cluster is not a Dataplane cluster as well:
-  delete_namespace_and_crds "${BROKER_NAMESPACE}"
+  force_delete_namespace "${BROKER_NAMESPACE}"
 
 }
 
@@ -1720,7 +1726,7 @@ function delete_submariner_test_namespaces() {
 
   for ns in "$TEST_NS" "$HEADLESS_TEST_NS" ; do
     if [[ -n "$ns" ]]; then
-      delete_namespace_and_crds "$ns"
+      force_delete_namespace "$ns"
       # create_namespace "$ns"
     fi
   done
@@ -1929,8 +1935,8 @@ function delete_old_submariner_images_from_current_cluster() {
     $SUBM_IMG_BUNDLE \
     ; do
     TITLE "Deleting image stream: $img_stream"
-    oc delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
-    # oc tag -d submariner-operator/${img_stream}
+    ${OC} delete imagestream "${img_stream}" -n ${SUBM_NAMESPACE} --ignore-not-found || :
+    # ${OC} tag -d submariner-operator/${img_stream}
   done
 
 }
@@ -2634,7 +2640,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   command -v terraform || FATAL "Terraform is required in order to run 'configure_osp.sh'"
 
   local ocp_install_dir="$1"
-  local git_user="manosnoam"
+  local git_user="redhat-openshift"
   local git_project="configure-osp-for-subm"
   local commit_or_branch="main"
   local github_dir="osp-scripts"
@@ -2968,7 +2974,7 @@ function configure_cluster_custom_registry_secrets() {
   )
 
   TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
-  oc adm prune images --registry-url=https://${BREW_REGISTRY} --force-insecure --confirm || :
+  ${OC} adm prune images --registry-url=https://${BREW_REGISTRY} --force-insecure --confirm || :
 
 }
 
@@ -4758,7 +4764,7 @@ function create_all_test_results_in_polarion() {
   upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
   # Add Polarion link to the HTML report
-  add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
+  add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
 
 
   # Upload Ginkgo E2E tests to Polarion
@@ -4770,7 +4776,7 @@ function create_all_test_results_in_polarion() {
     upload_junit_xml_to_polarion "$E2E_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
+    add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$E2E_JUNIT_XML"
 
     TITLE "Upload Junit results of Lighthouse E2E (Ginkgo) tests to Polarion:"
 
@@ -4778,7 +4784,7 @@ function create_all_test_results_in_polarion() {
     upload_junit_xml_to_polarion "$LIGHTHOUSE_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
     # Add Polarion link to the HTML report
-    add_polarion_testrun_url_to_report_description "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
+    add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$LIGHTHOUSE_JUNIT_XML"
 
   fi
 
@@ -4797,29 +4803,28 @@ function create_all_test_results_in_polarion() {
 
 # ------------------------------------------
 
-function add_polarion_testrun_url_to_report_description() {
+function add_polarion_testrun_url_to_report_headlines() {
 # Helper function to search polarion testrun url in the testrun import output, in order to add later to the HTML report
   trap_to_debug_commands;
 
   local polarion_testrun_import_log="$1"
   local polarion_test_run_file="$2"
 
-  TITLE "Add new Polarion Test run results to the Html report description: "
+  TITLE "Add new Polarion Test run results to the Html report headlines: "
   local polarion_testrun_result_page
-  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" | sed -z 's/\.\n.* to:/:\n/' || :)
+  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
+  | sed -z 's/\.\n.* to:/:\n/' || :)
+
+  local polarion_testrun_name
+  polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
+  polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
+  polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
   if [[ -n "$polarion_testrun_result_page" ]] ; then
     echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
-
-    local polarion_testrun_name
-    polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
-    polarion_testrun_name="${polarion_testrun_name//junit}" # Remove all "junit" from file name
-    polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
-
-    echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
-
+    # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
-    echo "Error reading Polarion Test results link [${polarion_testrun_result_page}]" 1>&2
+    echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
   fi
 
 }
@@ -4848,6 +4853,11 @@ function test_products_versions_cluster_a() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
   test_products_versions
+
+  local submariner_csvs
+  submariner_csvs="$(${OC} get csv -n $SUBM_NAMESPACE -o name)"
+  ${OC} get -n $SUBM_NAMESPACE $submariner_csvs -o json \
+  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-' > $SUBMARINER_VERSIONS
 }
 
 # ------------------------------------------
@@ -5090,7 +5100,7 @@ function print_resources_and_pod_logs() {
 
 # Functions to debug this script
 
-function test_debug_polarion() {
+function debug_test_polarion() {
   trap_to_debug_commands;
   PROMPT "DEBUG Polarion setup"
 
@@ -5108,7 +5118,7 @@ function test_debug_polarion() {
 
 }
 
-function test_debug_pass() {
+function debug_test_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
@@ -5130,7 +5140,7 @@ function test_debug_pass() {
 
 }
 
-function test_debug_fail() {
+function debug_test_fail() {
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -5146,7 +5156,7 @@ function test_debug_fail() {
 
 }
 
-function test_debug_fatal() {
+function debug_test_fatal() {
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
   FATAL "Terminating script here"
@@ -5181,16 +5191,16 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
   ### Script debug calls (should be left as a comment) ###
-  #
-  #   ${junit_cmd} test_debug_polarion
-  #   ${junit_cmd} test_debug_pass
-  #   ${junit_cmd} test_debug_fail
-  #   rc=$?
-  #   BUG "test_debug_fail - Exit code: $rc" \
-  #   "If RC $rc = 5 - junit_cmd should continue execution"
-  #   ${junit_cmd} test_debug_pass
-  #   ${junit_cmd} test_debug_fatal
-  #
+
+    # ${junit_cmd} debug_test_polarion
+    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_fail
+    # rc=$?
+    # BUG "debug_test_fail - Exit code: $rc" \
+    # "If RC $rc = 5 - junit_cmd should continue execution"
+    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_fatal
+
   ### END Script debug ###
 
   # Print planned steps according to CLI/User inputs
@@ -5827,19 +5837,66 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 ) |& tee -a "$SYS_LOG"
 
-# Clean SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used
+
+# ------------------------------------------
+
+
+echo "# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
+TITLE "Set Html report headlines with important test and environment info"
+html_report_headlines=""
+
 if [[ -s "$POLARION_RESULTS" ]] ; then
-  echo "# set Html report description with Polarion test run links:"
+  headline="Polarion results:"
+  echo "# ${headline}"
   cat "$POLARION_RESULTS"
 
-  html_report_description="Polarion results:
+  html_report_headlines+="<b>${headline}</b>
   $(< "$POLARION_RESULTS")"
 fi
 
+if [[ -s "$CLUSTER_A_VERSION_FILE" ]] ; then
+  headline="OCP cluster A version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_A_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_A_VERSION_FILE")"
+fi
+
+if [[ -s "$CLUSTER_B_VERSION_FILE" ]] ; then
+  headline="OCP cluster B version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_B_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_B_VERSION_FILE")"
+fi
+
+if [[ -s "$CLUSTER_C_VERSION_FILE" ]] ; then
+  headline="OCP cluster C version:"
+  echo "# ${headline}"
+  cat "$CLUSTER_C_VERSION_FILE"
+
+  html_report_headlines+="
+  <b>${headline}</b> $(< "$CLUSTER_C_VERSION_FILE")"
+fi
+
+if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
+  headline="Submariner services versions:"
+  echo "# ${headline}"
+  cat "$SUBMARINER_VERSIONS"
+
+  html_report_headlines+="
+  <b>${headline}</b>
+  $(< "$SUBMARINER_VERSIONS")"
+fi
+
+
+
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_description"
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
 
 # ------------------------------------------
 

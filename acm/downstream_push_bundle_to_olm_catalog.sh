@@ -20,12 +20,9 @@ function export_LATEST_IIB() {
 
   curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
 
-  # export LATEST_IIB=$(cat latest_iib.txt \
-  # | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]' \
-  # | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
-
   local index_images
-  index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+  # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+  index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
 
   TITLE "Image indexes for bundle '${bundle_name}' version '${ocp_version_x_y}' \n $index_images"
 

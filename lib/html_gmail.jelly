@@ -1,8 +1,13 @@
-<?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define"  xmlns:log="jelly:log" xmlns:util="jelly:util" xmlns:h="org.apache.commons.jelly.tags.http" >
+<?jelly escape-by-default='false'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:log="jelly:log" xmlns:util="jelly:util"  xmlns:x="jelly:xml" xmlns:hp="org.apache.commons.jelly.http" xmlns:ht="org.apache.commons.jelly.html" >
+
+<!-- xmlns:h="jelly:html" -->
+<!-- xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary" -->
+
  <body style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
   <j:set var="spc" value="&amp;nbsp;&amp;nbsp;" />
   <j:useBean var="StringUtils" class="org.apache.commons.lang.StringUtils" />
+  <!-- <j:useBean var="RegExUtils" class="org.apache.commons.lang3.RegExUtils" /> -->
   <j:set var="buildEnv" value="${build.getEnvironment(listener)}"/>
   <j:set var="jenkinsUrl" value="${buildEnv.get('JENKINS_URL')}" />
 
@@ -50,6 +55,66 @@
     </td>
    </tr>
 
+    <!-- <j:set var="reportUrl" value="${jenkinsUrl}${build.url}Test-Report" /> -->
+    <j:set var="reportUrl" value="${jenkinsUrl}${build.url}Test-Report/${buildEnv.get('REPORT_FILE')}" />
+    ${logger.println("reportUrl (text) = " + reportUrl )}
+
+    <j:new className="java.net.URL" var="URL">
+     <j:arg type="java.lang.String" value="${reportUrl}"/>
+    </j:new>
+    <j:set var="connection" value="${URL.openConnection()}" />
+    <j:set var="responseCode" value="${connection.getResponseCode()}" />
+    ${logger.println("reportUrl (connection) = " + connection.getURL() )}
+
+    <j:if test="${responseCode == '200'}">
+     <tr>
+      <td />
+      <td>
+       <j:new className="java.io.InputStreamReader" var="htmlInput" >
+       <j:arg type="java.io.InputStream" value="${connection.getInputStream()}" />
+       </j:new>
+       ${logger.println("htmlInput = " + htmlInput )}
+
+       <!-- StringBuilder and BufferedReader for parsing the output -->
+       <!-- <j:new className="java.lang.StringBuilder" var="stringBuilder" /> -->
+
+       <j:new className="java.io.BufferedReader" var="bufferedReader" >
+        <j:arg type="java.io.InputStreamReader" value="${htmlInput}" />
+       </j:new>
+        ${logger.println("bufferedReader = " + bufferedReader )}
+
+       <!-- Loop through the http response and append all lines of <header> into the stringBuilder -->
+       <j:set var="reportHeader" value="false" />
+       <j:set var="line" value="" />
+       <j:while test="${line != null}">
+        <j:set var="line" value="${bufferedReader.readLine()}" />
+        <j:if test="${line != null}">
+          <j:if test="${line.matches('.*&lt;\s*header.*')}">
+            ${logger.println("Header tag: " + line) }
+            <j:set var="reportHeader" value="true" />
+          </j:if>
+          <j:if test="${reportHeader == true}">
+            <j:set var="headline" value="${line.replaceAll('\&lt;\/? *h[1-6] *\&gt;', '')}" escapeText="false" />
+            ${logger.println("headline = " + headline) }
+            <j:if test="${!StringUtils.deleteWhitespace(headline).equals('')}">
+              <!-- <j:invoke method="append" on="${stringBuilder}">
+                <j:arg value="${line}" escapeText="true"/>
+              </j:invoke> -->
+              <p>${headline}</p>
+            </j:if>
+          </j:if>
+          <j:break test="${line.matches('.*&lt;/\s*header.*')}" />
+        </j:if>
+       </j:while>
+       <!-- ${logger.println("stringBuilder = " + stringBuilder.toString()) }
+       <j:set var="reportHeadlines" value="${StringUtils.substringsBetween(stringBuilder.toString(), 'h[1-6] *&gt;', '&lt;/ *h[1-6]')}" />
+       <j:forEach var="headline" items="${reportHeadlines}" trim="true">
+        <p>${headline}</p>
+       </j:forEach> -->
+      </td>
+     </tr>
+    </j:if>
+
    <!-- BLUEOCEAN RESULTS -->
    <j:set var="blueoceanPlugin" value="${it.getAction('io.jenkins.blueocean.service.embedded.BlueOceanUrlAction')}" />
    ${logger.println("blueoceanPlugin = " + blueoceanPlugin.getUrlName() )}
@@ -73,7 +138,7 @@
     </j:new>
     <j:set var="connection" value="${URL.openConnection()}" />
     <j:set var="responseCode" value="${connection.getResponseCode()}" />
-    ${logger.println("testResultsAnalyzer URL = " + connection.getURL() )}
+    ${logger.println("testResultsAnalyzer (connection) = " + connection.getURL() )}
     <j:if test="${responseCode == '200'}">
      <tr>
       <td>Statistics:</td>
@@ -147,72 +212,6 @@
       </td>
      </tr>
     </j:if>
-   </table>
-   <br />
-  </j:if>
-
-  <!-- ARTIFACTS -->
-  <j:set var="artifacts" value="${build.artifacts}" />
-  <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
-   <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-    <tr>
-     <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
-      <b>
-       Build artifacts
-      </b>
-     </td>
-    </tr>
-    <tr>
-     <td>
-      <j:forEach var="f" items="${artifacts}">
-       <li>
-        <a href="${jenkinsUrl}${build.url}artifact/${f}">
-         ${f}
-        </a>
-       </li>
-      </j:forEach>
-     </td>
-    </tr>
-   </table>
-   <br />
-  </j:if>
-
-  <!-- MAVEN ARTIFACTS -->
-  <j:set var="mbuilds" value="${build.moduleBuilds}" />
-  <j:if test="${mbuilds!=null}">
-   <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
-    <tr>
-     <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
-      <b>
-       MAVEN ARTIFACTS
-      </b>
-     </td>
-    </tr>
-    <j:forEach var="m" items="${mbuilds}">
-     <tr>
-      <td class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
-       <b>
-        ${m.key.displayName}
-       </b>
-      </td>
-     </tr>
-     <j:forEach var="mvnbld" items="${m.value}">
-      <j:set var="artifacts" value="${mvnbld.artifacts}" />
-      <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
-       <tr>
-        <td>
-         <j:forEach var="f" items="${artifacts}">
-          <li>
-           <a href="${jenkinsUrl}${mvnbld.url}artifact/${f}">
-            ${f}
-           </a>
-          </li>
-         </j:forEach>
-        </td>
-       </tr>
-      </j:if>
-     </j:forEach>
-    </j:forEach>
    </table>
    <br />
   </j:if>
@@ -322,6 +321,72 @@
    </j:if> <!-- End of TESTS SUCCESS -->
 
   </j:if> <!-- End of JUnit results -->
+
+  <!-- ARTIFACTS -->
+  <j:set var="artifacts" value="${build.artifacts}" />
+  <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
+   <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+    <tr>
+     <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
+      <b>
+       Build artifacts
+      </b>
+     </td>
+    </tr>
+    <tr>
+     <td>
+      <j:forEach var="f" items="${artifacts}">
+       <li>
+        <a href="${jenkinsUrl}${build.url}artifact/${f}">
+         ${f}
+        </a>
+       </li>
+      </j:forEach>
+     </td>
+    </tr>
+   </table>
+   <br />
+  </j:if>
+
+  <!-- MAVEN ARTIFACTS -->
+  <j:set var="mbuilds" value="${build.moduleBuilds}" />
+  <j:if test="${mbuilds!=null}">
+   <table width="100%" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+    <tr>
+     <td class="bg1" style="font-family: Verdana, Helvetica, sans serif; font-size: 120%; color: white; background-color: #0000C0">
+      <b>
+       MAVEN ARTIFACTS
+      </b>
+     </td>
+    </tr>
+    <j:forEach var="m" items="${mbuilds}">
+     <tr>
+      <td class="bg2" style="font-family: Verdana, Helvetica, sans serif; font-size: 110%; color: white; background-color: #9999ff">
+       <b>
+        ${m.key.displayName}
+       </b>
+      </td>
+     </tr>
+     <j:forEach var="mvnbld" items="${m.value}">
+      <j:set var="artifacts" value="${mvnbld.artifacts}" />
+      <j:if test="${artifacts!=null and artifacts.size()&gt;0}">
+       <tr>
+        <td>
+         <j:forEach var="f" items="${artifacts}">
+          <li>
+           <a href="${jenkinsUrl}${mvnbld.url}artifact/${f}">
+            ${f}
+           </a>
+          </li>
+         </j:forEach>
+        </td>
+       </tr>
+      </j:if>
+     </j:forEach>
+    </j:forEach>
+   </table>
+   <br />
+  </j:if>
 
   <!-- COBERTURA TEMPLATE -->
   <!-- <j:set var="coberturaAction" value="${it.coberturaAction}" />

@@ -73,42 +73,45 @@ function highlight()
 # ------------------------------------------
 
 function print_current_dir_and_cmd() {
-  # Get command to print, but skip printing if it's empty
-  local cmd
-  cmd="$(echo -e "$1" | xargs)"
-  [[ -n "$cmd" ]] || return
+  # Print called command and current directory
+  # Important: Use _unique_ variables for safer evaluation
 
-  # Print PS1 prompt (and trim trailing and leading spaces)
-  local new_location="[$0] $PS1 [${PWD##*/}]" && \
-  if [[ "$new_location" != "$current_location" ]]; then
-    export current_location="$new_location"
-    echo -e "\n${YELLOW}$current_location${NO_COLOR}\n"
+  local _bash_cmd
+  _bash_cmd="$(echo -e "$1" | xargs)"
+  # Skip printing if it's an empty command
+  [[ -n "$_bash_cmd" ]] || return
+
+  # Print PS1 prompt with location (if it's new location), and trim trailing and leading spaces
+  local _new_location="[$0] $PS1 [${PWD##*/}]" && \
+  if [[ "$_new_location" != "$_current_location" ]]; then
+    export _current_location="$_new_location"
+    echo -e "\n${YELLOW}$_current_location${NO_COLOR}\n"
   fi
 
-  # Save all command variables' values inside $all_vars_output
-  local all_vars_output="\n"
+  # Save all command variables' values inside $_all_vars_output
+  local _all_vars_output="\n"
 
   # List simple variables ($v or ${v}) first
-  local var_list=( $(echo "$cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
+  local _var_list=( $(echo "$_bash_cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
 
   # List complex variables (with parameter expansion) next
-  var_list+=( $(echo "$cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
+  _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
-  for variable in "${var_list[@]}" ; do
-     local var_name
-     var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
-     local var_value="${!var_name}"
+  for variable in "${_var_list[@]}" ; do
+     local _var_name
+     _var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+     local _var_value="${!_var_name}"
      if [[ "$variable" =~ [:/] ]] ; then
-       # For complex variables - add it to $all_vars_output
-       all_vars_output+="# ${var_name}=${var_value} \n"
+       # For complex variables - add it to $_all_vars_output
+       _all_vars_output+="+ ${_var_name}=${_var_value} \n"
      else
-       # For simple variables - replace them with their values within $cmd
-       cmd="${cmd//$variable/$var_value}"
+       # For simple variables - replace them with their values within $_bash_cmd
+       _bash_cmd="${_bash_cmd//$variable/$_var_value}"
      fi
    done
 
-  # Print $all_vars_output (after # sign), and $cmd (after $ sign)
-  echo -e "${CYAN}${all_vars_output}\$ ${cmd}${NO_COLOR}"
+  # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
+  echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
 }
 
 # ------------------------------------------
@@ -828,54 +831,55 @@ function ocp_login() {
 
 # ------------------------------------------
 
-# Function to delete selected namespace and CRDs on the current KUBECONFIG cluster
-function delete_namespace_and_crds() {
+# Function to delete all CRDs wich includes the input text on the current cluster
+function delete_crds_by_name() {
   trap_to_debug_commands;
-  # Input $1 : Namespace to delete
-  # Input $2 (Optional) : All CRDs to delete, by searching for *crd_name*
-  local ns_name=$1
-  local crd_name=$2
+
+  # Input $1 : All CRDs to delete, by searching for *crd_name*
+  local crd_name=$1
 
   local delete_crds=FALSE
 
-  if [[ -n $crd_name ]] ; then
-    echo "# Searching for existing CRDs of previous ${crd_name} installation on the cluster:"
-    ${OC} get crds |& highlight "${crd_name}" && delete_crds=TRUE || :
+  echo "# Searching for existing CRDs of previous ${crd_name} installation on the cluster:"
+  ${OC} get crds |& highlight "${crd_name}" && delete_crds=TRUE || :
 
-    # If there are existing CRDs on the cluster - remove them all:
-    # if [[ $? = 0 ]]; then
-    if [[ "$delete_crds" = TRUE ]]; then
-      echo "# Deleting ${crd_name} CRDs in the cluster"
-      crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
-      # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
-      ${OC} delete --timeout=10s crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
-    fi
-  fi
-
-    echo "# Searching for existing resources (and OLMs) in namespace ${ns_name} :"
-    # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
-    ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
-
-  # Removing whole namespace (and it's resources):
-  if [[ ${ns_name} = "default" ]] ; then
-    echo "# Skipping namespace deletion, since it's the \"default\" namespace."
-    return
+  # If there are existing CRDs on the cluster - remove them all:
+  # if [[ $? = 0 ]]; then
+  if [[ "$delete_crds" = TRUE ]]; then
+    echo "# Deleting ${crd_name} CRDs in the cluster"
+    crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
+    # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
+    ${OC} delete --timeout=10s crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
   else
-    echo "# Deleting whole namespace ${ns_name} from the cluster"
-    force_delete_namespace "${ns_name}"
+    echo "# No CRD with '${crd_name}' was found in the current cluster"
   fi
+
 }
 
 
 # ------------------------------------------
 
-# Function to force delete namespace
+# Function to force delete a namespace
 function force_delete_namespace() {
   trap_to_debug_commands;
   # Input $1 : Namespace to delete
-  ns_name=$1
+  local ns_name="$1"
 
-  ${OC} delete --timeout=30s namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
+  # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
+  local delete_timeout="${2:-30s}"
+
+  if [[ ${ns_name} = "default" ]] ; then
+    echo "# Skipping namespace deletion, since it's the \"default\" namespace."
+    return
+  fi
+
+  echo "# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
+  # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
+  ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
+
+  TITLE "Deleting whole namespace ${ns_name} from the cluster"
+
+  ${OC} delete --timeout=$delete_timeout namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
 
   if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
     echo "# Warning: Force delete of namespace via API"
@@ -945,7 +949,6 @@ function install_nginx_service() {
 
   if [[ -n "$target_namespace" ]] ; then
     echo "# Create Namespace for Nginx: $target_namespace"
-    # delete_namespace_and_crds "${target_namespace}"
     create_namespace "${target_namespace}"
   fi
 
@@ -1392,11 +1395,8 @@ function create_polarion_testcases_doc_from_junit() {
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
-      # # Add pre-wrap
-      # testcase_output="<br> <div style=\"white-space: pre-wrap\"> $testcase_output </div>"
-
-      echo "# Replace all end of lines with <br>"
-      testcase_output="<br><br> ${testcase_output//$'\n'/<br />}"
+      echo "# Add pre-line and replace all end of lines with <br> in testcase output"
+      testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/ <br>} </span>"
 
       echo "# Escape all < and > in testcase output"
       testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
@@ -1493,7 +1493,7 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
-    local polarion_test_plan_id="$7"
+    local polarion_test_plan_id="$7" # Optional - To set test plan (instead of the test plan from the testrun template)
 
     local sed_expression
 
@@ -1538,8 +1538,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
-            <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
-            <property name=\"plannedin\" value=\"$polarion_test_plan_id\" /> \n\
+            ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
             <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
         </properties> \n\
     <testsuite "
@@ -1720,9 +1719,8 @@ function log_to_html() {
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
-  # Set description div
-  [[ -z $description ]] || description="<h3><div style=\"white-space: pre-line\"> ${description}
-  </div></h3>"
+  # Set description headline
+  [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
 
   local repo_url=https://github.com/theZiz/aha.git
   local repo_branch=0.5.1
@@ -1785,8 +1783,10 @@ function log_to_html() {
   </style>
   </head>
   <body style="background-color:LightSkyBlue">
-  <h1>${title}</h1>
-  ${description}
+  <header>
+    <h1><b>${title}</b></h1>
+    ${description}
+  </header>
   <pre>
 EOF
 
@@ -1801,7 +1801,7 @@ EOF
   sed -r '/^\s*\+\+\+/d' -i $html_output
 
   # Make all urls as hyperlinks
-  sed -r "s|(^[^<]*)(https?://[^> \t]+)([^>]*$)|\1<a href='\2'>\2</a>\3|" -i $html_output
+  sed -r "s#(^|\s)(https?://[^<> \t]+)($|\s)#<a href='\2'>&</a>#g" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output

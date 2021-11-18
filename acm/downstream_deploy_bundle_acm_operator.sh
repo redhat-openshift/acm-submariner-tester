@@ -49,12 +49,6 @@ function clean_acm_namespace_and_resources_cluster_c() {
 function clean_acm_namespace_and_resources() {
   trap_to_debug_commands;
 
-  # ${OC} delete multiclusterhub --all || :
-  # ${OC} delete subs --all || :
-  # ${OC} delete clusterserviceversion --all || :
-  # ${OC} delete validatingwebhookconfiguration multiclusterhub-operator-validating-webhook || :
-  # delete_namespace_and_crds "${ACM_NAMESPACE}" "open-cluster-management" || :
-
   local acm_uninstaller_url="https://raw.githubusercontent.com/open-cluster-management/deploy/master/multiclusterhub/uninstall.sh"
   local acm_uninstaller_file="./acm_cleanup.sh"
 
@@ -63,6 +57,29 @@ function clean_acm_namespace_and_resources() {
 
   export TARGET_NAMESPACE="${ACM_NAMESPACE}"
   ${acm_uninstaller_file} || FAILURE "Uninstalling ACM Hub did not complete successfully"
+
+  BUG "ACM uninstaller script does not delete all resources" \
+  "Delete ACM resources directly" \
+  "https://github.com/open-cluster-management/deploy/issues/218"
+  # Workaround:
+
+  TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM"
+
+  delete_crds_by_name "open-cluster-management" || :
+  ${OC} delete managedcluster --all --wait || :
+  ${OC} delete validatingwebhookconfiguration --all --wait || :
+
+  TITLE "Delete all ACM resources in Namespace '${ACM_NAMESPACE}'"
+
+  ${OC} delete subs --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete catalogsource --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete is --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete multiclusterhub --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete clusterserviceversion --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete cm --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete service --all -n ${ACM_NAMESPACE} --wait || :
+
+  force_delete_namespace "${ACM_NAMESPACE}" 10m || :
 
 }
 
@@ -259,7 +276,7 @@ function create_new_managed_cluster_in_acm_hub() {
   # Run on ACM hub cluster (Manager)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  echo "# Create the namespace for the managed cluster"
+  TITLE "Create the namespace for the managed cluster"
   create_namespace "${cluster_id}"
   ${OC} label namespace ${cluster_id} cluster.open-cluster-management.io/managedCluster=${cluster_id} --overwrite
 
@@ -268,7 +285,7 @@ function create_new_managed_cluster_in_acm_hub() {
   # Define the managed Clusters
   # for i in {1..3}; do
 
-  echo "# Create the managed cluster"
+  TITLE "Create the managed cluster"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
@@ -288,9 +305,9 @@ EOF
   ### TODO: Wait for managedcluster
   # sleep 1m
 
-  TITLE "Create ACM klusterlet addon config for cluster '$cluster_id'"
+  TITLE "Create ACM klusterlet Addon config for cluster '$cluster_id'"
 
-  ### Create the klusterlet addon config
+  ### Create the klusterlet Addon config
   cat <<EOF | ${OC} apply -f -
   apiVersion: agent.open-cluster-management.io/v1
   kind: KlusterletAddonConfig
@@ -333,7 +350,7 @@ EOF
 
   # done
 
-  # TODO: wait for kluserlet addon
+  # TODO: wait for kluserlet Addon
   # sleep 1m
 
 }
@@ -351,7 +368,7 @@ function import_managed_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  TITLE "Install klusterlet (addon) on the managed clusters"
+  TITLE "Install klusterlet (Addon) on the managed clusters"
   # Import the managed clusters
   # info "install the agent"
   ${OC} apply -f ${kluster_crd}
@@ -484,6 +501,8 @@ function configure_submariner_version_for_managed_cluster() {
 
   TITLE "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
 
+  local submariner_status
+
   # Run on the hub
   # export LOG_TITLE="cluster1"
   # export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
@@ -509,9 +528,9 @@ function configure_submariner_version_for_managed_cluster() {
 EOF
   )
 
-  echo "# Create the Submariner Subscription config"
+  TITLE "Create the Submariner Subscription config"
 
-  cat <<EOF | ${OC} apply -f -
+  cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
@@ -540,24 +559,32 @@ EOF
 EOF
 
 
-  echo "# Create the Submariner addon to start the deployment"
+  if [[ ! "$submariner_status" = FAILED ]] ; then
 
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: addon.open-cluster-management.io/v1alpha1
-  kind: ManagedClusterAddOn
-  metadata:
-    name: ${SUBM_OPERATOR}
-    namespace: ${cluster_id}
-  spec:
-    installNamespace: ${SUBM_NAMESPACE}
+    TITLE "Create the Submariner Addon to start the deployment"
+
+    cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
+    apiVersion: addon.open-cluster-management.io/v1alpha1
+    kind: ManagedClusterAddOn
+    metadata:
+      name: ${SUBM_OPERATOR}
+      namespace: ${cluster_id}
+    spec:
+      installNamespace: ${SUBM_NAMESPACE}
 EOF
 
-  echo "# Label the managed clusters and klusterletaddonconfigs to deploy submariner"
+    TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
-  ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+    ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+
+  fi
 
   ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id}
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
   ${OC} get manifestwork -n ${cluster_id} --ignore-not-found
+
+  if [[ "$submariner_status" = FAILED ]] ; then
+    FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub namespace $cluster_id"
+  fi
 
 }
