@@ -180,14 +180,14 @@ export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
 export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
 
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
-> "$E2E_LOG"
+: > "$E2E_LOG"
 
 # Set SYS_LOG name according to REPORT_NAME (from subm_variables)
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 # SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
 # SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
 SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-> "$SYS_LOG"
+: > "$SYS_LOG"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -197,47 +197,47 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 
 # File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
-> $TEST_STATUS_FILE
+: > $TEST_STATUS_FILE
 
 # File to store OCP cluster A version
 export CLUSTER_A_VERSION_FILE="$SCRIPT_DIR/cluster_a.ver"
-> $CLUSTER_A_VERSION_FILE
+: > $CLUSTER_A_VERSION_FILE
 
 # File to store OCP cluster B version
 export CLUSTER_B_VERSION_FILE="$SCRIPT_DIR/cluster_b.ver"
-> $CLUSTER_B_VERSION_FILE
+: > $CLUSTER_B_VERSION_FILE
 
 # File to store OCP cluster C version
 export CLUSTER_C_VERSION_FILE="$SCRIPT_DIR/cluster_c.ver"
-> $CLUSTER_C_VERSION_FILE
+: > $CLUSTER_C_VERSION_FILE
 
 # File to store SubCtl version
 export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-> $SUBCTL_VERSION_FILE
+: > $SUBCTL_VERSION_FILE
 
 # File to store SubCtl JOIN command for cluster A
 export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-> $SUBCTL_JOIN_CLUSTER_A_FILE
+: > $SUBCTL_JOIN_CLUSTER_A_FILE
 
 # File to store SubCtl JOIN command for cluster B
 export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-> $SUBCTL_JOIN_CLUSTER_B_FILE
+: > $SUBCTL_JOIN_CLUSTER_B_FILE
 
 # File to store SubCtl JOIN command for cluster C
 export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-> $SUBCTL_JOIN_CLUSTER_C_FILE
+: > $SUBCTL_JOIN_CLUSTER_C_FILE
 
 # File to store Polarion auth
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-> $POLARION_AUTH
+: > $POLARION_AUTH
 
 # File to store Polarion test-run report link
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-> $POLARION_RESULTS
+: > $POLARION_RESULTS
 
 # File to store Submariner CSVs (Cluster service versions)
 export SUBMARINER_VERSIONS="$SCRIPT_DIR/submariner_csv.ver"
-> $SUBMARINER_VERSIONS
+: > $SUBMARINER_VERSIONS
 
 
 ####################################################################################
@@ -674,10 +674,10 @@ function show_test_plan() {
   - add_elevated_user_to_cluster_a
   - add_elevated_user_to_cluster_b / c
   - clean_submariner_namespace_and_resources_cluster_a
-  - clean_node_labels_and_machines_cluster_a
+  - clean_submariner_labels_and_machine_sets_cluster_a
   - delete_old_submariner_images_from_cluster_a
   - clean_submariner_namespace_and_resources_cluster_b / c
-  - clean_node_labels_and_machines_cluster_b / c
+  - clean_submariner_labels_and_machine_sets_cluster_b / c
   - delete_old_submariner_images_from_cluster_b / c
   - open_firewall_ports_on_aws_cluster_a
   - configure_images_prune_cluster_a
@@ -1762,7 +1762,7 @@ function delete_e2e_namespaces() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_a() {
+function clean_submariner_labels_and_machine_sets_cluster_a() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public) ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
   trap_to_debug_commands;
@@ -1776,7 +1776,7 @@ function clean_node_labels_and_machines_cluster_a() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_b() {
+function clean_submariner_labels_and_machine_sets_cluster_b() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem) ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
   trap_to_debug_commands;
@@ -1790,7 +1790,7 @@ function clean_node_labels_and_machines_cluster_b() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_c() {
+function clean_submariner_labels_and_machine_sets_cluster_c() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C"
   trap_to_debug_commands;
@@ -3749,7 +3749,7 @@ function test_ipsec_status() {
 
   export_variable_name_of_active_gateway_pod "active_gateway_pod"
 
-  > "$TEMP_FILE"
+  : > "$TEMP_FILE"
 
   TITLE "Verify IPSec status on the active Gateway pod [${active_gateway_pod}]:"
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
@@ -5122,7 +5122,9 @@ function debug_test_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
-  if [[ -n "TRUE" ]] ; then
+  local test="TRUE"
+
+  if [[ -n "$test" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
@@ -5340,11 +5342,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
+      # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
-      ${junit_cmd} clean_node_labels_and_machines_cluster_a
+      ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
 
       ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
@@ -5355,11 +5357,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} clean_acm_namespace_and_resources_cluster_b
+        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_b  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
-        ${junit_cmd} clean_node_labels_and_machines_cluster_b
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
@@ -5371,11 +5373,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
+        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
-        ${junit_cmd} clean_node_labels_and_machines_cluster_c
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
