@@ -199,18 +199,6 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
 : > $TEST_STATUS_FILE
 
-# File to store OCP cluster A version
-export CLUSTER_A_VERSION_FILE="$SCRIPT_DIR/cluster_a.ver"
-: > $CLUSTER_A_VERSION_FILE
-
-# File to store OCP cluster B version
-export CLUSTER_B_VERSION_FILE="$SCRIPT_DIR/cluster_b.ver"
-: > $CLUSTER_B_VERSION_FILE
-
-# File to store OCP cluster C version
-export CLUSTER_C_VERSION_FILE="$SCRIPT_DIR/cluster_c.ver"
-: > $CLUSTER_C_VERSION_FILE
-
 # File to store SubCtl version
 export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
 : > $SUBCTL_VERSION_FILE
@@ -1077,7 +1065,7 @@ function destroy_osp_cluster() {
   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
     TITLE "Using last created OCPUP yaml configuration file"
     local ocpup_yml
-    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 || :)"
+    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 )" || :
 
     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
 
@@ -1422,13 +1410,7 @@ function test_kubeconfig_cluster_a() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  # Get OCP cluster A version
-  cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_a_version" > "$CLUSTER_A_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
   test_cluster_status "$CLUSTER_A_NAME"
-
 }
 
 # ------------------------------------------
@@ -1438,13 +1420,7 @@ function test_kubeconfig_cluster_b() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
-  # Get OCP cluster B version
-  cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_B_NAME ${cl_b_version:+(OCP Version $cl_b_version)}"
   test_cluster_status "$CLUSTER_B_NAME"
-
 }
 
 # ------------------------------------------
@@ -1454,13 +1430,7 @@ function test_kubeconfig_cluster_c() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
 
-  # Get OCP cluster C version
-  cl_c_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_c_version" > "$CLUSTER_C_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_C_NAME ${cl_c_version:+(OCP Version $cl_c_version)}"
   test_cluster_status "$CLUSTER_C_NAME"
-
 }
 
 # ------------------------------------------
@@ -1470,6 +1440,12 @@ function test_cluster_status() {
   trap_to_debug_commands;
 
   local cluster_name="$1"
+
+  # Get OCP cluster version
+  local cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+
+  PROMPT "Testing status of cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
+
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
@@ -2169,7 +2145,7 @@ function download_subctl_by_tag() {
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
       echo -e "# Getting last downloaded subctl archive filename"
-      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 || :)"
+      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
       echo "# SubCtl binary will be extracted from [${subctl_xz}]"
@@ -2283,7 +2259,7 @@ function get_subctl_branch_tag() {
 function test_subctl_command() {
   trap_to_debug_commands;
   local subctl_version
-  subctl_version="$(subctl version | awk '{print $3}' || :)"
+  subctl_version="$(subctl version | awk '{print $3}' )" || :
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
@@ -4812,8 +4788,8 @@ function add_polarion_testrun_url_to_report_headlines() {
 
   TITLE "Add new Polarion Test run results to the Html report headlines: "
   local polarion_testrun_result_page
-  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
-  | sed -z 's/\.\n.* to:/:\n/' || :)
+  polarion_testrun_result_page="$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
+  | sed -z 's/\.\n.* to:/:\n/' )" || :
 
   local polarion_testrun_name
   polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
@@ -4886,15 +4862,22 @@ function test_products_versions() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name)"
+  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
-  echo -e "\n# Current OC user: $(${OC} whoami || : )"
-  echo -e "\n# Current Kubeconfig contexts:"
-  ${OC} config get-contexts
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
-  echo -e "\n### OCP Cluster ${cluster_name} ###"
-  ${OC} version || :
+  local cluster_platform
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
-  ${OC} get routes -A || :
+  # Print OCP cluster info into file "<cluster name>.info"
+  local cluster_info="${cluster_platform} cluster : OCP ${cluster_version}"
+  echo "${cluster_info}" > "${cluster_info_output}" || :
+  ${OC} get routes -A | awk '$2 ~ /console/ {print $1 " : " $3}' >> "${cluster_info_output}" || :
+
+  TITLE "OCP cluster ${cluster_name} information"
+  echo -e "\n# Cloud platform: ${cluster_platform}"
+  echo -e "\n# OCP version: ${cluster_version}"
 
   echo -e "\n### Submariner components ###\n"
 
@@ -4902,10 +4885,23 @@ function test_products_versions() {
 
   subctl show versions || :
 
-  # Show images info of running pods
+  # Show Libreswan (cable driver) version in the active gateway pod
+  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+
+  if [[ -n "$active_gateway_pod" ]] ; then
+    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+    echo -e "\n\n"
+
+    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+    echo -e "\n\n"
+  fi
+
+  # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
 
-  # Show image-stream tags
+  # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
 
   # # Show BREW_REGISTRY images
@@ -4927,19 +4923,12 @@ function test_products_versions() {
   #   print_image_info "$img_id"
   # done
 
-  # Show Libreswan (cable driver) version in the active gateway pod
+  echo -e "\n# Current OC user: $(${OC} whoami || : )"
+  echo -e "\n# Current Kubeconfig contexts:"
+  ${OC} config get-contexts
 
-  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
-
-  if [[ -n "$active_gateway_pod" ]] ; then
-    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
-    echo -e "\n\n"
-
-    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-    echo -e "\n\n"
-  fi
+  echo -e "\n### Cluster routes on ${cluster_name} ###"
+  ${OC} get routes -A || :
 
 }
 
@@ -5858,32 +5847,17 @@ if [[ -s "$POLARION_RESULTS" ]] ; then
   $(< "$POLARION_RESULTS")"
 fi
 
-if [[ -s "$CLUSTER_A_VERSION_FILE" ]] ; then
-  headline="OCP cluster A version:"
-  echo "# ${headline}"
-  cat "$CLUSTER_A_VERSION_FILE"
+# Loop on all *.info files and add them to report description:
+info_files="${SCRIPT_DIR}/*.info"
+for info in $info_files ; do
+  if [[ -s "$info" ]] ; then
+    echo -e "$info :
+    $(< "$info") \n\n"
 
-  html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_A_VERSION_FILE")"
-fi
-
-if [[ -s "$CLUSTER_B_VERSION_FILE" ]] ; then
-  headline="OCP cluster B version:"
-  echo "# ${headline}"
-  cat "$CLUSTER_B_VERSION_FILE"
-
-  html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_B_VERSION_FILE")"
-fi
-
-if [[ -s "$CLUSTER_C_VERSION_FILE" ]] ; then
-  headline="OCP cluster C version:"
-  echo "# ${headline}"
-  cat "$CLUSTER_C_VERSION_FILE"
-
-  html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_C_VERSION_FILE")"
-fi
+    # The first line of info file with bold font
+    html_report_headlines+="$(sed -r '1 s/^(.*)$/<br> <b> \1 <\/b>/' "$info")" || :
+  fi
+done
 
 if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
   headline="Submariner services versions:"
@@ -5891,11 +5865,9 @@ if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
   cat "$SUBMARINER_VERSIONS"
 
   html_report_headlines+="
-  <b>${headline}</b>
+  <br> <b>${headline}</b>
   $(< "$SUBMARINER_VERSIONS")"
 fi
-
-
 
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
 log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
