@@ -223,9 +223,9 @@ export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 : > $POLARION_RESULTS
 
-# File to store Submariner CSVs (Cluster service versions)
-export SUBMARINER_VERSIONS="$SCRIPT_DIR/submariner_csv.ver"
-: > $SUBMARINER_VERSIONS
+# File to store Submariner images version details
+export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
+: > $SUBMARINER_IMAGES
 
 
 ####################################################################################
@@ -4830,10 +4830,7 @@ function test_products_versions_cluster_a() {
   export KUBECONFIG="${KUBECONF_HUB}"
   test_products_versions
 
-  local submariner_csvs
-  submariner_csvs="$(${OC} get csv -n $SUBM_NAMESPACE -o name)"
-  ${OC} get -n $SUBM_NAMESPACE $submariner_csvs -o json \
-  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-' > $SUBMARINER_VERSIONS
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4843,6 +4840,8 @@ function test_products_versions_cluster_b() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_products_versions
+
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4852,6 +4851,8 @@ function test_products_versions_cluster_c() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_products_versions
+
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4864,16 +4865,11 @@ function test_products_versions() {
   cluster_name="$(print_current_cluster_name)"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
-
   local cluster_platform
   cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
-  # Print OCP cluster info into file "<cluster name>.info"
-  local cluster_info="${cluster_platform} cluster : OCP ${cluster_version}"
-  echo "${cluster_info}" > "${cluster_info_output}" || :
-  ${OC} get routes -A | awk '$2 ~ /console/ {print $1 " : " $3}' >> "${cluster_info_output}" || :
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   TITLE "OCP cluster ${cluster_name} information"
   echo -e "\n# Cloud platform: ${cluster_platform}"
@@ -4900,6 +4896,9 @@ function test_products_versions() {
 
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
+
+  # Show Submariner CSVs (Cluster service versions)
+  print_csvs_in_namespace "$SUBM_NAMESPACE"
 
   # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
@@ -4929,6 +4928,36 @@ function test_products_versions() {
 
   echo -e "\n### Cluster routes on ${cluster_name} ###"
   ${OC} get routes -A || :
+
+}
+
+# ------------------------------------------
+
+function save_cluster_info_to_file() {
+# Save important OCP cluster and Submariner information to local files
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  local cluster_platform
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+
+  # Print OCP cluster info into file local file "<cluster name>.info"
+  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
+
+  local cluster_info="${cluster_platform} cluster : OCP ${cluster_version}"
+  echo "${cluster_info}" > "${cluster_info_output}" || :
+
+  # Print all cluster routes into file "<cluster name>.info"
+  ${OC} get routes -A | awk '$2 ~ /console/ {print $1 " : " $3}' >> "${cluster_info_output}" || :
+
+  # Just for the first managed cluster - print Submariner images url into $SUBMARINER_IMAGES file
+  [[ -s "$SUBMARINER_IMAGES" ]] || \
+  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}" | grep -Po "url=\K.*" > $SUBMARINER_IMAGES
 
 }
 
@@ -5859,14 +5888,14 @@ for info in $info_files ; do
   fi
 done
 
-if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
-  headline="Submariner services versions:"
+if [[ -s "$SUBMARINER_IMAGES" ]] ; then
+  headline="Submariner images:"
   echo "# ${headline}"
-  cat "$SUBMARINER_VERSIONS"
+  cat "$SUBMARINER_IMAGES"
 
   html_report_headlines+="
   <br> <b>${headline}</b>
-  $(< "$SUBMARINER_VERSIONS")"
+  $(< "$SUBMARINER_IMAGES")"
 fi
 
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG

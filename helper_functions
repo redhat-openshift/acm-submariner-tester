@@ -1059,6 +1059,22 @@ function print_image_tags_info() {
 
 # ------------------------------------------
 
+# Function to print hash details of all CSVs (Cluster service versions) in a namespace
+function print_csvs_in_namespace() {
+  # Do not trap_to_debug_commands, so it will not be printed as return value
+
+  local namespace=$1 # Default is current context namespace
+
+  local csvs
+  csvs="$(${OC} get csv ${namespace:+-n $namespace} -o name)"
+
+  ${OC} get ${namespace:+-n $namespace} $csvs -o json \
+  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-'
+
+}
+
+# ------------------------------------------
+
 # Function to return (print) the first running pod id, by a label. Exit with FATAL if nothing found.
 function get_running_pod_by_label() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
