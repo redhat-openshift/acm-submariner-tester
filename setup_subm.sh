@@ -1648,9 +1648,12 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  force_delete_namespace "${SUBM_NAMESPACE}"
+  # force_delete_namespace "${SUBM_NAMESPACE}"
 
   delete_crds_by_name "submariner"
+
+  ${OC} delete namespace ${SUBM_NAMESPACE} --wait || :
+  ${OC} wait --for=delete namespace ${SUBM_NAMESPACE} || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   force_delete_namespace "${BROKER_NAMESPACE}"
