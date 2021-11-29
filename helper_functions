@@ -283,8 +283,8 @@ function TITLE() {
   echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
 
-  # Print rest of message (from line 2)
-  echo -e "${message}" | tail -n +2
+  # Print rest of message (from line 2), with # at the beginning
+  echo -e "${message}" | tail -n +2 | sed 's/^/# /'
 
 }
 
@@ -1325,7 +1325,7 @@ function get_latest_repository_version_by_tag() {
 
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
-    trap_to_debug_commands;
+    trap '' DEBUG # DONT trap_to_debug_commands
 
     # Input (9 params) :
 
@@ -1386,7 +1386,9 @@ function create_polarion_testcases_doc_from_junit() {
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
       local test_name="${full_testcase_name#*.}" # text after the dot
 
-      TITLE "Setting Polarion schema from Junit file [$junit_xml] : Test class [${class_name}] : Test name [${test_name}]"
+      TITLE "Setting Polarion schema from Junit file [$junit_xml]
+      Test class [${class_name}]
+      Test name [${test_name}]"
 
       echo "# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
@@ -1505,7 +1507,7 @@ function create_polarion_testcases_doc_from_junit() {
 
 # Function to create Polarion test run (xml) from Junit
 function create_polarion_testrun_result_from_junit() {
-    trap_to_debug_commands;
+    trap '' DEBUG # DONT trap_to_debug_commands
 
     # Input (7 params) :
 
@@ -1689,7 +1691,7 @@ function generate_suite_title_from_junit_filename() {
 
 # Function to watch testcase-log or xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
 function watch_polarion_job_status() {
-  trap_to_debug_commands;
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # Input params:
   local polarion_url="$1"
