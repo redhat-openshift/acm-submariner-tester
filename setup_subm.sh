@@ -3610,7 +3610,7 @@ function test_ha_status() {
 
   PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
 
-  ${OC} describe cm -n openshift-dns || submariner_status=DOWN
+  ${OC} describe configmaps -n openshift-dns || submariner_status=DOWN
 
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || submariner_status=DOWN
 
@@ -5039,7 +5039,9 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
 
-  TITLE "Submariner Gateway and Deployments on ${cluster_name}"
+  ${OC} get all -n ${BROKER_NAMESPACE} || :
+
+  TITLE "Submariner Gateway info on ${cluster_name}"
 
   ${OC} get nodes --selector=submariner.io/gateway=true --show-labels || :
 
@@ -5048,18 +5050,24 @@ function print_resources_and_pod_logs() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
+  TITLE "Submariner Roles and Broker info on ${cluster_name}"
+
+  ${OC} get roles -A | grep "submariner" || :
+
+  ${OC} describe role submariner-k8s-broker-cluster -n ${BROKER_NAMESPACE} || :
+
+  TITLE "Submariner Deployments, Daemon and Replica sets on ${cluster_name}"
+
   ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
   #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
-  TITLE "Submariner Daemons, Replicas and configurations on ${cluster_name}"
+  ${OC} describe daemonsets -n ${SUBM_NAMESPACE} || :
 
-  ${OC} get daemonsets -A || :
+  ${OC} describe replicasets -n ${SUBM_NAMESPACE} || :
 
-  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+  TITLE "Openshift configurations on ${cluster_name}"
 
-  ${OC} describe rs -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe cm -n openshift-dns || :
+  ${OC} describe configmaps -n openshift-dns || :
 
   echo -e "# TODO: Loop on each cluster: ${OC} describe cluster ${cluster_name} -n ${SUBM_NAMESPACE}"
 
