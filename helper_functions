@@ -1607,7 +1607,7 @@ function create_polarion_testrun_result_from_junit() {
     # Define Polarion <testcase> property (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_testcase_content="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" value=\"Auto generated from $junit_xml\" /> \n\
+            <property name=\"polarion-testcase-comment\" value=\"Auto generated ${BUILD_URL:+in Jenkins Build $BUILD_URL }from Junit file: $junit_xml \" /> \n\
         </properties> \n\
     </testcase>"
 
