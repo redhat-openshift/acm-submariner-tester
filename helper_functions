@@ -1602,16 +1602,19 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment')"
+    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment'):"
 
-    # Define Polarion <testcase> property (it is passed into SED, make sure new lines ends with " \n\ ")
-    polarion_testcase_content="\n\
+    local testrun_comment="Auto generated ${BUILD_URL:+in Jenkins Build $BUILD_URL }from Junit file: $junit_xml"
+    echo "$testrun_comment"
+
+    # Define property of <testcase> comment in the test-run xml (it is passed into SED, make sure new lines ends with " \n\ ")
+    local testcase_properties="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" value=\"Auto generated ${BUILD_URL:+in Jenkins Build $BUILD_URL }from Junit file: $junit_xml \" /> \n\
+            <property name=\"polarion-testcase-comment\" value=\"${testrun_comment}\" /> \n\
         </properties> \n\
     </testcase>"
 
-    sed_expression="s:</testcase>:$polarion_testcase_content:g"
+    sed_expression="s%</testcase>%${testcase_properties//%/\\%}%g"
 
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_xml"
