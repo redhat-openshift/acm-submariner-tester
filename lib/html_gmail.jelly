@@ -11,8 +11,9 @@
   <j:set var="buildEnv" value="${build.getEnvironment(listener)}"/>
   <j:set var="jenkinsUrl" value="${buildEnv.get('JENKINS_URL')}" />
 
-  <!-- GENERAL INFO -->
   <table style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
+
+   <!-- BUILD STATUS ICON -->
    <!-- <tr>
     <td align="left" style="font-family: Verdana, Helvetica, sans serif; font-size: 11px; color: black">
      <j:choose>
@@ -36,18 +37,10 @@
      </b>
     </td>
    </tr> -->
-   <tr>
-    <td>Build:</td>
-    <td>${build.displayName}</td>
-   </tr>
-   <tr>
-    <td></td>
-    <td>${build.description}</td>
-   </tr>
 
    <!-- HTML REPORT -->
    <tr>
-    <td>Test report:</td>
+    <td>Report:</td>
     <td>
      <a href="${jenkinsUrl}${build.url}Test-Report">
       ${jenkinsUrl}${build.url}Test-Report
@@ -67,8 +60,8 @@
     ${logger.println("reportUrl (connection) = " + connection.getURL() )}
 
     <j:if test="${responseCode == '200'}">
-     <tr>
-      <td />
+     <tr align="left" valign="top">
+      <td>Description:</td>
       <td>
        <j:new className="java.io.InputStreamReader" var="htmlInput" >
        <j:arg type="java.io.InputStream" value="${connection.getInputStream()}" />
@@ -94,14 +87,12 @@
             <j:set var="reportHeader" value="true" />
           </j:if>
           <j:if test="${reportHeader == true}">
-            <j:set var="headline" value="${line.replaceAll('\&lt;\/? *h[1-6] *\&gt;', '')}" escapeText="false" />
+            <j:set var="headline" value="${line.replaceAll('\&lt;\/? *(h[1-6]|header) *\&gt;', '')}" />
             ${logger.println("headline = " + headline) }
-            <j:if test="${!StringUtils.deleteWhitespace(headline).equals('')}">
-              <!-- <j:invoke method="append" on="${stringBuilder}">
-                <j:arg value="${line}" escapeText="true"/>
-              </j:invoke> -->
-              <p>${headline}</p>
-            </j:if>
+            <!-- <j:invoke method="append" on="${stringBuilder}">
+              <j:arg value="${line}" escapeText="true"/>
+            </j:invoke> -->
+            <p style="margin-top:0; margin-bottom:0;">${headline}</p>
           </j:if>
           <j:break test="${line.matches('.*&lt;/\s*header.*')}" />
         </j:if>
@@ -115,6 +106,28 @@
      </tr>
     </j:if>
 
+    <!-- BUILD INFO -->
+    <tr>
+     <td>Job:</td>
+     <td>${build.displayName}</td>
+    </tr>
+    <tr>
+     <td></td>
+     <td>${it.timestampString}</td>
+    </tr>
+    <tr>
+     <td></td>
+     <td>${build.description}</td>
+    </tr>
+    <tr>
+     <td>Log:</td>
+     <td>
+      <a href="${jenkinsUrl}${build.url}consoleFull">
+       ${jenkinsUrl}${build.url}consoleFull
+      </a>
+     </td>
+    </tr>
+
    <!-- BLUEOCEAN RESULTS -->
    <j:set var="blueoceanPlugin" value="${it.getAction('io.jenkins.blueocean.service.embedded.BlueOceanUrlAction')}" />
    ${logger.println("blueoceanPlugin = " + blueoceanPlugin.getUrlName() )}
@@ -122,7 +135,7 @@
      <j:set var="blueTestsUrl" value="${jenkinsUrl}${blueoceanPlugin.getUrlName()}tests"/>
      ${logger.println("blueTestsUrl = " + blueTestsUrl )}
      <tr>
-       <td>Junit:</td>
+       <td>All Tests:</td>
        <td>
         <a href="${blueTestsUrl}">${blueTestsUrl}</a>
        </td>
@@ -149,19 +162,6 @@
     </j:if>
    </j:if>
 
-   <!-- BUILD DATE -->
-   <tr>
-    <td>Date of build:</td>
-    <td>${it.timestampString}</td>
-   </tr>
-   <tr>
-    <td>Console log:</td>
-    <td>
-     <a href="${jenkinsUrl}${build.url}consoleFull">
-      ${jenkinsUrl}${build.url}consoleFull
-     </a>
-    </td>
-   </tr>
   </table>
   <br />
 

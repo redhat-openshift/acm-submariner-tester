@@ -283,8 +283,8 @@ function TITLE() {
   echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
 
-  # Print rest of message (from line 2)
-  echo -e "${message}" | tail -n +2
+  # Print rest of message (from line 2), with # at the beginning
+  echo -e "${message}" | tail -n +2 | sed 's/^/# /'
 
 }
 
@@ -985,9 +985,15 @@ function print_current_cluster_name() {
   # Do not trap_to_debug_commands
 
   local current_context
-  current_context=$(${OC} config current-context)
-  ${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}"
+  local cluster_name
 
+  current_context=$(${OC} config current-context)
+  cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")
+
+  cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
+  cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
+
+  echo $cluster_name
 }
 
 # ------------------------------------------
@@ -1048,6 +1054,22 @@ function print_image_tags_info() {
     ${OC} describe istag $img_tag ${namespace:+-n $namespace} 2>/dev/null \
     | grep -Po "$regex_container_info" || continue
   done
+
+}
+
+# ------------------------------------------
+
+# Function to print hash details of all CSVs (Cluster service versions) in a namespace
+function print_csvs_in_namespace() {
+  # Do not trap_to_debug_commands, so it will not be printed as return value
+
+  local namespace=$1 # Default is current context namespace
+
+  local csvs
+  csvs="$(${OC} get csv ${namespace:+-n $namespace} -o name)"
+
+  ${OC} get ${namespace:+-n $namespace} $csvs -o json \
+  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-'
 
 }
 
@@ -1303,7 +1325,7 @@ function get_latest_repository_version_by_tag() {
 
 # Function to create test cases document in Polarion from Junit xml
 function create_polarion_testcases_doc_from_junit() {
-    trap_to_debug_commands;
+    trap '' DEBUG # DONT trap_to_debug_commands
 
     # Input (9 params) :
 
@@ -1364,7 +1386,9 @@ function create_polarion_testcases_doc_from_junit() {
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
       local test_name="${full_testcase_name#*.}" # text after the dot
 
-      TITLE "Setting Polarion schema from Junit file [$junit_xml] : Test class [${class_name}] : Test name [${test_name}]"
+      TITLE "Setting Polarion schema from Junit file [$junit_xml]
+      Test class [${class_name}]
+      Test name [${test_name}]"
 
       echo "# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
@@ -1483,7 +1507,7 @@ function create_polarion_testcases_doc_from_junit() {
 
 # Function to create Polarion test run (xml) from Junit
 function create_polarion_testrun_result_from_junit() {
-    trap_to_debug_commands;
+    trap '' DEBUG # DONT trap_to_debug_commands
 
     # Input (7 params) :
 
@@ -1540,6 +1564,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
             <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
+            <property name=\"polarion-create-defects\" value=\"true\" /> \n\
         </properties> \n\
     <testsuite "
 
@@ -1578,16 +1603,19 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment')"
+    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment'):"
 
-    # Define Polarion <testcase> property (it is passed into SED, make sure new lines ends with " \n\ ")
-    polarion_testcase_content="\n\
+    local testrun_comment="Auto generated ${BUILD_URL:+in Jenkins Build $BUILD_URL }from Junit file: $junit_xml"
+    echo "$testrun_comment"
+
+    # Define property of <testcase> comment in the test-run xml (it is passed into SED, make sure new lines ends with " \n\ ")
+    local testcase_properties="\n\
         <properties> \n\
-            <property name=\"polarion-testcase-comment\" value=\"Auto generated from $junit_xml\" /> \n\
+            <property name=\"polarion-testcase-comment\" value=\"${testrun_comment}\" /> \n\
         </properties> \n\
     </testcase>"
 
-    sed_expression="s:</testcase>:$polarion_testcase_content:g"
+    sed_expression="s%</testcase>%${testcase_properties//%/\\%}%g"
 
     # Insert the property instead of EACH testcase tag
     sed -r "$sed_expression" -i "$polarion_testrun_xml"
@@ -1667,7 +1695,7 @@ function generate_suite_title_from_junit_filename() {
 
 # Function to watch testcase-log or xunit-log web page, for "Message sent" (replace quotes special HTML characters to ASCII)
 function watch_polarion_job_status() {
-  trap_to_debug_commands;
+  trap '' DEBUG # DONT trap_to_debug_commands
 
   # Input params:
   local polarion_url="$1"

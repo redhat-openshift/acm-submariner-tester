@@ -180,14 +180,14 @@ export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
 export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
 
 export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
-> "$E2E_LOG"
+: > "$E2E_LOG"
 
 # Set SYS_LOG name according to REPORT_NAME (from subm_variables)
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 # SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
 # SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
 SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-> "$SYS_LOG"
+: > "$SYS_LOG"
 
 # Common test variables
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
@@ -197,47 +197,35 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 
 # File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
-> $TEST_STATUS_FILE
-
-# File to store OCP cluster A version
-export CLUSTER_A_VERSION_FILE="$SCRIPT_DIR/cluster_a.ver"
-> $CLUSTER_A_VERSION_FILE
-
-# File to store OCP cluster B version
-export CLUSTER_B_VERSION_FILE="$SCRIPT_DIR/cluster_b.ver"
-> $CLUSTER_B_VERSION_FILE
-
-# File to store OCP cluster C version
-export CLUSTER_C_VERSION_FILE="$SCRIPT_DIR/cluster_c.ver"
-> $CLUSTER_C_VERSION_FILE
+: > $TEST_STATUS_FILE
 
 # File to store SubCtl version
 export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-> $SUBCTL_VERSION_FILE
+: > $SUBCTL_VERSION_FILE
 
 # File to store SubCtl JOIN command for cluster A
 export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-> $SUBCTL_JOIN_CLUSTER_A_FILE
+: > $SUBCTL_JOIN_CLUSTER_A_FILE
 
 # File to store SubCtl JOIN command for cluster B
 export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-> $SUBCTL_JOIN_CLUSTER_B_FILE
+: > $SUBCTL_JOIN_CLUSTER_B_FILE
 
 # File to store SubCtl JOIN command for cluster C
 export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-> $SUBCTL_JOIN_CLUSTER_C_FILE
+: > $SUBCTL_JOIN_CLUSTER_C_FILE
 
 # File to store Polarion auth
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-> $POLARION_AUTH
+: > $POLARION_AUTH
 
 # File to store Polarion test-run report link
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-> $POLARION_RESULTS
+: > $POLARION_RESULTS
 
-# File to store Submariner CSVs (Cluster service versions)
-export SUBMARINER_VERSIONS="$SCRIPT_DIR/submariner_csv.ver"
-> $SUBMARINER_VERSIONS
+# File to store Submariner images version details
+export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
+: > $SUBMARINER_IMAGES
 
 
 ####################################################################################
@@ -674,10 +662,10 @@ function show_test_plan() {
   - add_elevated_user_to_cluster_a
   - add_elevated_user_to_cluster_b / c
   - clean_submariner_namespace_and_resources_cluster_a
-  - clean_node_labels_and_machines_cluster_a
+  - clean_submariner_labels_and_machine_sets_cluster_a
   - delete_old_submariner_images_from_cluster_a
   - clean_submariner_namespace_and_resources_cluster_b / c
-  - clean_node_labels_and_machines_cluster_b / c
+  - clean_submariner_labels_and_machine_sets_cluster_b / c
   - delete_old_submariner_images_from_cluster_b / c
   - open_firewall_ports_on_aws_cluster_a
   - configure_images_prune_cluster_a
@@ -1077,7 +1065,7 @@ function destroy_osp_cluster() {
   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
     TITLE "Using last created OCPUP yaml configuration file"
     local ocpup_yml
-    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 || :)"
+    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 )" || :
 
     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
 
@@ -1422,13 +1410,7 @@ function test_kubeconfig_cluster_a() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  # Get OCP cluster A version
-  cl_a_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_a_version" > "$CLUSTER_A_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_A_NAME ${cl_a_version:+(OCP Version $cl_a_version)}"
   test_cluster_status "$CLUSTER_A_NAME"
-
 }
 
 # ------------------------------------------
@@ -1438,13 +1420,7 @@ function test_kubeconfig_cluster_b() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
 
-  # Get OCP cluster B version
-  cl_b_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_b_version" > "$CLUSTER_B_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_B_NAME ${cl_b_version:+(OCP Version $cl_b_version)}"
   test_cluster_status "$CLUSTER_B_NAME"
-
 }
 
 # ------------------------------------------
@@ -1454,13 +1430,7 @@ function test_kubeconfig_cluster_c() {
   trap_to_debug_commands;
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
 
-  # Get OCP cluster C version
-  cl_c_version=$(${OC} version | awk '/Server Version/ { print $3 }' || :)
-  echo "$cl_c_version" > "$CLUSTER_C_VERSION_FILE"
-
-  PROMPT "Testing status of cluster $CLUSTER_C_NAME ${cl_c_version:+(OCP Version $cl_c_version)}"
   test_cluster_status "$CLUSTER_C_NAME"
-
 }
 
 # ------------------------------------------
@@ -1470,6 +1440,12 @@ function test_cluster_status() {
   trap_to_debug_commands;
 
   local cluster_name="$1"
+
+  # Get OCP cluster version
+  local cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+
+  PROMPT "Testing status of cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
+
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
@@ -1672,9 +1648,12 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  force_delete_namespace "${SUBM_NAMESPACE}"
+  # force_delete_namespace "${SUBM_NAMESPACE}"
 
   delete_crds_by_name "submariner"
+
+  ${OC} delete namespace ${SUBM_NAMESPACE} --wait || :
+  ${OC} wait --for=delete namespace ${SUBM_NAMESPACE} || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   force_delete_namespace "${BROKER_NAMESPACE}"
@@ -1762,7 +1741,7 @@ function delete_e2e_namespaces() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_a() {
+function clean_submariner_labels_and_machine_sets_cluster_a() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public) ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from AWS cluster A (public)"
   trap_to_debug_commands;
@@ -1776,7 +1755,7 @@ function clean_node_labels_and_machines_cluster_a() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_b() {
+function clean_submariner_labels_and_machine_sets_cluster_b() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem) ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
   trap_to_debug_commands;
@@ -1790,7 +1769,7 @@ function clean_node_labels_and_machines_cluster_b() {
 
 # ------------------------------------------
 
-function clean_node_labels_and_machines_cluster_c() {
+function clean_submariner_labels_and_machine_sets_cluster_c() {
 ### Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C ###
   PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C"
   trap_to_debug_commands;
@@ -2169,7 +2148,7 @@ function download_subctl_by_tag() {
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
       echo -e "# Getting last downloaded subctl archive filename"
-      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 || :)"
+      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
       echo "# SubCtl binary will be extracted from [${subctl_xz}]"
@@ -2283,7 +2262,7 @@ function get_subctl_branch_tag() {
 function test_subctl_command() {
   trap_to_debug_commands;
   local subctl_version
-  subctl_version="$(subctl version | awk '{print $3}' || :)"
+  subctl_version="$(subctl version | awk '{print $3}' )" || :
 
   PROMPT "Verifying Submariner CLI tool ${subctl_version:+ ($subctl_version)}"
 
@@ -3631,7 +3610,7 @@ function test_ha_status() {
 
   PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
 
-  ${OC} describe cm -n openshift-dns || submariner_status=DOWN
+  ${OC} describe configmaps -n openshift-dns || submariner_status=DOWN
 
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || submariner_status=DOWN
 
@@ -3749,7 +3728,7 @@ function test_ipsec_status() {
 
   export_variable_name_of_active_gateway_pod "active_gateway_pod"
 
-  > "$TEMP_FILE"
+  : > "$TEMP_FILE"
 
   TITLE "Verify IPSec status on the active Gateway pod [${active_gateway_pod}]:"
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
@@ -4812,8 +4791,8 @@ function add_polarion_testrun_url_to_report_headlines() {
 
   TITLE "Add new Polarion Test run results to the Html report headlines: "
   local polarion_testrun_result_page
-  polarion_testrun_result_page=$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
-  | sed -z 's/\.\n.* to:/:\n/' || :)
+  polarion_testrun_result_page="$(grep -Poz '(?s)Test suite.*\n.*Polarion results published[^\n]*' "$polarion_testrun_import_log" \
+  | sed -z 's/\.\n.* to:/:\n/' )" || :
 
   local polarion_testrun_name
   polarion_testrun_name="$(basename ${polarion_test_run_file%.*})" # Get file name without path and extension
@@ -4854,10 +4833,7 @@ function test_products_versions_cluster_a() {
   export KUBECONFIG="${KUBECONF_HUB}"
   test_products_versions
 
-  local submariner_csvs
-  submariner_csvs="$(${OC} get csv -n $SUBM_NAMESPACE -o name)"
-  ${OC} get -n $SUBM_NAMESPACE $submariner_csvs -o json \
-  | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-' > $SUBMARINER_VERSIONS
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4867,6 +4843,8 @@ function test_products_versions_cluster_b() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
   test_products_versions
+
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4876,6 +4854,8 @@ function test_products_versions_cluster_c() {
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   test_products_versions
+
+  save_cluster_info_to_file
 }
 
 # ------------------------------------------
@@ -4886,15 +4866,17 @@ function test_products_versions() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name)"
+  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
-  echo -e "\n# Current OC user: $(${OC} whoami || : )"
-  echo -e "\n# Current Kubeconfig contexts:"
-  ${OC} config get-contexts
+  local cluster_platform
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
-  echo -e "\n### OCP Cluster ${cluster_name} ###"
-  ${OC} version || :
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
-  ${OC} get routes -A || :
+  TITLE "OCP cluster ${cluster_name} information"
+  echo -e "\n# Cloud platform: ${cluster_platform}"
+  echo -e "\n# OCP version: ${cluster_version}"
 
   echo -e "\n### Submariner components ###\n"
 
@@ -4902,10 +4884,26 @@ function test_products_versions() {
 
   subctl show versions || :
 
-  # Show images info of running pods
+  # Show Libreswan (cable driver) version in the active gateway pod
+  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+
+  if [[ -n "$active_gateway_pod" ]] ; then
+    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+    echo -e "\n\n"
+
+    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
+    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+    echo -e "\n\n"
+  fi
+
+  # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
 
-  # Show image-stream tags
+  # Show Submariner CSVs (Cluster service versions)
+  print_csvs_in_namespace "$SUBM_NAMESPACE"
+
+  # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
 
   # # Show BREW_REGISTRY images
@@ -4927,19 +4925,42 @@ function test_products_versions() {
   #   print_image_info "$img_id"
   # done
 
-  # Show Libreswan (cable driver) version in the active gateway pod
+  echo -e "\n# Current OC user: $(${OC} whoami || : )"
+  echo -e "\n# Current Kubeconfig contexts:"
+  ${OC} config get-contexts
 
-  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+  echo -e "\n### Cluster routes on ${cluster_name} ###"
+  ${OC} get routes -A || :
 
-  if [[ -n "$active_gateway_pod" ]] ; then
-    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
-    echo -e "\n\n"
+}
 
-    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-    echo -e "\n\n"
-  fi
+# ------------------------------------------
+
+function save_cluster_info_to_file() {
+# Save important OCP cluster and Submariner information to local files
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  local cluster_platform
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+
+  # Print OCP cluster info into file local file "<cluster name>.info"
+  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
+
+  local cluster_info="${cluster_platform} cluster : OCP ${cluster_version}"
+  echo "${cluster_info}" > "${cluster_info_output}" || :
+
+  # Print all cluster routes into file "<cluster name>.info"
+  ${OC} get routes -A | awk '$2 ~ /console/ {print $1 " : " $3}' >> "${cluster_info_output}" || :
+
+  # Just for the first managed cluster - print Submariner images url into $SUBMARINER_IMAGES file
+  [[ -s "$SUBMARINER_IMAGES" ]] || \
+  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}" | grep -Po "url=\K.*" > $SUBMARINER_IMAGES
 
 }
 
@@ -5018,7 +5039,9 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n ${SUBM_NAMESPACE} || :
 
-  TITLE "Submariner Gateway and Deployments on ${cluster_name}"
+  ${OC} get all -n ${BROKER_NAMESPACE} || :
+
+  TITLE "Submariner Gateway info on ${cluster_name}"
 
   ${OC} get nodes --selector=submariner.io/gateway=true --show-labels || :
 
@@ -5027,18 +5050,24 @@ function print_resources_and_pod_logs() {
 
   ${OC} describe Gateway -n ${SUBM_NAMESPACE} || :
 
+  TITLE "Submariner Roles and Broker info on ${cluster_name}"
+
+  ${OC} get roles -A | grep "submariner" || :
+
+  ${OC} describe role submariner-k8s-broker-cluster -n ${BROKER_NAMESPACE} || :
+
+  TITLE "Submariner Deployments, Daemon and Replica sets on ${cluster_name}"
+
   ${OC} describe deployments -n ${SUBM_NAMESPACE} || :
   #  ${OC} get deployments -o yaml -n ${SUBM_NAMESPACE} || :
 
-  TITLE "Submariner Daemons, Replicas and configurations on ${cluster_name}"
+  ${OC} describe daemonsets -n ${SUBM_NAMESPACE} || :
 
-  ${OC} get daemonsets -A || :
+  ${OC} describe replicasets -n ${SUBM_NAMESPACE} || :
 
-  ${OC} describe ds -n ${SUBM_NAMESPACE} || :
+  TITLE "Openshift configurations on ${cluster_name}"
 
-  ${OC} describe rs -n ${SUBM_NAMESPACE} || :
-
-  ${OC} describe cm -n openshift-dns || :
+  ${OC} describe configmaps -n openshift-dns || :
 
   echo -e "# TODO: Loop on each cluster: ${OC} describe cluster ${cluster_name} -n ${SUBM_NAMESPACE}"
 
@@ -5122,7 +5151,9 @@ function debug_test_pass() {
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
-  if [[ -n "TRUE" ]] ; then
+  local test="TRUE"
+
+  if [[ -n "$test" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
@@ -5340,11 +5371,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running cleanup on cluster A if requested
     if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} clean_acm_namespace_and_resources_cluster_a
+      # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
       ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
-      ${junit_cmd} clean_node_labels_and_machines_cluster_a
+      ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
 
       ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
@@ -5355,11 +5386,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} clean_acm_namespace_and_resources_cluster_b
+        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_b  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
-        ${junit_cmd} clean_node_labels_and_machines_cluster_b
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
@@ -5371,11 +5402,11 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} clean_acm_namespace_and_resources_cluster_c
+        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c  # Skipping ACM cleanup, as it might not be required for Submariner tests
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
-        ${junit_cmd} clean_node_labels_and_machines_cluster_c
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
@@ -5856,44 +5887,27 @@ if [[ -s "$POLARION_RESULTS" ]] ; then
   $(< "$POLARION_RESULTS")"
 fi
 
-if [[ -s "$CLUSTER_A_VERSION_FILE" ]] ; then
-  headline="OCP cluster A version:"
+# Loop on all *.info files and add them to report description:
+info_files="${SCRIPT_DIR}/*.info"
+for info in $info_files ; do
+  if [[ -s "$info" ]] ; then
+    echo -e "$info :
+    $(< "$info") \n\n"
+
+    # The first line of info file with bold font
+    html_report_headlines+="$(sed -r '1 s/^(.*)$/<br> <b> \1 <\/b>/' "$info")" || :
+  fi
+done
+
+if [[ -s "$SUBMARINER_IMAGES" ]] ; then
+  headline="Submariner images:"
   echo "# ${headline}"
-  cat "$CLUSTER_A_VERSION_FILE"
+  cat "$SUBMARINER_IMAGES"
 
   html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_A_VERSION_FILE")"
+  <br> <b>${headline}</b>
+  $(< "$SUBMARINER_IMAGES")"
 fi
-
-if [[ -s "$CLUSTER_B_VERSION_FILE" ]] ; then
-  headline="OCP cluster B version:"
-  echo "# ${headline}"
-  cat "$CLUSTER_B_VERSION_FILE"
-
-  html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_B_VERSION_FILE")"
-fi
-
-if [[ -s "$CLUSTER_C_VERSION_FILE" ]] ; then
-  headline="OCP cluster C version:"
-  echo "# ${headline}"
-  cat "$CLUSTER_C_VERSION_FILE"
-
-  html_report_headlines+="
-  <b>${headline}</b> $(< "$CLUSTER_C_VERSION_FILE")"
-fi
-
-if [[ -s "$SUBMARINER_VERSIONS" ]] ; then
-  headline="Submariner services versions:"
-  echo "# ${headline}"
-  cat "$SUBMARINER_VERSIONS"
-
-  html_report_headlines+="
-  <b>${headline}</b>
-  $(< "$SUBMARINER_VERSIONS")"
-fi
-
-
 
 # Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
 log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"

@@ -3,30 +3,28 @@
 ############ OCP Operators functions ############
 
 
-### Function to find latest index image for a bundle in datagrepper.engineering.redhat
+### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
   trap_to_debug_commands;
 
   local version="${1}"
   local bundle_name="${2}"
+  local index_images
 
-  local ocp_version_x_y
-  ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
+  TITLE "Retrieving index-image from UBI (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
+
   local num_of_latest_builds=5
-  local num_of_days=15
+  local rows=$((num_of_latest_builds * 5))
 
-  rows=$((num_of_latest_builds * 5))
-  delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
+  local num_of_days=30
+  local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
   curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
 
-  local index_images
   # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
   index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
 
-  TITLE "Image indexes for bundle '${bundle_name}' version '${ocp_version_x_y}' \n $index_images"
-
-  # Index Images example:
+  # index-images example:
   # {
   # "nvr": "submariner-operator-bundle-container-v0.11.0-6",
   # "index_image": {
@@ -36,19 +34,38 @@ function export_LATEST_IIB() {
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
 
-  LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' )
+  if [[ "$index_images" = null ]]; then
+    BUG "Failed to retrieve index-image during the last $num_of_days days, attempting with double $num_of_days"
+    delta=$((delta * 2))
+
+    curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
+
+    # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+    index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+
+    if [[ "$index_images" = null ]]; then
+      FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
+    fi
+  fi
+
+  local ocp_version_x_y
+  ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
+
+  TITLE "Getting index-image according to OCP version '${ocp_version_x_y}' \n $index_images"
+
+  LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
 
   if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-    BUG "Failed to retrieve index image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
+    BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
 
-    ocp_version_x_y="$(echo "$index_images" | jq -r '.index_image' | jq '[.][] | keys | last')"
+    ocp_version_x_y="$(echo "$index_images" | jq -r '.index_image' | jq '[.][] | keys | last')" || :
 
-    TITLE "Getting Image index for bundle '${bundle_name}' of latest version '${ocp_version_x_y}'"
+    TITLE "Getting the last index-image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
 
-    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'${ocp_version_x_y} )
+    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'${ocp_version_x_y} ) || :
 
     if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-      FATAL "Failed to retrieve index image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
+      FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
     fi
   fi
 
@@ -74,7 +91,7 @@ function deploy_ocp_bundle() {
   # Whether to install operator on the default namespace, or in a specific namespace
   declare -a installModes=('AllNamespaces' 'SingleNamespace')
 
-  TITLE "Deploy OCP operator bundle using defined variables:
+  TITLE "Deploy OCP operator bundle '${bundle_name}'
   \n# VERSION=${version}
   \n# OPERATOR_NAME=${operator_name}
   \n# BUNDLE_NAME=${bundle_name}

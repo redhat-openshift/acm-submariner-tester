@@ -17,9 +17,10 @@ export CLUSTER_A_NAME="user-cloud-project-a" # Recommended cluster name: {user}-
 export CLUSTER_A_YAML="${CLUSTER_A_YAML:-${WORKDIR}/setup-cluster-a.yaml}"
 export NETSHOOT_CLUSTER_A="netshoot-cl-a"
 
+export SUBM_NAMESPACE="submariner-operator"
 export BROKER_INFO="broker-info.subm"
 export BROKER_NAMESPACE="submariner-k8s-broker"
-export SUBM_NAMESPACE="submariner-operator"
+export BROKER_NAMESPACE="submariner-broker"
 
 export CLUSTER_B_NAME="user-cloud-project-b" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
