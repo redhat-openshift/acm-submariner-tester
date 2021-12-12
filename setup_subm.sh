@@ -5910,20 +5910,27 @@ if [[ -s "$SUBMARINER_IMAGES" ]] ; then
   $(< "$SUBMARINER_IMAGES")"
 fi
 
-# Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+
+### Create REPORT_FILE (html) from $SYS_LOG using log_to_html()
+{
+  log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+
+  # If REPORT_FILE was not passed externally, set it as the latest html file that was created
+  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+
+} || :
 
 # ------------------------------------------
 
-### Collecting artifacts ###
+### Collecting artifacts and compressing to tar.gz archive ###
 
-# If REPORT_FILE was not passed externally, set it as the latest html file that was created
-REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+if [[ -n "${REPORT_FILE}" ]] ; then
+   ARCHIVE_FILE="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+else
+   ARCHIVE_FILE="${PWD##*/}_${DATE_TIME}.tar.gz"
+fi
 
-# Compressing report to tar.gz
-report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
-
-TITLE "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
+TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
 
 export_active_clusters_kubeconfig
 
@@ -5959,7 +5966,7 @@ fi
 [[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
 
 # Compress all artifacts
-tar --dereference --hard-dereference -cvzf $report_archive $(ls \
+tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
  "$REPORT_FILE" \
  "$SYS_LOG" \
  kubconf_* \
@@ -5970,10 +5977,10 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  *.log \
  2>/dev/null)
 
-TITLE "Archive \"$report_archive\" now contains:"
-tar tvf $report_archive
+TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
+tar tvf $ARCHIVE_FILE
 
-TITLE "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
+TITLE "To view in your Browser, run:\n tar -xvf ${ARCHIVE_FILE}; firefox ${REPORT_FILE}"
 
 test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
 TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
