@@ -1571,7 +1571,9 @@ EOF
   ${OC} describe clusterrole system:${OCP_USR}
 
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
-  watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
+  watch_and_retry "$cmd | grep 'system:${OCP_USR}\$'" 5m || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
+
+  ${OC} get clusterrolebindings
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
