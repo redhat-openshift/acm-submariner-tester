@@ -131,10 +131,11 @@ Examples with pre-defined options:
 ----------------------------------------------------------------------'
 
 ####################################################################################
-#          Global bash configurations, constants and external sources              #
+#               Global bash configurations and external sources                    #
 ####################################################################################
 
-# Set SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
+# Set $SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
+# Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
 SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 export SCRIPT_DIR
 
@@ -162,6 +163,11 @@ shopt -s nocasematch
 
 # Expend user aliases
 shopt -s expand_aliases
+
+
+#####################################################################################################
+#         Constant variables and files (overrides previous variables from sourced files)            #
+#####################################################################################################
 
 # Date-time signature for log and report files
 DATE_TIME="$(date +%d%m%Y_%H%M)"
@@ -193,7 +199,10 @@ SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding 
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
 export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
-### Store dynamic variable values in local files
+
+#################################################################################
+#               Saving important test properties in local files                 #
+#################################################################################
 
 # File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
@@ -227,11 +236,9 @@ export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
 : > $SUBMARINER_IMAGES
 
-# OCP user sec
-export OCP_SEC="${WORKDIR}/${OCP_USR}.sec"
 
 ####################################################################################
-#                              CLI Script inputs                                   #
+#                             CLI Script arguments                                 #
 ####################################################################################
 
 check_cli_args() {
@@ -366,8 +373,9 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
+
 ####################################################################################
-#              Get User inputs (only for missing CLI inputs)                       #
+#               Get User input (only for missing CLI arguments)                    #
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
@@ -574,7 +582,9 @@ if [[ -z "$got_user_input" ]]; then
 
 fi
 
-### Set CLI/User inputs - Default to "NO" for any unset value ###
+
+### Set missing user variable ###
+TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset value)"
 
 get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
@@ -610,7 +620,7 @@ script_debug_mode=${script_debug_mode:-NO}
 
 
 ####################################################################################
-#                             Main script functions                                #
+#                             Define script functions                                #
 ####################################################################################
 
 # ------------------------------------------
@@ -1444,7 +1454,8 @@ function test_cluster_status() {
   local cluster_name="$1"
 
   # Get OCP cluster version
-  local cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   PROMPT "Testing status of cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
 
@@ -1511,10 +1522,10 @@ function add_elevated_user() {
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
   ( # subshell to hide commands
-    # Update the OCP_SEC if it is older than 1 day
-    find -maxdepth 1 -type f -wholename "${OCP_SEC}" -mtime +1 -print -quit -exec openssl rand -base64 12 \; > "${OCP_SEC}"
+    # Update the ${OCP_USR}.sec - if it is older than 1 day
+    find -maxdepth 1 -type f -wholename "${WORKDIR}/${OCP_USR}.sec" -mtime +1 -print -quit -exec openssl rand -base64 12 \; > "${WORKDIR}/${OCP_USR}.sec"
     local ocp_pwd
-    ocp_pwd="$(< ${OCP_SEC})"
+    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
   )
 
@@ -1562,7 +1573,7 @@ EOF
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
   watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
 
-  ocp_login "${OCP_USR}" "$(< ${OCP_SEC})"
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -5201,7 +5212,7 @@ function debug_test_fatal() {
 
 
 ####################################################################################
-#                    Main - Submariner Deploy and Tests                            #
+#                    MAIN - Submariner Deploy and Tests                            #
 ####################################################################################
 
 ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
@@ -5966,7 +5977,7 @@ fi
 
 # Artifact other WORKDIR files
 [[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
-[[ ! -f "${OCP_SEC}" ]] || cp -f "${OCP_SEC}" "${OCP_USR}.sec"
+[[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
 
 # Compress all artifacts
 tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
