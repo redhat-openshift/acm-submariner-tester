@@ -227,6 +227,8 @@ export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
 : > $SUBMARINER_IMAGES
 
+# OCP user sec
+export OCP_SEC="${WORKDIR}/${OCP_USR}.sec"
 
 ####################################################################################
 #                              CLI Script inputs                                   #
@@ -1014,7 +1016,7 @@ function destroy_aws_cluster() {
     # Remove existing OCP install-config directory:
     #rm -r "_${ocp_install_dir}/" || echo "# Old config dir removed."
     TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
-    # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
+    # find -maxdepth 1 -type d -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
   else
     TITLE "OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
@@ -1509,9 +1511,10 @@ function add_elevated_user() {
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
   ( # subshell to hide commands
-    [[ -s "${WORKDIR}/${OCP_USR}.sec" ]] || openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
+    # Update the OCP_SEC if it is older than 1 day
+    find -maxdepth 1 -type f -wholename "${OCP_SEC}" -mtime +1 -print -quit -exec openssl rand -base64 12 \; > "${OCP_SEC}"
     local ocp_pwd
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+    ocp_pwd="$(< ${OCP_SEC})"
     printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
   )
 
@@ -1559,7 +1562,7 @@ EOF
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
   watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
 
-  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
+  ocp_login "${OCP_USR}" "$(< ${OCP_SEC})"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -5963,7 +5966,7 @@ fi
 
 # Artifact other WORKDIR files
 [[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
-[[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
+[[ ! -f "${OCP_SEC}" ]] || cp -f "${OCP_SEC}" "${OCP_USR}.sec"
 
 # Compress all artifacts
 tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
