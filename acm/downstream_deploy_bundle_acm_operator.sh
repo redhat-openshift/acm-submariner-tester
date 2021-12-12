@@ -513,10 +513,7 @@ function configure_submariner_version_for_managed_cluster() {
 
   local submariner_status
 
-  # Run on the hub
-  # export LOG_TITLE="cluster1"
-  # export KUBECONFIG=/opt/openshift-aws/smattar-cluster1/auth/kubeconfig
-
+  # Following steps should be run on ACM hub
   export KUBECONFIG="${KUBECONF_HUB}"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
@@ -586,15 +583,25 @@ EOF
     TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
     ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-
   fi
 
-  ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id}
-  ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} >/dev/null 2>&1 && ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
+  TITLE "SubmarinerConfig and ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
+
+  ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} && \
+  ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+
+  ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} && \
+  ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+
+  TITLE "Wait for ManifestWork of '${cluster_id}-klusterlet-crds' to be ready in the ACM Hub under namespace ${cluster_id}"
+
+  cmd="${OC} get manifestwork -n ${cluster_id} | grep 'klusterlet-crds'"
+  watch_and_retry "$cmd" "3m" || submariner_status=FAILED
+
   ${OC} get manifestwork -n ${cluster_id} --ignore-not-found
 
   if [[ "$submariner_status" = FAILED ]] ; then
-    FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub namespace $cluster_id"
+    FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub under namespace $cluster_id"
   fi
 
 }
