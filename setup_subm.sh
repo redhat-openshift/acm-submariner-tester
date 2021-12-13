@@ -1522,8 +1522,11 @@ function add_elevated_user() {
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
   ( # subshell to hide commands
-    # Update the ${OCP_USR}.sec - if it is older than 1 day
-    find -maxdepth 1 -type f -wholename "${WORKDIR}/${OCP_USR}.sec" -mtime +1 -print -quit -exec openssl rand -base64 12 \; > "${WORKDIR}/${OCP_USR}.sec"
+    # Update ${OCP_USR}.sec - if it is empty or older than 1 day
+    touch -a ${WORKDIR}/${OCP_USR}.sec
+    find "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) -print -quit -exec \
+    openssl rand -base64 12 \; > "${WORKDIR}/${OCP_USR}.sec"
+
     local ocp_pwd
     ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
