@@ -1747,7 +1747,7 @@ function log_to_html() {
   echo "# Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
-  # Set description headline
+  # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
 
   local repo_url=https://github.com/theZiz/aha.git
@@ -1828,8 +1828,8 @@ EOF
   # Trim sh2ju debug lines starting with +++ from the html report
   sed -r '/^\s*\+\+\+/d' -i $html_output
 
-  # Make all urls as hyperlinks
-  sed -r "s#(^|\s)(https?://[^<> \t]+)($|\s)#<a href='\2'>&</a>#g" -i $html_output
+  # Make all http urls as Html <a> hyperlinks
+  sed -r "s#([^'\"])(https?://[^<> \t'\"]+)(\s|\n|$)# \1<a href='\2'>\2</a>\3 #g" -i $html_output
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
   sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output
