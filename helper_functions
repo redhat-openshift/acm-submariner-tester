@@ -567,7 +567,9 @@ function download_github_file_or_dir() {
   ${commit_or_branch:+\n# Commit ID: $commit_or_branch} \
   \n# Directory: ${dir_or_file:-Whole project tree} \n"
 
-  wget -O - ${archive_url} | tar xz --strip=1 "${git_project}-${commit_or_branch}/${dir_or_file}"
+  # Use WGET with a random wait of 5 to 15 seconds between retrievals, and resume getting a partially-downloaded file
+  wget --wait 10 --random-wait --continue -O - ${archive_url} \
+  | tar xz --strip=1 "${git_project}-${commit_or_branch}/${dir_or_file}"
 
 }
 
