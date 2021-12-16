@@ -919,8 +919,8 @@ function download_ocp_installer() {
   download_file ${oc_installer_url}${ocp_install_gz}
   download_file ${oc_installer_url}${oc_client_gz}
 
-  tar -xvf ${ocp_install_gz} -C ${WORKDIR}
-  tar -xvf ${oc_client_gz} -C ${WORKDIR}
+  tar -xvf "${ocp_install_gz}" -C "${WORKDIR}"
+  tar -xvf "${oc_client_gz}" -C "${WORKDIR}"
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p $GOBIN
@@ -4820,7 +4820,8 @@ function add_polarion_testrun_url_to_report_headlines() {
   polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
   if [[ -n "$polarion_testrun_result_page" ]] ; then
-    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
+    # echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
+    echo "$polarion_testrun_result_page" >> "$POLARION_RESULTS" || :
     # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
     echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
