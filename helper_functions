@@ -253,13 +253,15 @@ function run_and_tail() {
 
 # ------------------------------------------
 
-# Function to print current time and a message
+# Function to print highlighted message with the current time
 function PROMPT() {
-  message="$1"
-  color="${2:-${YELLOW}}"
-  cur_time="$HAT[$(date '+%Y-%m-%d %H:%M:%S' || :)]"
-  echo -e "\n${cur_time}\n"\
-  "${color}### $message ###${NO_COLOR}\n"\
+  local message="$1"
+  local color="${2:-${YELLOW}}"
+  local cur_time
+  cur_time="$(date '+%Y-%m-%d %H:%M:%S' || :)"
+
+  echo -e "\n${HAT}[${cur_time}]\n"\
+  "${color}### ${message} ###${NO_COLOR}\n"\
   "[${PWD}]\n"
 }
 
@@ -1244,8 +1246,9 @@ function build_go_repo() {
   # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo "# 'go get ${go_repo_and_branch} might have had errors"
   GO111MODULE="off" go get -v ${go_repo_and_branch} || echo "# GO get '${go_repo_and_branch}' might have had errors"
 
-  echo "# Pull latest changes with Git: "
-  cd $GOPATH/src/$repo_url
+  local repo_local_path="$GOPATH/src/$repo_url"
+  echo "# Pull latest changes with Git into: $repo_local_path"
+  cd $repo_local_path || ( echo "$repo_local_path was not created, exiting." && exit 1 )
 
   git_reset_local_repo ${branch_or_tag}
 
@@ -1627,9 +1630,9 @@ function create_polarion_testrun_result_from_junit() {
     local temp_testrun
     temp_testrun="`mktemp`_testrun"
 
-    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_xml" > temp_testrun
+    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_xml" > ${temp_testrun}
 
-    mv temp_testrun "$polarion_testrun_xml"
+    mv ${temp_testrun} "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 

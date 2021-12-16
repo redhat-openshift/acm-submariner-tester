@@ -895,32 +895,38 @@ function download_ocp_installer() {
 
   local ocp_major_version
   ocp_major_version="$(echo $ocp_installer_version | cut -s -d '.' -f 1)" # Get the major digit of OCP version
+
   local ocp_major_version="${ocp_major_version:-4}" # if no numerical version was requested (e.g. "latest"), the default OCP major version is 4
   local oc_version_path="ocp/${ocp_installer_version}"
 
-  # Get the nightly (ocp-dev-preview) build ?
+  # Get the nightly (ocp-dev-preview) build, if requested by user input
   if [[ "$oc_version_path" =~ nightly ]] ; then
     oc_version_path="ocp-dev-preview/latest"
     # Also available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   fi
 
+  local oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+
   cd ${WORKDIR}
 
-  oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+  local ocp_install_gz
   ocp_install_gz=$(curl $oc_installer_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+
+  local oc_client_gz
   oc_client_gz=$(curl $oc_installer_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
   [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $oc_installer_url"
 
-  TITLE "Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
+  TITLE "Deleting previous OCP installer and client, and downloading: \n# $ocp_install_gz \n# $oc_client_gz"
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
   delete_old_files_or_dirs "openshift-*.tar.gz"
 
   download_file ${oc_installer_url}${ocp_install_gz}
   download_file ${oc_installer_url}${oc_client_gz}
 
-  tar -xvf "${ocp_install_gz}" -C "${WORKDIR}"
-  tar -xvf "${oc_client_gz}" -C "${WORKDIR}"
+  TITLE "Extracting OCP installer and client into ${WORKDIR}: \n# $ocp_install_gz \n# $oc_client_gz"
+  tar -xvf "${ocp_install_gz%%$'\n'*}" -C ${WORKDIR}
+  tar -xvf "${oc_client_gz%%$'\n'*}" -C ${WORKDIR}
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p $GOBIN
