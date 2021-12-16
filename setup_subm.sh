@@ -924,9 +924,13 @@ function download_ocp_installer() {
   download_file ${oc_installer_url}${ocp_install_gz}
   download_file ${oc_installer_url}${oc_client_gz}
 
-  TITLE "Extracting OCP installer and client into ${WORKDIR}: \n# $ocp_install_gz \n# $oc_client_gz"
-  tar -xvf "${ocp_install_gz%%$'\n'*}" -C ${WORKDIR}
-  tar -xvf "${oc_client_gz%%$'\n'*}" -C ${WORKDIR}
+  TITLE "Extracting OCP installer and client into ${WORKDIR}: \n $ocp_install_gz \n $oc_client_gz"
+
+  ocp_install_gz="${ocp_install_gz%%$'\n'*}"
+  oc_client_gz="${oc_client_gz%%$'\n'*}"
+
+  tar -xvf "$ocp_install_gz" -C ${WORKDIR}
+  tar -xvf "$oc_client_gz" -C ${WORKDIR}
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p $GOBIN

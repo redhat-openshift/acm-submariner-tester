@@ -1541,37 +1541,47 @@ function create_polarion_testrun_result_from_junit() {
     polarion_testrun_xml="$(dirname $junit_xml)/${polarion_testrun_xml}" # Append full directory path of the original junit_xml file
 
     # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_xml%%.*})"
-    TITLE "Polarion Test-run title: [${testsuite_name}]
-    \n# Polarion Test-run file [${polarion_testrun_xml}] \n"
+
+    echo "# Set Polarion test-run ID with plain text only, and lowercase"
+    local polarion_testrun_id
+    polarion_testrun_id="${polarion_team_name//[^a-zA-Z0-9]/-}_${testsuite_name//[^a-zA-Z0-9]/-}"
+    polarion_testrun_id="${polarion_testrun_id,,*}"
+
+    # ------------------------------------------------------------------------ #
+
+    TITLE "Generating Polarion Test-run file [${polarion_testrun_xml}] to import:
+
+    Test-run title: ${polarion_testrun_id}
+    Test-run title: ${testsuite_name}
+    Test-run title: ${polarion_testrun_template}
+    Test-run title: ${polarion_project_id}
+    Test-run title: ${polarion_team_name}
+    Test-run title: ${polarion_test_plan_id}
+    "
 
     cp "$junit_xml" "$polarion_testrun_xml"
 
     echo "# Remove Test-Cases Junit index (if added within sh2ju): "
     sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_xml"
 
-    # ------------------------------------------------------------------------ #
-
-    echo "# Add <testsuites> with Polarion project id: [${polarion_project_id}], team name: [${polarion_team_name}, test plan: [${polarion_test_plan_id}]"
-
-    # Remove first <testsuiteS> tag (if exists):
+    echo "# Remove first <testsuiteS> tag (if exists)"
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_xml"
     # sed -r "s:<testsuites>::" -i "$polarion_testrun_xml"
 
     # Define Polarion <testsuites> properties (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
+            <property name=\"polarion-testrun-id\" value=\"${polarion_testrun_id}\" /> \n\
+            <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
+            <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             <property name=\"polarion-project-id\" value=\"$polarion_project_id\" /> \n\
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
-            <property name=\"polarion-testrun-title\" value=\"$testsuite_name\" /> \n\
-            <property name=\"polarion-testrun-template-id\" value=\"$polarion_testrun_template\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
             <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
             <property name=\"polarion-create-defects\" value=\"true\" /> \n\
         </properties> \n\
     <testsuite "
-
-    # Removed: <property name=\"polarion-testrun-id\" value=\"$polarion_testrun_id\" /> \n\
 
     sed_expression="0,/<testsuite /s,<testsuite ,$polarion_suite_content,"
 
