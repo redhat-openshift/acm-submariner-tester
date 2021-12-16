@@ -595,10 +595,11 @@ EOF
 
   TITLE "Wait for ManifestWork of '${cluster_id}-klusterlet-crds' to be ready in the ACM Hub under namespace ${cluster_id}"
 
-  cmd="${OC} get manifestwork -n ${cluster_id} | grep 'klusterlet-crds'"
-  watch_and_retry "$cmd" "3m" || submariner_status=FAILED
+  local regex="klusterlet-crds"
+  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  watch_and_retry "$cmd | grep '$regex'" "10m" || :
 
-  ${OC} get manifestwork -n ${cluster_id} --ignore-not-found
+  $cmd |& highlight "$regex" || submariner_status=FAILED
 
   if [[ "$submariner_status" = FAILED ]] ; then
     FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub under namespace $cluster_id"
