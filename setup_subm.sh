@@ -131,10 +131,11 @@ Examples with pre-defined options:
 ----------------------------------------------------------------------'
 
 ####################################################################################
-#          Global bash configurations, constants and external sources              #
+#               Global bash configurations and external sources                    #
 ####################################################################################
 
-# Set SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
+# Set $SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
+# Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
 SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
 export SCRIPT_DIR
 
@@ -162,6 +163,11 @@ shopt -s nocasematch
 
 # Expend user aliases
 shopt -s expand_aliases
+
+
+#####################################################################################################
+#         Constant variables and files (overrides previous variables from sourced files)            #
+#####################################################################################################
 
 # Date-time signature for log and report files
 DATE_TIME="$(date +%d%m%Y_%H%M)"
@@ -193,7 +199,10 @@ SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding 
 export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
 export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
-### Store dynamic variable values in local files
+
+#################################################################################
+#               Saving important test properties in local files                 #
+#################################################################################
 
 # File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
@@ -229,7 +238,7 @@ export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
 
 
 ####################################################################################
-#                              CLI Script inputs                                   #
+#                             CLI Script arguments                                 #
 ####################################################################################
 
 check_cli_args() {
@@ -364,8 +373,9 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
+
 ####################################################################################
-#              Get User inputs (only for missing CLI inputs)                       #
+#               Get User input (only for missing CLI arguments)                    #
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
@@ -572,7 +582,9 @@ if [[ -z "$got_user_input" ]]; then
 
 fi
 
-### Set CLI/User inputs - Default to "NO" for any unset value ###
+
+### Set missing user variable ###
+TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset value)"
 
 get_ocp_installer=${get_ocp_installer:-NO}
 # OCP_VERSION=${OCP_VERSION}
@@ -608,7 +620,7 @@ script_debug_mode=${script_debug_mode:-NO}
 
 
 ####################################################################################
-#                             Main script functions                                #
+#                             Define script functions                                #
 ####################################################################################
 
 # ------------------------------------------
@@ -707,7 +719,7 @@ function show_test_plan() {
     "
   fi
 
-  echo -e "# TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs"
+  echo -e "\n# TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs"
 
   if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
     echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
@@ -883,32 +895,42 @@ function download_ocp_installer() {
 
   local ocp_major_version
   ocp_major_version="$(echo $ocp_installer_version | cut -s -d '.' -f 1)" # Get the major digit of OCP version
+
   local ocp_major_version="${ocp_major_version:-4}" # if no numerical version was requested (e.g. "latest"), the default OCP major version is 4
   local oc_version_path="ocp/${ocp_installer_version}"
 
-  # Get the nightly (ocp-dev-preview) build ?
+  # Get the nightly (ocp-dev-preview) build, if requested by user input
   if [[ "$oc_version_path" =~ nightly ]] ; then
     oc_version_path="ocp-dev-preview/latest"
     # Also available at: https://openshift-release-artifacts.svc.ci.openshift.org/
   fi
 
+  local oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+
   cd ${WORKDIR}
 
-  oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+  local ocp_install_gz
   ocp_install_gz=$(curl $oc_installer_url | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+
+  local oc_client_gz
   oc_client_gz=$(curl $oc_installer_url | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
 
   [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $oc_installer_url"
 
-  TITLE "Deleting previous OCP installers, and downloading: [$ocp_install_gz], [$oc_client_gz]."
+  TITLE "Deleting previous OCP installer and client, and downloading: \n# $ocp_install_gz \n# $oc_client_gz"
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
   delete_old_files_or_dirs "openshift-*.tar.gz"
 
   download_file ${oc_installer_url}${ocp_install_gz}
   download_file ${oc_installer_url}${oc_client_gz}
 
-  tar -xvf ${ocp_install_gz} -C ${WORKDIR}
-  tar -xvf ${oc_client_gz} -C ${WORKDIR}
+  TITLE "Extracting OCP installer and client into ${WORKDIR}: \n $ocp_install_gz \n $oc_client_gz"
+
+  ocp_install_gz="${ocp_install_gz%%$'\n'*}"
+  oc_client_gz="${oc_client_gz%%$'\n'*}"
+
+  tar -xvf "$ocp_install_gz" -C ${WORKDIR}
+  tar -xvf "$oc_client_gz" -C ${WORKDIR}
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p $GOBIN
@@ -932,7 +954,7 @@ function build_ocpup_tool_latest() {
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  echo -e "# TODO: Need to fix ocpup alias"
+  echo -e "\n# TODO: Need to fix ocpup alias"
 
   cd ${WORKDIR}
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
@@ -991,7 +1013,7 @@ function destroy_aws_cluster() {
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
 
   # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
-  echo -e "# TODO: should first check if it was not already purged, because it can save a lot of time."
+  echo -e "\n# TODO: should first check if it was not already purged, because it can save a lot of time."
   if [[ -d "${ocp_install_dir}" ]]; then
     TITLE "Previous OCP Installation found: ${ocp_install_dir}"
     # cd "${ocp_install_dir}"
@@ -1014,7 +1036,7 @@ function destroy_aws_cluster() {
     # Remove existing OCP install-config directory:
     #rm -r "_${ocp_install_dir}/" || echo "# Old config dir removed."
     TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
-    # find -type d -maxdepth 1 -name "_*" -mtime +1 -exec rm -rf {} \;
+    # find -maxdepth 1 -type d -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
   else
     TITLE "OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
@@ -1128,7 +1150,7 @@ function prepare_install_aws_cluster() {
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
   [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
-  echo -e "# TODO: change more {keys : values} in $installer_yaml_new, from the global variables file"
+  echo -e "\n# TODO: change more {keys : values} in $installer_yaml_new, from the global variables file"
 
 }
 
@@ -1442,7 +1464,8 @@ function test_cluster_status() {
   local cluster_name="$1"
 
   # Get OCP cluster version
-  local cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   PROMPT "Testing status of cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
 
@@ -1509,7 +1532,11 @@ function add_elevated_user() {
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
   ( # subshell to hide commands
-    [[ -s "${WORKDIR}/${OCP_USR}.sec" ]] || openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
+    # Update ${OCP_USR}.sec - if it is empty or older than 1 day
+    touch -a ${WORKDIR}/${OCP_USR}.sec
+    find "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) -print -quit -exec \
+    openssl rand -base64 12 \; > "${WORKDIR}/${OCP_USR}.sec"
+
     local ocp_pwd
     ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
     printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
@@ -1557,7 +1584,9 @@ EOF
   ${OC} describe clusterrole system:${OCP_USR}
 
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].name'"
-  watch_and_retry "$cmd" 5m "^${OCP_USR}$" || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
+  watch_and_retry "$cmd | grep 'system:${OCP_USR}\$'" 5m || BUG "WARNING: User \"${OCP_USR}\" may not be cluster admin"
+
+  ${OC} get clusterrolebindings
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
@@ -2429,14 +2458,14 @@ function append_custom_images_to_join_cmd_file() {
 
 function install_broker_cluster_a() {
 ### Installing Submariner Broker on AWS cluster A (public) ###
-  echo -e "# TODO: Should test broker deployment also on different Public cluster (C), rather than on Public cluster A."
-  echo -e "# TODO: Call kubeconfig of broker cluster"
+  echo -e "\n# TODO: Should test broker deployment also on different Public cluster (C), rather than on Public cluster A."
+  echo -e "\n# TODO: Call kubeconfig of broker cluster"
   trap_to_debug_commands;
 
   local DEPLOY_CMD="subctl deploy-broker"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
-    echo -e "# TODO: Move to a separate function"
+    echo -e "\n# TODO: Move to a separate function"
     PROMPT "Adding GlobalNet to Submariner Deploy command"
 
     BUG "Running subctl with GlobalNet can fail if glabalnet_cidr address is already assigned" \
@@ -2527,7 +2556,7 @@ function open_firewall_ports_on_aws_cluster_c() {
 function open_firewall_ports_on_aws_gateway_nodes() {
 ### Open firewall ports for the gateway node with terraform (prep_for_subm.sh) on AWS cluster ###
   # Old readme: https://github.com/submariner-io/submariner/tree/devel/tools/openshift/ocp-ipi-aws
-  echo -e "# TODO: subctl cloud prepare as: https://submariner.io/getting-started/quickstart/openshift/aws/#prepare-aws-clusters-for-submariner"
+  echo -e "\n# TODO: subctl cloud prepare as: https://submariner.io/getting-started/quickstart/openshift/aws/#prepare-aws-clusters-for-submariner"
   trap_to_debug_commands;
 
   TITLE "Using \"prep_for_subm.sh\" - to add External IP and open ports on AWS cluster nodes for Submariner gateway"
@@ -2680,7 +2709,7 @@ function label_gateway_on_broker_nodes_with_external_ip() {
   "https://github.com/submariner-io/submariner-operator/issues/253"
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  echo -e "# TODO: Check that the Gateway label was created with prep_for_subm.sh on AWS cluster A (public) ?"
+  echo -e "\n# TODO: Check that the Gateway label was created with prep_for_subm.sh on AWS cluster A (public) ?"
   gateway_label_all_nodes_external_ip
 }
 
@@ -2726,7 +2755,7 @@ function gateway_label_first_worker_node() {
   TITLE "Adding submariner gateway labels to first worker node: $gw_node1"
     # gw_node1: user-cl1-bbmkg-worker-8mx4k
 
-  echo -e "# TODO: Run only If there's no Gateway label already"
+  echo -e "\n# TODO: Run only If there's no Gateway label already"
   ${OC} label node $gw_node1 "submariner.io/gateway=true" --overwrite
     # node/user-cl1-bbmkg-worker-8mx4k labeled
 
@@ -2769,7 +2798,7 @@ function gateway_label_all_nodes_external_ip() {
     # gw_nodes: user-cl1-bbmkg-worker-8mx4k
 
   for node in $gw_nodes; do
-    echo -e "# TODO: Run only If there's no Gateway label already"
+    echo -e "\n# TODO: Run only If there's no Gateway label already"
     ${OC} label node $node "submariner.io/gateway=true" --overwrite
       # node/user-cl1-bbmkg-worker-8mx4k labeled
   done
@@ -3335,7 +3364,8 @@ function test_submariner_resources_status() {
 
   ${OC} get all -n ${SUBM_NAMESPACE} --show-labels |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || submariner_status=DOWN
-  echo -e "# TODO: consider checking for 'Terminating' pods"
+
+  echo -e "\n# TODO: consider checking for 'Terminating' pods"
 
   if [[ "$submariner_status" = DOWN ]] ; then
     echo "### Potential Bugs ###"
@@ -3348,7 +3378,7 @@ function test_submariner_resources_status() {
     "No workaround yet" \
     "https://bugzilla.redhat.com/show_bug.cgi?id=1921824"
 
-    FAILURE "Submariner installation failure occurred on $cluster_name.
+    FATAL "Submariner installation failure occurred on $cluster_name.
     Resources/CRDs were not installed, or Submariner pods have crashed."
   fi
 
@@ -3614,7 +3644,7 @@ function test_ha_status() {
 
   ${OC} get clusters -n ${SUBM_NAMESPACE} -o wide || submariner_status=DOWN
 
-  echo -e "# TODO: Need to get current cluster ID"
+  echo -e "\n# TODO: Need to get current cluster ID"
   #${OC} describe cluster "${cluster_id}" -n ${SUBM_NAMESPACE} || submariner_status=DOWN
 
   local cmd="${OC} describe Gateway -n ${SUBM_NAMESPACE} &> '$TEMP_FILE'"
@@ -3936,7 +3966,7 @@ function test_lighthouse_status() {
   # Watch lighthouse pod logs for 100 (5 X 20) seconds
   watch_pod_logs "$lighthouse_pod" "${SUBM_NAMESPACE}" "$regex" 5 || FAILURE "Lighthouse status is not as expected"
 
-  echo -e "# TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status"
+  echo -e "\n# TODO: Can also test app=submariner-lighthouse-coredns  for the lighthouse DNS status"
 }
 
 
@@ -4059,7 +4089,7 @@ function test_clusters_connected_overlapping_cidrs() {
   [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
   netshoot_global_ip="$GLOBAL_IP"
 
-  echo -e "# TODO: Ping to the netshoot_global_ip"
+  echo -e "\n# TODO: Ping to the netshoot_global_ip"
 
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
@@ -4069,7 +4099,7 @@ function test_clusters_connected_overlapping_cidrs() {
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
   -- curl --output /dev/null --max-time 30 --verbose ${nginx_global_ip}:${NGINX_PORT}
 
-  echo -e "# TODO: validate annotation of globalIp in the node"
+  echo -e "\n# TODO: validate annotation of globalIp in the node"
 }
 
 # ------------------------------------------
@@ -4089,7 +4119,7 @@ function test_clusters_connected_full_domain_name() {
   export KUBECONFIG="${KUBECONF_HUB}"
 
   TITLE "Try to ping ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_cl_b_dns (and IP)"
-  echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
+  echo -e "\n# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
       # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
       # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
       # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
@@ -4107,7 +4137,7 @@ function test_clusters_connected_full_domain_name() {
   TITLE "Try to CURL from ${NETSHOOT_CLUSTER_A} to ${nginx_cl_b_dns}:${NGINX_PORT} :"
   ${OC} exec ${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_cl_b_dns}:${NGINX_PORT}"
 
-  echo -e "# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
+  echo -e "\n# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
 
 }
 
@@ -4211,7 +4241,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
   test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS
   [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
-  echo -e "# TODO: Ping to the new_nginx_global_ip"
+  echo -e "\n# TODO: Ping to the new_nginx_global_ip"
   # new_nginx_global_ip="$GLOBAL_IP"
 }
 
@@ -4241,7 +4271,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     export KUBECONFIG="${KUBECONF_HUB}"
 
     TITLE "Try to ping HEADLESS ${NGINX_CLUSTER_BC} until getting expected FQDN: $nginx_headless_cl_b_dns (and IP)"
-    echo -e "# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
+    echo -e "\n# TODO: Validate both GlobalIP and svc.${MULTI_CLUSTER_DOMAIN} with   ${OC} get all"
         # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
         # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
         # service/openshift    ExternalName   <none>       kubernetes.default.svc.clusterset.local   <none>    32m
@@ -4258,7 +4288,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
     TITLE "Try to CURL from ${NEW_NETSHOOT_CLUSTER_A} to ${nginx_headless_cl_b_dns}:${NGINX_PORT} :"
     ${OC} exec ${NEW_NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} -- /bin/bash -c "curl --max-time 30 --verbose ${nginx_headless_cl_b_dns}:${NGINX_PORT}"
 
-    echo -e "# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
+    echo -e "\n# TODO: Test connectivity with https://github.com/tsliwowicz/go-wrk"
 
   fi
 
@@ -4800,7 +4830,8 @@ function add_polarion_testrun_url_to_report_headlines() {
   polarion_testrun_name="${polarion_testrun_name//_/ }" # Replace all _ with spaces
 
   if [[ -n "$polarion_testrun_result_page" ]] ; then
-    echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
+    # echo "$polarion_testrun_result_page" | sed -r 's/(https:[^ ]*)/\1\&tab=records/g' >> "$POLARION_RESULTS" || :
+    echo "$polarion_testrun_result_page" >> "$POLARION_RESULTS" || :
     # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
     echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
@@ -5069,7 +5100,7 @@ function print_resources_and_pod_logs() {
 
   ${OC} describe configmaps -n openshift-dns || :
 
-  echo -e "# TODO: Loop on each cluster: ${OC} describe cluster ${cluster_name} -n ${SUBM_NAMESPACE}"
+  echo -e "\n# TODO: Loop on each cluster: ${OC} describe cluster ${cluster_name} -n ${SUBM_NAMESPACE}"
 
   # for pod in $(${OC} get pods -A \
   # -l 'name in (submariner-operator,submariner-gateway,submariner-globalnet,kube-proxy)' \
@@ -5197,7 +5228,7 @@ function debug_test_fatal() {
 
 
 ####################################################################################
-#                    Main - Submariner Deploy and Tests                            #
+#                    MAIN - Submariner Deploy and Tests                            #
 ####################################################################################
 
 ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
@@ -5218,7 +5249,7 @@ fi
 cd ${SCRIPT_DIR}
 
 # Printing output both to stdout and to $SYS_LOG with tee
-echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
+echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
   ### Script debug calls (should be left as a comment) ###
@@ -5311,7 +5342,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$get_ocp_installer" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
 
-        echo -e "# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
+        echo -e "\n# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
 
         # ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
@@ -5415,7 +5446,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Configure firewall ports, gateway labels, and images prune on all clusters
 
-    echo -e "# TODO: Run only if it's an AWS (public) cluster"
+    echo -e "\n# TODO: Run only if it's an AWS (public) cluster"
     ${junit_cmd} open_firewall_ports_on_aws_cluster_a
 
     ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
@@ -5424,7 +5455,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      echo -e "# TODO: Run only if it's an openstack (on-prem) cluster"
+      echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
       ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
       ${junit_cmd} label_first_gateway_cluster_b
@@ -5435,7 +5466,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      echo -e "# TODO: Run only if it's an AWS (public) cluster"
+      echo -e "\n# TODO: Run only if it's an AWS (public) cluster"
       ${junit_cmd} open_firewall_ports_on_aws_cluster_c
 
       ${junit_cmd} label_first_gateway_cluster_c
@@ -5717,7 +5748,7 @@ echo -e "# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
-        echo -e "# TODO: Test headless service with GLobalnet - when the feature of is supported"
+        echo -e "\n# TODO: Test headless service with GLobalnet - when the feature of is supported"
         BUG "HEADLESS Service is not supported with GlobalNet" \
          "No workaround yet - Skip the whole test" \
         "https://github.com/submariner-io/lighthouse/issues/273"
@@ -5909,48 +5940,57 @@ if [[ -s "$SUBMARINER_IMAGES" ]] ; then
   $(< "$SUBMARINER_IMAGES")"
 fi
 
-# Run log_to_html() to create REPORT_FILE (html) from $SYS_LOG
-log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+
+### Create REPORT_FILE (html) from $SYS_LOG using log_to_html()
+{
+  log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+
+  # If REPORT_FILE was not passed externally, set it as the latest html file that was created
+  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+
+} || :
 
 # ------------------------------------------
 
-### Collecting artifacts ###
+### Collecting artifacts and compressing to tar.gz archive ###
 
-# If REPORT_FILE was not passed externally, set it as the latest html file that was created
-REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+if [[ -n "${REPORT_FILE}" ]] ; then
+   ARCHIVE_FILE="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+else
+   ARCHIVE_FILE="${PWD##*/}_${DATE_TIME}.tar.gz"
+fi
 
-# Compressing report to tar.gz
-report_archive="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
-
-TITLE "Compressing Report, Log, Kubeconfigs and $BROKER_INFO into: ${report_archive}"
+TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
 
 export_active_clusters_kubeconfig
 
+
+# Artifact OCP clusters kubeconfigs and logs
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
-  # Artifact kubeconfig
+  echo "# Saving kubeconfig and OCP installer log of Cluster A"
+
   cp -f "$KUBECONF_HUB" "kubconf_${CLUSTER_A_NAME}" || :
 
-  # Artifact cluster logs
   find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+  sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "$CLUSTER_B_YAML" ]] ; then
-  # Artifact kubeconfig
+  echo "# Saving kubeconfig and OCP installer log of Cluster B"
+
   cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}" || :
 
-  # Artifact cluster logs
   find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+  sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "$CLUSTER_C_YAML" ]] ; then
-  # Artifact kubeconfig
+  echo "# Saving kubeconfig and OCP installer log of Cluster C"
+
   cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}" || :
 
-  # Artifact cluster logs
   find ${CLUSTER_C_DIR} -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \;
+  sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact other WORKDIR files
@@ -5958,7 +5998,7 @@ fi
 [[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
 
 # Compress all artifacts
-tar --dereference --hard-dereference -cvzf $report_archive $(ls \
+tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
  "$REPORT_FILE" \
  "$SYS_LOG" \
  kubconf_* \
@@ -5969,10 +6009,10 @@ tar --dereference --hard-dereference -cvzf $report_archive $(ls \
  *.log \
  2>/dev/null)
 
-TITLE "Archive \"$report_archive\" now contains:"
-tar tvf $report_archive
+TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
+tar tvf $ARCHIVE_FILE
 
-TITLE "To view in your Browser, run:\n tar -xvf ${report_archive}; firefox ${REPORT_FILE}"
+TITLE "To view in your Browser, run:\n tar -xvf ${ARCHIVE_FILE}; firefox ${REPORT_FILE}"
 
 test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
 TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
