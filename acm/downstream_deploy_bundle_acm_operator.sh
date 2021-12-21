@@ -116,11 +116,11 @@ function install_acm_operator() {
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
   watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${acm_channel}"
+  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR}" "${ACM_BUNDLE}" "${ACM_NAMESPACE}" "${acm_channel}" "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}"
 
-  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE_NAME}"
+  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE_NAME}"
+  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE}"
 
   echo "# Install ACM operator completed"
 
@@ -446,7 +446,7 @@ function install_submariner_operator_on_managed_cluster() {
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
-  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}"
+  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}" "${SUBM_SUBSCRIPTION}" "${SUBM_CATALOG}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
@@ -560,7 +560,7 @@ EOF
       submarinerRouteAgentImagePullSpec: ''
     subscriptionConfig:
       channel: ${submariner_channel}
-      source: my-catalog-source
+      source: ${SUBM_CATALOG}
       sourceNamespace: ${SUBM_NAMESPACE}
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF

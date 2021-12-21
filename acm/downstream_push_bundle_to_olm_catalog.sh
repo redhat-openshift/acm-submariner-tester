@@ -87,6 +87,8 @@ function deploy_ocp_bundle() {
   local bundle_name="$3"
   local namespace="$4"
   local channel="$5"
+  local subscription_name="$6"
+  local catalog_source="$7"
 
   # Whether to install operator on the default namespace, or in a specific namespace
   declare -a installModes=('AllNamespaces' 'SingleNamespace')
@@ -96,19 +98,26 @@ function deploy_ocp_bundle() {
   \n# OPERATOR_NAME=${operator_name}
   \n# BUNDLE_NAME=${bundle_name}
   \n# NAMESPACE=${namespace}
-  \n# CHANNEL=${channel}"
+  \n# CHANNEL=${channel}
+  \n# SUBSCRIPTION=${subscription_name}
+  \n# CATALOG_SOURCE=${catalog_source}
+  "
 
   if [[ -z "${version}" ]] ||
      [[ -z "${operator_name}" ]] ||
      [[ -z "${bundle_name}" ]] ||
      [[ -z "${namespace}" ]] ||
-     [[ -z "${channel}" ]]; then
+     [[ -z "${channel}" ]] ||
+     [[ -z "${subscription_name}" ]] ||
+     [[ -z "${catalog_source}" ]] ; then
       error "Required environment variables not loaded"
       error "    VERSION"
       error "    OPERATOR_NAME"
       error "    BUNDLE_NAME"
       error "    NAMESPACE"
       error "    CHANNEL"
+      error "    SUBSCRIPTION"
+      error "    CATALOG_SOURCE"
       exit 3
   fi
 
@@ -132,8 +141,8 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo "# Delete previous catalogSource and Subscription"
-  ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
-  ${OC} delete catalogsource/${ACM_CATALOG} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete sub/${subscription_name} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete catalogsource/${catalog_source} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
   export_LATEST_IIB "${version}" "${bundle_name}"
 
@@ -154,7 +163,7 @@ function deploy_ocp_bundle() {
   apiVersion: operators.coreos.com/v1alpha1
   kind: CatalogSource
   metadata:
-    name: ${ACM_CATALOG}
+    name: ${catalog_source}
     namespace: ${marketplace_namespace}
   spec:
     sourceType: grpc
@@ -167,10 +176,10 @@ function deploy_ocp_bundle() {
 EOF
 
 
-  TITLE "Wait for CatalogSource '${ACM_CATALOG}' to be created"
+  TITLE "Wait for CatalogSource '${catalog_source}' to be created"
 
-  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${ACM_CATALOG} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${ACM_CATALOG}' was not created"
+  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
 
   # test
   ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
@@ -179,7 +188,7 @@ EOF
 
   cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
   regex="${version//[a-zA-Z]}"
-  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${ACM_CATALOG}'"
+  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${catalog_source}'"
 
   if [ "${SUBSCRIBE}" = true ]; then
     # Deprecated since ACM 2.3
@@ -206,13 +215,13 @@ EOF
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
-    name: ${ACM_SUBSCRIPTION}
+    name: ${subscription_name}
     namespace: ${subscriptionNamespace}
   spec:
     channel: ${channel}
     installPlanApproval: Automatic
     name: ${operator_name}
-    source: ${ACM_CATALOG}
+    source: ${catalog_source}
     sourceNamespace: ${marketplace_namespace}
     startingCSV: ${operator_name}.${version}
 EOF
@@ -220,23 +229,23 @@ EOF
     # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
     #
     # # local duration=5m
-    # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${ACM_SUBSCRIPTION} || subscription_status=FAILED
+    # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${subscription_name} || subscription_status=FAILED
     #
     # local acm_subscription="`mktemp`_acm_subscription"
-    # local cmd="${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" &> '$acm_subscription'"
+    # local cmd="${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}" &> '$acm_subscription'"
     # local duration=5m
     # local regex="State:\s*AtLatestKnown|UpgradePending"
     #
     # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
     # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
     #
-    # ${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}"
+    # ${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}"
     #
     # if [[ "$subscription_status" = FAILED ]] ; then
-    #   FATAL "InstallPlan for '${ACM_SUBSCRIPTION}' subscription in ${subscriptionNamespace} is not ready after $duration"
+    #   FATAL "InstallPlan for '${subscription_name}' subscription in ${subscriptionNamespace} is not ready after $duration"
     # fi
     #
-    # installPlan=$(${OC} get subscriptions.operators.coreos.com ${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
+    # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription_name} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
     # if [ -n "${installPlan}" ]; then
     #   ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
     # fi

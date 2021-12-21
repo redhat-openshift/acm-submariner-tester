@@ -2994,7 +2994,7 @@ function configure_cluster_custom_registry_mirror() {
 
   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
-  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver || :
 
   local ocp_registry_url
   ocp_registry_url=$(${OC} registry info --internal)
@@ -3353,7 +3353,13 @@ function test_submariner_resources_status() {
   cluster_name="$(print_current_cluster_name)"
   local submariner_status=UP
 
-  PROMPT "Testing that Submariner CRDs and resources were created on cluster ${cluster_name}"
+  PROMPT "Testing that Submariner CatalogSource, CRDs and resources were created on cluster ${cluster_name}"
+
+  ${OC} get catalogsource -n ${SUBM_NAMESPACE} --ignore-not-found
+
+  cmd="${OC} get catalogsource -n ${SUBM_NAMESPACE} ${SUBM_CATALOG} -o jsonpath='{.status.connectionState.lastObservedState}'"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "Submariner CatalogSource '${SUBM_CATALOG}' was not created in ${SUBM_NAMESPACE}"
+
   ${OC} get crds | grep submariners || submariner_status=DOWN
       # ...
       # submariners.submariner.io                                   2019-11-28T14:09:56Z
