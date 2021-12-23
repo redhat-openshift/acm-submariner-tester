@@ -33,6 +33,7 @@ export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
 export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
+# For AWS
 # Wrap credentials with single quotes:
 export AWS_KEY='user-aws-access-key'
 export AWS_SECRET='user-aws-secret-access-key'
@@ -45,6 +46,7 @@ export AWS_ZONE_ID="aws-zone-id"
 export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
+# For OpenStack
 # Wrap credentials with single quotes:
 export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
 export OS_USERNAME='openstack-user'
@@ -53,6 +55,9 @@ export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
+
+# For Google Cloud
+GCP_CRED_JSON="gcp-cred.json"
 
 # Do not use the same IPSEC port numbers multiple times in one project
 export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}

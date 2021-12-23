@@ -862,10 +862,12 @@ function setup_workspace() {
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
     )
+
+    # Installing GCP-CLI if $config_aws_cli = yes/y
+    TITLE "Installing GCP-CLI"
+    configure_gcp_access "${GCP_CRED_JSON}"
   fi
 
-  # # CD to previous directory
-  # cd -
 }
 
 # ------------------------------------------
@@ -2023,7 +2025,7 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_managed_cluster() {
-  PROMPT "Install Nginx service on managed cluster ${TEST_NS:+ (Namespace $TEST_NS)}"
+  PROMPT "Install Nginx service on managed cluster $(print_current_cluster_name) ${TEST_NS:+ (Namespace $TEST_NS)}"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
@@ -2045,7 +2047,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   # Trying to connect from cluster A to cluster B/C will fail (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  echo -e "\n# Get IP of ${NGINX_CLUSTER_BC} on managed cluster ${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
+  echo -e "\n# Get IP of ${NGINX_CLUSTER_BC} on managed cluster $(print_current_cluster_name) ${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
 
   ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS}
   nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
@@ -2995,6 +2997,8 @@ function configure_cluster_custom_registry_mirror() {
   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
   ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver || :
+
+  ${OC} get clusteroperators authentication kube-apiserver
 
   local ocp_registry_url
   ocp_registry_url=$(${OC} registry info --internal)
@@ -4072,7 +4076,7 @@ function test_clusters_connected_by_service_ip() {
 function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster $(print_current_cluster_name) should get a GlobalNet IP"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
@@ -4230,7 +4234,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
 
   trap_to_debug_commands;
 
-  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster should get a GlobalNet IP"
+  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster $(print_current_cluster_name) should get a GlobalNet IP"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     BUG "HEADLESS Service is not supported with GlobalNet" \
