@@ -1150,7 +1150,9 @@ function prepare_install_aws_cluster() {
 
   echo "# Update OCP installer configuration (${installer_yaml_new}) of AWS cluster $cluster_name"
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
-  [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
+
+  # Set the same region for ALL clusters (even on different clouds)
+  # [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
 
   echo -e "\n# TODO: change more {keys : values} in $installer_yaml_new, from the global variables file"
 
@@ -1302,15 +1304,27 @@ function export_active_clusters_kubeconfig() {
 ### Helper function to unset inactive clusters kubeconfig ###
   trap_to_debug_commands;
 
+  # TODO: Need to re-factor so any cluster A/B/C have same function to export its name, dir, etc.
+
+  local cluster_platform
+  local cluster_base_dns
+
   TITLE "Exporting all active clusters kubeconfig (and unset inactive kubeconfigs)"
 
   # Setting HUB (Cluster A) config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
+
+  # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
+  cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}' || :)"
+  # cluster_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
+  export CLUSTER_A_NAME="${CLUSTER_A_NAME}${cluster_base_dns:+-$cluster_base_dns}${cluster_platform:+-$cluster_platform}"
+
+  echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME"
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
   export KUBECONF_HUB=${CLUSTER_A_DIR}/auth/kubeconfig
 
+  # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_B"
-    # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
+    echo "# Exporting \$KUBECONF_CLUSTER_B for $CLUSTER_B_NAME"
     CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
     export CLUSTER_B_DIR
     KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
@@ -1322,9 +1336,15 @@ function export_active_clusters_kubeconfig() {
     unset CLUSTER_B_NAME
   fi
 
+  # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_C"
-    # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
+    echo "# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
+
+    # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
+    cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}' || :)"
+    # cluster_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}}' || :)"
+    export CLUSTER_C_NAME="${CLUSTER_C_NAME}${cluster_base_dns:+-$cluster_base_dns}${cluster_platform:+-$cluster_platform}"
+
     export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
     export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"

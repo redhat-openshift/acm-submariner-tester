@@ -57,7 +57,7 @@ export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
 
 # For Google Cloud
-GCP_CRED_JSON="gcp-cred.json"
+GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}"
 
 # Do not use the same IPSEC port numbers multiple times in one project
 export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}
