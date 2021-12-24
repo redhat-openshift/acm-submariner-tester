@@ -857,14 +857,14 @@ function setup_workspace() {
 
   # Installing AWS-CLI if $config_aws_cli = yes/y
   if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
-    TITLE "Installing AWS-CLI, and setting Profile [$AWS_PROFILE_NAME] and Region [$AWS_REGION]"
+    TITLE "Installing and configuring AWS-CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
     ( # subshell to hide commands
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
     )
 
-    # Installing GCP-CLI if $config_aws_cli = yes/y
-    TITLE "Installing GCP-CLI"
+    # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
+    TITLE "Installing and configuring GCP-CLI"
     configure_gcp_access "${GCP_CRED_JSON}"
   fi
 

@@ -729,12 +729,17 @@ function configure_gcp_access() {
 
   install_local_gcloud
 
+  trap '' DEBUG # DONT trap_to_debug_commands
+
   export CLOUDSDK_PYTHON=/usr/bin/python2
   export GOOGLE_CREDENTIALS="${gcp_cred_json}"
 
-  gcloud auth activate-service-account --key-file="${gcp_cred_json}"
-  # gcloud config set project gc-acm-dev
-  # gcloud config set compute/zone us-east1  # set zone to us-west2-b
+  # local client_id
+  # client_id=$(grep -Po 'client_id[^\d]*\K\d+' "${gcp_cred_json}")
+
+  gcloud auth activate-service-account $client_id --key-file="${gcp_cred_json}"
+  # gcloud config set project my-project
+  # gcloud config set compute/zone us-east1
 
   gcloud auth list --filter=status:ACTIVE --format="value(account)"
 
@@ -744,6 +749,8 @@ function configure_gcp_access() {
 
 # Function to install aws-cli, and to configure AWS access:
 function configure_aws_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
   local aws_profile_name="$1"
   local aws_region="$2"
   local aws_key="$3"
