@@ -1037,13 +1037,15 @@ function print_current_cluster_name() {
   local current_context
   local cluster_name
 
-  current_context=$(${OC} config current-context)
-  cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")
+  current_context="$(${OC} config current-context || :)"
+  if [[ -n "$current_context" ]] ; then
+    cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
 
-  cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
-  cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
+    cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
+    cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
 
-  echo $cluster_name
+    echo $cluster_name
+  fi
 }
 
 # ------------------------------------------

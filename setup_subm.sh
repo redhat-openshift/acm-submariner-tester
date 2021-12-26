@@ -2045,8 +2045,10 @@ function install_netshoot_app_on_cluster_a() {
 # ------------------------------------------
 
 function install_nginx_svc_on_managed_cluster() {
-  PROMPT "Install Nginx service on managed cluster $(print_current_cluster_name) ${TEST_NS:+ (Namespace $TEST_NS)}"
   trap_to_debug_commands;
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Install Nginx service on managed cluster $cluster_name ${TEST_NS:+ (Namespace $TEST_NS)}"
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
@@ -2059,15 +2061,17 @@ function install_nginx_svc_on_managed_cluster() {
 
 function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
-  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster"
   trap_to_debug_commands;
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster ($cluster_name)"
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
   # Trying to connect from cluster A to cluster B/C will fail (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
-  echo -e "\n# Get IP of ${NGINX_CLUSTER_BC} on managed cluster $(print_current_cluster_name) ${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
+  echo -e "\n# Get IP of ${NGINX_CLUSTER_BC} on managed cluster $cluster_name ${TEST_NS:+(Namespace: $TEST_NS)} to verify connectivity:\n"
 
   ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS}
   nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
@@ -2360,7 +2364,7 @@ function create_subctl_join_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   local join_cmd_file="$1"
 
   TITLE "Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
@@ -2511,7 +2515,7 @@ function install_broker_cluster_a() {
   [[ ! -e "${BROKER_INFO}" ]] || rm "${BROKER_INFO}"
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   TITLE "Executing SubCtl Deploy command on $cluster_name: \n# ${DEPLOY_CMD}"
 
   BUG "For Submariner 0.9+ operator image should be accessible before broker deploy" \
@@ -3335,7 +3339,7 @@ function run_subctl_join_cmd_from_file() {
   ${OC} config view
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   TITLE "Executing SubCtl Join command on $cluster_name: \n# ${JOIN_CMD}"
 
   $JOIN_CMD
@@ -3375,7 +3379,7 @@ function test_submariner_resources_status() {
 # Check submariner-gateway on the Operator pod
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   local submariner_status=UP
 
   PROMPT "Testing that Submariner CatalogSource, CRDs and resources were created on cluster ${cluster_name}"
@@ -3621,7 +3625,7 @@ function test_submariner_cable_driver() {
 # Check submariner cable driver
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
 
@@ -3666,7 +3670,7 @@ function test_ha_status() {
 # Check submariner HA status
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   local submariner_status=UP
 
   PROMPT "Check HA status of Submariner and Gateway resources on ${cluster_name}"
@@ -3732,7 +3736,7 @@ function test_submariner_connection_established() {
 # Check submariner cable driver
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Check Submariner Gateway established connection on ${cluster_name}"
 
@@ -3783,7 +3787,7 @@ function test_ipsec_status() {
 # Check submariner cable driver
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Testing IPSec Status of the Active Gateway in ${cluster_name}"
 
@@ -3838,7 +3842,7 @@ function test_globalnet_status() {
   # Check Globalnet controller pod status
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Testing GlobalNet controller, Global IPs and Endpoints status on ${cluster_name}"
 
@@ -3984,7 +3988,7 @@ function test_lighthouse_status() {
   # Check Lighthouse (the pod for service-discovery) status
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Testing Lighthouse agent status on ${cluster_name}"
 
@@ -4097,8 +4101,10 @@ function test_clusters_connected_by_service_ip() {
 function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
-  PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster $(print_current_cluster_name) should get a GlobalNet IP"
   trap_to_debug_commands;
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster $cluster_name should get a GlobalNet IP"
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
@@ -4252,10 +4258,10 @@ function install_nginx_headless_namespace_managed_cluster() {
 
 function test_nginx_headless_global_ip_managed_cluster() {
 ### Check that $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
-
   trap_to_debug_commands;
-
-  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster $(print_current_cluster_name) should get a GlobalNet IP"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster $cluster_name should get a GlobalNet IP"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
     BUG "HEADLESS Service is not supported with GlobalNet" \
@@ -4927,7 +4933,7 @@ function test_products_versions() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
   local cluster_platform
@@ -5003,7 +5009,7 @@ function save_cluster_info_to_file() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   local cluster_platform
   cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
@@ -5478,6 +5484,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Configure firewall ports, gateway labels, and images prune on all clusters
 
     echo -e "\n# TODO: For AWS/GCP run subctl cloud prepare, for OSP use terraform script"
+    # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+    #
     # ${junit_cmd} open_firewall_ports_on_cluster_a
     #
     # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
@@ -5498,6 +5506,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       echo -e "\n# TODO: For AWS/GCP run subctl cloud prepare, for OSP use terraform script"
+      # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+      #
       # ${junit_cmd} open_firewall_ports_on_cluster_c
       #
       # ${junit_cmd} label_first_gateway_cluster_c
