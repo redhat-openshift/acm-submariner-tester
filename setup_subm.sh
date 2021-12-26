@@ -5477,10 +5477,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Configure firewall ports, gateway labels, and images prune on all clusters
 
-    echo -e "\n# TODO: Run only if it's an AWS (public) cluster"
-    ${junit_cmd} open_firewall_ports_on_cluster_a
-
-    ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+    echo -e "\n# TODO: For AWS/GCP run subctl cloud prepare, for OSP use terraform script"
+    # ${junit_cmd} open_firewall_ports_on_cluster_a
+    #
+    # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
     ${junit_cmd} configure_images_prune_cluster_a
 
@@ -5497,10 +5497,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      echo -e "\n# TODO: Run only if it's an AWS (public) cluster"
-      ${junit_cmd} open_firewall_ports_on_cluster_c
-
-      ${junit_cmd} label_first_gateway_cluster_c
+      echo -e "\n# TODO: For AWS/GCP run subctl cloud prepare, for OSP use terraform script"
+      # ${junit_cmd} open_firewall_ports_on_cluster_c
+      #
+      # ${junit_cmd} label_first_gateway_cluster_c
 
       ${junit_cmd} configure_images_prune_cluster_c
 
