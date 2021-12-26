@@ -1534,8 +1534,8 @@ function add_elevated_user() {
   ( # subshell to hide commands
     # Update ${OCP_USR}.sec - if it is empty or older than 1 day
     touch -a ${WORKDIR}/${OCP_USR}.sec
-    find "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) -print -quit -exec \
-    openssl rand -base64 12 \; > "${WORKDIR}/${OCP_USR}.sec"
+    find "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) -exec \
+    openssl rand -base64 12 \; -quit > "${WORKDIR}/${OCP_USR}.sec"
 
     local ocp_pwd
     ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
@@ -2616,6 +2616,7 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
   TITLE "Running '${terraform_script} ${ocp_install_dir} -auto-approve' script to apply Terraform 'ec2-resources.tf'"
+  # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
   ./${terraform_script} "${ocp_install_dir}" -auto-approve |& highlight "Apply complete| already exists" \
   || FATAL "./${terraform_script} did not complete successfully"
