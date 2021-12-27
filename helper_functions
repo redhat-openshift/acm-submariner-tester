@@ -538,7 +538,10 @@ function install_local_gcloud() {
 
   export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  install_conda_package "google-cloud-sdk" "${install_dir}" "${pkg_version}"
+  # install_conda_package "google-cloud-sdk" "${install_dir}" "${pkg_version}"
+  verify_anaconda "${install_dir}"
+  source activate $CONDA_ENV_NAME
+  conda install -y -c conda-forge google-cloud-sdk
   conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
   conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
 

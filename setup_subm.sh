@@ -864,8 +864,11 @@ function setup_workspace() {
     )
 
     # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
-    TITLE "Installing and configuring GCP-CLI"
-    configure_gcp_access "${GCP_CRED_JSON}"
+    if [[ -s "$GCP_CRED_JSON" ]] ; then
+      TITLE "Installing and configuring GCP-CLI"
+      configure_gcp_access "${GCP_CRED_JSON}"
+    fi
+    
   fi
 
 }
