@@ -868,7 +868,7 @@ function setup_workspace() {
       TITLE "Installing and configuring GCP-CLI"
       configure_gcp_access "${GCP_CRED_JSON}"
     fi
-    
+
   fi
 
 }
@@ -1548,7 +1548,7 @@ function add_elevated_user_to_cluster_c() {
 
 function add_elevated_user() {
   # Add new elevated user to OCP cluster
-  # Ref: https://docs.openshift.com/container-platform/4.1/authentication/identity_providers/configuring-htpasswd-identity-provider.html
+  # Ref: https://docs.openshift.com/container-platform/latest/authentication/identity_providers/configuring-htpasswd-identity-provider.html
 
   trap_to_debug_commands;
 
@@ -1556,18 +1556,17 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-  ( # subshell to hide commands
-    # Update ${OCP_USR}.sec - if it is empty or older than 1 day
-    touch -a ${WORKDIR}/${OCP_USR}.sec
-    find "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) -exec \
-    openssl rand -base64 12 \; -quit > "${WORKDIR}/${OCP_USR}.sec"
-
-    local ocp_pwd
-    ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-    printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
-  )
-
-  TITLE "Create secret from the HTPasswd file"
+    # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
+    touch -a "${WORKDIR}/${http_sec_name}"
+    if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
+      echo "# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
+      ( # subshell to hide commands
+        openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
+        local ocp_pwd
+        ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+        printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
+      )
+    fi
 
   ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
