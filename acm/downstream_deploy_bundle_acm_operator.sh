@@ -530,8 +530,8 @@ function configure_submariner_version_for_managed_cluster() {
         namespace: ${cluster_id}
     type: Opaque
     data:
-        aws_access_key_id: $(echo ${AWS_KEY} | base64 -w0)
-        aws_secret_access_key: $(echo ${AWS_SECRET} | base64 -w0)
+        aws_access_key_id: $(echo -n ${AWS_KEY} | base64 -w0)
+        aws_secret_access_key: $(echo -n ${AWS_SECRET} | base64 -w0)
 EOF
   )
 
