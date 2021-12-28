@@ -421,6 +421,7 @@ function install_conda_package() {
   local pkg_name="$1"
   local install_dir="${2:-.}/"
   local pkg_version="$3"
+  local pkg_label="$4"
 
   echo "# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
@@ -429,7 +430,7 @@ function install_conda_package() {
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge ${pkg_name}${pkg_version:+=$pkg_version}
+  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}
   conda list
 }
 
@@ -524,6 +525,28 @@ function install_local_jq() {
   local pkg_version="$2"
 
   install_conda_package "jq" "${install_dir}" "${pkg_version}"
+}
+
+# ------------------------------------------
+
+# Function to install gcloud cli with Anaconda (https://anaconda.org/conda-forge/google-cloud-sdk)
+function install_local_gcloud() {
+  trap_to_debug_commands
+
+  local install_dir="${1:-.}/"
+  local pkg_version="$2"
+
+  export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  # install_conda_package "google-cloud-sdk" "${install_dir}" "${pkg_version}"
+  verify_anaconda "${install_dir}"
+  source activate $CONDA_ENV_NAME
+  conda install -y -c conda-forge google-cloud-sdk
+  conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
+  conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
+
+  gcloud --version
+
 }
 
 # ------------------------------------------
@@ -703,14 +726,40 @@ function change_yaml_key_value() {
 
 # ------------------------------------------
 
+# Function to install gcloud CLI, and configure GCP (Google Cloud Platform) access:
+function configure_gcp_access() {
+  local gcp_cred_json="$1"
+
+  install_local_gcloud
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  export CLOUDSDK_PYTHON=/usr/bin/python2
+  export GOOGLE_CREDENTIALS="${gcp_cred_json}"
+
+  # local client_id
+  # client_id=$(grep -Po 'client_id[^\d]*\K\d+' "${gcp_cred_json}")
+
+  gcloud auth activate-service-account $client_id --key-file="${gcp_cred_json}"
+  # gcloud config set project my-project
+  # gcloud config set compute/zone us-east1
+
+  gcloud auth list --filter=status:ACTIVE --format="value(account)"
+
+}
+
+# ------------------------------------------
+
 # Function to install aws-cli, and to configure AWS access:
 function configure_aws_access() {
-  AWS_PROFILE_NAME="$1"
-  AWS_REGION="$2"
-  AWS_KEY="$3"
-  AWS_SECRET="$4"
-  install_dir="${5:-./}"
-  aws_bin_dir="${6:-$HOME/.local/bin}"
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local aws_profile_name="$1"
+  local aws_region="$2"
+  local aws_key="$3"
+  local aws_secret="$4"
+  local install_dir="${5:-./}"
+  local aws_bin_dir="${6:-$HOME/.local/bin}"
 
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
@@ -726,16 +775,16 @@ function configure_aws_access() {
 
   (
     # subshell to hide commands
-    aws configure set profile $AWS_PROFILE_NAME
-    aws configure set aws_access_key_id $AWS_KEY
-    aws configure set aws_secret_access_key $AWS_SECRET
+    aws configure set profile $aws_profile_name
+    aws configure set aws_access_key_id $aws_key
+    aws configure set aws_secret_access_key $aws_secret
 
-    aws configure set default.region $AWS_REGION
+    aws configure set default.region $aws_region
     aws configure set output text
     aws configure set color on
   )
 
-  # aws --profile "$AWS_PROFILE_NAME" configure  --region "$AWS_REGION" --output text --color on
+  # aws --profile "$aws_profile_name" configure  --region "$aws_region" --output text --color on
   aws sts get-caller-identity
 }
 
@@ -991,13 +1040,15 @@ function print_current_cluster_name() {
   local current_context
   local cluster_name
 
-  current_context=$(${OC} config current-context)
-  cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")
+  current_context="$(${OC} config current-context || :)"
+  if [[ -n "$current_context" ]] ; then
+    cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
 
-  cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
-  cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
+    cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
+    cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
 
-  echo $cluster_name
+    echo $cluster_name
+  fi
 }
 
 # ------------------------------------------
