@@ -1317,7 +1317,7 @@ function export_active_clusters_kubeconfig() {
   # Setting HUB (Cluster A) config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
 
   # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
-  cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}' || :)"
+  cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_A_YAML} | awk -F'\0' '{print $1; exit}' || :)"
   # cluster_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
   export CLUSTER_A_NAME="${CLUSTER_A_NAME}${cluster_base_dns:+-$cluster_base_dns}${cluster_platform:+-$cluster_platform}"
 
