@@ -496,6 +496,9 @@ function configure_submariner_for_managed_cluster_c() {
 
 function configure_submariner_version_for_managed_cluster() {
   ### Create ACM managed cluster by cluster ID ###
+
+  # TODO: Split to smaller functions
+
   trap_to_debug_commands;
 
   local cluster_id="${1}"
@@ -518,10 +521,8 @@ function configure_submariner_version_for_managed_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  echo "# Configure Submariner credentials"
-
+  echo "# Configure Submariner credentials for the Gateway node on AWS (${cluster_id}-aws-creds)"
   ( # subshell to hide commands
-    ### Create the aws creds secret
     cat <<EOF | ${OC} apply -f -
     apiVersion: v1
     kind: Secret
@@ -535,7 +536,24 @@ function configure_submariner_version_for_managed_cluster() {
 EOF
   )
 
-  TITLE "Create the Submariner Subscription config"
+  if [[ -s "$GCP_CRED_JSON" ]] ; then
+    echo "# Configure Submariner credentials for the Gateway node on GCP (${cluster_id}-gcp-creds)"
+    ( # subshell to hide commands
+      cat <<EOF | ${OC} apply -f -
+      apiVersion: v1
+      kind: Secret
+      metadata:
+          name: ${cluster_id}-gcp-creds
+          namespace: ${cluster_id}
+      type: Opaque
+      data:
+          osServiceAccount.json: "$(< ${GCP_CRED_JSON})"
+EOF
+    )
+  fi
+
+
+  TITLE "Create the Submariner Subscription config for AWS and GCP managed cluster '${cluster_id}'"
 
   cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
@@ -549,6 +567,7 @@ EOF
     cableDriver: libreswan
     credentialsSecret:
       name: ${cluster_id}-aws-creds
+      name: ${cluster_id}-gcp-creds
     gatewayConfig:
       aws:
         instanceType: m5.xlarge
