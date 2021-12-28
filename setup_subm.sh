@@ -1556,17 +1556,17 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-    # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
-    touch -a "${WORKDIR}/${http_sec_name}"
-    if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
-      echo "# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
-      ( # subshell to hide commands
-        openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
-        local ocp_pwd
-        ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
-        printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
-      )
-    fi
+  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
+  touch -a "${WORKDIR}/${http_sec_name}"
+  if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
+    echo "# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
+    ( # subshell to hide commands
+      openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
+      local ocp_pwd
+      ocp_pwd="$(< ${WORKDIR}/${OCP_USR}.sec)"
+      printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
+    )
+  fi
 
   ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
