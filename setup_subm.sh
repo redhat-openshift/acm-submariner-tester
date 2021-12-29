@@ -1309,17 +1309,17 @@ function export_active_clusters_kubeconfig() {
 
   # TODO: Need to re-factor so any cluster A/B/C have same function to export its name, dir, etc.
 
-  local cluster_platform
-  local cluster_base_dns
+  local ocp_yaml_platform
+  local ocp_yaml_base_dns
 
   TITLE "Exporting all active clusters kubeconfig (and unset inactive kubeconfigs)"
 
   # Setting HUB (Cluster A) config ($WORKDIR and $CLUSTER_A_NAME were set in subm_variables file)
 
   # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
-  cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_A_YAML} | awk -F'\0' '{print $1; exit}' || :)"
-  # cluster_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
-  export CLUSTER_A_NAME="${CLUSTER_A_NAME}${cluster_base_dns:+-$cluster_base_dns}${cluster_platform:+-$cluster_platform}"
+  ocp_yaml_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_A_YAML} | awk -F'\0' '{print $1; exit}' || :)"
+  # ocp_yaml_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
+  export CLUSTER_A_NAME="${CLUSTER_A_NAME}${ocp_yaml_base_dns:+-$ocp_yaml_base_dns}${ocp_yaml_platform:+-$ocp_yaml_platform}"
 
   echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME"
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
@@ -1344,9 +1344,9 @@ function export_active_clusters_kubeconfig() {
     echo "# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
 
     # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
-    cluster_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}' || :)"
-    # cluster_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}}' || :)"
-    export CLUSTER_C_NAME="${CLUSTER_C_NAME}${cluster_base_dns:+-$cluster_base_dns}${cluster_platform:+-$cluster_platform}"
+    ocp_yaml_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}' || :)"
+    # ocp_yaml_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}}' || :)"
+    export CLUSTER_C_NAME="${CLUSTER_C_NAME}${ocp_yaml_base_dns:+-$ocp_yaml_base_dns}${ocp_yaml_platform:+-$ocp_yaml_platform}"
 
     export CLUSTER_C_DIR=${WORKDIR}/${CLUSTER_C_NAME}
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
@@ -2049,10 +2049,10 @@ function install_netshoot_app_on_cluster_a() {
 function install_nginx_svc_on_managed_cluster() {
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name || :)"
-  PROMPT "Install Nginx service on managed cluster $cluster_name ${TEST_NS:+ (Namespace $TEST_NS)}"
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Install Nginx service on managed cluster $cluster_name ${TEST_NS:+ (Namespace $TEST_NS)}"
 
   TITLE "Creating ${NGINX_CLUSTER_BC}:${NGINX_PORT} in ${TEST_NS}, using ${NGINX_IMAGE}, and disabling it's cluster-ip (with '--cluster-ip=None'):"
 
@@ -2065,10 +2065,10 @@ function test_basic_cluster_connectivity_before_submariner() {
 ### Pre-test - Demonstrate that the clusters aren’t connected without Submariner ###
   trap_to_debug_commands;
   local cluster_name
-  cluster_name="$(print_current_cluster_name || :)"
-  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster ($cluster_name)"
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
+  cluster_name="$(print_current_cluster_name || :)"
+  PROMPT "Before Submariner is installed: Verifying IP connectivity on the SAME cluster ($cluster_name)"
 
   # Trying to connect from cluster A to cluster B/C will fail (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
@@ -2365,6 +2365,7 @@ function set_join_parameters_for_cluster_c() {
 function create_subctl_join_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   local join_cmd_file="$1"
@@ -3380,6 +3381,7 @@ function test_submariner_resources_cluster_c() {
 function test_submariner_resources_status() {
 # Check submariner-gateway on the Operator pod
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   local submariner_status=UP
@@ -3626,6 +3628,7 @@ function test_cable_driver_cluster_c() {
 function test_submariner_cable_driver() {
 # Check submariner cable driver
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
@@ -3671,6 +3674,7 @@ function test_ha_status_cluster_c() {
 function test_ha_status() {
 # Check submariner HA status
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   local submariner_status=UP
@@ -3737,6 +3741,7 @@ function test_submariner_connection_cluster_c() {
 function test_submariner_connection_established() {
 # Check submariner cable driver
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
@@ -3788,6 +3793,7 @@ function test_ipsec_status_cluster_c() {
 function test_ipsec_status() {
 # Check submariner cable driver
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
@@ -3843,6 +3849,7 @@ function test_globalnet_status_cluster_c() {
 function test_globalnet_status() {
   # Check Globalnet controller pod status
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
@@ -3989,6 +3996,7 @@ function test_lighthouse_status_cluster_c() {
 function test_lighthouse_status() {
   # Check Lighthouse (the pod for service-discovery) status
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
@@ -4104,6 +4112,7 @@ function test_clusters_connected_overlapping_cidrs() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   PROMPT "Testing GlobalNet annotation - Nginx service on managed cluster $cluster_name should get a GlobalNet IP"
@@ -4261,6 +4270,7 @@ function install_nginx_headless_namespace_managed_cluster() {
 function test_nginx_headless_global_ip_managed_cluster() {
 ### Check that $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
   trap_to_debug_commands;
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster $cluster_name should get a GlobalNet IP"
@@ -4938,14 +4948,14 @@ function test_products_versions() {
   cluster_name="$(print_current_cluster_name || :)"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
-  local cluster_platform
-  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud || :)"
 
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   TITLE "OCP cluster ${cluster_name} information"
-  echo -e "\n# Cloud platform: ${cluster_platform}"
+  echo -e "\n# Cloud platform: ${ocp_cloud}"
   echo -e "\n# OCP version: ${cluster_version}"
 
   echo -e "\n### Submariner components ###\n"
@@ -5013,8 +5023,8 @@ function save_cluster_info_to_file() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  local cluster_platform
-  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud || :)"
 
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
@@ -5022,7 +5032,7 @@ function save_cluster_info_to_file() {
   # Print OCP cluster info into file local file "<cluster name>.info"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
-  local cluster_info="${cluster_platform} cluster : OCP ${cluster_version}"
+  local cluster_info="${ocp_cloud} cluster : OCP ${cluster_version}"
   echo "${cluster_info}" > "${cluster_info_output}" || :
 
   # Print all cluster routes into file "<cluster name>.info"
@@ -5614,31 +5624,31 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
 
-    ${junit_cmd} import_managed_cluster_a
+    ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
     # Setup Submariner Addon on the managed clusters
 
-    ${junit_cmd} install_submariner_on_managed_cluster_a
+    ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} configure_submariner_for_managed_cluster_a
+    ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_HUB}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      ${junit_cmd} import_managed_cluster_b
+      ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} install_submariner_on_managed_cluster_b
+      ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} configure_submariner_for_managed_cluster_b
+      ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      ${junit_cmd} import_managed_cluster_c
+      ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} install_submariner_on_managed_cluster_c
+      ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} configure_submariner_for_managed_cluster_c
+      ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
 

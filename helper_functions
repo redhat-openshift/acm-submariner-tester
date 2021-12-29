@@ -872,7 +872,14 @@ function ocp_login() {
   local ocp_server
   ocp_server="${3:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
 
-  TITLE "Login with user ${ocp_usr} to OCP server: ${ocp_server}"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud || :)"
+
+  TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
+  ${ocp_server}"
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
@@ -1040,15 +1047,44 @@ function print_current_cluster_name() {
   local current_context
   local cluster_name
 
+  export KUBECONFIG="$KUBECONFIG"
   current_context="$(${OC} config current-context || :)"
+
   if [[ -n "$current_context" ]] ; then
     cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
+  else
+    cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == 'admin')].context.cluster}")"
+  fi
 
     cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
     cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
 
     echo $cluster_name
+}
+
+# ------------------------------------------
+
+# Function to print current cluster cloud name
+function print_current_cluster_cloud() {
+
+  # DONT trap_to_debug_commands
+
+  local cluster_platform
+
+  export KUBECONFIG="$KUBECONFIG"
+  
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+
+  if [[ "$cluster_platform" = "AWS" ]] ; then
+    echo "Amazon"
+  elif [[ "$cluster_platform" = "GCP" ]] ; then
+    echo "Google"
+  elif [[ "$cluster_platform" = "OpenStack" ]] ;
+    then echo "Openstack"
+  else
+    echo "Unknown"
   fi
+
 }
 
 # ------------------------------------------

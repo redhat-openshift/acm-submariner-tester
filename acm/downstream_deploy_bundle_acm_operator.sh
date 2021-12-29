@@ -237,40 +237,25 @@ EOF
 
 # ------------------------------------------
 
-function import_managed_cluster_a() {
-  PROMPT "Import ACM CRDs for managed cluster A"
+function create_and_import_managed_cluster() {
   trap_to_debug_commands;
 
-  local cluster_id="acm-${CLUSTER_A_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
+  local kubeconfig_file="$1"
 
-  export KUBECONFIG="${KUBECONF_HUB}"
-  import_managed_cluster "$cluster_id"
-}
+  export KUBECONFIG="$kubeconfig_file"
 
-# ------------------------------------------
+  local cluster_id
+  cluster_id="acm-$(print_current_cluster_name)"
 
-function import_managed_cluster_b() {
-  PROMPT "Import ACM CRDs for managed cluster B"
-  trap_to_debug_commands;
+  PROMPT "Create and import a managed cluster in ACM: $cluster_id"
 
-  local cluster_id="acm-${CLUSTER_B_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Openstack"
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud)"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  import_managed_cluster "$cluster_id"
-}
+  create_new_managed_cluster_in_acm_hub "$cluster_id" "$ocp_cloud"
 
-# ------------------------------------------
+  export KUBECONFIG="$kubeconfig_file"
 
-function import_managed_cluster_c() {
-  PROMPT "Import ACM CRDs for managed cluster C"
-  trap_to_debug_commands;
-
-  local cluster_id="acm-${CLUSTER_C_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   import_managed_cluster "$cluster_id"
 }
 
@@ -393,40 +378,18 @@ function import_managed_cluster() {
 
 # ------------------------------------------
 
-function install_submariner_on_managed_cluster_a() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function install_submariner_on_managed_cluster_b() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function install_submariner_on_managed_cluster_c() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
 function install_submariner_operator_on_managed_cluster() {
   trap_to_debug_commands;
 
-  local submariner_version="${1:-$SUBM_VER_TAG}"
+  local kubeconfig_file="$1"
+  local submariner_version="${2:-$SUBM_VER_TAG}"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster: $cluster_name"
 
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
@@ -434,9 +397,6 @@ function install_submariner_operator_on_managed_cluster() {
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
-
-  local cluster_name
-  cluster_name="$(print_current_cluster_name)"
 
   TITLE "Install custom catalog source for Submariner version $submariner_version (channel $submariner_channel) on cluster $cluster_name"
 
@@ -464,31 +424,18 @@ function install_submariner_operator_on_managed_cluster() {
 
 # ------------------------------------------
 
-function configure_submariner_for_managed_cluster_a() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster A"
+function configure_submariner_for_managed_cluster() {
   trap_to_debug_commands;
 
-  local cluster_id="acm-${CLUSTER_A_NAME}"
-  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
-}
+  local kubeconfig_file="$1"
 
-# ------------------------------------------
+  export KUBECONFIG="$kubeconfig_file"
 
-function configure_submariner_for_managed_cluster_b() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster B"
-  trap_to_debug_commands;
+  local cluster_id
+  cluster_id="acm-$(print_current_cluster_name)"
 
-  local cluster_id="acm-${CLUSTER_B_NAME}"
-  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
-}
+  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster: $cluster_id"
 
-# ------------------------------------------
-
-function configure_submariner_for_managed_cluster_c() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster C"
-  trap_to_debug_commands;
-
-  local cluster_id="acm-${CLUSTER_C_NAME}"
   configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
 }
 
@@ -497,7 +444,7 @@ function configure_submariner_for_managed_cluster_c() {
 function configure_submariner_version_for_managed_cluster() {
   ### Create ACM managed cluster by cluster ID ###
 
-  # TODO: Split to smaller functions
+  # TODO: Split to smaller functions (e.g. start from configure_submariner_for_managed_cluster)
 
   trap_to_debug_commands;
 
