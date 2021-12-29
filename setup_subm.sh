@@ -4365,7 +4365,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  export_active_clusters_kubeconfig
+  # export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -4573,7 +4573,7 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
   local subctl_diagnose
 
-  export_active_clusters_kubeconfig
+  # export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -4618,7 +4618,7 @@ function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
 
-  export_active_clusters_kubeconfig
+  # export_active_clusters_kubeconfig
 
   subctl benchmark latency ${KUBECONF_HUB} ${KUBECONF_MANAGED} --verbose || benchmark_status=ERROR
 
@@ -4764,7 +4764,7 @@ function test_submariner_e2e_with_subctl() {
 
   TITLE "SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
 
-  export_active_clusters_kubeconfig
+  # export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -5266,6 +5266,7 @@ function debug_test_fatal() {
 # ------------------------------------------
 
 
+
 ####################################################################################
 #                    MAIN - Submariner Deploy and Tests                            #
 ####################################################################################
@@ -5286,6 +5287,9 @@ else
 fi
 
 cd ${SCRIPT_DIR}
+
+# Exporting active clusters KUBECONFIGs
+export_active_clusters_kubeconfig
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
@@ -5316,7 +5320,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
 
   # Exporting active clusters KUBECONFIGs
-  export_active_clusters_kubeconfig
+  # export_active_clusters_kubeconfig
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
@@ -6008,8 +6012,7 @@ fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
 
-export_active_clusters_kubeconfig
-
+# export_active_clusters_kubeconfig
 
 # Artifact OCP clusters kubeconfigs and logs
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
