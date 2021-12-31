@@ -607,14 +607,27 @@ EOF
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} && \
   ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
-  TITLE "Wait for ManifestWork of '${cluster_id}-klusterlet-crds' to be ready in the ACM Hub under namespace ${cluster_id}"
+  # TODO: ManifestWork validation should be moved to a new function
+  local regex
 
-  local regex="klusterlet-crds"
+  regex="submariner-operator"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep '$regex'" "10m" || :
-
   $cmd |& highlight "$regex" || submariner_status=FAILED
 
+  regex="submariner-gateway"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  watch_and_retry "$cmd | grep '$regex'" "10m" || :
+  $cmd |& highlight "$regex" || submariner_status=FAILED
+
+  regex="${cluster_id}-klusterlet-crds"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  watch_and_retry "$cmd | grep '$regex'" "10m" || :
+  $cmd |& highlight "$regex" || submariner_status=FAILED
+  
   if [[ "$submariner_status" = FAILED ]] ; then
     FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub under namespace $cluster_id"
   fi
