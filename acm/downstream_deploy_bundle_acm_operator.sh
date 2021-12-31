@@ -596,7 +596,9 @@ EOF
 
     TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
-    ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+    # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+    ${OC} label managedclusters ${cluster_id} "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" --overwrite
+
   fi
 
   TITLE "SubmarinerConfig and ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
@@ -610,11 +612,11 @@ EOF
   # TODO: ManifestWork validation should be moved to a new function
   local regex
 
-  regex="submariner-operator"
-  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
-  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
-  watch_and_retry "$cmd | grep '$regex'" "10m" || :
-  $cmd |& highlight "$regex" || submariner_status=FAILED
+  # regex="submariner-operator"
+  # TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  # local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  # watch_and_retry "$cmd | grep '$regex'" "10m" || :
+  # $cmd |& highlight "$regex" || submariner_status=FAILED
 
   regex="submariner-gateway"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
@@ -627,7 +629,7 @@ EOF
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep '$regex'" "10m" || :
   $cmd |& highlight "$regex" || submariner_status=FAILED
-  
+
   if [[ "$submariner_status" = FAILED ]] ; then
     FATAL "Submariner ${submariner_version} Addon installation failed in ACM Hub under namespace $cluster_id"
   fi
