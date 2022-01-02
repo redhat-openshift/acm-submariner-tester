@@ -9,9 +9,15 @@ function export_LATEST_IIB() {
 
   local version="${1}"
   local bundle_name="${2}"
-  local index_images
 
   TITLE "Retrieving index-image from UBI (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
+
+  local index_images
+
+  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+  local umb_output="latest_iib.txt"
+  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  # local iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
   local num_of_latest_builds=5
   local rows=$((num_of_latest_builds * 5))
@@ -19,10 +25,9 @@ function export_LATEST_IIB() {
   local num_of_days=30
   local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
-  curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
+  curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-  # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
-  index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+  index_images="$(cat $umb_output | jq -r "${iib_query}")"
 
   # index-images example:
   # {
@@ -35,13 +40,14 @@ function export_LATEST_IIB() {
   # }
 
   if [[ "$index_images" = null ]]; then
-    BUG "Failed to retrieve index-image during the last $num_of_days days, attempting with double $num_of_days"
-    delta=$((delta * 2))
+    BUG "Failed to retrieve completed images during the last $num_of_days days, getting all images during delta of 3X${num_of_days} days"
+    delta=$((delta * 3))
 
-    curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
+    curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-    # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
-    index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+    cat $umb_output | jq -r "${iib_query}"
+
+    index_images="$(cat $umb_output | jq -r "${iib_query}")"
 
     if [[ "$index_images" = null ]]; then
       FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
