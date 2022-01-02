@@ -5423,7 +5423,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ### Running prerequisites for submariner tests ###
     # It will be skipped if using --skip-tests (except for pkg unit-tests, that does not require submariner deployment)
 
-    if [[ ! "$skip_tests" =~ ((sys|e2e|all)(,|$))+ ]] ; then
+    if [[ ! "$skip_tests" =~ (all(,|$))+ ]] ; then
 
       ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
@@ -5514,9 +5514,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
-        ${junit_cmd} open_firewall_ports_on_cluster_a
+        # ${junit_cmd} open_firewall_ports_on_cluster_a
 
-        ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
         ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
@@ -5605,7 +5605,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
 
   ### END of prerequisites for submariner test ###
-  
+
 
   TITLE "OCP clusters and environment setup is ready"
   echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
