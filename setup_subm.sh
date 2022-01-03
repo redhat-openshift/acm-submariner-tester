@@ -1406,12 +1406,20 @@ function update_kubeconfig_default_context() {
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  TITLE "Set current context of cluster '$cluster_name' to the default admin context"
+  TITLE "Set current context of cluster '$cluster_name' to the first context with master (or admin) user"
 
-  echo "# Switch to the cluster of the admin user"
-  local admin_context
-  admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}' | awk '{print $1}')
-  ${OC} config use-context "$admin_context"
+  local master_context
+  local master_user="master"
+
+  master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+
+  if [[ -z "$master_context" ]] ; then
+    master_user="admin"
+    master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+  fi
+
+  echo "# Switch to the cluster of the '$master_user' user"
+  ${OC} config use-context "$master_context"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -1447,7 +1455,7 @@ function update_kubeconfig_default_context() {
   TITLE "Set KUBECONFIG context '$renamed_context' to cluster id '$cluster_id', and its namespace to 'default'"
   # ${OC} config set "contexts.${renamed_context}.namespace" "default"
   # ${OC} config set "contexts.${cur_context}.namespace" "default"
-  ${OC} config set-context "$renamed_context" --cluster "$cluster_id" --user "admin" --namespace "default"
+  ${OC} config set-context "$renamed_context" --cluster "$cluster_id" --user "${master_user}" --namespace "default"
   ${OC} config use-context "$renamed_context"
 
   ${OC} config get-contexts

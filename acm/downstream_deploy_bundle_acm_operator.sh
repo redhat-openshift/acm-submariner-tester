@@ -618,7 +618,7 @@ EOF
   # TODO: ManifestWork validation should be moved to a new function
   local regex
 
-  regex="submariner-(gateway|operator)"
+  regex="submariner"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
