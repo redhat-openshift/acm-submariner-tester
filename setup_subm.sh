@@ -5581,45 +5581,41 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi # End of configure custom images in OCP registry
 
-    else  # When using --skip-ocp-setup :
+      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
 
-      # Verify clusters status even if OCP setup/cleanup was skipped
+      ${junit_cmd} install_netshoot_app_on_cluster_a
 
-      ${junit_cmd} test_kubeconfig_cluster_a
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_b
+        export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
+      elif [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-    fi
+        export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
 
+      fi
 
-    ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+      ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
 
-    ${junit_cmd} install_netshoot_app_on_cluster_a
+      ${junit_cmd} install_nginx_svc_on_managed_cluster
 
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      ${junit_cmd} test_basic_cluster_connectivity_before_submariner
 
-      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} test_clusters_disconnected_before_submariner
 
-    elif [[ -s "$CLUSTER_C_YAML" ]] ; then
+    fi ### END of prerequisites for submariner system tests ###
 
-      export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
+  else  # When using --skip-ocp-setup :
 
-    fi
+    # Verify clusters status even if OCP setup/cleanup was skipped
 
-    ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
+    ${junit_cmd} test_kubeconfig_cluster_a
 
-    ${junit_cmd} install_nginx_svc_on_managed_cluster
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_b
 
-    ${junit_cmd} test_basic_cluster_connectivity_before_submariner
-
-    ${junit_cmd} test_clusters_disconnected_before_submariner
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
 
   fi
-
-  ### END of prerequisites for submariner test ###
-
 
   TITLE "OCP clusters and environment setup is ready"
   echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
