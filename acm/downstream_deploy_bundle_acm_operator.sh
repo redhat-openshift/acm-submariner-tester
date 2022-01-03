@@ -514,7 +514,7 @@ EOF
           namespace: ${cluster_id}
       type: Opaque
       data:
-          osServiceAccount.json: "$(< ${GCP_CRED_JSON})"
+          osServiceAccount.json: $(base64 -w0 "${GCP_CRED_JSON}")
 EOF
     )
 
