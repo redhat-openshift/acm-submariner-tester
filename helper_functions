@@ -895,23 +895,30 @@ function ocp_login() {
 function delete_crds_by_name() {
   trap_to_debug_commands;
 
-  # Input $1 : All CRDs to delete, by searching for *crd_name*
-  local crd_name=$1
+  # Input $1 : All CRDs to delete, by searching for *crd_regex*
+  local crd_regex=$1
 
   local delete_crds=FALSE
 
-  echo "# Searching for existing CRDs of previous ${crd_name} installation on the cluster:"
-  ${OC} get crds |& highlight "${crd_name}" && delete_crds=TRUE || :
+  echo "# Searching for existing CRDs of previous ${crd_regex} installation on the cluster:"
+  ${OC} get crds |& highlight "${crd_regex}" && delete_crds=TRUE || :
 
   # If there are existing CRDs on the cluster - remove them all:
   # if [[ $? = 0 ]]; then
   if [[ "$delete_crds" = TRUE ]]; then
-    echo "# Deleting ${crd_name} CRDs in the cluster"
-    crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_name}.*")
-    # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
-    ${OC} delete --timeout=10s crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
+    echo "# Deleting ${crd_regex} CRDs in the cluster"
+    crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
+    # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
+    # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
+
+    for crd_name in $crd_list ; do
+      echo -e "\n# Deleting CRD $crd_name"
+      ${OC} delete --timeout=1m crd $crd_name --ignore-not-found || \
+      ${OC} patch crd/${crd_name} -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+    done
+    
   else
-    echo "# No CRD with '${crd_name}' was found in the current cluster"
+    echo "# No CRD with '${crd_regex}' was found in the current cluster"
   fi
 
 }
@@ -1072,7 +1079,7 @@ function print_current_cluster_cloud() {
   local cluster_platform
 
   export KUBECONFIG="$KUBECONFIG"
-  
+
   cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
   if [[ "$cluster_platform" = "AWS" ]] ; then
