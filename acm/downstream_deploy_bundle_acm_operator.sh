@@ -551,7 +551,9 @@ EOF
 
   TITLE "Create the Submariner subscription config for $managed_cluster_cloud managed cluster: ${cluster_id}"
 
-  cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
+  local subscription_conf="SubmarinerConfig_${cluster_id}.yaml"
+
+  cat <<-EOF > $subscription_conf
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
@@ -579,9 +581,13 @@ EOF
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
+  echo "# Apply SubmarinerConfig (if failed once - apply again)"
+
+  ${OC} apply --dry-run='server' -f $subscription_conf | highlight "unchanged" \
+  || ${OC} apply -f $subscription_conf || ${OC} apply -f $subscription_conf || submariner_status=FAILED
+
 
   if [[ ! "$submariner_status" = FAILED ]] ; then
-
     TITLE "Create the Submariner Addon to start the deployment"
 
     cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
