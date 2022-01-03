@@ -1321,7 +1321,7 @@ function export_active_clusters_kubeconfig() {
   # ocp_yaml_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
   export CLUSTER_A_NAME="${CLUSTER_A_NAME}${ocp_yaml_base_dns:+-$ocp_yaml_base_dns}${ocp_yaml_platform:+-$ocp_yaml_platform}"
 
-  echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME"
+  echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME (Cluster A is also the ACM Hub)"
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
   export KUBECONF_HUB=${CLUSTER_A_DIR}/auth/kubeconfig
 
@@ -1366,7 +1366,7 @@ function update_kubeconfig_context_cluster_a() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  update_kubeconfig_default_context
+  update_kubeconfig_default_context "${CLUSTER_A_NAME}"
 
 }
 
@@ -1377,7 +1377,7 @@ function update_kubeconfig_context_cluster_b() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  update_kubeconfig_default_context
+  update_kubeconfig_default_context "${CLUSTER_B_NAME}"
 
 }
 
@@ -1388,27 +1388,27 @@ function update_kubeconfig_context_cluster_c() {
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  update_kubeconfig_default_context
+  update_kubeconfig_default_context "${CLUSTER_C_NAME}"
 
 }
 
 # ------------------------------------------
 
 function update_kubeconfig_default_context() {
-  # Add new elevated user and set new kubeconfig context
+  # Backup kubeconfig of the cluster, and update its context name
   trap_to_debug_commands;
 
-  # Get the default cluster name of the admin user
   local cluster_name
-  cluster_name="$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')" || :
-
-  TITLE "Set current context of cluster '$cluster_name' to the default admin context"
+  cluster_name="$1"
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${KUBECONFIG}"
 
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
+  TITLE "Set current context of cluster '$cluster_name' to the default admin context"
+
+  echo "# Switch to the cluster of the admin user"
   local admin_context
   admin_context=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].name}' | awk '{print $1}')
   ${OC} config use-context "$admin_context"
@@ -1416,33 +1416,39 @@ function update_kubeconfig_default_context() {
   local cur_context
   cur_context="$(${OC} config current-context)"
 
-  # Updating kubeconfig current-context - it should be equal to $cluster_name
-  #
-  # if [[ ! "$cur_context" = "${cluster_name}" ]] ; then
-  #
-  #   BUG "E2E will fail if clusters have same name (default is \"admin\")" \
-  #   "Modify KUBECONFIG cluster context name on both clusters to be unique" \
-  #   "https://github.com/submariner-io/submariner/issues/245"
-  #
-  #   if ${OC} config get-contexts "${cluster_name}" 2>/dev/null ; then
-  #     echo "# Rename existing kubeconfig context '${cluster_name}' to: ${cluster_name}_old"
-  #     ${OC} config rename-context "${cluster_name}" "${cluster_name}_old" || :
-  #   fi
-  #
-  #   if ${OC} config get-contexts "${cur_context}" 2>/dev/null ; then
-  #     echo "# Update kubeconfig current-context '${cur_context}' to: ${cluster_name}"
-  #     ${OC} config rename-context "${cur_context}" "${cluster_name}" || :
-  #   fi
-  # fi
-  #
-  # local cluster_id=$(${OC} config get-clusters | tail -1)
-  # echo "# Set KUBECONFIG context '$cluster_name' to cluster id '$cluster_id', and its namespace to 'default'"
-  # # ${OC} config set "contexts.${cluster_name}.namespace" "default"
-  # ${OC} config set-context "$cluster_name" --cluster "$cluster_id" --user "admin" --namespace "default"
-  # ${OC} config use-context "$cluster_name"
+  BUG "If using managed cluster-id with long name or special characters (from current kubeconfig context),
+  Submariner Gateway resource will not be created using Submariner Addon" \
+  "Replace all special characters in kubeconfig current context before running subctl deploy" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2036325"
+  # Workaround:
+  local renamed_context="${cluster_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
 
-  TITLE "Set KUBECONFIG current context '$cur_context' to use the 'default' namespace"
-  ${OC} config set "contexts.${cur_context}.namespace" "default"
+  if [[ ! "$cur_context" = "${renamed_context}" ]] ; then
+
+    TITLE "Updating kubeconfig current-context name to '$renamed_context'"
+
+    BUG "E2E will fail if clusters have same name (default is \"admin\")" \
+    "Modify KUBECONFIG cluster context name on both clusters to be unique" \
+    "https://github.com/submariner-io/submariner/issues/245"
+
+    if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
+      echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+      ${OC} config delete-context "${renamed_context}_old" || :
+      ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
+    fi
+
+    ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
+    ${OC} config use-context "$renamed_context" || :
+  fi
+
+  TITLE "Set KUBECONFIG current context '$cur_context' to use the first cluster and the 'default' namespace"
+
+  local cluster_id=$(${OC} config get-clusters | tail -1)
+  TITLE "Set KUBECONFIG context '$renamed_context' to cluster id '$cluster_id', and its namespace to 'default'"
+  # ${OC} config set "contexts.${renamed_context}.namespace" "default"
+  # ${OC} config set "contexts.${cur_context}.namespace" "default"
+  ${OC} config set-context "$renamed_context" --cluster "$cluster_id" --user "admin" --namespace "default"
+  ${OC} config use-context "$renamed_context"
 
   ${OC} config get-contexts
 
@@ -1618,19 +1624,19 @@ EOF
   cur_context="$(${OC} config current-context)"
   TITLE "Kubeconfig current-context is: $cur_context"
 
-  BUG "subctl deploy can fail later on \"Error deploying the operator: timed out waiting for the condition\"" \
-  "Replace all special characters in kubeconfig current context before running subctl deploy" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
-
-  # Workaround:
-  local renamed_context="${cur_context//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
-  if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
-    echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
-    ${OC} config delete-context "${renamed_context}_old" || :
-    ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
-  fi
-  ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
-  ${OC} config use-context "$renamed_context" || :
+  # BUG "subctl deploy can fail later on \"Error deploying the operator: timed out waiting for the condition\"" \
+  # "Replace all special characters in kubeconfig current context before running subctl deploy" \
+  # "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
+  #
+  # # Workaround:
+  # local renamed_context="${cur_context//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  # if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
+  #   echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+  #   ${OC} config delete-context "${renamed_context}_old" || :
+  #   ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
+  # fi
+  # ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
+  # ${OC} config use-context "$renamed_context" || :
 
 }
 
