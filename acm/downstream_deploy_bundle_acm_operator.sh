@@ -75,6 +75,7 @@ function clean_acm_namespace_and_resources() {
   delete_crds_by_name "open-cluster-management" || :
   ${OC} delete managedcluster --all --wait || :
   ${OC} delete validatingwebhookconfiguration --all --wait || :
+  ${OC} delete manifestwork --all --wait || :
 
   TITLE "Delete all ACM resources in Namespace '${ACM_NAMESPACE}' in cluster ${cluster_name}"
 
@@ -110,8 +111,7 @@ function install_acm_operator() {
   export KUBECONFIG="${KUBECONF_HUB}"
   export SUBSCRIBE=true
 
-  # Run on the Hub install
-  # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
+  # Run on the Hub cluster only
 
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
@@ -622,7 +622,8 @@ EOF
   watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
   $cmd |& highlight "$regex" || submariner_status=FAILED
 
-  regex="${cluster_id}-klusterlet-crds"
+  # regex="${cluster_id}-klusterlet-crds"
+  regex="klusterlet"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
