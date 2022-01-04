@@ -1436,7 +1436,7 @@ function update_kubeconfig_default_context() {
   "Replace all special characters in kubeconfig current context before running subctl deploy" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2036325"
   # Workaround:
-  local renamed_context="${cluster_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  local renamed_context="${cluster_name//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   if [[ ! "$cur_context" = "${renamed_context}" ]] ; then
 
@@ -1645,7 +1645,7 @@ EOF
   # "https://bugzilla.redhat.com/show_bug.cgi?id=1973288"
   #
   # # Workaround:
-  # local renamed_context="${cur_context//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  # local renamed_context="${cur_context//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
   # if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
   #   echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
   #   ${OC} config delete-context "${renamed_context}_old" || :
@@ -2424,7 +2424,7 @@ function create_subctl_join_file() {
   cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
   echo "# Write the join parameters into the join command file: $join_cmd_file"
-  JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo "$JOIN_CMD" > "$join_cmd_file"
 

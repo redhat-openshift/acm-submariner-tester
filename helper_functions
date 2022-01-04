@@ -972,7 +972,7 @@ function create_docker_registry_secret() {
   local namespace="$4"
 
   local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-z0-9]/-}" # Replace anything but letters and numbers with "-"
+  local secret_name="${secret_name//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   TITLE "Creating new docker-registry in '$namespace' namespace"
   echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
@@ -1056,20 +1056,29 @@ function print_current_cluster_name() {
 
   export KUBECONFIG="$KUBECONFIG"
 
+  # Get cluster name of "admin" user in kubeconfig
   cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
-  if [[ -n "$cluster_name" ]] ; then
-    current_context="$(${OC} config current-context || :)"
-
-    if [[ -n "$current_context" ]] ; then
-      cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
-    else
-      cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == 'admin')].context.cluster}")"
-    fi
+  # If it's empty, get the oldest cluster name found in kubeconfig
+  if [[ -z "$cluster_name" ]] ; then
+    cluster_name=$(${OC} config view -o jsonpath='{.clusters[-1].name}' | awk '{print $1}')
   fi
 
-  cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
-  cluster_name="${cluster_name//[^a-zA-Z0-9]/_}" # Replace special characters with underscore
+  # If it's empty, get the cluster name of "admin" context
+  if [[ -z "$cluster_name" ]] ; then
+    cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.name == "admin")].context.cluster}' | awk '{print $1}')
+  fi
+
+  # If it's empty, get the cluster name of current context
+  if [[ -z "$cluster_name" ]] ; then
+    current_context=$(${OC} config current-context || :)
+    cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")
+  fi
+
+  # Remove the :<port number> if exists
+  cluster_name="${cluster_name%%:*}"
+  # Replace special characters with underscore
+  cluster_name="${cluster_name//[^a-zA-Z0-9]/-}"
 
   echo $cluster_name
 }
