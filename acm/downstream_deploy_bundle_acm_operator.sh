@@ -378,7 +378,7 @@ function import_managed_cluster() {
 
 # ------------------------------------------
 
-function install_submariner_operator_on_managed_cluster() {
+function configure_submariner_bundle_on_cluster() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -389,8 +389,6 @@ function install_submariner_operator_on_managed_cluster() {
   local cluster_name
   cluster_name="$(print_current_cluster_name)"
 
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster: $cluster_name"
-
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
@@ -398,7 +396,7 @@ function install_submariner_operator_on_managed_cluster() {
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  TITLE "Install custom catalog source for Submariner version $submariner_version (channel $submariner_channel) on cluster $cluster_name"
+  PROMPT "Configure Submariner bundle $submariner_version (channel $submariner_channel) on cluster $cluster_name"
 
   export SUBSCRIBE=false
 
@@ -424,7 +422,7 @@ function install_submariner_operator_on_managed_cluster() {
 
 # ------------------------------------------
 
-function configure_submariner_for_managed_cluster() {
+function install_submariner_via_acm_managed_cluster() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -434,7 +432,7 @@ function configure_submariner_for_managed_cluster() {
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name)"
 
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster: $cluster_id"
+  PROMPT "Install Submariner $SUBM_VER_TAG via ACM on managed cluster: $cluster_id"
 
   configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
 }
@@ -444,7 +442,7 @@ function configure_submariner_for_managed_cluster() {
 function configure_submariner_version_for_managed_cluster() {
   ### Create ACM managed cluster by cluster ID ###
 
-  # TODO: Split to smaller functions (e.g. start from configure_submariner_for_managed_cluster)
+  # TODO: Split to smaller functions (e.g. start from install_submariner_via_acm_managed_cluster)
 
   trap_to_debug_commands;
 

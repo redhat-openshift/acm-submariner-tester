@@ -1461,7 +1461,7 @@ function update_kubeconfig_default_context() {
   Auth user: $cur_username
   Namespace: default
   "
-  
+
   # ${OC} config set "contexts.${renamed_context}.namespace" "default"
   ${OC} config set-context "$renamed_context" --cluster "$cluster_url" --user "${cur_username}" --namespace "default"
   ${OC} config use-context "$renamed_context"
@@ -5650,17 +5650,17 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Setup Submariner Addon on the managed clusters
 
-    ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_HUB}"
+    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_HUB}"
+    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
@@ -5668,9 +5668,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} install_submariner_operator_on_managed_cluster "${KUBECONF_CLUSTER_C}"
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} configure_submariner_for_managed_cluster "${KUBECONF_CLUSTER_C}"
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
 
