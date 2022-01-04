@@ -916,7 +916,7 @@ function delete_crds_by_name() {
       ${OC} delete --timeout=1m crd $crd_name --ignore-not-found || \
       ${OC} patch crd/${crd_name} -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
-    
+
   else
     echo "# No CRD with '${crd_regex}' was found in the current cluster"
   fi
@@ -1055,18 +1055,23 @@ function print_current_cluster_name() {
   local cluster_name
 
   export KUBECONFIG="$KUBECONFIG"
-  current_context="$(${OC} config current-context || :)"
 
-  if [[ -n "$current_context" ]] ; then
-    cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
-  else
-    cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == 'admin')].context.cluster}")"
+  cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
+
+  if [[ -n "$cluster_name" ]] ; then
+    current_context="$(${OC} config current-context || :)"
+
+    if [[ -n "$current_context" ]] ; then
+      cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")"
+    else
+      cluster_name="$(${OC} config view -o jsonpath="{.contexts[?(@.name == 'admin')].context.cluster}")"
+    fi
   fi
 
-    cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
-    cluster_name="${cluster_name//[^a-zA-Z0-9-]/_}" # Replace special characters with underscore
+  cluster_name="${cluster_name%%:*}" # Remove the :<port number> if exists
+  cluster_name="${cluster_name//[^a-zA-Z0-9]/_}" # Replace special characters with underscore
 
-    echo $cluster_name
+  echo $cluster_name
 }
 
 # ------------------------------------------
