@@ -88,6 +88,7 @@ function deploy_ocp_bundle() {
 
   trap_to_debug_commands;
 
+  # Input args
   local version="$1"
   local operator_name="$2"
   local bundle_name="$3"
@@ -96,17 +97,19 @@ function deploy_ocp_bundle() {
   local subscription_name="$6"
   local catalog_source="$7"
 
-  # Whether to install operator on the default namespace, or in a specific namespace
-  declare -a installModes=('AllNamespaces' 'SingleNamespace')
+  local marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
 
-  TITLE "Deploy OCP operator bundle '${bundle_name}'
-  \n# VERSION=${version}
-  \n# OPERATOR_NAME=${operator_name}
-  \n# BUNDLE_NAME=${bundle_name}
-  \n# NAMESPACE=${namespace}
-  \n# CHANNEL=${channel}
-  \n# SUBSCRIPTION=${subscription_name}
-  \n# CATALOG_SOURCE=${catalog_source}
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  TITLE "Add Subscription and CatalogSource for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
+  VERSION=${version}
+  OPERATOR_NAME=${operator_name}
+  BUNDLE_NAME=${bundle_name}
+  NAMESPACE=${namespace}
+  CHANNEL=${channel}
+  SUBSCRIPTION=${subscription_name}
+  CATALOG_SOURCE=${catalog_source}
   "
 
   if [[ -z "${version}" ]] ||
@@ -127,12 +130,13 @@ function deploy_ocp_bundle() {
       exit 3
   fi
 
-  marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
+  # Whether to install operator on the default namespace, or in a specific namespace
+  declare -a installModes=('AllNamespaces' 'SingleNamespace')
   INSTALL_MODE=${installModes[1]}
 
   SUBSCRIBE=${SUBSCRIBE:-false}
 
-  # login
+  # login to current kubeconfig cluster
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   ocp_registry_url=$(${OC} registry info --internal)
@@ -163,7 +167,8 @@ function deploy_ocp_bundle() {
   ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${marketplace_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
-  TITLE "Create the CatalogSource"
+  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
+  ${OCP_IMAGE_INDEX}"
 
   cat <<EOF | ${OC} apply -n ${marketplace_namespace} -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -181,11 +186,12 @@ function deploy_ocp_bundle() {
         interval: 5m
 EOF
 
-
-  TITLE "Wait for CatalogSource '${catalog_source}' to be created"
+  echo "# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${marketplace_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
+
+  TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${marketplace_namespace}' in cluster ${cluster_name}"
 
   # test
   ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
@@ -197,25 +203,25 @@ EOF
   watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${catalog_source}'"
 
   if [ "${SUBSCRIBE}" = true ]; then
+
+    TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
+
     # Deprecated since ACM 2.3
     if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
       # create the OperatorGroup
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: operators.coreos.com/v1alpha2
-  kind: OperatorGroup
-  metadata:
-    name: my-group
-    namespace: ${namespace}
-  spec:
-    targetNamespaces:
-      - ${namespace}
+      cat <<EOF | ${OC} apply -f -
+      apiVersion: operators.coreos.com/v1alpha2
+      kind: OperatorGroup
+      metadata:
+        name: my-group
+        namespace: ${namespace}
+      spec:
+        targetNamespaces:
+          - ${namespace}
 EOF
-
-    # Display operator group
-    ${OC} get operatorgroup -n ${namespace} --ignore-not-found
-  fi
-
-  TITLE "Create the Subscription (Automatic Approval)"
+      # Display operator group
+      ${OC} get operatorgroup -n ${namespace} --ignore-not-found
+    fi
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -256,7 +262,7 @@ EOF
     #   ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
     # fi
 
-    TITLE "Display ${subscriptionNamespace} resources"
+    TITLE "Display ${subscriptionNamespace} resources in cluster ${cluster_name}"
 
     ${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found
@@ -264,7 +270,7 @@ EOF
     ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
-    TITLE "Display Operator deployments logs"
+    TITLE "Display Operator deployments logs in cluster ${cluster_name}"
 
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
