@@ -188,7 +188,9 @@ function create_clusterset_for_submariner_in_acm_hub() {
     FATAL "ManagedClusterSet resource type is missing"
   fi
 
-  TITLE "Creating 'ManagedClusterSet' resource for Submariner"
+  TITLE "Creating 'ManagedClusterSet' resource for ${SUBM_OPERATOR}"
+
+  ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
