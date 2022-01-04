@@ -1424,6 +1424,13 @@ function update_kubeconfig_default_context() {
   local cur_context
   cur_context="$(${OC} config current-context)"
 
+  local cur_username
+  cur_username="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '${cur_context}')].context.user}")"
+
+  local cluster_url
+  # cluster_url="$(${OC} config get-clusters | tail -1)"
+  cluster_url="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '${cur_context}')].context.cluster}")"
+
   BUG "If using managed cluster-id with long name or special characters (from current kubeconfig context),
   Submariner Gateway resource will not be created using Submariner Addon" \
   "Replace all special characters in kubeconfig current context before running subctl deploy" \
@@ -1433,7 +1440,7 @@ function update_kubeconfig_default_context() {
 
   if [[ ! "$cur_context" = "${renamed_context}" ]] ; then
 
-    TITLE "Updating kubeconfig current-context name to '$renamed_context'"
+    TITLE "Renaming kubeconfig current-context to '$renamed_context'"
 
     BUG "E2E will fail if clusters have same name (default is \"admin\")" \
     "Modify KUBECONFIG cluster context name on both clusters to be unique" \
@@ -1446,16 +1453,17 @@ function update_kubeconfig_default_context() {
     fi
 
     ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
-    ${OC} config use-context "$renamed_context" || :
+    # ${OC} config use-context "$renamed_context" || :
   fi
 
-  TITLE "Set KUBECONFIG current context '$cur_context' to use the first cluster and the 'default' namespace"
-
-  local cluster_id=$(${OC} config get-clusters | tail -1)
-  TITLE "Set KUBECONFIG context '$renamed_context' to cluster id '$cluster_id', and its namespace to 'default'"
+  TITLE "Updating KUBECONFIG current context '$renamed_context' to use:
+  Cluster url: $cluster_url
+  Auth user: $cur_username
+  Namespace: default
+  "
+  
   # ${OC} config set "contexts.${renamed_context}.namespace" "default"
-  # ${OC} config set "contexts.${cur_context}.namespace" "default"
-  ${OC} config set-context "$renamed_context" --cluster "$cluster_id" --user "${master_user}" --namespace "default"
+  ${OC} config set-context "$renamed_context" --cluster "$cluster_url" --user "${cur_username}" --namespace "default"
   ${OC} config use-context "$renamed_context"
 
   ${OC} config get-contexts
