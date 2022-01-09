@@ -9,9 +9,15 @@ function export_LATEST_IIB() {
 
   local version="${1}"
   local bundle_name="${2}"
-  local index_images
 
   TITLE "Retrieving index-image from UBI (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
+
+  local index_images
+
+  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+  local umb_output="latest_iib.txt"
+  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  # local iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
   local num_of_latest_builds=5
   local rows=$((num_of_latest_builds * 5))
@@ -19,10 +25,9 @@ function export_LATEST_IIB() {
   local num_of_days=30
   local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
-  curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
+  curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-  # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
-  index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+  index_images="$(cat $umb_output | jq -r "${iib_query}")"
 
   # index-images example:
   # {
@@ -35,13 +40,14 @@ function export_LATEST_IIB() {
   # }
 
   if [[ "$index_images" = null ]]; then
-    BUG "Failed to retrieve index-image during the last $num_of_days days, attempting with double $num_of_days"
-    delta=$((delta * 2))
+    BUG "Failed to retrieve completed images during the last $num_of_days days, getting all images during delta of 3X${num_of_days} days"
+    delta=$((delta * 3))
 
-    curl --retry 30 --retry-delay 5 -o latest_iib.txt -Ls 'https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&rows_per_page='${rows}'&delta='${delta}'&contains='${bundle_name}'-container-'${version}
+    curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-    # index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
-    index_images="$(cat latest_iib.txt | jq -r '[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]')"
+    cat $umb_output | jq -r "${iib_query}"
+
+    index_images="$(cat $umb_output | jq -r "${iib_query}")"
 
     if [[ "$index_images" = null ]]; then
       FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
@@ -82,42 +88,55 @@ function deploy_ocp_bundle() {
 
   trap_to_debug_commands;
 
+  # Input args
   local version="$1"
   local operator_name="$2"
   local bundle_name="$3"
   local namespace="$4"
   local channel="$5"
+  local subscription_name="$6"
+  local catalog_source="$7"
 
-  # Whether to install operator on the default namespace, or in a specific namespace
-  declare -a installModes=('AllNamespaces' 'SingleNamespace')
+  local marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
 
-  TITLE "Deploy OCP operator bundle '${bundle_name}'
-  \n# VERSION=${version}
-  \n# OPERATOR_NAME=${operator_name}
-  \n# BUNDLE_NAME=${bundle_name}
-  \n# NAMESPACE=${namespace}
-  \n# CHANNEL=${channel}"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  TITLE "Add Subscription and CatalogSource for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
+  VERSION=${version}
+  OPERATOR_NAME=${operator_name}
+  BUNDLE_NAME=${bundle_name}
+  NAMESPACE=${namespace}
+  CHANNEL=${channel}
+  SUBSCRIPTION=${subscription_name}
+  CATALOG_SOURCE=${catalog_source}
+  "
 
   if [[ -z "${version}" ]] ||
      [[ -z "${operator_name}" ]] ||
      [[ -z "${bundle_name}" ]] ||
      [[ -z "${namespace}" ]] ||
-     [[ -z "${channel}" ]]; then
+     [[ -z "${channel}" ]] ||
+     [[ -z "${subscription_name}" ]] ||
+     [[ -z "${catalog_source}" ]] ; then
       error "Required environment variables not loaded"
       error "    VERSION"
       error "    OPERATOR_NAME"
       error "    BUNDLE_NAME"
       error "    NAMESPACE"
       error "    CHANNEL"
+      error "    SUBSCRIPTION"
+      error "    CATALOG_SOURCE"
       exit 3
   fi
 
-  marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
+  # Whether to install operator on the default namespace, or in a specific namespace
+  declare -a installModes=('AllNamespaces' 'SingleNamespace')
   INSTALL_MODE=${installModes[1]}
 
   SUBSCRIBE=${SUBSCRIBE:-false}
 
-  # login
+  # login to current kubeconfig cluster
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   ocp_registry_url=$(${OC} registry info --internal)
@@ -132,8 +151,8 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo "# Delete previous catalogSource and Subscription"
-  ${OC} delete sub/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
-  ${OC} delete catalogsource/${ACM_CATALOG} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete sub/${subscription_name} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete catalogsource/${catalog_source} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
   export_LATEST_IIB "${version}" "${bundle_name}"
 
@@ -148,13 +167,14 @@ function deploy_ocp_bundle() {
   ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${marketplace_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
-  TITLE "Create the CatalogSource"
+  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
+  ${OCP_IMAGE_INDEX}"
 
   cat <<EOF | ${OC} apply -n ${marketplace_namespace} -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: CatalogSource
   metadata:
-    name: ${ACM_CATALOG}
+    name: ${catalog_source}
     namespace: ${marketplace_namespace}
   spec:
     sourceType: grpc
@@ -166,11 +186,12 @@ function deploy_ocp_bundle() {
         interval: 5m
 EOF
 
+  echo "# Wait for CatalogSource '${catalog_source}' to be created:"
 
-  TITLE "Wait for CatalogSource '${ACM_CATALOG}' to be created"
+  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
 
-  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${ACM_CATALOG} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${ACM_CATALOG}' was not created"
+  TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${marketplace_namespace}' in cluster ${cluster_name}"
 
   # test
   ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
@@ -179,40 +200,40 @@ EOF
 
   cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
   regex="${version//[a-zA-Z]}"
-  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${ACM_CATALOG}'"
+  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${catalog_source}'"
 
   if [ "${SUBSCRIBE}" = true ]; then
+
+    TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
+
     # Deprecated since ACM 2.3
     if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
       # create the OperatorGroup
-  cat <<EOF | ${OC} apply -f -
-  apiVersion: operators.coreos.com/v1alpha2
-  kind: OperatorGroup
-  metadata:
-    name: my-group
-    namespace: ${namespace}
-  spec:
-    targetNamespaces:
-      - ${namespace}
+      cat <<EOF | ${OC} apply -f -
+      apiVersion: operators.coreos.com/v1alpha2
+      kind: OperatorGroup
+      metadata:
+        name: my-group
+        namespace: ${namespace}
+      spec:
+        targetNamespaces:
+          - ${namespace}
 EOF
-
-    # Display operator group
-    ${OC} get operatorgroup -n ${namespace} --ignore-not-found
-  fi
-
-  TITLE "Create the Subscription (Automatic Approval)"
+      # Display operator group
+      ${OC} get operatorgroup -n ${namespace} --ignore-not-found
+    fi
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
-    name: ${ACM_SUBSCRIPTION}
+    name: ${subscription_name}
     namespace: ${subscriptionNamespace}
   spec:
     channel: ${channel}
     installPlanApproval: Automatic
     name: ${operator_name}
-    source: ${ACM_CATALOG}
+    source: ${catalog_source}
     sourceNamespace: ${marketplace_namespace}
     startingCSV: ${operator_name}.${version}
 EOF
@@ -220,28 +241,28 @@ EOF
     # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
     #
     # # local duration=5m
-    # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${ACM_SUBSCRIPTION} || subscription_status=FAILED
+    # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${subscription_name} || subscription_status=FAILED
     #
     # local acm_subscription="`mktemp`_acm_subscription"
-    # local cmd="${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" &> '$acm_subscription'"
+    # local cmd="${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}" &> '$acm_subscription'"
     # local duration=5m
     # local regex="State:\s*AtLatestKnown|UpgradePending"
     #
     # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
     # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
     #
-    # ${OC} describe subs/${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}"
+    # ${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}"
     #
     # if [[ "$subscription_status" = FAILED ]] ; then
-    #   FATAL "InstallPlan for '${ACM_SUBSCRIPTION}' subscription in ${subscriptionNamespace} is not ready after $duration"
+    #   FATAL "InstallPlan for '${subscription_name}' subscription in ${subscriptionNamespace} is not ready after $duration"
     # fi
     #
-    # installPlan=$(${OC} get subscriptions.operators.coreos.com ${ACM_SUBSCRIPTION} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
+    # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription_name} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
     # if [ -n "${installPlan}" ]; then
     #   ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
     # fi
 
-    TITLE "Display ${subscriptionNamespace} resources"
+    TITLE "Display ${subscriptionNamespace} resources in cluster ${cluster_name}"
 
     ${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found
@@ -249,7 +270,7 @@ EOF
     ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
     ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
-    TITLE "Display Operator deployments logs"
+    TITLE "Display Operator deployments logs in cluster ${cluster_name}"
 
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
     ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :

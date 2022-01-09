@@ -75,6 +75,7 @@ function clean_acm_namespace_and_resources() {
   delete_crds_by_name "open-cluster-management" || :
   ${OC} delete managedcluster --all --wait || :
   ${OC} delete validatingwebhookconfiguration --all --wait || :
+  ${OC} delete manifestwork --all --wait || :
 
   TITLE "Delete all ACM resources in Namespace '${ACM_NAMESPACE}' in cluster ${cluster_name}"
 
@@ -110,17 +111,16 @@ function install_acm_operator() {
   export KUBECONFIG="${KUBECONF_HUB}"
   export SUBSCRIBE=true
 
-  # Run on the Hub install
-  # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
+  # Run on the Hub cluster only
 
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
   watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR_NAME}" "${ACM_BUNDLE_NAME}" "${ACM_NAMESPACE}" "${acm_channel}"
+  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR}" "${ACM_BUNDLE}" "${ACM_NAMESPACE}" "${acm_channel}" "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}"
 
-  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE_NAME}"
+  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE_NAME}"
+  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE}"
 
   echo "# Install ACM operator completed"
 
@@ -188,7 +188,9 @@ function create_clusterset_for_submariner_in_acm_hub() {
     FATAL "ManagedClusterSet resource type is missing"
   fi
 
-  TITLE "Creating 'ManagedClusterSet' resource for Submariner"
+  TITLE "Creating 'ManagedClusterSet' resource for ${SUBM_OPERATOR}"
+
+  ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
@@ -237,40 +239,25 @@ EOF
 
 # ------------------------------------------
 
-function import_managed_cluster_a() {
-  PROMPT "Import ACM CRDs for managed cluster A"
+function create_and_import_managed_cluster() {
   trap_to_debug_commands;
 
-  local cluster_id="acm-${CLUSTER_A_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
+  local kubeconfig_file="$1"
 
-  export KUBECONFIG="${KUBECONF_HUB}"
-  import_managed_cluster "$cluster_id"
-}
+  export KUBECONFIG="$kubeconfig_file"
 
-# ------------------------------------------
+  local cluster_id
+  cluster_id="acm-$(print_current_cluster_name)"
 
-function import_managed_cluster_b() {
-  PROMPT "Import ACM CRDs for managed cluster B"
-  trap_to_debug_commands;
+  PROMPT "Create and import a managed cluster in ACM: $cluster_id"
 
-  local cluster_id="acm-${CLUSTER_B_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Openstack"
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud)"
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  import_managed_cluster "$cluster_id"
-}
+  create_new_managed_cluster_in_acm_hub "$cluster_id" "$ocp_cloud"
 
-# ------------------------------------------
+  export KUBECONFIG="$kubeconfig_file"
 
-function import_managed_cluster_c() {
-  PROMPT "Import ACM CRDs for managed cluster C"
-  trap_to_debug_commands;
-
-  local cluster_id="acm-${CLUSTER_C_NAME}"
-  create_new_managed_cluster_in_acm_hub "$cluster_id" "Amazon"
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   import_managed_cluster "$cluster_id"
 }
 
@@ -393,40 +380,16 @@ function import_managed_cluster() {
 
 # ------------------------------------------
 
-function install_submariner_on_managed_cluster_a() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster A"
+function configure_submariner_bundle_on_cluster() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_HUB}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
+  local kubeconfig_file="$1"
+  local submariner_version="${2:-$SUBM_VER_TAG}"
 
-# ------------------------------------------
+  export KUBECONFIG="$kubeconfig_file"
 
-function install_submariner_on_managed_cluster_b() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function install_submariner_on_managed_cluster_c() {
-  PROMPT "Install Submariner Operator $SUBM_VER_TAG on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  install_submariner_operator_on_managed_cluster "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function install_submariner_operator_on_managed_cluster() {
-  trap_to_debug_commands;
-
-  local submariner_version="${1:-$SUBM_VER_TAG}"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
 
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
@@ -435,10 +398,7 @@ function install_submariner_operator_on_managed_cluster() {
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  local cluster_name
-  cluster_name="$(print_current_cluster_name)"
-
-  TITLE "Install custom catalog source for Submariner version $submariner_version (channel $submariner_channel) on cluster $cluster_name"
+  PROMPT "Configure Submariner bundle $submariner_version (channel $submariner_channel) on cluster $cluster_name"
 
   export SUBSCRIBE=false
 
@@ -446,7 +406,7 @@ function install_submariner_operator_on_managed_cluster() {
 
   # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
 
-  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}"
+  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}" "${SUBM_SUBSCRIPTION}" "${SUBM_CATALOG}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
@@ -464,31 +424,18 @@ function install_submariner_operator_on_managed_cluster() {
 
 # ------------------------------------------
 
-function configure_submariner_for_managed_cluster_a() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster A"
+function install_submariner_via_acm_managed_cluster() {
   trap_to_debug_commands;
 
-  local cluster_id="acm-${CLUSTER_A_NAME}"
-  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
-}
+  local kubeconfig_file="$1"
 
-# ------------------------------------------
+  export KUBECONFIG="$kubeconfig_file"
 
-function configure_submariner_for_managed_cluster_b() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster B"
-  trap_to_debug_commands;
+  local cluster_id
+  cluster_id="acm-$(print_current_cluster_name)"
 
-  local cluster_id="acm-${CLUSTER_B_NAME}"
-  configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
-}
+  PROMPT "Install Submariner $SUBM_VER_TAG via ACM on managed cluster: $cluster_id"
 
-# ------------------------------------------
-
-function configure_submariner_for_managed_cluster_c() {
-  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for managed cluster C"
-  trap_to_debug_commands;
-
-  local cluster_id="acm-${CLUSTER_C_NAME}"
   configure_submariner_version_for_managed_cluster "$cluster_id" "$SUBM_VER_TAG"
 }
 
@@ -496,6 +443,9 @@ function configure_submariner_for_managed_cluster_c() {
 
 function configure_submariner_version_for_managed_cluster() {
   ### Create ACM managed cluster by cluster ID ###
+
+  # TODO: Split to smaller functions (e.g. start from install_submariner_via_acm_managed_cluster)
+
   trap_to_debug_commands;
 
   local cluster_id="${1}"
@@ -512,32 +462,98 @@ function configure_submariner_version_for_managed_cluster() {
   TITLE "Configure Submariner ${submariner_version} Addon in ACM Hub namespace $cluster_id"
 
   local submariner_status
+  local cluster_secret_name
 
   # Following steps should be run on ACM hub
   export KUBECONFIG="${KUBECONF_HUB}"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  echo "# Configure Submariner credentials"
+  ${OC} get managedclusters
 
-  ( # subshell to hide commands
-    ### Create the aws creds secret
-    cat <<EOF | ${OC} apply -f -
-    apiVersion: v1
-    kind: Secret
-    metadata:
-        name: ${cluster_id}-aws-creds
-        namespace: ${cluster_id}
-    type: Opaque
-    data:
-        aws_access_key_id: $(echo ${AWS_KEY} | base64 -w0)
-        aws_secret_access_key: $(echo ${AWS_SECRET} | base64 -w0)
+  local managed_cluster_cloud
+  managed_cluster_cloud=$(${OC} get managedclusters -o jsonpath="{.items[?(@.metadata.name=='${cluster_id}')].metadata.labels.cloud}")
+
+  if [[ "$managed_cluster_cloud" = "Amazon" ]] ; then
+
+    cluster_secret_name="${cluster_id}-aws-creds"
+
+    TITLE "Configure Submariner credentials for the Gateway node on $managed_cluster_cloud (${cluster_secret_name})"
+
+    ( # subshell to hide commands
+      ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
+      || FATAL "No $managed_cluster_cloud credentials found for Managed cluster '${cluster_id}'"
+
+      cat <<EOF | ${OC} apply -f -
+      apiVersion: v1
+      kind: Secret
+      metadata:
+          name: ${cluster_secret_name}
+          namespace: ${cluster_id}
+      type: Opaque
+      data:
+          aws_access_key_id: $(echo -n ${AWS_KEY} | base64 -w0)
+          aws_secret_access_key: $(echo -n ${AWS_SECRET} | base64 -w0)
 EOF
-  )
+    )
 
-  TITLE "Create the Submariner Subscription config"
+  elif [[ "$managed_cluster_cloud" = "Google" ]] ; then
 
-  cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
+    cluster_secret_name="${cluster_id}-gcp-creds"
+
+    TITLE "Configure Submariner credentials for the Gateway node on $managed_cluster_cloud (${cluster_secret_name})"
+
+    ( # subshell to hide commands
+      [[ -s "$GCP_CRED_JSON" ]] || FATAL "No $managed_cluster_cloud credentials found for Managed cluster '${cluster_id}'"
+
+      cat <<EOF | ${OC} apply -f -
+      apiVersion: v1
+      kind: Secret
+      metadata:
+          name: ${cluster_secret_name}
+          namespace: ${cluster_id}
+      type: Opaque
+      data:
+          osServiceAccount.json: $(base64 -w0 "${GCP_CRED_JSON}")
+EOF
+    )
+
+  elif [[ "$managed_cluster_cloud" = "Openstack" ]] ; then
+
+    cluster_secret_name="${cluster_id}-osp-creds"
+
+    TITLE "Configure Submariner credentials for the Gateway node on $managed_cluster_cloud (${cluster_secret_name})"
+
+    echo "### Openstack Gateway creation is not yet supported - should be done externally with 'configure_osp.sh'"
+
+#     ( # subshell to hide commands
+        # ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
+        # || FATAL "No $managed_cluster_cloud credentials found for Managed cluster '${cluster_id}'"
+
+#     cat <<EOF | ${OC} apply -f -
+#     apiVersion: v1
+#     kind: Secret
+#     metadata:
+#         name: ${cluster_secret_name}
+#         namespace: ${cluster_id}
+#     type: Opaque
+#     data:
+#         username: $(echo -n ${OS_USERNAME} | base64 -w0)
+#         password: $(echo -n ${OS_PASSWORD} | base64 -w0)
+# EOF
+#     )
+
+  else
+    FATAL "Could not determine Cloud type '$managed_cluster_cloud' for Managed cluster '${cluster_id}'"
+
+  fi
+
+
+  TITLE "Create the Submariner subscription config for $managed_cluster_cloud managed cluster: ${cluster_id}"
+
+  local subscription_conf="SubmarinerConfig_${cluster_id}.yaml"
+
+  cat <<-EOF > $subscription_conf
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
@@ -548,10 +564,10 @@ EOF
     IPSecNATTPort: ${IPSEC_NATT_PORT}
     cableDriver: libreswan
     credentialsSecret:
-      name: ${cluster_id}-aws-creds
+      name: ${cluster_secret_name}
     gatewayConfig:
       aws:
-        instanceType: m5.xlarge
+        instanceType: c5d.large
       gateways: 1
     imagePullSpecs:
       lighthouseAgentImagePullSpec: ''
@@ -560,14 +576,18 @@ EOF
       submarinerRouteAgentImagePullSpec: ''
     subscriptionConfig:
       channel: ${submariner_channel}
-      source: my-catalog-source
+      source: ${SUBM_CATALOG}
       sourceNamespace: ${SUBM_NAMESPACE}
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
+  echo "# Apply SubmarinerConfig (if failed once - apply again)"
+
+  ${OC} apply --dry-run='server' -f $subscription_conf | highlight "unchanged" \
+  || ${OC} apply -f $subscription_conf || ${OC} apply -f $subscription_conf || submariner_status=FAILED
+
 
   if [[ ! "$submariner_status" = FAILED ]] ; then
-
     TITLE "Create the Submariner Addon to start the deployment"
 
     cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
@@ -582,7 +602,9 @@ EOF
 
     TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
-    ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+    # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
+    ${OC} label managedclusters ${cluster_id} "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" --overwrite
+
   fi
 
   TITLE "SubmarinerConfig and ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
@@ -593,12 +615,20 @@ EOF
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} && \
   ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
-  TITLE "Wait for ManifestWork of '${cluster_id}-klusterlet-crds' to be ready in the ACM Hub under namespace ${cluster_id}"
+  # TODO: ManifestWork validation should be moved to a new function
+  local regex
 
-  local regex="klusterlet-crds"
+  regex="submariner"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
-  watch_and_retry "$cmd | grep '$regex'" "10m" || :
+  watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
+  $cmd |& highlight "$regex" || submariner_status=FAILED
 
+  # regex="${cluster_id}-klusterlet-crds"
+  regex="klusterlet"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
   $cmd |& highlight "$regex" || submariner_status=FAILED
 
   if [[ "$submariner_status" = FAILED ]] ; then
