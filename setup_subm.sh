@@ -1406,19 +1406,19 @@ function update_kubeconfig_default_context() {
   echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  TITLE "Set current context of cluster '$cluster_name' to the first context with master (or admin) user"
+  local admin_user="admin"
+  TITLE "Set current context of cluster '$cluster_name' to the first context with '${admin_user}' user"
 
   local master_context
-  local master_user="master"
-
-  master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+  master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${admin_user}\")).name][0] // empty")
 
   if [[ -z "$master_context" ]] ; then
-    master_user="admin"
-    master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+    admin_user="master"
+    echo "# Warning: Admin user not found, looking for context of '${admin_user}' user instead"
+    master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${admin_user}\")).name][0] // empty")
   fi
 
-  echo "# Switch to the cluster of the '$master_user' user"
+  echo "# Switch to the cluster of the '$admin_user' user"
   ${OC} config use-context "$master_context"
 
   local cur_context
@@ -1453,7 +1453,6 @@ function update_kubeconfig_default_context() {
     fi
 
     ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
-    # ${OC} config use-context "$renamed_context" || :
   fi
 
   TITLE "Updating KUBECONFIG current context '$renamed_context' to use:
@@ -5340,14 +5339,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### END Script debug ###
 
-  # Print planned steps according to CLI/User inputs
-  ${junit_cmd} show_test_plan
-
   # Setup and verify environment
   setup_workspace
 
   # Set script trap functions
   set_trap_functions
+
+  # Print planned steps according to CLI/User inputs
+  ${junit_cmd} show_test_plan
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
 
