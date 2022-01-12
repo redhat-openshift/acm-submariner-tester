@@ -624,8 +624,8 @@ EOF
   watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
   $cmd |& highlight "$regex" || submariner_status=FAILED
 
-  # regex="${cluster_id}-klusterlet-crds"
-  regex="klusterlet"
+  # regex="${cluster_id}-klusterlet-addon-appmgr"
+  regex="klusterlet-addon-appmgr"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "10m" || :
