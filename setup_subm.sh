@@ -5228,9 +5228,15 @@ function print_resources_and_pod_logs() {
 
 # ------------------------------------------
 
-# Functions to debug this script
+
+###################################################################
+#         Internal usage functions to debug this script           #
+###################################################################
+
 
 function debug_test_polarion() {
+  # Internal debugging function for Polarion
+
   trap_to_debug_commands;
   PROMPT "DEBUG Polarion setup"
 
@@ -5245,16 +5251,20 @@ function debug_test_polarion() {
   fi
 
   echo 1 > $TEST_STATUS_FILE
-
 }
 
+# ------------------------------------------
+
 function debug_test_pass() {
+  # Internal debugging function to test juint with arguments and special characters
+
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
-  local test="TRUE"
+  local arg1="$1"
+  local arg2="$2"
 
-  if [[ -n "$test" ]] ; then
+  if [[ "$arg1" != "$arg2" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
@@ -5272,7 +5282,11 @@ function debug_test_pass() {
 
 }
 
+# ------------------------------------------
+
 function debug_test_fail() {
+  # Internal debugging function to mark junit test as failed, without exiting script on error
+
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -5288,7 +5302,11 @@ function debug_test_fail() {
 
 }
 
+# ------------------------------------------
+
 function debug_test_fatal() {
+  # Internal debugging function to test FATAL error (tests should not continue afterwards)
+
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
   FATAL "Terminating script here"
@@ -5329,12 +5347,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### Script debug calls (should be left as a comment) ###
 
     # ${junit_cmd} debug_test_polarion
-    # ${junit_cmd} debug_test_pass
-    # ${junit_cmd} debug_test_fail
+    # ${junit_cmd} debug_test_pass "junit" "junit"
+    # ${junit_cmd} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
     # rc=$?
     # BUG "debug_test_fail - Exit code: $rc" \
     # "If RC $rc = 5 - junit_cmd should continue execution"
-    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_pass 100 200 300
     # ${junit_cmd} debug_test_fatal
 
   ### END Script debug ###
