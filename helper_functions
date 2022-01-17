@@ -351,12 +351,12 @@ function record_junit() {
   # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
   shift
 
-  # Set junit test name as the called function
-  local test_name="$1"
-  local func_and_args="$@"
+  # Set junit test name as the called function and args (omitting special characters)
+  local func_and_args="$*"
+  local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
 
-  echo "+++ Recording junit test \"$test_name\" ${func_and_args:+[$func_and_args]}
-  +++ into xml output file \"${output_dir}/${output_file}\""
+  echo "+++ Recording test as Junit: ${func_and_args}"
+  echo "+++ XML output of all Junit: ${output_dir}/${output_file}"
 
   juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
 }
