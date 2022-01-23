@@ -5095,11 +5095,13 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    TITLE "Submariner information (subctl show and diagnose)"
+    TITLE "Submariner information (using subctl show, diagnose and gather logs)"
 
     subctl show all || :
 
     subctl diagnose all || :
+
+    subctl gather || :
 
     export KUBECONFIG="${KUBECONF_HUB}"
     print_resources_and_pod_logs "$CLUSTER_A_NAME"
