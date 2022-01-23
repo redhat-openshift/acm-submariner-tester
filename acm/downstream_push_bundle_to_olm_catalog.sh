@@ -64,7 +64,9 @@ function export_LATEST_IIB() {
   if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
     BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
 
-    ocp_version_x_y="$(echo "$index_images" | jq -r '.index_image' | jq '[.][] | keys | last')" || :
+    # Find the latest version, after sorting by product versions (not by real numbers), so for example: v4.10 is higher than v4.9
+
+    ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
 
     TITLE "Getting the last index-image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
 
