@@ -200,30 +200,36 @@ EOF
   ${OC} -n ${marketplace_namespace} get pods --ignore-not-found
   ${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source' || :
 
-  cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  regex="${version//[a-zA-Z]}"
-  watch_and_retry "$cmd" 3m "$regex" || FATAL "The package ${operator_name} version ${version//[a-zA-Z]} was not found in the CatalogSource '${catalog_source}'"
+  # List all available versions in the bundle package manifest
+  # cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+  # regex="${version//[a-zA-Z]}"
+  # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
+
+  # List all available channels in the bundle package manifest
+  cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
+  regex="${channel}"
+  watch_and_retry "$cmd" 3m "$regex" || FATAL "Channel '${regex}' was not found in the package manifest of ${operator_name}"
 
   if [ "${SUBSCRIBE}" = true ]; then
 
     TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
 
-    # Deprecated since ACM 2.3
-    if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
-      # create the OperatorGroup
-      cat <<EOF | ${OC} apply -f -
-      apiVersion: operators.coreos.com/v1alpha2
-      kind: OperatorGroup
-      metadata:
-        name: my-group
-        namespace: ${namespace}
-      spec:
-        targetNamespaces:
-          - ${namespace}
-EOF
-      # Display operator group
-      ${OC} get operatorgroup -n ${namespace} --ignore-not-found
-    fi
+#     # Deprecated since ACM 2.3
+#     if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
+#       # create the OperatorGroup
+#       cat <<EOF | ${OC} apply -f -
+#       apiVersion: operators.coreos.com/v1alpha2
+#       kind: OperatorGroup
+#       metadata:
+#         name: my-group
+#         namespace: ${namespace}
+#       spec:
+#         targetNamespaces:
+#           - ${namespace}
+# EOF
+#       # Display operator group
+#       ${OC} get operatorgroup -n ${namespace} --ignore-not-found
+#     fi
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
