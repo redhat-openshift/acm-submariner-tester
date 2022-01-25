@@ -8,13 +8,13 @@
 # https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
-# for both cluster A (AWS) and cluster B (OSP), in the current directory.                             #
+# for both cluster A (AWS) and clusters B or C (OSP/GCP/AWS), in the current directory.               #
 #                                                                                                     #
 # For cluster A, use Openshift-installer config format:                                               #
 # https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
 #                                                                                                     #
 # For cluster B, use OCPUP config format:                                                             #
-# https://github.com/dimaunx/ocpup#create-config-file                                                 #
+# https://github.com/redhat-openshift/ocpup#create-config-file                                                 #
 #                                                                                                     #
 # To create those config files, you need to supply your AWS pull secret, and SSH public key:          #
 #                                                                                                     #
@@ -963,7 +963,7 @@ function build_ocpup_tool_latest() {
 
   cd ${WORKDIR}
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
-  git clone https://github.com/dimaunx/ocpup || echo "# OCPUP directory already exists"
+  git clone https://github.com/redhat-openshift/ocpup || echo "# OCPUP directory already exists"
   cd ocpup
 
   # To cleanup GOLANG mod files:
@@ -2121,7 +2121,7 @@ function test_clusters_disconnected_before_submariner() {
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
-  # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
+  # Trying to connect from cluster A to cluster B/C, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
@@ -3448,7 +3448,7 @@ function test_submariner_resources_status() {
 
 function test_public_ip_on_gateway_node() {
 # Testing that Submariner Gateway node received public (external) IP
-  PROMPT "Testing that Submariner Gateway node received public (external) IP"
+  PROMPT "Testing that Submariner Gateway node received public (external) IP on the Broker cluster A"
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
@@ -3470,7 +3470,7 @@ function test_public_ip_on_gateway_node() {
 
 function test_disaster_recovery_of_gateway_nodes() {
 # Check that submariner tunnel works if broker nodes External-IPs (on gateways) is changed
-  PROMPT "Testing Disaster Recovery: Reboot Submariner-Gateway VM, to verify re-allocation of public (external) IP"
+  PROMPT "Testing Disaster Recovery: Reboot Submariner Gateway VM on the Broker cluster A, to verify re-allocation of public (external) IP"
   trap_to_debug_commands;
 
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
@@ -3519,7 +3519,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 
 function test_renewal_of_gateway_and_public_ip() {
 # Testing that Submariner Gateway was re-created with new public IP
-  PROMPT "Testing that Submariner Gateway was re-created with new public IP"
+  PROMPT "Testing that Submariner Gateway was re-created with new public IP on the Broker cluster A"
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
@@ -4082,7 +4082,7 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_bc="$(< $TEMP_FILE)"
-  TITLE "Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+  TITLE "Nginx service on cluster B/C, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
     # nginx_IP_cluster_bc: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_HUB}"
@@ -4121,7 +4121,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 
     msg="# Negative Test - Clusters have Overlapping CIDRs:
-    \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
+    \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
     ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
   fi
@@ -4162,7 +4162,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
-  To Nginx service on cluster B, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
+  To Nginx service on cluster B/C, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
 
   export KUBECONFIG="${KUBECONF_HUB}"
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
@@ -4174,7 +4174,7 @@ function test_clusters_connected_overlapping_cidrs() {
 # ------------------------------------------
 
 function test_clusters_connected_full_domain_name() {
-### Nginx service on cluster B, will be identified by its Domain Name ###
+### Nginx service on cluster B/C, will be identified by its Domain Name ###
 # This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_BC service, on the default namespace
 
   trap_to_debug_commands;
@@ -4183,7 +4183,7 @@ function test_clusters_connected_full_domain_name() {
   local nginx_cl_b_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
-  To the default Nginx service on cluster B${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
+  To the default Nginx service on cluster B/C${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4220,7 +4220,7 @@ function test_clusters_cannot_connect_short_service_name() {
   local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B/C: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4318,7 +4318,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
 # ------------------------------------------
 
 function test_clusters_connected_headless_service_on_new_namespace() {
-### Nginx service on cluster B, will be identified by its Domain Name (with service-discovery) ###
+### Nginx service on cluster B/C, will be identified by its Domain Name (with service-discovery) ###
 
   trap_to_debug_commands;
 
@@ -4326,7 +4326,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
   local nginx_headless_cl_b_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
-  To the HEADLESS Nginx service on cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
+  To the HEADLESS Nginx service on cluster B/C${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
@@ -4374,7 +4374,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
   local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B/C: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4914,15 +4914,13 @@ function add_polarion_testrun_url_to_report_headlines() {
 function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    TITLE "Showing product versions (since CLI option --print-logs was used)"
+  TITLE "Showing product versions on script teardown"
 
-    ${junit_cmd} test_products_versions_cluster_a || :
+  ${junit_cmd} test_products_versions_cluster_a || :
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
+  [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
-  fi
+  [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
 
 }
 
@@ -5754,6 +5752,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ### Running High-level (System) tests of Submariner ###
 
+    # Testing the Submariner gateway disaster recovery just on the Broker cluster (using $KUBECONF_HUB)
+
     ${junit_cmd} test_public_ip_on_gateway_node
 
     ${junit_cmd} test_disaster_recovery_of_gateway_nodes
@@ -5762,9 +5762,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
+    # Testing Submariner resources on all clusters
+
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_c
+
+    # Testing Submariner cable-driver on all clusters
 
     ${junit_cmd} test_cable_driver_cluster_a
 
@@ -5772,11 +5776,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_cable_driver_cluster_c
 
+    # Testing Submariner HA (High Availability) status on all clusters
+
     ${junit_cmd} test_ha_status_cluster_a
 
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ha_status_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ha_status_cluster_c
+
+    # Testing Submariner connectivity status on all clusters
 
     ${junit_cmd} test_submariner_connection_cluster_a
 
@@ -5784,13 +5792,19 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_c
 
+    # Testing SubCtl (Submariner CLI tool) info on all clusters
+
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
+    # Testing IPSec status on all clusters
 
     ${junit_cmd} test_ipsec_status_cluster_a
 
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_c
+
+    # Testing GlobalNet connectivity (if enabled) on all clusters
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
@@ -5801,7 +5815,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_globalnet_status_cluster_c
     fi
 
-    # Test service-discovery (lighthouse)
+    # Test service-discovery (lighthouse) on all clusters
 
     ${junit_cmd} test_lighthouse_status_cluster_a
 
@@ -5809,8 +5823,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_lighthouse_status_cluster_c
 
-    ### Running connectivity tests between the On-Premise and Public clusters,
-    # To validate that now Submariner made the connection possible.
+    ### Running connectivity tests between the clusters ###
+    # (Validating that now Submariner made the connection possible)
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
@@ -5843,7 +5857,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
-    # Test the new netshoot and headless nginx service discovery
+    # Test the new netshoot and headless Nginx service-discovery
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
