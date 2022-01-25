@@ -109,20 +109,17 @@ export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
 export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
-export SUBM_SUBSCRIPTION="my-submariner-subscription"
+# export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
 
 # ACM vars
-export OPERATORS_NAMESPACE="openshift-operators"
+# export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
 export ACM_SUBSCRIPTION="my-acm-subscription"
 export ACM_CATALOG="my-acm-catalog"
-
-# export ACM_VERSION="v2.4.0"
-# export ACM_CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
 
 export TEST_NS="${TEST_NS:-test-submariner}"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"

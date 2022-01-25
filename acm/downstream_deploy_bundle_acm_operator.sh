@@ -106,17 +106,16 @@ function install_acm_operator() {
   local acm_channel
   acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
 
-  PROMPT "Install ACM operator $acm_version (Channel ${acm_channel})"
+  PROMPT "Install ACM operator $acm_version (channel '${acm_channel}' with automatic subscription)"
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  export SUBSCRIBE=true
 
   # Run on the Hub cluster only
 
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
   watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${acm_version}" "${ACM_OPERATOR}" "${ACM_BUNDLE}" "${ACM_NAMESPACE}" "${acm_channel}" "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}"
+  deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_SUBSCRIPTION}" "${ACM_NAMESPACE}"
 
   TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
@@ -398,15 +397,11 @@ function configure_submariner_bundle_on_cluster() {
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  PROMPT "Configure Submariner bundle $submariner_version (channel $submariner_channel) on cluster $cluster_name"
-
-  export SUBSCRIBE=false
+  PROMPT "Configure Submariner bundle $submariner_version (channel '$submariner_channel' without subscription) on cluster $cluster_name"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  # ${wd:?}/downstream_push_bundle_to_olm_catalog.sh
-
-  deploy_ocp_bundle "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_BUNDLE}" "${SUBM_NAMESPACE}" "${submariner_channel}" "${SUBM_SUBSCRIPTION}" "${SUBM_CATALOG}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}

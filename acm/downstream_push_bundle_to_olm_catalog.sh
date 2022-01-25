@@ -86,57 +86,46 @@ function export_LATEST_IIB() {
 # ------------------------------------------
 
 function deploy_ocp_bundle() {
-  ### Deploy OCP Bundel ###
+  ### Deploy OCP Bundle ###
 
   trap_to_debug_commands;
 
   # Input args
-  local version="$1"
-  local operator_name="$2"
-  local bundle_name="$3"
-  local namespace="$4"
-  local channel="$5"
-  local subscription_name="$6"
-  local catalog_source="$7"
-
-  local marketplace_namespace=${namespace:-$MARKETPLACE_NAMESPACE}
+  local bundle_name="$1"
+  local version="$2"
+  local operator_name="$3"
+  local channel="$4"
+  local catalog_source="$5"
+  local subscription_name="${6:-NONE}"
+  local bundle_namespace="${7:-$MARKETPLACE_NAMESPACE}"
+  local subscription_namespace="${8:-$bundle_namespace}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name)"
 
-  TITLE "Add Subscription and CatalogSource for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
-  VERSION=${version}
-  OPERATOR_NAME=${operator_name}
-  BUNDLE_NAME=${bundle_name}
-  NAMESPACE=${namespace}
-  CHANNEL=${channel}
-  SUBSCRIPTION=${subscription_name}
-  CATALOG_SOURCE=${catalog_source}
+  TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
+  Bundle Name: ${bundle_name}
+  Bundle Version: ${version}
+  Operator Name: ${operator_name}
+  Channel: ${channel}
+  Catalog Source: ${catalog_source}
+  Subscription Name: ${subscription_name}
+  Bundle Namespace: ${bundle_namespace}
+  Subscription Namespace: ${subscription_namespace}
   "
 
-  if [[ -z "${version}" ]] ||
+  if [[ -z "${bundle_name}" ]] ||
+     [[ -z "${version}" ]] ||
      [[ -z "${operator_name}" ]] ||
-     [[ -z "${bundle_name}" ]] ||
-     [[ -z "${namespace}" ]] ||
      [[ -z "${channel}" ]] ||
-     [[ -z "${subscription_name}" ]] ||
      [[ -z "${catalog_source}" ]] ; then
-      error "Required environment variables not loaded"
-      error "    VERSION"
-      error "    OPERATOR_NAME"
-      error "    BUNDLE_NAME"
-      error "    NAMESPACE"
-      error "    CHANNEL"
-      error "    SUBSCRIPTION"
-      error "    CATALOG_SOURCE"
-      exit 3
+       FATAL "Required parameters for the Bundle installation are missing:
+       Bundle Name: ${bundle_name}
+       Bundle Version: ${version}
+       Operator Name: ${operator_name}
+       Channel: ${channel}
+       Catalog Source: ${catalog_source}"
   fi
-
-  # Whether to install operator on the default namespace, or in a specific namespace
-  declare -a installModes=('AllNamespaces' 'SingleNamespace')
-  INSTALL_MODE=${installModes[1]}
-
-  SUBSCRIBE=${SUBSCRIBE:-false}
 
   # login to current kubeconfig cluster
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
@@ -144,40 +133,40 @@ function deploy_ocp_bundle() {
   ocp_registry_url=$(${OC} registry info --internal)
 
   echo "# Create/switch project"
-  ${OC} new-project "${namespace}" 2>/dev/null || ${OC} project "${namespace}" -q
-
-  echo "# Set the subscription namespace"
-  subscriptionNamespace=$([ "${INSTALL_MODE}" == "${installModes[0]}" ] && echo "${OPERATORS_NAMESPACE}" || echo "${namespace}")
+  ${OC} new-project "${bundle_namespace}" 2>/dev/null || ${OC} project "${bundle_namespace}" -q
 
   echo "# Disable the default remote OperatorHub sources for OLM"
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
-
-  echo "# Delete previous catalogSource and Subscription"
-  ${OC} delete sub/${subscription_name} -n "${subscriptionNamespace}" --wait > /dev/null 2>&1 || :
-  ${OC} delete catalogsource/${catalog_source} -n "${marketplace_namespace}" --wait > /dev/null 2>&1 || :
 
   export_LATEST_IIB "${version}" "${bundle_name}"
 
   SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
-  if ${OC} get is "${bundle_name}-index" -n "${marketplace_namespace}" > /dev/null 2>&1; then
-    ${OC} delete is "${bundle_name}-index" -n "${marketplace_namespace}" --wait
+  if ${OC} get is "${bundle_name}-index" -n "${bundle_namespace}" > /dev/null 2>&1; then
+    echo "# Delete previous Image Stream '${bundle_name}-index'"
+    ${OC} delete is "${bundle_name}-index" -n "${bundle_namespace}" --wait
   fi
 
-  OCP_IMAGE_INDEX="${ocp_registry_url}/${marketplace_namespace}/${bundle_name}-index:${version}"
+  OCP_IMAGE_INDEX="${ocp_registry_url}/${bundle_namespace}/${bundle_name}-index:${version}"
 
-  ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${marketplace_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+  TITLE "Import Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}' from:
+  ${SRC_IMAGE_INDEX}"
+
+  ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${bundle_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
   ${OCP_IMAGE_INDEX}"
 
-  cat <<EOF | ${OC} apply -n ${marketplace_namespace} -f -
+  echo "# Delete previous catalogSource if exists"
+  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait > /dev/null 2>&1 || :
+
+  cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: CatalogSource
   metadata:
     name: ${catalog_source}
-    namespace: ${marketplace_namespace}
+    namespace: ${bundle_namespace}
   spec:
     sourceType: grpc
     image: ${OCP_IMAGE_INDEX}
@@ -190,99 +179,132 @@ EOF
 
   echo "# Wait for CatalogSource '${catalog_source}' to be created:"
 
-  cmd="${OC} get catalogsource -n ${marketplace_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
+  cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
 
-  TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${marketplace_namespace}' in cluster ${cluster_name}"
+  TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${bundle_namespace}' in cluster ${cluster_name}"
 
-  # test
-  ${OC} -n ${marketplace_namespace} get catalogsource --ignore-not-found
-  ${OC} -n ${marketplace_namespace} get pods --ignore-not-found
-  ${OC} -n ${marketplace_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source' || :
-
-  # List all available versions in the bundle package manifest
-  # cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  # regex="${version//[a-zA-Z]}"
-  # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
+  ${OC} -n ${bundle_namespace} get catalogsource --ignore-not-found
+  ${OC} -n ${bundle_namespace} get pods --ignore-not-found
+  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source' || :
 
   # List all available channels in the bundle package manifest
-  cmd="${OC} get packagemanifests -n ${marketplace_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
+  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
   regex="${channel}"
   watch_and_retry "$cmd" 3m "$regex" || FATAL "Channel '${regex}' was not found in the package manifest of ${operator_name}"
 
-  if [ "${SUBSCRIBE}" = true ]; then
+  # List all available versions in the bundle package manifest
+  # cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+  # regex="${version//[a-zA-Z]}"
+  # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
 
-    TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
 
-#     # Deprecated since ACM 2.3
-#     if [ "${INSTALL_MODE}" == "${installModes[1]}" ]; then
-#       # create the OperatorGroup
-#       cat <<EOF | ${OC} apply -f -
-#       apiVersion: operators.coreos.com/v1alpha2
-#       kind: OperatorGroup
-#       metadata:
-#         name: my-group
-#         namespace: ${namespace}
-#       spec:
-#         targetNamespaces:
-#           - ${namespace}
-# EOF
-#       # Display operator group
-#       ${OC} get operatorgroup -n ${namespace} --ignore-not-found
-#     fi
+  echo "# Only if the subscription name '${subscription_name}' is not NONE, create the OperatorGroup and Subscription resources"
+
+  if [[ "${subscription_name}" != NONE ]]; then
+    create_subscription "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_SUBSCRIPTION}" "${ACM_NAMESPACE}"
+  fi
+
+  TITLE "Display Operator deployments logs in cluster ${cluster_name}"
+
+  ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
+
+}
+
+
+# ------------------------------------------
+
+function create_subscription() {
+  ### Create Subscription for the Bundle ###
+
+  trap_to_debug_commands;
+
+  # Input args
+  local version="$1"
+  local operator_name="$2"
+  local channel="$3"
+  local catalog_source="$4"
+  local subscription_name="$5"
+  local bundle_namespace="$6"
+  local subscription_namespace="$7"
+
+  # subscription_namespace="openshift-operators" is the required subscription, only if deploying as a global operator
+  # local subscription_namespace="${7:-$OPERATORS_NAMESPACE}"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
+
+  if [[ -n "${bundle_namespace}" ]]; then
+    local operator_group_name="my-${operator_name}-group"
+    TITLE "Create the OperatorGroup '${operator_group_name}' for the Bundle in a target namespace '${bundle_namespace}' in cluster ${cluster_name}"
+
+    cat <<EOF | ${OC} apply -f -
+    apiVersion: operators.coreos.com/v1alpha2
+    kind: OperatorGroup
+    metadata:
+      name: ${operator_group_name}
+      namespace: ${bundle_namespace}
+    spec:
+      targetNamespaces:
+      - ${bundle_namespace}
+EOF
+
+    echo "# Display all Operator Groups in '${bundle_namespace}' namespace"
+    ${OC} get operatorgroup -n ${bundle_namespace} --ignore-not-found
+  fi
+
+
+  TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
+
+  echo "# Delete previous Subscription '${subscription_name}' if exists"
+  ${OC} delete sub/${subscription_name} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
     name: ${subscription_name}
-    namespace: ${subscriptionNamespace}
+    namespace: ${subscription_namespace}
   spec:
     channel: ${channel}
     installPlanApproval: Automatic
     name: ${operator_name}
     source: ${catalog_source}
-    sourceNamespace: ${marketplace_namespace}
+    sourceNamespace: ${bundle_namespace}
     startingCSV: ${operator_name}.${version}
 EOF
 
-    # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
-    #
-    # # local duration=5m
-    # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscriptionNamespace} subs/${subscription_name} || subscription_status=FAILED
-    #
-    # local acm_subscription="`mktemp`_acm_subscription"
-    # local cmd="${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}" &> '$acm_subscription'"
-    # local duration=5m
-    # local regex="State:\s*AtLatestKnown|UpgradePending"
-    #
-    # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
-    # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
-    #
-    # ${OC} describe subs/${subscription_name} -n "${subscriptionNamespace}"
-    #
-    # if [[ "$subscription_status" = FAILED ]] ; then
-    #   FATAL "InstallPlan for '${subscription_name}' subscription in ${subscriptionNamespace} is not ready after $duration"
-    # fi
-    #
-    # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription_name} -n "${subscriptionNamespace}" -o jsonpath='{.status.installPlanRef.name}')
-    # if [ -n "${installPlan}" ]; then
-    #   ${OC} patch installplan -n "${subscriptionNamespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
-    # fi
+  # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
+  #
+  # # local duration=5m
+  # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_name} || subscription_status=FAILED
+  #
+  # local acm_subscription="`mktemp`_acm_subscription"
+  # local cmd="${OC} describe subs/${subscription_name} -n "${subscription_namespace}" &> '$acm_subscription'"
+  # local duration=5m
+  # local regex="State:\s*AtLatestKnown|UpgradePending"
+  #
+  # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
+  # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
+  #
+  # ${OC} describe subs/${subscription_name} -n "${subscription_namespace}"
+  #
+  # if [[ "$subscription_status" = FAILED ]] ; then
+  #   FATAL "InstallPlan for '${subscription_name}' subscription in ${subscription_namespace} is not ready after $duration"
+  # fi
+  #
+  # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')
+  # if [ -n "${installPlan}" ]; then
+  #   ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
+  # fi
 
-    TITLE "Display ${subscriptionNamespace} resources in cluster ${cluster_name}"
+  TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
 
-    ${OC} get sub -n "${subscriptionNamespace}" --ignore-not-found
-    ${OC} get installplan -n "${subscriptionNamespace}" --ignore-not-found
-    ${OC} get csv -n "${subscriptionNamespace}" --ignore-not-found
-    ${OC} get pods -n "${subscriptionNamespace}" --ignore-not-found
-    ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-
-    TITLE "Display Operator deployments logs in cluster ${cluster_name}"
-
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
-    ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
-
-  fi
+  ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
+  ${OC} get installplan -n "${subscription_namespace}" --ignore-not-found
+  ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
+  ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
 
 }
