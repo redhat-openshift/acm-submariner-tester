@@ -4914,15 +4914,13 @@ function add_polarion_testrun_url_to_report_headlines() {
 function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    TITLE "Showing product versions (since CLI option --print-logs was used)"
+  TITLE "Showing product versions on script teardown"
 
-    ${junit_cmd} test_products_versions_cluster_a || :
+  ${junit_cmd} test_products_versions_cluster_a || :
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
+  [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
-  fi
+  [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
 
 }
 
