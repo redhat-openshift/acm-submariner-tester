@@ -115,7 +115,7 @@ function install_acm_operator() {
   local cmd="${OC} get MultiClusterHub multiclusterhub"
   local retries=3
   watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_SUBSCRIPTION}" "${ACM_NAMESPACE}"
+  deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
 
   TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
@@ -401,7 +401,7 @@ function configure_submariner_bundle_on_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}

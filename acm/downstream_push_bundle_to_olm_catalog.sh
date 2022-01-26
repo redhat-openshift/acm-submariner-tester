@@ -96,8 +96,8 @@ function deploy_ocp_bundle() {
   local operator_name="$3"
   local channel="$4"
   local catalog_source="$5"
-  local subscription_name="${6:-NONE}"
-  local bundle_namespace="${7:-$MARKETPLACE_NAMESPACE}"
+  local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
+  local subscription="${7:-NONE}"
   local subscription_namespace="${8:-$bundle_namespace}"
 
   local cluster_name
@@ -109,8 +109,8 @@ function deploy_ocp_bundle() {
   Operator Name: ${operator_name}
   Channel: ${channel}
   Catalog Source: ${catalog_source}
-  Subscription Name: ${subscription_name}
   Bundle Namespace: ${bundle_namespace}
+  Subscription Name: ${subscription}
   Subscription Namespace: ${subscription_namespace}
   "
 
@@ -199,10 +199,10 @@ EOF
   # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
 
 
-  echo "# Only if the subscription name '${subscription_name}' is not NONE, create the OperatorGroup and Subscription resources"
+  echo "# Only if the subscription '${subscription}' is not NONE, create the OperatorGroup and Subscription resources"
 
-  if [[ "${subscription_name}" != NONE ]]; then
-    create_subscription "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_SUBSCRIPTION}" "${ACM_NAMESPACE}"
+  if [[ "${subscription}" != NONE ]]; then
+    create_subscription "${version}" "${operator_name}" "${channel}" "${catalog_source}" "${bundle_namespace}" "${subscription}" "${subscription_namespace}"
   fi
 
   TITLE "Display Operator deployments logs in cluster ${cluster_name}"
@@ -226,8 +226,8 @@ function create_subscription() {
   local operator_name="$2"
   local channel="$3"
   local catalog_source="$4"
-  local subscription_name="$5"
-  local bundle_namespace="$6"
+  local bundle_namespace="$5"
+  local subscription="$6"
   local subscription_namespace="$7"
 
   # subscription_namespace="openshift-operators" is the required subscription, only if deploying as a global operator
@@ -256,16 +256,16 @@ EOF
   fi
 
 
-  TITLE "Create the Subscription '${subscription_name}' (with automatic approval) in cluster ${cluster_name}"
+  TITLE "Create the Subscription '${subscription}' (with automatic approval) in cluster ${cluster_name}"
 
-  echo "# Delete previous Subscription '${subscription_name}' if exists"
-  ${OC} delete sub/${subscription_name} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
+  echo "# Delete previous Subscription '${subscription}' if exists"
+  ${OC} delete sub/${subscription} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
-    name: ${subscription_name}
+    name: ${subscription}
     namespace: ${subscription_namespace}
   spec:
     channel: ${channel}
@@ -279,23 +279,23 @@ EOF
   # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
   #
   # # local duration=5m
-  # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_name} || subscription_status=FAILED
+  # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription} || subscription_status=FAILED
   #
   # local acm_subscription="`mktemp`_acm_subscription"
-  # local cmd="${OC} describe subs/${subscription_name} -n "${subscription_namespace}" &> '$acm_subscription'"
+  # local cmd="${OC} describe subs/${subscription} -n "${subscription_namespace}" &> '$acm_subscription'"
   # local duration=5m
   # local regex="State:\s*AtLatestKnown|UpgradePending"
   #
   # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
   # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
   #
-  # ${OC} describe subs/${subscription_name} -n "${subscription_namespace}"
+  # ${OC} describe subs/${subscription} -n "${subscription_namespace}"
   #
   # if [[ "$subscription_status" = FAILED ]] ; then
-  #   FATAL "InstallPlan for '${subscription_name}' subscription in ${subscription_namespace} is not ready after $duration"
+  #   FATAL "InstallPlan for '${subscription}' subscription in ${subscription_namespace} is not ready after $duration"
   # fi
   #
-  # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')
+  # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')
   # if [ -n "${installPlan}" ]; then
   #   ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
   # fi
