@@ -1724,12 +1724,13 @@ function delete_submariner_namespace_and_crds() {
 
   # force_delete_namespace "${SUBM_NAMESPACE}"
 
-  delete_crds_by_name "submariner"
+  delete_crds_by_name 'submariner\.io'
 
   ${OC} delete namespace ${SUBM_NAMESPACE} --wait || :
   ${OC} wait --for=delete namespace ${SUBM_NAMESPACE} || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
+  # ${OC} delete namespace ${BROKER_NAMESPACE} --wait || :
   force_delete_namespace "${BROKER_NAMESPACE}"
 
 }
