@@ -682,6 +682,9 @@ function validate_submariner_addon_configured() {
   ${OC} wait --timeout=3m --for=condition=Available managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
   # Should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
 
+  ${OC} wait --timeout=3m --for=condition=SubmarinerAgentDegraded=false managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  # The default value of status condition is true, but for negative test it should be set to false
+
   ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
   if [[ "$submariner_status" = FAILED ]] ; then
