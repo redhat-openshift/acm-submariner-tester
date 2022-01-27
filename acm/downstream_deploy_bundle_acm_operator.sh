@@ -666,12 +666,23 @@ function validate_submariner_addon_configured() {
 
   TITLE "SubmarinerConfig and ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
 
-  ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} && \
+  # Test SubmarinerConfig
+
+  ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || :
+
+  ${OC} wait --timeout=3m --for=condition=SubmarinerGatewaysLabeled submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  # Should print: submarinerconfig.submarineraddon.open-cluster-management.io/submariner condition met
+
   ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
-  ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} && \
-  ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  # Test ManagedClusterAddons
 
+  ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || :
+
+  ${OC} wait --timeout=3m --for=condition=Available managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  # Should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
+
+  ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
   if [[ "$submariner_status" = FAILED ]] ; then
     FATAL "Submariner Addon installation failed in ACM Hub for the cluster id: $cluster_id"
