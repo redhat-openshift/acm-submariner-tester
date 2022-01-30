@@ -664,26 +664,32 @@ function validate_submariner_addon_configured() {
   $cmd |& highlight "$regex" || submariner_status=FAILED
 
 
-  TITLE "SubmarinerConfig and ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
-
-  # Test SubmarinerConfig
+  TITLE "Verify SubmarinerConfig in the ACM Hub under namespace ${cluster_id}"
 
   ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || :
 
-  ${OC} wait --timeout=3m --for=condition=SubmarinerGatewaysLabeled submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
-  # Should print: submarinerconfig.submarineraddon.open-cluster-management.io/submariner condition met
+  # Test SubmarinerConfig - All checks should print: submarinerconfig.submarineraddon.open-cluster-management.io/submariner condition met
+
+  ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerClusterEnvironmentPrepared || :
+  ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerConfigApplied || :
+  ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerGatewaysLabeled || submariner_status=FAILED
 
   ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
-  # Test ManagedClusterAddons
+
+  TITLE "Verify ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
+
+  # Test ManagedClusterAddons - All checks should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
 
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || :
 
-  ${OC} wait --timeout=3m --for=condition=Available managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
-  # Should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=RegistrationApplied || :
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=ManifestApplied || :
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=Available || submariner_status=FAILED
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerGatewayNodesLabeled || submariner_status=FAILED
 
-  ${OC} wait --timeout=3m --for=condition=SubmarinerAgentDegraded=false managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
-  # The default value of status condition is true, but for negative test it should be set to false
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerAgentDegraded=false || submariner_status=FAILED
+  # The default value of status condition is true, so for negative test it should be set to false
 
   ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
 
