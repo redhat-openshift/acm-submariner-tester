@@ -10,7 +10,7 @@ function export_LATEST_IIB() {
   local version="${1}"
   local bundle_name="${2}"
 
-  TITLE "Retrieving index-image from UBI (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
+  TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
 
   local index_images
 
