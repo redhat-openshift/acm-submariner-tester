@@ -4397,12 +4397,18 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  # export_active_clusters_kubeconfig
+  local subctl_version="${SUBM_VER_TAG}"
+
+  # Fix the $subctl_version value for custom images
+  set_subm_version_tag_var "subctl_version"
 
   export_merged_kubeconfigs
 
-  subctl show versions || subctl_info=ERROR
-
+  subctl show versions |& highlight "submariner.*${subctl_version}" || \
+  BUG "Subctl shows wrong Submariner version - it should have been v${subctl_version}" \
+  "Please verify that all Submariner components (e.g. Gateway) have image version = v${subctl_version}" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
+  
   subctl show networks || subctl_info=ERROR
 
   subctl show endpoints || subctl_info=ERROR
@@ -4605,8 +4611,6 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
   local subctl_diagnose
 
-  # export_active_clusters_kubeconfig
-
   export_merged_kubeconfigs
 
   # For SubCtl > 0.8 : Run subctl diagnose:
@@ -4649,8 +4653,6 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
-
-  # export_active_clusters_kubeconfig
 
   subctl benchmark latency ${KUBECONF_HUB} ${KUBECONF_MANAGED} --verbose || benchmark_status=ERROR
 
@@ -4768,8 +4770,6 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_to_debug_commands;
 
-  # export_active_clusters_kubeconfig
-
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
 
@@ -4795,8 +4795,6 @@ function test_submariner_e2e_with_subctl() {
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
   TITLE "SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
-
-  # export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -5368,9 +5366,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ${junit_cmd} show_test_plan
 
   ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
-
-  # Exporting active clusters KUBECONFIGs
-  # export_active_clusters_kubeconfig
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
@@ -6077,8 +6072,6 @@ else
 fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
-
-# export_active_clusters_kubeconfig
 
 # Artifact OCP clusters kubeconfigs and logs
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
