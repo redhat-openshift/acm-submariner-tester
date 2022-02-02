@@ -420,6 +420,8 @@ function configure_submariner_bundle_on_cluster() {
 # ------------------------------------------
 
 function install_submariner_via_acm_managed_cluster() {
+  # TODO: This funtion should be split and executed as several junit tests
+
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -463,7 +465,14 @@ function install_submariner_via_acm_managed_cluster() {
   # After creating the cloud credentials for the managed cluster - use it in the SubmarinerConfig
   configure_submariner_version_for_managed_cluster "$cluster_id" "$cluster_secret_name" "$SUBM_VER_TAG"
 
-  validate_submariner_addon_configured "$cluster_id"
+  # Validate manifestwork
+  validate_submariner_manifestwork "$cluster_id"
+
+  # Validate submarinerconfig
+  validate_submariner_config_status "$cluster_id"
+
+  # Validate managedclusteraddons
+  validate_submariner_addon_status "$cluster_id"
 
 }
 
@@ -619,7 +628,7 @@ EOF
 
   TITLE "Create the Submariner Addon to start the deployment"
 
-  cat <<EOF | ${OC} apply -f - || submariner_status=FAILED
+  cat <<EOF | ${OC} apply -f -
   apiVersion: addon.open-cluster-management.io/v1alpha1
   kind: ManagedClusterAddOn
   metadata:
@@ -638,33 +647,48 @@ EOF
 
 # ------------------------------------------
 
-function validate_submariner_addon_configured() {
-  ### Validate that Submariner addon is configured correctly in ACM, for the managed cluster_id ###
+function validate_submariner_manifestwork() {
+  ### Validate that Submariner manifestwork created in ACM, for the managed cluster_id ###
 
   trap_to_debug_commands;
 
   local cluster_id="${1}"
 
-  local submariner_status
+  local manifestwork_status
 
-  # TODO: ManifestWork validation should be moved to a new function
   local regex
 
   regex="submariner"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "5m" || :
-  $cmd |& highlight "$regex" || submariner_status=FAILED
+  $cmd |& highlight "$regex" || manifestwork_status=FAILED
 
   # regex="${cluster_id}-klusterlet-addon-appmgr"
   regex="klusterlet-addon-appmgr"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "15m" || :
-  $cmd |& highlight "$regex" || submariner_status=FAILED
+  $cmd |& highlight "$regex" || manifestwork_status=FAILED
 
+  if [[ "$manifestwork_status" = FAILED ]] ; then
+    FATAL "Submariner Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
+  fi
 
-  TITLE "Verify SubmarinerConfig in the ACM Hub under namespace ${cluster_id}"
+}
+
+# ------------------------------------------
+
+function validate_submariner_config_status() {
+  ### Validate that SubmarinerConfig is ready in ACM, for the cluster_id ###
+
+  trap_to_debug_commands;
+
+  local cluster_id="${1}"
+
+  local config_status
+
+  TITLE "Verify SubmarinerConfig '${SUBM_OPERATOR}' in the ACM Hub under namespace ${cluster_id}"
 
   ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || :
 
@@ -673,12 +697,28 @@ function validate_submariner_addon_configured() {
 
   ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerClusterEnvironmentPrepared && \
   ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerConfigApplied && \
-  ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerGatewaysLabeled || submariner_status=FAILED
+  ${OC} wait --timeout=5m submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerGatewaysLabeled || config_status=FAILED
 
-  ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || config_status=FAILED
 
+  if [[ "$config_status" = FAILED ]] ; then
+    FATAL "SubmarinerConfig resource has unhealthy conditions in ACM cluster id: $cluster_id"
+  fi
 
-  TITLE "Verify ManagedClusterAddons in the ACM Hub under namespace ${cluster_id}"
+}
+
+# ------------------------------------------
+
+function validate_submariner_addon_status() {
+  ### Validate that Submariner Addon has gateway labels and running agent for the managed cluster_id ###
+
+  trap_to_debug_commands;
+
+  local cluster_id="${1}"
+
+  local managed_cluster_status
+
+  TITLE "Verify ManagedClusterAddons '${SUBM_OPERATOR}' in the ACM Hub under namespace ${cluster_id}"
 
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || :
 
@@ -690,13 +730,36 @@ function validate_submariner_addon_configured() {
   ${OC} wait --timeout=15m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=ManifestApplied && \
   ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=Available && \
   ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerGatewayNodesLabeled && \
-  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerAgentDegraded=false && \
-  ${OC} wait --timeout=15m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerConnectionDegraded=false || submariner_status=FAILED
+  ${OC} wait --timeout=5m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
 
-  ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || submariner_status=FAILED
+  ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || managed_cluster_status=FAILED
 
-  if [[ "$submariner_status" = FAILED ]] ; then
-    FATAL "Submariner Addon installation failed in ACM Hub for the cluster id: $cluster_id"
+  if [[ "$managed_cluster_status" = FAILED ]] ; then
+    FATAL "Submariner ManagedClusterAddon has unhealthy conditions in ACM cluster id: $cluster_id"
+  fi
+
+  TITLE "Verify Submariner connection established in the '${SUBM_OPERATOR}' cluster-set of ACM namespace ${cluster_id}"
+
+  ${OC} get managedclusters
+
+  # The ManagedCluster-Broker connection is a management-plane connection only (via the Kube API), and not a data-plane connection.
+  # "SubmarinerConnectionDegraded" condition is relevant only when more than one ManagedClusters are configured.
+  # i.e. To establish actual inter-cluster data-plane connections between ManagedClusters (which are part of the same ManagedClusterSet).
+
+  local clusterset_count
+  clusterset_count="$(${OC} get managedclusters -l "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" -o name | wc -w)"
+  # Can also count with: ${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${SUBM_OPERATOR}')].metadata.name}" | wc -w
+
+  if (( clusterset_count > 1 )) ; then
+    ${OC} wait --timeout=15m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerConnectionDegraded=false || managed_cluster_status=FAILED
+
+    if [[ "$managed_cluster_status" = FAILED ]] ; then
+      ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
+      FATAL "Submariner connection could not be established in ACM cluster id: $cluster_id"
+    fi
+
+  else
+    echo "# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
   fi
 
 }
