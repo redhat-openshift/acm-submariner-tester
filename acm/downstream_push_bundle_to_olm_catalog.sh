@@ -256,10 +256,12 @@ EOF
   fi
 
 
-  TITLE "Create the Subscription '${subscription}' (with automatic approval) in cluster ${cluster_name}"
+  TITLE "Create the Subscription '${subscription}' (with Manual approval) in cluster ${cluster_name}"
 
   echo "# Delete previous Subscription '${subscription}' if exists"
   ${OC} delete sub/${subscription} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
+
+  echo "# Apply InstallPlan 'Manual' Approve (instead of 'Automatic'), in order to pin the bundle version (startingCSV) to '${operator_name}.${version}'"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -269,36 +271,37 @@ EOF
     namespace: ${subscription_namespace}
   spec:
     channel: ${channel}
-    installPlanApproval: Automatic
+    installPlanApproval: Manual
     name: ${operator_name}
     source: ${catalog_source}
     sourceNamespace: ${bundle_namespace}
     startingCSV: ${operator_name}.${version}
 EOF
 
-  # echo "# InstallPlan Manual Approve (instead of Automatic), in order to pin the bundle version"
-  #
-  # # local duration=5m
-  # # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription} || subscription_status=FAILED
-  #
-  # local acm_subscription="`mktemp`_acm_subscription"
-  # local cmd="${OC} describe subs/${subscription} -n "${subscription_namespace}" &> '$acm_subscription'"
-  # local duration=5m
-  # local regex="State:\s*AtLatestKnown|UpgradePending"
-  #
-  # watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
-  # cat $acm_subscription |& highlight "$regex" || subscription_status=FAILED
-  #
-  # ${OC} describe subs/${subscription} -n "${subscription_namespace}"
-  #
-  # if [[ "$subscription_status" = FAILED ]] ; then
-  #   FATAL "InstallPlan for '${subscription}' subscription in ${subscription_namespace} is not ready after $duration"
-  # fi
-  #
-  # installPlan=$(${OC} get subscriptions.operators.coreos.com ${subscription} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')
-  # if [ -n "${installPlan}" ]; then
-  #   ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge
-  # fi
+  local duration=5m
+  echo "# Wait $duration for Subscription '${subscription}' status to be 'AtLatestKnown' or 'UpgradePending'"
+
+  local subscription_status
+  # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription} || subscription_status=FAILED
+
+  local acm_subscription="`mktemp`_acm_subscription"
+  local cmd="${OC} describe subs/${subscription} -n "${subscription_namespace}" &> '$acm_subscription'"
+  local regex="State:\s*AtLatestKnown|UpgradePending"
+
+  watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
+
+  if cat $acm_subscription |& highlight "$regex" ; then
+
+    local installPlan
+    installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
+
+    if [[ -n "${installPlan}" ]] ; then
+      ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge || subscription_status=FAILED
+    fi
+
+  else
+    subscription_status=FAILED
+  fi
 
   TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
 
@@ -306,5 +309,9 @@ EOF
   ${OC} get installplan -n "${subscription_namespace}" --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
+
+  if [[ "$subscription_status" = FAILED ]] ; then
+    FATAL "InstallPlan for Subscription '${subscription}' in ${subscription_namespace} could not be created"
+  fi
 
 }
