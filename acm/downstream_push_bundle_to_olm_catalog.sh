@@ -311,7 +311,7 @@ EOF
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
 
   if [[ "$subscription_status" = FAILED ]] ; then
-    FATAL "InstallPlan for Subscription '${subscription}' in ${subscription_namespace} could not be created"
+    FAILURE "InstallPlan for Subscription '${subscription}' in ${subscription_namespace} could not be created"
   fi
 
 }
