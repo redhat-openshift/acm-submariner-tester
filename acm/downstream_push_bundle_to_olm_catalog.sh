@@ -172,9 +172,9 @@ function deploy_ocp_bundle() {
     image: ${OCP_IMAGE_INDEX}
     displayName: Testing Catalog Source
     publisher: Red Hat Partner (Test)
-    updateStrategy:
-      registryPoll:
-        interval: 5m
+    # updateStrategy:
+    #   registryPoll:
+    #     interval: 5m
 EOF
 
   echo "# Wait for CatalogSource '${catalog_source}' to be created:"
