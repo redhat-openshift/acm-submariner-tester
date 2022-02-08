@@ -1092,7 +1092,7 @@ function destroy_osp_cluster() {
   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
     TITLE "Using last created OCPUP yaml configuration file"
     local ocpup_yml
-    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 )" || :
+    ocpup_yml="$(ls -1 -tc *ocpup*.yaml | head -1 )" || :
 
     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
 
@@ -2227,7 +2227,7 @@ function download_subctl_by_tag() {
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
       echo -e "# Getting last downloaded subctl archive filename"
-      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 )" || :
+      subctl_xz="$(ls -1 -tc subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
       echo "# SubCtl binary will be extracted from [${subctl_xz}]"
@@ -2235,7 +2235,7 @@ function download_subctl_by_tag() {
 
       echo "# Rename last extracted file to subctl"
       local extracted_file
-      extracted_file="$(ls -1 -tu subctl* | head -1)"
+      extracted_file="$(ls -1 -tc subctl* | head -1)"
       [[ -f "$extracted_file" ]] || FATAL "subctl binary was not found in ${subctl_xz}"
       ls -l "${extracted_file}"
 
@@ -2292,7 +2292,7 @@ function download_subctl_by_tag() {
         tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
         # Rename last extracted file to subctl
-        extracted_file="$(ls -1 -tu subctl* | head -1)"
+        extracted_file="$(ls -1 -tc subctl* | head -1)"
 
         [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
         chmod +x subctl
@@ -6059,7 +6059,7 @@ fi
   log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
 
   # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}"
 
 } || :
 
