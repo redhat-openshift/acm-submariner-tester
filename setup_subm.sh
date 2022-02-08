@@ -2172,7 +2172,7 @@ function set_subm_version_tag_var() {
 
   [[ -n "${subm_version_tag}" ]] || FATAL "Submariner version to use was not defined. Try to run again with option '--subctl-version x.y.z'"
 
-  TITLE "Retrieve correct tag for SubCtl version \$${tag_var_name} : $subm_version_tag"
+  TITLE "Retrieve correct tag for Submariner version \$${tag_var_name} : $subm_version_tag"
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
     subm_version_tag=$(get_subctl_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
@@ -4408,7 +4408,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
   BUG "Subctl shows wrong Submariner version - it should have been v${subctl_version}" \
   "Please verify that all Submariner components (e.g. Gateway) have image version = v${subctl_version}" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
-  
+
   subctl show networks || subctl_info=ERROR
 
   subctl show endpoints || subctl_info=ERROR
@@ -5646,6 +5646,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
+  ### Download and install SUBCTL ###
+  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+
+    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+  fi
 
   ### INSTALL ACM with Submariner on all Clusters ###
 
@@ -5689,19 +5695,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
 
-  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
-  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
-
-  echo 2 > $TEST_STATUS_FILE
-
   ### END of ACM Install ###
 
-  ### Download and install SUBCTL ###
-  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-
-    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-  fi
 
   ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
@@ -5741,6 +5736,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
   ### END of install_with_subctl ###
+
+
+  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
+  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
+
+  echo 2 > $TEST_STATUS_FILE
+
 
   ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
