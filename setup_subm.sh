@@ -688,8 +688,7 @@ function show_test_plan() {
   - configure_images_prune_cluster_b / c
   - configure_custom_registry_cluster_a: $registry_images
   - configure_custom_registry_cluster_b / c: $registry_images
-  - upload_submariner_images_to_registry_cluster_a: $registry_images
-  - upload_submariner_images_to_registry_cluster_b / c: $registry_images
+  - upload_submariner_images_to_cluster_registry: $registry_images
   - configure_namespace_for_submariner_tests_on_cluster_a
   - configure_namespace_for_submariner_tests_on_managed_cluster
   - test_kubeconfig_cluster_a
@@ -3222,51 +3221,22 @@ EOF
 
 # ------------------------------------------
 
-function upload_submariner_images_to_registry_cluster_a() {
-# Upload custom images to the registry - OCP cluster A (public)
-  PROMPT "Upload custom images to the registry of cluster A"
+function upload_submariner_images_to_cluster_registry() {
+# Upload custom images to the registry of the requested OCP cluster
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_HUB}"
+  local kubeconfig_file="$1"
 
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
+  export KUBECONFIG="$kubeconfig_file"
 
-# ------------------------------------------
+  local cluster_name
+  cluster_name="$(print_current_cluster_name)"
 
-function upload_submariner_images_to_registry_cluster_b() {
-# Upload custom images to the registry - OSP cluster B (on-prem)
-  PROMPT "Upload custom images to the registry of cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function upload_submariner_images_to_registry_cluster_c() {
-# Upload custom images to the registry - OSP cluster C
-  PROMPT "Upload custom images to the registry of cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function upload_submariner_images_to_registry() {
-# Join Submariner member - of current cluster kubeconfig
-  trap_to_debug_commands;
-
-  local image_tag="${1:-$SUBM_VER_TAG}"
-
+  local image_tag="$SUBM_VER_TAG"
   # Fix the $image_tag value for custom images
   set_subm_version_tag_var "image_tag"
 
-  # [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-  # local image_tag="$(subctl version | awk '{print $3}')"
+  PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
 
   TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
   \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
@@ -5503,7 +5473,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
-      fi
+      fi # End of cluster A cleanup
 
       # Running cleanup on cluster B if requested
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -5519,7 +5489,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
         fi
-      fi
+      fi # End of cluster B cleanup
 
       # Running cleanup on cluster C if requested
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
@@ -5535,9 +5505,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
         fi
-      fi
+      fi # End of cluster C cleanup
 
-      # Configure firewall ports, gateway labels, and images prune on all clusters
+      ### Configure firewall ports, gateway labels, and images prune on all clusters ###
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -5573,22 +5543,25 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} configure_images_prune_cluster_c
 
-      fi
+      fi # End of configure firewall, labels, and images prune
 
-      # Overriding Submariner images with custom images from registry, if requested with --registry-images
+
+      ### Configuring clusters registry with custom (downstream) mirrors, secrets and images, if using --registry-images ###
+
       if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
         # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
 
         ${junit_cmd} configure_custom_registry_cluster_a
 
-        ${junit_cmd} upload_submariner_images_to_registry_cluster_a
+        # Upload Submariner images is relevant with --subctl-install. During ACM install configure_submariner_bundle_on_cluster() is used instead.
+        [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
         if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
           ${junit_cmd} configure_custom_registry_cluster_b
 
-          ${junit_cmd} upload_submariner_images_to_registry_cluster_b
+          [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
         fi
 
@@ -5596,11 +5569,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
           ${junit_cmd} configure_custom_registry_cluster_c
 
-          ${junit_cmd} upload_submariner_images_to_registry_cluster_c
+          [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
         fi
 
-      fi # End of configure custom images in OCP registry
+      fi # End of configure custom clusters registry
+
+
+      ### Create namespace and services for submariner system tests ###
 
       ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
 
@@ -5624,7 +5600,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} test_clusters_disconnected_before_submariner
 
-    fi ### END of prerequisites for submariner system tests ###
+    fi
+    ### END of prerequisites for submariner system tests ###
 
   else  # When using --skip-ocp-setup :
 
@@ -5650,6 +5627,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
     ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+    ${junit_cmd} test_subctl_command
 
   fi
 
@@ -5693,19 +5672,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-  fi
-
   ### END of ACM Install ###
-
 
   ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
-  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
+  elif [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
-
-    ${junit_cmd} test_subctl_command
 
     ${junit_cmd} set_join_parameters_for_cluster_a
 
