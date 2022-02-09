@@ -3059,17 +3059,56 @@ function configure_cluster_custom_registry_mirror() {
 
   create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
 
-  add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
-  add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
+  # Deprecating creation of MachineConfig in favor of ImageContentSourcePolicy
+  # add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
+  # add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
+
+  add_image_content_source_policy
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
-  TITLE "Show OCP Registry (machine-config encoded) on master nodes:"
-  ${OC} get mc 99-master-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+  # TITLE "Show OCP Registry (machine-config encoded) on master nodes:"
+  # ${OC} get mc 99-master-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+  #
+  # TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
+  # ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
 
-  TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
-  ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+}
+
+# ------------------------------------------
+
+function add_image_content_source_policy() {
+### Helper function to add OCP registry mirror for ACM and Submariner on all master or all worker nodes
+  trap_to_debug_commands
+
+  TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy in current cluster"
+
+  local img_policy
+  img_policy="`mktemp`_ImageContentSourcePolicy.yaml"
+
+  cat <<-EOF > $img_policy
+  apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    name: brew-registry
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${OFFICIAL_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${STAGING_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${VPN_REGISTRY}
+EOF
+
+  ${OC} apply --dry-run='server' -f $img_policy | highlight "unchanged" \
+  || ${OC} apply -f $img_policy
+
+  ${OC} get ImageContentSourcePolicy -o yaml
 
 }
 

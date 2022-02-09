@@ -147,19 +147,42 @@ function deploy_ocp_bundle() {
     ${OC} delete is "${bundle_name}-index" -n "${bundle_namespace}" --wait
   fi
 
-  OCP_IMAGE_INDEX="${ocp_registry_url}/${bundle_namespace}/${bundle_name}-index:${version}"
+  # OCP_IMAGE_INDEX="${ocp_registry_url}/${bundle_namespace}/${bundle_name}-index:${version}"
+  #
+  # TITLE "Import Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}'
+  # From: ${SRC_IMAGE_INDEX}
+  # As: ${OCP_IMAGE_INDEX}"
+  #
+  # ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${bundle_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+  #
+  #
+  # TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
+  # ${OCP_IMAGE_INDEX}"
+  #
+  # echo "# Delete previous catalogSource if exists"
+  # ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait > /dev/null 2>&1 || :
+  #
+  #   cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
+  #   apiVersion: operators.coreos.com/v1alpha1
+  #   kind: CatalogSource
+  #   metadata:
+  #     name: ${catalog_source}
+  #     namespace: ${bundle_namespace}
+  #   spec:
+  #     sourceType: grpc
+  #     image: ${OCP_IMAGE_INDEX}
+  #     displayName: Testing Catalog Source
+  #     publisher: Red Hat Partner (Test)
+  #     # updateStrategy:
+  #     #   registryPoll:
+  #     #     interval: 5m
+  # EOF
 
-  TITLE "Import Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}' from:
-  ${SRC_IMAGE_INDEX}"
 
-  ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${bundle_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
-
-
-  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
-  ${OCP_IMAGE_INDEX}"
+  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${SRC_IMAGE_INDEX}"
 
   echo "# Delete previous catalogSource if exists"
-  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
   cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -169,13 +192,14 @@ function deploy_ocp_bundle() {
     namespace: ${bundle_namespace}
   spec:
     sourceType: grpc
-    image: ${OCP_IMAGE_INDEX}
+    image: ${SRC_IMAGE_INDEX}
     displayName: Testing Catalog Source
     publisher: Red Hat Partner (Test)
     # updateStrategy:
     #   registryPoll:
     #     interval: 5m
 EOF
+
 
   echo "# Wait for CatalogSource '${catalog_source}' to be created:"
 
