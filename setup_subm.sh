@@ -5672,7 +5672,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
 
-  ### INSTALL ACM with Submariner on all Clusters ###
+  ### Install ACM Hub, and create cluster set of the manged clusters for Submariner ###
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
@@ -5686,19 +5686,17 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
-    # Setup Submariner Addon on the managed clusters
-
-    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
-
-    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
+    # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
+    #
+    # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+      # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
+      #
+      # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
@@ -5706,17 +5704,17 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+      # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
+      #
+      # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
-
+  fi
   ### END of ACM Install ###
 
   ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
-  elif [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
+  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
@@ -5747,6 +5745,30 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
+
+  else
+
+    ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters as OCP bundle  ###
+
+    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
+
+    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
+
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
+
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+    fi
+
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
+
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+    fi
 
   fi
   ### END of install_with_subctl ###
