@@ -3059,6 +3059,11 @@ function configure_cluster_custom_registry_mirror() {
 
   create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
 
+  BUG "Using image tags for ImageContentSourcePolicy resource is not supported" \
+  "Create MachineConfig (instead of ImageContentSourcePolicy) to configure registry mirrors on all nodes" \
+  "https://issues.redhat.com/browse/RFE-1608"
+  # Workaround: deprecating creation of ImageContentSourcePolicy in favor of MachineConfig
+  # add_image_content_source_policy
   add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
   add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
 
@@ -3070,6 +3075,42 @@ function configure_cluster_custom_registry_mirror() {
 
   TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
   ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+
+}
+
+# ------------------------------------------
+
+function add_image_content_source_policy() {
+### Helper function to add OCP registry mirror for ACM and Submariner on all master or all worker nodes
+  trap_to_debug_commands
+
+  TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy in current cluster"
+
+  local img_policy
+  img_policy="`mktemp`_ImageContentSourcePolicy.yaml"
+
+  cat <<-EOF > $img_policy
+  apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    name: brew-registry
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${OFFICIAL_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${STAGING_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${VPN_REGISTRY}
+EOF
+
+  ${OC} apply --dry-run='server' -f $img_policy | highlight "unchanged" \
+  || ${OC} apply -f $img_policy
+
+  ${OC} get ImageContentSourcePolicy -o yaml
 
 }
 
@@ -3149,7 +3190,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
       insecure = false
 
   [[registry]]
@@ -3164,7 +3205,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
       insecure = false
 
   [[registry]]
@@ -5554,14 +5595,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} configure_custom_registry_cluster_a
 
-        # Upload Submariner images is relevant with --subctl-install. During ACM install configure_submariner_bundle_on_cluster() is used instead.
-        [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
         if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
           ${junit_cmd} configure_custom_registry_cluster_b
 
-          [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
+          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
         fi
 
@@ -5569,7 +5609,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
           ${junit_cmd} configure_custom_registry_cluster_c
 
-          [[ "$install_acm" =~ ^(y|yes)$ ]] || ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
+          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
         fi
 

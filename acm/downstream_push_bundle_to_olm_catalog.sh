@@ -138,49 +138,55 @@ function deploy_ocp_bundle() {
   echo "# Disable the default remote OperatorHub sources for OLM"
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
+  # Set and export the variable ${LATEST_IIB}
   export_LATEST_IIB "${version}" "${bundle_name}"
 
-  SRC_IMAGE_INDEX="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
+  local source_image_path
+  source_image_path="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
-  if ${OC} get is "${bundle_name}-index" -n "${bundle_namespace}" > /dev/null 2>&1; then
-    echo "# Delete previous Image Stream '${bundle_name}-index'"
-    ${OC} delete is "${bundle_name}-index" -n "${bundle_namespace}" --wait
+  local bundle_image_name="${bundle_name}-index"
+
+  local target_image_path="${ocp_registry_url}/${bundle_namespace}/${bundle_image_name}:${version}"
+
+  TITLE "Import new Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}'
+  Source image path: ${source_image_path}
+  Target image path: ${target_image_path}"
+
+  if ${OC} get is "${bundle_image_name}" -n "${bundle_namespace}" > /dev/null 2>&1; then
+    echo "# Delete previous Image Stream before importing a new Bundle image '${bundle_image_name}'"
+    ${OC} delete is "${bundle_image_name}" -n "${bundle_namespace}" --wait
   fi
 
-  OCP_IMAGE_INDEX="${ocp_registry_url}/${bundle_namespace}/${bundle_name}-index:${version}"
-
-  TITLE "Import Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}' from:
-  ${SRC_IMAGE_INDEX}"
-
-  ${OC} import-image "${OCP_IMAGE_INDEX}" --from="${SRC_IMAGE_INDEX}" -n "${bundle_namespace}" --confirm | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+  ${OC} import-image "${target_image_path}" --from="${source_image_path}" -n "${bundle_namespace}" --confirm \
+  | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
 
-  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image:
-  ${OCP_IMAGE_INDEX}"
+  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
   echo "# Delete previous catalogSource if exists"
-  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
-  apiVersion: operators.coreos.com/v1alpha1
-  kind: CatalogSource
-  metadata:
-    name: ${catalog_source}
-    namespace: ${bundle_namespace}
-  spec:
-    sourceType: grpc
-    image: ${OCP_IMAGE_INDEX}
-    displayName: Testing Catalog Source
-    publisher: Red Hat Partner (Test)
-    # updateStrategy:
-    #   registryPoll:
-    #     interval: 5m
+    cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
+    apiVersion: operators.coreos.com/v1alpha1
+    kind: CatalogSource
+    metadata:
+      name: ${catalog_source}
+      namespace: ${bundle_namespace}
+    spec:
+      sourceType: grpc
+      image: ${target_image_path}
+      displayName: Testing Catalog Source
+      publisher: Red Hat Partner (Test)
+      # updateStrategy:
+      #   registryPoll:
+      #     interval: 5m
 EOF
 
   echo "# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
+
 
   TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${bundle_namespace}' in cluster ${cluster_name}"
 
@@ -198,9 +204,7 @@ EOF
   # regex="${version//[a-zA-Z]}"
   # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
 
-
   echo "# Only if the subscription '${subscription}' is not NONE, create the OperatorGroup and Subscription resources"
-
   if [[ "${subscription}" != NONE ]]; then
     create_subscription "${version}" "${operator_name}" "${channel}" "${catalog_source}" "${bundle_namespace}" "${subscription}" "${subscription_namespace}"
   fi
