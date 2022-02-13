@@ -175,7 +175,7 @@ function deploy_ocp_bundle() {
     spec:
       sourceType: grpc
       image: ${target_image_path}
-      displayName: Testing Catalog Source
+      displayName: ${bundle_name} Catalog Source
       publisher: Red Hat Partner (Test)
       # updateStrategy:
       #   registryPoll:
@@ -190,11 +190,12 @@ EOF
 
   TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${bundle_namespace}' in cluster ${cluster_name}"
 
-  ${OC} -n ${bundle_namespace} get catalogsource --ignore-not-found
+  ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
   ${OC} -n ${bundle_namespace} get pods --ignore-not-found
-  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found | grep 'Testing Catalog Source' || :
+  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found | grep "${bundle_name} Catalog Source" || :
 
-  # List all available channels in the bundle package manifest
+  TITLE "Verify channel '${channel}' exists in the package manifest '${operator_name}' of Bundle namespace '${bundle_namespace}'"
+
   cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
   regex="${channel}"
   watch_and_retry "$cmd" 3m "$regex" || FATAL "Channel '${regex}' was not found in the package manifest of ${operator_name}"
