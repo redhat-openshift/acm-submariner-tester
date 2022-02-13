@@ -397,11 +397,11 @@ function configure_submariner_bundle_on_cluster() {
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  PROMPT "Install Submariner bundle $submariner_version (Subscription '${SUBM_SUBSCRIPTION}', channel '${submariner_channel}') on cluster $cluster_name"
+  PROMPT "Install Submariner bundle $submariner_version (without a manual Subscription) on cluster $cluster_name"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}" "${SUBM_SUBSCRIPTION}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" # "${SUBM_NAMESPACE}" "${SUBM_SUBSCRIPTION}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
