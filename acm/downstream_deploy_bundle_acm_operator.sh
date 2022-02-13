@@ -463,16 +463,16 @@ function install_submariner_via_acm_managed_cluster() {
   fi
 
   # After creating the cloud credentials for the managed cluster - use it in the SubmarinerConfig
-  configure_submariner_version_for_managed_cluster "$cluster_id" "$cluster_secret_name" "$SUBM_VER_TAG"
+  create_submariner_config_in_acm_managed_cluster "$cluster_id" "$cluster_secret_name" "$SUBM_VER_TAG"
 
   # Validate manifestwork
-  validate_submariner_manifestwork "$cluster_id"
+  validate_submariner_manifestwork_in_acm_managed_cluster "$cluster_id"
 
   # Validate submarinerconfig
-  validate_submariner_config_status "$cluster_id"
+  validate_submariner_config_in_acm_managed_cluster "$cluster_id"
 
   # Validate managedclusteraddons
-  validate_submariner_addon_status "$cluster_id"
+  validate_submariner_addon_status_in_acm_managed_cluster "$cluster_id"
 
 }
 
@@ -572,8 +572,8 @@ function configure_submariner_addon_for_openstack() {
 
 # ------------------------------------------
 
-function configure_submariner_version_for_managed_cluster() {
-  ### Create the Submariner subscription config on the managed cluster_id with specified submariner version ###
+function create_submariner_config_in_acm_managed_cluster() {
+  ### Create the SubmarinerConfig on the managed cluster_id with specified submariner version ###
 
   trap_to_debug_commands;
 
@@ -588,11 +588,11 @@ function configure_submariner_version_for_managed_cluster() {
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
 
-  TITLE "Create the Submariner subscription config on managed cluster '${cluster_id}' with version: ${submariner_version}"
+  TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
-  local subscription_conf="SubmarinerConfig_${cluster_id}.yaml"
+  local submariner_conf="SubmarinerConfig_${cluster_id}.yaml"
 
-  cat <<-EOF > $subscription_conf
+  cat <<-EOF > $submariner_conf
   apiVersion: submarineraddon.open-cluster-management.io/v1alpha1
   kind: SubmarinerConfig
   metadata:
@@ -622,8 +622,8 @@ EOF
 
   echo "# Apply SubmarinerConfig (if failed once - apply again)"
 
-  ${OC} apply --dry-run='server' -f $subscription_conf | highlight "unchanged" \
-  || ${OC} apply -f $subscription_conf || ${OC} apply -f $subscription_conf
+  ${OC} apply --dry-run='server' -f $submariner_conf | highlight "unchanged" \
+  || ${OC} apply -f $submariner_conf || ${OC} apply -f $submariner_conf
 
 
   TITLE "Create the Submariner Addon to start the deployment"
@@ -647,7 +647,7 @@ EOF
 
 # ------------------------------------------
 
-function validate_submariner_manifestwork() {
+function validate_submariner_manifestwork_in_acm_managed_cluster() {
   ### Validate that Submariner manifestwork created in ACM, for the managed cluster_id ###
 
   trap_to_debug_commands;
@@ -679,7 +679,7 @@ function validate_submariner_manifestwork() {
 
 # ------------------------------------------
 
-function validate_submariner_config_status() {
+function validate_submariner_config_in_acm_managed_cluster() {
   ### Validate that SubmarinerConfig is ready in ACM, for the cluster_id ###
 
   trap_to_debug_commands;
@@ -709,7 +709,7 @@ function validate_submariner_config_status() {
 
 # ------------------------------------------
 
-function validate_submariner_addon_status() {
+function validate_submariner_addon_status_in_acm_managed_cluster() {
   ### Validate that Submariner Addon has gateway labels and running agent for the managed cluster_id ###
 
   trap_to_debug_commands;
