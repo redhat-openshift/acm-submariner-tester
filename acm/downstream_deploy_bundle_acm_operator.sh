@@ -401,7 +401,7 @@ function configure_submariner_bundle_on_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" # "${SUBM_NAMESPACE}" "${SUBM_SUBSCRIPTION}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}" # "${SUBM_SUBSCRIPTION}"
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
@@ -755,7 +755,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
 
     if [[ "$managed_cluster_status" = FAILED ]] ; then
       ${OC} describe managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id}
-      FATAL "Submariner connection could not be established in ACM cluster id: $cluster_id"
+      FAILURE "Submariner connection could not be established in ACM cluster id: $cluster_id"
     fi
 
   else
