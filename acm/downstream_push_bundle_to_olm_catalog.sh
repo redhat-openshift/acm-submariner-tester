@@ -166,6 +166,8 @@ function deploy_ocp_bundle() {
   echo "# Delete previous catalogSource if exists"
   ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
+  local catalog_display_name="${bundle_name} Catalog Source"
+
     cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
     apiVersion: operators.coreos.com/v1alpha1
     kind: CatalogSource
@@ -175,7 +177,7 @@ function deploy_ocp_bundle() {
     spec:
       sourceType: grpc
       image: ${target_image_path}
-      displayName: ${bundle_name} Catalog Source
+      displayName: ${catalog_display_name}
       publisher: Red Hat Partner (Test)
       # updateStrategy:
       #   registryPoll:
@@ -187,37 +189,41 @@ EOF
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
 
-
-  TITLE "Display catalog-sources, pods and packagemanifests of the Marketplace (namespace) '${bundle_namespace}' in cluster ${cluster_name}"
-
   ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
-  ${OC} -n ${bundle_namespace} get pods --ignore-not-found
-  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found | grep "${bundle_name} Catalog Source" || :
 
-  TITLE "Verify channel '${channel}' exists in the package manifest '${operator_name}' of Bundle namespace '${bundle_namespace}'"
+  TITLE "Verify that the Package Manifest '${operator_name}' includes the required '${catalog_display_name}', channel '${channel}' and version '${version}' before installing the Bundle '${bundle_name}'"
+
+  local packagemanifests_status
+
+  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found \
+  |& highlight "${catalog_display_name}" || packagemanifests_status=FAILED
 
   cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
   regex="${channel}"
-  watch_and_retry "$cmd" 3m "$regex" || FATAL "Channel '${regex}' was not found in the package manifest of ${operator_name}"
+  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  # List all available versions in the bundle package manifest
-  # cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  # regex="${version//[a-zA-Z]}"
-  # watch_and_retry "$cmd" 3m "$regex" || FATAL "Version '${regex}' was not found in the package manifest of ${operator_name}"
+  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+  regex="${version//[a-zA-Z]}"
+  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
+  TITLE "Display OLM deployments logs and pods in cluster ${cluster_name}"
+
+  ${OC} -n ${bundle_namespace} get pods --ignore-not-found
+  ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
+
+  # Create Subscription only if requested
   echo "# Only if the subscription '${subscription}' is not NONE, create the OperatorGroup and Subscription resources"
   if [[ "${subscription}" != NONE ]]; then
     create_subscription "${version}" "${operator_name}" "${channel}" "${catalog_source}" "${bundle_namespace}" "${subscription}" "${subscription_namespace}"
   fi
 
-  TITLE "Display Operator deployments logs in cluster ${cluster_name}"
-
-  ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
+  if [[ "$packagemanifests_status" = FAILED ]] ; then
+    FAILURE "Package Manifest '${operator_name}' did not include either '${catalog_display_name}', channel '${channel}' or '${version}'"
+  fi
 
 }
-
 
 # ------------------------------------------
 
