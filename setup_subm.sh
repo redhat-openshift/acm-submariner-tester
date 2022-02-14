@@ -5506,7 +5506,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # Running cleanup on cluster A if requested
       if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a  # Skipping ACM cleanup, as it might not be required for Submariner tests
+        # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
@@ -5521,7 +5523,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_b  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
@@ -5537,7 +5539,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
