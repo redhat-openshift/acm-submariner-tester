@@ -83,6 +83,11 @@ export REGISTRY_IMAGE_PREFIX="rhacm2"
 export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
 export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 
+# Another official Redhat registry catalog (external)
+export CATALOG_REGISTRY="registry.access.redhat.com"
+export CATALOG_IMAGE_PREFIX="openshift4"
+export CATALOG_IMAGE_IMPORT_PATH="ose-oauth-proxy"
+
 # Wrap credentials with single quotes:
 export REGISTRY_USR='mirror-user'
 export REGISTRY_PWD='mirror-pass'
