@@ -2,52 +2,45 @@
 
 ############ ACM and Submariner operator installation functions ############
 
-# Set working dir
-# wd="$(dirname "$(realpath -s $0)")"
-
-# source ${wd:?}/debug.sh
-
-trap_to_debug_commands; # Trap commands (should be called only after sourcing debug.sh)
-
-export LOG_TITLE="cluster1"
-
 # ------------------------------------------
 
-function clean_acm_namespace_and_resources_cluster_a() {
-### Run cleanup of previous ACM on cluster A ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
+function remove_acm_managed_cluster() {
+### Removing Cluster-ID from ACM managed clusters (if exists) ###
   trap_to_debug_commands;
 
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_id
+  cluster_id="acm-$(print_current_cluster_name)"
+
+  PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
+
+  # Following steps should be run on ACM hub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
-  clean_acm_namespace_and_resources
-}
 
-# ------------------------------------------
+  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-function clean_acm_namespace_and_resources_cluster_b() {
-### Run cleanup of previous ACM on cluster A ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster B"
-  trap_to_debug_commands;
+  ${OC} get managedcluster -o wide || :
 
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  clean_acm_namespace_and_resources
-}
+  if ${OC} get managedcluster -o wide | grep "${cluster_id}" ; then
+    ${OC} delete managedcluster --all --wait || :
+  else
+    echo "# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
+  fi
 
-# ------------------------------------------
-
-function clean_acm_namespace_and_resources_cluster_c() {
-### Run cleanup of previous ACM on cluster C ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  clean_acm_namespace_and_resources
 }
 
 # ------------------------------------------
 
 function clean_acm_namespace_and_resources() {
+### Uninstall ACM Hub ###
+  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
   trap_to_debug_commands;
+
+  # Run on ACM hub cluster (Manager)
+  export KUBECONFIG="${KUBECONF_HUB}"
 
   local acm_uninstaller_url="https://raw.githubusercontent.com/open-cluster-management/deploy/master/multiclusterhub/uninstall.sh"
   local acm_uninstaller_file="./acm_cleanup.sh"
@@ -278,11 +271,6 @@ function create_new_managed_cluster_in_acm_hub() {
 
   TITLE "Create ACM managed cluster by ID: $cluster_id, Type: $cluster_type"
 
-  # Define the managed Clusters
-  # for i in {1..3}; do
-
-  TITLE "Create the managed cluster"
-
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
   kind: ManagedCluster
@@ -299,7 +287,7 @@ function create_new_managed_cluster_in_acm_hub() {
 EOF
 
   ### TODO: Wait for managedcluster
-  # sleep 1m
+
 
   TITLE "Create ACM klusterlet Addon config for cluster '$cluster_id'"
 
@@ -334,6 +322,8 @@ EOF
     version: 2.2.0
 EOF
 
+  # TODO: wait for kluserlet Addon
+
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
@@ -343,11 +333,6 @@ EOF
 
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.crds\\.yaml}" | base64 --decode > ${kluster_crd}
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.import\\.yaml}" | base64 --decode > ${kluster_import}
-
-  # done
-
-  # TODO: wait for kluserlet Addon
-  # sleep 1m
 
 }
 
@@ -428,7 +413,7 @@ function install_submariner_via_acm_managed_cluster() {
 
   export KUBECONFIG="$kubeconfig_file"
 
-  echo "# Generate '\$cluster_id' according to the cuurent cluster name of kubeconfig: $kubeconfig_file"
+  echo "# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
 
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name)"
@@ -440,10 +425,10 @@ function install_submariner_via_acm_managed_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  ${OC} get managedclusters
+  ${OC} get managedcluster -o wide
 
   local managed_cluster_cloud
-  managed_cluster_cloud=$(${OC} get managedclusters -o jsonpath="{.items[?(@.metadata.name=='${cluster_id}')].metadata.labels.cloud}")
+  managed_cluster_cloud=$(${OC} get managedcluster -o jsonpath="{.items[?(@.metadata.name=='${cluster_id}')].metadata.labels.cloud}")
 
   TITLE "Configure ${cluster_id} credentials for the Submariner Gateway on cloud: $managed_cluster_cloud"
 
@@ -641,7 +626,7 @@ EOF
   TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
   # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-  ${OC} label managedclusters ${cluster_id} "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" --overwrite
+  ${OC} label managedcluster ${cluster_id} "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" --overwrite
 
 }
 
@@ -740,14 +725,14 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
 
   TITLE "Verify Submariner connection established in the '${SUBM_OPERATOR}' cluster-set of ACM namespace ${cluster_id}"
 
-  ${OC} get managedclusters
+  ${OC} get managedcluster -o wide
 
   # The ManagedCluster-Broker connection is a management-plane connection only (via the Kube API), and not a data-plane connection.
   # "SubmarinerConnectionDegraded" condition is relevant only when more than one ManagedClusters are configured.
   # i.e. To establish actual inter-cluster data-plane connections between ManagedClusters (which are part of the same ManagedClusterSet).
 
   local clusterset_count
-  clusterset_count="$(${OC} get managedclusters -l "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" -o name | wc -w)"
+  clusterset_count="$(${OC} get managedcluster -l "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" -o name | wc -w)"
   # Can also count with: ${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${SUBM_OPERATOR}')].metadata.name}" | wc -w
 
   if (( clusterset_count > 1 )) ; then

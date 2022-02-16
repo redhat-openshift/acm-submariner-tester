@@ -3018,8 +3018,7 @@ function configure_cluster_custom_registry_secrets() {
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
-  (
-    # ocp_usr=$(${OC} whoami | tr -d ':')
+  ( # subshell to hide commands
     ocp_token=$(${OC} whoami -t)
 
     TITLE "Configure OCP registry local secret"
@@ -3053,11 +3052,16 @@ function configure_cluster_custom_registry_mirror() {
   ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
-  TITLE "Add OCP Registry mirror for ACM and Submariner:"
+  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner (${SUBM_NAMESPACE}) and ACM (${SUBM_NAMESPACE})"
 
-  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
+  )
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
+  )
 
-  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
+  TITLE "Add OCP Registry mirrors to all OCP cluster nodes using MachineConfig"
 
   BUG "Using image tags for ImageContentSourcePolicy resource is not supported" \
   "Create MachineConfig (instead of ImageContentSourcePolicy) to configure registry mirrors on all nodes" \
@@ -3130,10 +3134,31 @@ function add_acm_registry_mirror_to_ocp_node() {
   local_registry_path = $local_registry_path"
 
   if [[ -z "$local_registry_path" ]] || [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
-    FATAL "Expected Openshift Registry values are missing: $reg_values"
+    FATAL "Openshift Registry values are missing: $reg_values"
   else
-    TITLE "Adding Submariner registry mirror to all OCP cluster nodes"
-    echo -e "$reg_values"
+    TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes:
+    * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+
+    * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+
+    * ${VPN_REGISTRY} -->
+          - ${BREW_REGISTRY}
+
+    * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}
+
+    * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}
+
+    * ${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH} -->
+          - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
+    "
   fi
 
   config_source=$(cat <<EOF | raw_to_url_encode
@@ -3208,16 +3233,16 @@ function add_acm_registry_mirror_to_ocp_node() {
       location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
       insecure = false
 
-  [[registry]]
-    prefix = ""
-    location = "registry.access.redhat.com/openshift4/ose-oauth-proxy"
-    mirror-by-digest-only = true
-    insecure = false
-    blocked = false
-
-    [[registry.mirror]]
-      location = "registry.redhat.io/openshift4/ose-oauth-proxy"
+    [[registry]]
+      prefix = ""
+      location = "${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
+      mirror-by-digest-only = true
       insecure = false
+      blocked = false
+
+      [[registry.mirror]]
+        location = "${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
+        insecure = false
 EOF
   )
 
@@ -5506,7 +5531,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # Running cleanup on cluster A if requested
       if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a  # Skipping ACM cleanup, as it might not be required for Submariner tests
+        # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
@@ -5521,7 +5548,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_b  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
@@ -5537,7 +5564,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
