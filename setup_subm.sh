@@ -3296,7 +3296,7 @@ function upload_submariner_images_to_cluster_registry() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   local image_tag="$SUBM_VER_TAG"
   # Fix the $image_tag value for custom images
