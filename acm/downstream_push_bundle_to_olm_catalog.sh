@@ -101,7 +101,7 @@ function deploy_ocp_bundle() {
   local subscription_namespace="${8:-$bundle_namespace}"
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
   Bundle Name: ${bundle_name}
@@ -245,7 +245,7 @@ function create_subscription() {
   # local subscription_namespace="${7:-$OPERATORS_NAMESPACE}"
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   if [[ -n "${bundle_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"

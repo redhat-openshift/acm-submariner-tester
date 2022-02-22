@@ -1069,22 +1069,22 @@ function print_current_cluster_name() {
   export KUBECONFIG="$KUBECONFIG"
 
   # Get cluster name of "admin" user in kubeconfig
-  cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
+  cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}' || :)
 
   # If it's empty, get the oldest cluster name found in kubeconfig
   if [[ -z "$cluster_name" ]] ; then
-    cluster_name=$(${OC} config view -o jsonpath='{.clusters[-1].name}' | awk '{print $1}')
+    cluster_name=$(${OC} config view -o jsonpath='{.clusters[-1].name}' | awk '{print $1}' || :)
   fi
 
   # If it's empty, get the cluster name of "admin" context
   if [[ -z "$cluster_name" ]] ; then
-    cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.name == "admin")].context.cluster}' | awk '{print $1}')
+    cluster_name=$(${OC} config view -o jsonpath='{.contexts[?(@.name == "admin")].context.cluster}' | awk '{print $1}' || :)
   fi
 
   # If it's empty, get the cluster name of current context
   if [[ -z "$cluster_name" ]] ; then
     current_context=$(${OC} config current-context || :)
-    cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}")
+    cluster_name=$(${OC} config view -o jsonpath="{.contexts[?(@.name == '$current_context')].context.cluster}" || :)
   fi
 
   # Remove the :<port number> if exists
