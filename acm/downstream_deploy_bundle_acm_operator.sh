@@ -114,7 +114,7 @@ function install_acm_operator() {
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE}"
 
-  echo "# Install ACM operator completed"
+  echo "# Install ACM operator ${acm_version} completed"
 
 }
 
@@ -154,7 +154,10 @@ EOF
     FATAL "ACM Hub is not ready after $duration"
   fi
 
-  TITLE "ACM console url: $(${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+
+  TITLE "ACM ${acm_current_version} console url: $(${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
 

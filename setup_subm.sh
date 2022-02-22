@@ -5008,9 +5008,14 @@ function test_products_versions() {
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
+  # Get ACM version if ACM hub is install on current cluster
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+
   TITLE "OCP cluster ${cluster_name} information"
   echo -e "\n# Cloud platform: ${ocp_cloud}"
   echo -e "\n# OCP version: ${cluster_version}"
+  [[ -z "$acm_current_version" ]] || echo -e "\n# ACM version: ${acm_current_version}"
 
   echo -e "\n### Submariner components ###\n"
 
