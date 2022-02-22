@@ -13,7 +13,7 @@ function remove_acm_managed_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name)"
+  cluster_id="acm-$(print_current_cluster_name || :)"
 
   PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
 
@@ -61,7 +61,7 @@ function clean_acm_namespace_and_resources() {
   # Workaround:
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM in cluster ${cluster_name}"
 
@@ -90,25 +90,38 @@ function clean_acm_namespace_and_resources() {
 # ------------------------------------------
 
 function install_acm_operator() {
-  ### Install ACM operator ###
+  ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
-
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
-
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
-  local acm_channel
-  acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
-
-  PROMPT "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub cluster"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  # Run on the Hub cluster only
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
 
-  local cmd="${OC} get MultiClusterHub multiclusterhub"
-  local retries=3
-  watch_and_retry "$cmd" "$retries" "Running" || \
-  deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Install ACM version $acm_version on the Hub cluster ${cluster_name}"
+
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+
+  # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
+  if [[ "$acm_version" != "$acm_current_version" ]] ; then
+
+    if [[ -z "$acm_current_version" ]] ; then
+      echo "# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
+    else
+      echo "# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
+    fi
+
+    local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
+    local acm_channel
+    acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+
+    TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
+
+    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
+  fi
 
   TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
@@ -145,12 +158,12 @@ EOF
   TITLE "Wait for multiclusterhub to be ready"
 
   # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
-  cmd="${OC} get MultiClusterHub multiclusterhub"
+  cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
   duration=15m
   watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
-    ${OC} get MultiClusterHub multiclusterhub
+    ${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}
     FATAL "ACM Hub is not ready after $duration"
   fi
 
@@ -242,7 +255,7 @@ function create_and_import_managed_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name)"
+  cluster_id="acm-$(print_current_cluster_name || :)"
 
   PROMPT "Create and import a managed cluster in ACM: $cluster_id"
 
@@ -376,7 +389,7 @@ function configure_submariner_bundle_on_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_name
-  cluster_name="$(print_current_cluster_name)"
+  cluster_name="$(print_current_cluster_name || :)"
 
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
@@ -419,7 +432,7 @@ function install_submariner_via_acm_managed_cluster() {
   echo "# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
 
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name)"
+  cluster_id="acm-$(print_current_cluster_name || :)"
 
   PROMPT "Install Submariner $SUBM_VER_TAG via ACM on managed cluster: $cluster_id"
 
