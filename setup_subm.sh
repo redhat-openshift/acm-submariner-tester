@@ -1,49 +1,58 @@
 #!/bin/bash
 #######################################################################################################
 #                                                                                                     #
-# Setup Submariner on AWS and OSP (Upshift)                                                           #
+# Setup ACM with Submariner on public clouds (Amazon and Google) and On-premise (OpenStack)           #
 # By Noam Manos, nmanos@redhat.com                                                                    #
 #                                                                                                     #
-# You can find latest script here:                                                                    #
+# You can find latest script files here:                                                              #
 # https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
 # for both cluster A (AWS) and clusters B or C (OSP/GCP/AWS), in the current directory.               #
 #                                                                                                     #
-# For cluster A, use Openshift-installer config format:                                               #
+# For cluster A - use Openshift-installer config format. For example on Amazon cloud:                 #
 # https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
 #                                                                                                     #
-# For cluster B, use OCPUP config format:                                                             #
-# https://github.com/redhat-openshift/ocpup#create-config-file                                                 #
+# For cluster B - use OCPUP config format:                                                            #
+# https://github.com/redhat-openshift/ocpup#create-config-file                                        #
+#                                                                                                     #
+# For cluster C - use Openshift-installer config format. For example on Google cloud:                 #
+# https://github.com/openshift/installer/blob/master/docs/user/gcp/customization.md#examples          #
 #                                                                                                     #
 # To create those config files, you need to supply your AWS pull secret, and SSH public key:          #
 #                                                                                                     #
-# (1) Get access to Upshift account.                                                                  #
+# (1) Get access to OpenStack on PSI account:                                                         #
 # - Follow PnT Resource Workflow:                                                                     #
 # https://docs.engineering.redhat.com/display/HSSP/PnT+Resource+Request+Workflow+including+PSI        #
-# - PSI Resource (Openstack, Upshift) request form:                                                   #
-# https://docs.google.com/forms/d/e/1FAIpQLScxbNCO1fNFeIeFUghlCSr9uqVZncYwYmgSR2CLNIQv5AUTaw/viewform #
-# - OpenShift on OpenStack (using PSI) Mojo page:                                                     #
-# https://mojo.redhat.com/docs/DOC-1207953                                                            #
+# - PSI Resource (Openstack, OpenStack on PSI) request form:                                          #
+# https://redhat.service-now.com/help?id=sc_cat_item&sys_id=0430d9eedb2150d0d8a333f3b9961927          #
 # - Make sure your user is included in the Rover group with the same OSP project name:                #
 # https://rover.redhat.com/groups/group/{your-rover-group-name}                                       #
 # - Login to Openstack Admin with your kerberos credentials (and your company domain.com):            #
-# https://rhos-d.infra.prod.upshift.rdu2.redhat.com/dashboard/project/                                #
+# https://openstack.psi.redhat.com/dashboard/auth/login/?next=/dashboard/                             #
 # - Support email: psi-openstack-users@redhat.com                                                     #
 # - Support IRC: #psi , #ops-escalation                                                               #
 # - Support Google-Chat: exd-infra-escalation                                                         #
 #                                                                                                     #
-# (2) Get access to AWS account.                                                                      #
+# (2) Get access to AWS account:                                                                      #
 # - To get it, please fill AWS request form:                                                          #
-# https://docs.google.com/forms/d/e/1FAIpQLSeBi_walgnC4555JEHk5rw-muFUiOf2VCWa1yuEgSl0vDeyQw/viewform #
+# https://devservices.dpp.openshift.com/support/aws_iam_account_request/                              #
 # - Once you get approved, login to AWS openshift-dev account via the web console:                    #
-# https://{AWS Account ID}.signin.aws.amazon.com/console                                              #
+# https://{aws-account-id}.signin.aws.amazon.com/console                                              #
 #                                                                                                     #
-# (3) Your Red Hat Openshift pull secret, found in:                                                   #
+# (3) Get access to GCP account:                                                                      #
+# - Create a personal service account (SA) with a user email, in:                                     #
+# https://cloud.google.com/iam/docs/creating-managing-service-accounts#creating_a_service_account     #
+# - Grant these roles to your SA: Compute Admin, Security Admin, Service Account Admin,               #
+#   Service Account User, Storage Admin, DNS Administrator, Service Account Key Admin.                #
+# - Download your personal GCP credentials from:                                                      #
+# https://console.cloud.google.com/iam-admin/serviceaccounts?project={gcp-project}                    #
+#                                                                                                     #
+# (4) Your Red Hat Openshift pull secret, found in:                                                   #
 # https://cloud.redhat.com/openshift/install/aws/installer-provisioned                                #
 # It is used by Openshift-installer to download OCP images from Red Hat repositories.                 #
 #                                                                                                     #
-# (4) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
+# (5) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
 # cat ~/.ssh/id_rsa.pub                                                                               #
 # It is required by Openshift-installer for authentication.                                           #
 #                                                                                                     #
@@ -53,7 +62,7 @@
 # Script description
 disclosure='----------------------------------------------------------------------
 
-Interactive script to create Openshift multi-clusters on private and public clouds, and test inter-connectivity with Submariner.
+Interactive script to install Advanced Cluster Manager on private and public OpenShift clusters, and test inter-connectivity with Submariner.
 
 Running with pre-defined parameters (optional):
 
@@ -109,21 +118,20 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.0 --subctl-version 0.11.0 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.0 release
-  * Install Submariner 0.11.0 release
+  * Install ACM 2.4.2 release
+  * Install Submariner 0.11.2 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer nightly --reset-cluster-c --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
 
-  * Download OCP installer version 4.5.1
-  * Recreate new cluster on OCP (cluster A)
-  * Clean existing cluster on OSP (cluster B)
+  * Download OCP installer pre-release (nightly)
+  * Recreate new cluster C (e.g. on GCP)
+  * Clean existing cluster A (e.g. on AWS)
   * Install "subctl-devel" (subctl development branch)
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)

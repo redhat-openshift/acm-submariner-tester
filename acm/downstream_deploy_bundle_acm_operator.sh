@@ -100,7 +100,7 @@ function install_acm_operator() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Install ACM version $acm_version on the Hub cluster ${cluster_name}"
+  PROMPT "Install ACM bundle $acm_version on the Hub cluster ${cluster_name}"
 
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
@@ -391,14 +391,14 @@ function configure_submariner_bundle_on_cluster() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  PROMPT "Install Submariner bundle $submariner_version (without Subscription) on cluster $cluster_name"
+
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
   submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
-
-  PROMPT "Install Submariner bundle $submariner_version (without a manual Subscription) on cluster $cluster_name"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
