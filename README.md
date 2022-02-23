@@ -1,5 +1,5 @@
 # acm-submariner-tester
-Interactive script to create Openshift multi-clusters on private and public clouds, and test inter-connectivity with Submariner.
+Interactive script to install Advanced Cluster Manager on private and public OpenShift clusters, and test inter-connectivity with Submariner.
 
 Running with pre-defined parameters (optional):
 
@@ -58,21 +58,20 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.0 --subctl-version 0.11.0 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.0 release
-  * Install Submariner 0.11.0 release
+  * Install ACM 2.4.2 release
+  * Install Submariner 0.11.2 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer nightly --reset-cluster-c --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
 
-  * Download OCP installer version 4.5.1
-  * Recreate new cluster on AWS (cluster A)
-  * Clean existing cluster on OSP (cluster B)
+  * Download OCP installer pre-release (nightly)
+  * Recreate new cluster C (e.g. on GCP)
+  * Clean existing cluster A (e.g. on AWS)
   * Install "subctl-devel" (subctl development branch)
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
