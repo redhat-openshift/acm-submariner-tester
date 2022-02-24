@@ -290,8 +290,9 @@ EOF
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
-  local acm_subscription="`mktemp`_acm_subscription"
-  local cmd="${OC} describe subs/${subscription_display_name} -n "${subscription_namespace}" &> '$acm_subscription'"
+  local acm_subscription
+  acm_subscription="`mktemp`_acm_subscription"
+  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$acm_subscription'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
