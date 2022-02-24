@@ -207,18 +207,19 @@ EOF
   ${OC} -n ${bundle_namespace} get pods --ignore-not-found
   ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
-  TITLE "Display OLM Operator deployment logs in cluster ${cluster_name}"
+  TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
-  --all-containers --limit-bytes=100000 --since=1h | grep -E '^E0|Error|Warning' || :
+  --all-containers --limit-bytes=100000 --since=1h |& (! highlight "^E0|Error|Warning") || packagemanifests_status=FAILED
 
-  TITLE "Display Catalog Operator deployment logs in cluster ${cluster_name}"
+  TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m | grep -E '^E0|Error|Warning' || :
+  --all-containers --limit-bytes=10000 --since=10m |& (! highlight "^E0|Error|Warning") || packagemanifests_status=FAILED
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
-    FAILURE "Package Manifest '${operator_name}' did not include either '${catalog_display_name}', channel '${operator_channel}' or '${operator_version}'"
+    FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
+    Channel '${operator_channel}', Version '${operator_version}', or OLM deployment"
   fi
 
 }
