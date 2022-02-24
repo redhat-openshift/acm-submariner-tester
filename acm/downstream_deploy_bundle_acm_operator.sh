@@ -636,6 +636,9 @@ EOF
   ${OC} apply --dry-run='server' -f $submariner_conf | highlight "unchanged" \
   || ${OC} apply -f $submariner_conf || ${OC} apply -f $submariner_conf
 
+  TITLE "Display the SubmarinerConfig CRD"
+
+  ${OC} describe crd submarinerconfigs.submarineraddon.open-cluster-management.io || :
 
   TITLE "Create the Submariner Addon to start the deployment"
 

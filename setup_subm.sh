@@ -5044,11 +5044,12 @@ function test_products_versions() {
     echo -e "\n\n"
   fi
 
+  # Show Submariner and ACM CSVs (Cluster service versions)
+  print_csvs_in_namespace "$SUBM_NAMESPACE"
+  print_csvs_in_namespace "$ACM_NAMESPACE"
+
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
-
-  # Show Submariner CSVs (Cluster service versions)
-  print_csvs_in_namespace "$SUBM_NAMESPACE"
 
   # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
