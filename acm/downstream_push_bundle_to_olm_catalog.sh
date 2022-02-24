@@ -191,8 +191,9 @@ EOF
 
   local packagemanifests_status
 
-  ${OC} -n ${bundle_namespace} get packagemanifests --ignore-not-found \
-  |& highlight "${catalog_display_name}" || packagemanifests_status=FAILED
+  cmd="${OC} get packagemanifests -n ${bundle_namespace}"
+  regex="${catalog_display_name}"
+  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
   cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
   regex="${operator_channel}"
@@ -210,12 +211,12 @@ EOF
   TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
-  --all-containers --limit-bytes=100000 --since=1h |& (! highlight "^E0|Error|Warning") || packagemanifests_status=FAILED
+  --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
 
   TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight "^E0|Error|Warning") || packagemanifests_status=FAILED
+  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED "level":"error"
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
     FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
@@ -290,8 +291,9 @@ EOF
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
-  local acm_subscription="`mktemp`_acm_subscription"
-  local cmd="${OC} describe subs/${subscription_display_name} -n "${subscription_namespace}" &> '$acm_subscription'"
+  local acm_subscription
+  acm_subscription="`mktemp`_acm_subscription"
+  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$acm_subscription'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :

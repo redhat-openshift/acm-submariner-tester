@@ -123,19 +123,37 @@ function install_acm_operator() {
     # Deploy ACM operator as an OCP bundle
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
 
-    # TODO: Subscription should probably be run as a separate test
-    TITLE "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
+    echo "# ACM $acm_version installation completed"
 
-    # Create Subscription for ACM operator
-    create_subscription "${ACM_SUBSCRIPTION}" "${ACM_OPERATOR}" "${acm_version}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
-
+  else
+    TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
   fi
 
-  TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
-  cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD was not created for ${ACM_BUNDLE}"
+}
 
-  echo "# Install ACM operator ${acm_version} completed"
+# ------------------------------------------
+
+function create_acm_subscription() {
+  ### Create ACM subscription - It should be run only on the Hub cluster ###
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
+
+  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
+  local acm_channel
+  acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+
+  # Create Subscription for ACM operator
+  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_OPERATOR}" "${acm_version}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
+
+  echo "# ACM Subscription ${ACM_SUBSCRIPTION} created"
 
 }
 
@@ -143,12 +161,22 @@ function install_acm_operator() {
 
 function create_acm_multiclusterhub() {
   ### Create ACM MultiClusterHub instance ###
-  PROMPT "Create ACM MultiClusterHub instance"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  # Create the MultiClusterHub instance
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create ACM MultiClusterHub instance on cluster ${cluster_name}"
+
+  echo "# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
+
+  cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
+  watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
+
+  TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
+
   cat <<EOF | ${OC} apply -f -
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
