@@ -206,12 +206,20 @@ EOF
   regex="${version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  TITLE "Display OLM deployments logs and pods in cluster ${cluster_name}"
+  TITLE "Display OLM and ${bundle_namespace} pods in cluster ${cluster_name}"
 
   ${OC} -n ${bundle_namespace} get pods --ignore-not-found
   ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator | grep '^E0|Error|Warning' || :
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator | grep '^E0|Error|Warning' || :
+
+  TITLE "Display OLM Operator deployment logs in cluster ${cluster_name}"
+
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
+  --all-containers --limit-bytes=100000 --since=1h | grep -E '^E0|Error|Warning' || :
+
+  TITLE "Display Catalog Operator deployment logs in cluster ${cluster_name}"
+
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
+  --all-containers --limit-bytes=10000 --since=10m | grep -E '^E0|Error|Warning' || :
 
   # Create Subscription only if requested
   echo "# Only if the subscription '${subscription}' is not NONE, create the OperatorGroup and Subscription resources"
