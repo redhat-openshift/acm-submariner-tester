@@ -369,7 +369,8 @@ while [[ $# -gt 0 ]]; do
   --import-vars)
     check_cli_args "$2"
     export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file: $GLOBAL_VARS"
+    TITLE "Importing additional variables from file:
+    $GLOBAL_VARS"
     source "$GLOBAL_VARS"
     shift 2 ;;
   -*)

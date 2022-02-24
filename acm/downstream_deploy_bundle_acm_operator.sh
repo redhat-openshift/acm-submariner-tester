@@ -127,7 +127,7 @@ function install_acm_operator() {
     TITLE "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
 
     # Create Subscription for ACM operator
-    create_subscription "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
+    create_subscription "${ACM_SUBSCRIPTION}" "${ACM_OPERATOR}" "${acm_version}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
 
   fi
 

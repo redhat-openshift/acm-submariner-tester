@@ -238,14 +238,14 @@ function create_subscription() {
   local catalog_source="$5"
 
   # Optional args: "openshift-operators" or "openshift-marketplace" are only required if deploying as a global operator
-  local operator_namespace="${5:-$OPERATORS_NAMESPACE}"
-  local subscription_namespace="${5:-$MARKETPLACE_NAMESPACE}"
+  local operator_namespace="${6:-$OPERATORS_NAMESPACE}"
+  local subscription_namespace="${6:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   echo "# Delete previous Subscription '${subscription_display_name}' if exists"
-  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
+  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   if [[ -n "${operator_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"
