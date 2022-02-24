@@ -92,38 +92,34 @@ function deploy_ocp_bundle() {
 
   # Input args
   local bundle_name="$1"
-  local version="$2"
+  local operator_version="$2"
   local operator_name="$3"
-  local channel="$4"
+  local operator_channel="$4"
   local catalog_source="$5"
   local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
-  local subscription="${7:-NONE}"
-  local subscription_namespace="${8:-$bundle_namespace}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
   Bundle Name: ${bundle_name}
-  Bundle Version: ${version}
+  Operator Version: ${operator_version}
   Operator Name: ${operator_name}
-  Channel: ${channel}
+  Channel: ${operator_channel}
   Catalog Source: ${catalog_source}
   Bundle Namespace: ${bundle_namespace}
-  Subscription Name: ${subscription}
-  Subscription Namespace: ${subscription_namespace}
   "
 
   if [[ -z "${bundle_name}" ]] ||
-     [[ -z "${version}" ]] ||
+     [[ -z "${operator_version}" ]] ||
      [[ -z "${operator_name}" ]] ||
-     [[ -z "${channel}" ]] ||
+     [[ -z "${operator_channel}" ]] ||
      [[ -z "${catalog_source}" ]] ; then
        FATAL "Required parameters for the Bundle installation are missing:
        Bundle Name: ${bundle_name}
-       Bundle Version: ${version}
+       Operator Version: ${operator_version}
        Operator Name: ${operator_name}
-       Channel: ${channel}
+       Channel: ${operator_channel}
        Catalog Source: ${catalog_source}"
   fi
 
@@ -139,14 +135,14 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   # Set and export the variable ${LATEST_IIB}
-  export_LATEST_IIB "${version}" "${bundle_name}"
+  export_LATEST_IIB "${operator_version}" "${bundle_name}"
 
   local source_image_path
   source_image_path="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
 
   local bundle_image_name="${bundle_name}-index"
 
-  local target_image_path="${ocp_registry_url}/${bundle_namespace}/${bundle_image_name}:${version}"
+  local target_image_path="${ocp_registry_url}/${bundle_namespace}/${bundle_image_name}:${operator_version}"
 
   TITLE "Import new Bundle image into cluster ${cluster_name} namespace '${bundle_namespace}'
   Source image path: ${source_image_path}
@@ -191,7 +187,7 @@ EOF
 
   ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify that the Package Manifest '${operator_name}' includes the required '${catalog_display_name}', channel '${channel}' and version '${version}' before installing the Bundle '${bundle_name}'"
+  TITLE "Verify that the Package Manifest '${operator_name}' includes the required '${catalog_display_name}', channel '${operator_channel}' and version '${operator_version}' before installing the Bundle '${bundle_name}'"
 
   local packagemanifests_status
 
@@ -199,11 +195,11 @@ EOF
   |& highlight "${catalog_display_name}" || packagemanifests_status=FAILED
 
   cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
-  regex="${channel}"
+  regex="${operator_channel}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
   cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  regex="${version//[a-zA-Z]}"
+  regex="${operator_version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
   TITLE "Display OLM and ${bundle_namespace} pods in cluster ${cluster_name}"
@@ -221,14 +217,8 @@ EOF
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
   --all-containers --limit-bytes=10000 --since=10m | grep -E '^E0|Error|Warning' || :
 
-  # Create Subscription only if requested
-  echo "# Only if the subscription '${subscription}' is not NONE, create the OperatorGroup and Subscription resources"
-  if [[ "${subscription}" != NONE ]]; then
-    create_subscription "${version}" "${operator_name}" "${channel}" "${catalog_source}" "${bundle_namespace}" "${subscription}" "${subscription_namespace}"
-  fi
-
   if [[ "$packagemanifests_status" = FAILED ]] ; then
-    FAILURE "Package Manifest '${operator_name}' did not include either '${catalog_display_name}', channel '${channel}' or '${version}'"
+    FAILURE "Package Manifest '${operator_name}' did not include either '${catalog_display_name}', channel '${operator_channel}' or '${operator_version}'"
   fi
 
 }
@@ -236,75 +226,71 @@ EOF
 # ------------------------------------------
 
 function create_subscription() {
-  ### Create Subscription for the Bundle ###
+  ### Create Subscription for an Operator ###
 
   trap_to_debug_commands;
 
   # Input args
-  local version="$1"
+  local subscription_display_name="$1"
   local operator_name="$2"
-  local channel="$3"
-  local catalog_source="$4"
-  local bundle_namespace="$5"
-  local subscription="$6"
-  local subscription_namespace="$7"
+  local operator_version="$3"
+  local operator_channel="$4"
+  local catalog_source="$5"
 
-  # subscription_namespace="openshift-operators" is the required subscription, only if deploying as a global operator
-  # local subscription_namespace="${7:-$OPERATORS_NAMESPACE}"
+  # Optional args: "openshift-operators" or "openshift-marketplace" are only required if deploying as a global operator
+  local operator_namespace="${5:-$OPERATORS_NAMESPACE}"
+  local subscription_namespace="${5:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  if [[ -n "${bundle_namespace}" ]]; then
+  echo "# Delete previous Subscription '${subscription_display_name}' if exists"
+  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
+
+  if [[ -n "${operator_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"
-    TITLE "Create the OperatorGroup '${operator_group_name}' for the Bundle in a target namespace '${bundle_namespace}' in cluster ${cluster_name}"
+    TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: operators.coreos.com/v1alpha2
     kind: OperatorGroup
     metadata:
       name: ${operator_group_name}
-      namespace: ${bundle_namespace}
+      namespace: ${operator_namespace}
     spec:
       targetNamespaces:
-      - ${bundle_namespace}
+      - ${operator_namespace}
 EOF
 
-    echo "# Display all Operator Groups in '${bundle_namespace}' namespace"
-    ${OC} get operatorgroup -n ${bundle_namespace} --ignore-not-found
+    echo "# Display all Operator Groups in '${operator_namespace}' namespace"
+    ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
   fi
 
-
-  TITLE "Create the Subscription '${subscription}' (with Manual approval) in cluster ${cluster_name}"
-
-  echo "# Delete previous Subscription '${subscription}' if exists"
-  ${OC} delete sub/${subscription} -n "${subscription_namespace}" --wait > /dev/null 2>&1 || :
-
-  echo "# Apply InstallPlan 'Manual' Approve (instead of 'Automatic'), in order to pin the bundle version (startingCSV) to '${operator_name}.${version}'"
+  TITLE "Apply InstallPlan with 'Manual' approval (instead of 'Automatic'), in order to pin the Operator version (startingCSV) to '${operator_name}.${operator_version}'"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
   kind: Subscription
   metadata:
-    name: ${subscription}
+    name: ${subscription_display_name}
     namespace: ${subscription_namespace}
   spec:
-    channel: ${channel}
+    channel: ${operator_channel}
     installPlanApproval: Manual
     name: ${operator_name}
     source: ${catalog_source}
-    sourceNamespace: ${bundle_namespace}
-    startingCSV: ${operator_name}.${version}
+    sourceNamespace: ${operator_namespace}
+    startingCSV: ${operator_name}.${operator_version}
 EOF
 
   local duration=5m
-  echo "# Wait $duration for Subscription '${subscription}' status to be 'AtLatestKnown' or 'UpgradePending'"
+  echo "# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
-  # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription} || subscription_status=FAILED
+  # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
   local acm_subscription="`mktemp`_acm_subscription"
-  local cmd="${OC} describe subs/${subscription} -n "${subscription_namespace}" &> '$acm_subscription'"
+  local cmd="${OC} describe subs/${subscription_display_name} -n "${subscription_namespace}" &> '$acm_subscription'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
@@ -312,7 +298,7 @@ EOF
   if cat $acm_subscription |& highlight "$regex" ; then
 
     local installPlan
-    installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
+    installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
 
     if [[ -n "${installPlan}" ]] ; then
       ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge || subscription_status=FAILED
@@ -330,7 +316,7 @@ EOF
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
 
   if [[ "$subscription_status" = FAILED ]] ; then
-    FAILURE "InstallPlan for Subscription '${subscription}' in ${subscription_namespace} could not be created"
+    FAILURE "InstallPlan for the Subscription '${subscription_display_name}' of Operator '${operator_name}' could not be created"
   fi
 
 }

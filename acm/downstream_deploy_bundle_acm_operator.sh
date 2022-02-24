@@ -120,7 +120,15 @@ function install_acm_operator() {
 
     TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
 
+    # Deploy ACM operator as an OCP bundle
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
+
+    # TODO: Subscription should probably be run as a separate test
+    TITLE "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
+
+    # Create Subscription for ACM operator
+    create_subscription "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
+
   fi
 
   TITLE "Wait for MultiClusterHub CRD to be ready for ${ACM_BUNDLE}"
@@ -402,7 +410,9 @@ function configure_submariner_bundle_on_cluster() {
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}" # "${SUBM_SUBSCRIPTION}"
+  # Deploy Submariner operator as an OCP bundle
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}"
+  # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
   ${OC} adm policy add-scc-to-user privileged system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}
