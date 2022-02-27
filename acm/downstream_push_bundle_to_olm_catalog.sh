@@ -216,7 +216,7 @@ EOF
   TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED "level":"error"
+  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
     FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
