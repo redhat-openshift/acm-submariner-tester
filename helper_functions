@@ -986,8 +986,9 @@ function create_docker_registry_secret() {
   local secret_name="${registry_server}-${registry_usr}"
   local secret_name="${secret_name//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
-  TITLE "Creating new docker-registry in '$namespace' namespace"
-  echo -e "\n# Server: ${registry_server} \n# Secret name: ${secret_name}"
+  TITLE "Creating new docker-registry in '$namespace' namespace
+  Server: ${registry_server}
+  Secret name: ${secret_name}"
 
   create_namespace "${namespace}"
 
@@ -1128,7 +1129,7 @@ function print_images_info_of_namespace_pods() {
 
   local namespace=$1 # Default is current context namespace
 
-  echo -e "\n### Images of Pods ${namespace:+(in namespace $namespace) }###"
+  TITLE "Images of Pods ${namespace:+(in namespace $namespace) }"
 
   for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
@@ -1169,7 +1170,7 @@ function print_image_tags_info() {
   local namespace=$1 # Default is current context namespace
   local regex_container_info="\s+\K(name=|url=|version=|release=).*"
 
-  echo -e "\n### ImageStream Tags ${namespace:+(in namespace $namespace) }###"
+  TITLE "ImageStream Tags ${namespace:+(in namespace $namespace) }"
 
   # Show image-stream tags
   ${OC} get istag ${namespace:+-n $namespace} | awk 'NR>1 {print $1}' | \
@@ -1188,6 +1189,8 @@ function print_csvs_in_namespace() {
   # Do not trap_to_debug_commands, so it will not be printed as return value
 
   local namespace=$1 # Default is current context namespace
+
+  TITLE "Cluster service versions (CSVs) ${namespace:+(in namespace $namespace) }"
 
   local csvs
   csvs="$(${OC} get csv ${namespace:+-n $namespace} -o name)"
@@ -1332,7 +1335,7 @@ function print_pod_logs_in_namespace() {
   local namespace="$2"
   local pods_label="${3:+ -l $3}"
 
-  echo -e "\n##################### Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace #####################\n"
+  TITLE "Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace"
 
   for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}') ; do
     echo -e "\n### Pod $pod in cluster: $cluster_name, namespace: $namespace ###\n"
@@ -1471,8 +1474,8 @@ function create_polarion_testcases_doc_from_junit() {
     temp_test_output="`mktemp`_test_output"
 
     TITLE "Creating Polarion test-cases document for Junit results: $junit_xml
-    \n# Polarion project: ${polarion_project_id}
-    \n# Document path: ${polarion_team_name}/${polarion_testcases_doc}"
+    Polarion project: ${polarion_project_id}
+    Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1647,7 +1650,7 @@ function create_polarion_testrun_result_from_junit() {
     local sed_expression
 
     TITLE "Creating Polarion test-run (xml) for Junit results: $junit_xml
-    \n# Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
+    Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1801,12 +1804,12 @@ function create_polarion_testrun_result_from_junit() {
     # Set links for all titles:
     all_titles_link="${polarion_url}/#/project/${polarion_project_id}/testruns?query=title%3A\"${testsuite_name// /%20}\""
 
-    echo -e "\n### The new test-run result was successfully added to Polarion ###
-    \n# $polarion_testrun_result_page \n
-    \n# All test-runs by template-id '${polarion_testrun_template}':
-    \n# ${all_templates_link}
-    \n# All test-runs by title '${testsuite_name}':
-    \n# ${all_titles_link}"
+    TITLE "The new test-run result was successfully added to Polarion
+    $polarion_testrun_result_page \n
+    All test-runs by template-id '${polarion_testrun_template}':
+    ${all_templates_link}
+    All test-runs by title '${testsuite_name}':
+    ${all_titles_link}"
 
 }
 

@@ -369,7 +369,8 @@ while [[ $# -gt 0 ]]; do
   --import-vars)
     check_cli_args "$2"
     export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file: $GLOBAL_VARS"
+    TITLE "Importing additional variables from file:
+    $GLOBAL_VARS"
     source "$GLOBAL_VARS"
     shift 2 ;;
   -*)
@@ -497,7 +498,7 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_acm and ACM_VER_TAG - to install_acm_operator
+  # User input: $install_acm and ACM_VER_TAG - to Install ACM and add managed clusters
   if [[ "$install_acm" =~ ^(yes|y)$ ]]; then
     while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
@@ -5044,11 +5045,12 @@ function test_products_versions() {
     echo -e "\n\n"
   fi
 
+  # Show Submariner and ACM CSVs (Cluster service versions)
+  print_csvs_in_namespace "$SUBM_NAMESPACE"
+  print_csvs_in_namespace "$ACM_NAMESPACE"
+
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
-
-  # Show Submariner CSVs (Cluster service versions)
-  print_csvs_in_namespace "$SUBM_NAMESPACE"
 
   # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
@@ -5720,33 +5722,23 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
+    ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
+
     ${junit_cmd} create_acm_multiclusterhub
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
 
     ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
-    # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
-    #
-    # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
-
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-      # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
-      #
-      # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-      # ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
-      #
-      # ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
   fi

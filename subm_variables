@@ -118,7 +118,7 @@ export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
 
 # ACM vars
-# export OPERATORS_NAMESPACE="openshift-operators"
+export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
