@@ -24,8 +24,17 @@ function remove_acm_managed_cluster() {
 
   ${OC} get managedcluster -o wide || :
 
-  if ${OC} get managedcluster -o wide | grep "${cluster_id}" ; then
-    ${OC} delete managedcluster --all --wait || :
+  if ${OC} get managedcluster ${cluster_id} ; then
+    ${OC} delete managedcluster ${cluster_id} || force_managedcluster_delete=TRUE
+
+    if [[ "$force_managedcluster_delete" = TRUE && $(${OC} get managedcluster ${cluster_id}) ]]; then
+      TITLE "Resetting finalizers of managed cluster '${cluster_id}' and force deleting its namespace"
+
+      ${OC} patch managedcluster ${cluster_id} --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]' || :
+
+      force_delete_namespace "${cluster_id}"
+    fi
+
   else
     echo "# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
   fi
@@ -317,8 +326,11 @@ function create_new_managed_cluster_in_acm_hub() {
   # Run on ACM hub cluster (Manager)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  TITLE "Create the namespace for the managed cluster"
+  TITLE "Create the namespace for the managed cluster: ${cluster_id}"
+
+  # ${OC} new-project "${cluster_id}" | ${OC} project "${cluster_id}" -q
   create_namespace "${cluster_id}"
+
   ${OC} label namespace ${cluster_id} cluster.open-cluster-management.io/managedCluster=${cluster_id} --overwrite
 
   TITLE "Create ACM managed cluster by ID: $cluster_id, Type: $cluster_type"
