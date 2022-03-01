@@ -77,7 +77,7 @@ function export_LATEST_IIB() {
     fi
   fi
 
-  echo "# Exporting LATEST_IIB as: $LATEST_IIB"
+  echo -e "\n# Exporting LATEST_IIB as: $LATEST_IIB"
 
   export LATEST_IIB
 
@@ -128,10 +128,10 @@ function deploy_ocp_bundle() {
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  echo "# Create/switch project"
-  ${OC} new-project "${bundle_namespace}" 2>/dev/null || ${OC} project "${bundle_namespace}" -q
+  echo -e "\n# Create/switch project"
+  ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
 
-  echo "# Disable the default remote OperatorHub sources for OLM"
+  echo -e "\n# Disable the default remote OperatorHub sources for OLM"
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   # Set and export the variable ${LATEST_IIB}
@@ -149,7 +149,7 @@ function deploy_ocp_bundle() {
   Target image path: ${target_image_path}"
 
   if ${OC} get is "${bundle_image_name}" -n "${bundle_namespace}" > /dev/null 2>&1; then
-    echo "# Delete previous Image Stream before importing a new Bundle image '${bundle_image_name}'"
+    echo -e "\n# Delete previous Image Stream before importing a new Bundle image '${bundle_image_name}'"
     ${OC} delete is "${bundle_image_name}" -n "${bundle_namespace}" --wait
   fi
 
@@ -159,7 +159,7 @@ function deploy_ocp_bundle() {
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  echo "# Delete previous catalogSource if exists"
+  echo -e "\n# Delete previous catalogSource if exists"
   ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
   local catalog_display_name="${bundle_name} Catalog Source"
@@ -180,7 +180,7 @@ function deploy_ocp_bundle() {
       #     interval: 5m
 EOF
 
-  echo "# Wait for CatalogSource '${catalog_source}' to be created:"
+  echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
@@ -263,14 +263,14 @@ function create_subscription() {
       - ${operator_namespace}
 EOF
 
-    echo "# Display all Operator Groups in '${operator_namespace}' namespace"
+    echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
   fi
 
-  echo "# Delete previous Subscription '${subscription_display_name}' if exists"
+  echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
   ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
 
-  echo "# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
+  echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
   local install_plan
   local starting_csv
 
@@ -299,7 +299,7 @@ EOF
 EOF
 
   local duration=5m
-  echo "# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
+  echo -e "\n# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED

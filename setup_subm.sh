@@ -250,7 +250,7 @@ export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
 ####################################################################################
 
 check_cli_args() {
-  [[ -n "$1" ]] || ( echo "# Missing arguments. Please see Help with: -h" && exit 1 )
+  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
 }
 
 POSITIONAL=()
@@ -259,7 +259,7 @@ while [[ $# -gt 0 ]]; do
   # Consume next (1st) argument
   case $1 in
   -h|--help)
-    echo "# ${disclosure}" && exit 0
+    echo -e "\n# ${disclosure}" && exit 0
     shift ;;
   -d|--debug)
     script_debug_mode=YES
@@ -388,7 +388,7 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
-  echo "# ${disclosure}"
+  echo -e "\n# ${disclosure}"
 
   # User input: $skip_ocp_setup - to skip OCP clusters setup (destroy / create / clean)
   while [[ ! "$skip_ocp_setup" =~ ^(yes|no)$ ]]; do
@@ -833,7 +833,7 @@ function setup_workspace() {
     verify_golang
 
     if [[ -e ${GOBIN} ]] ; then
-      echo "# Re-exporting global variables"
+      echo -e "\n# Re-exporting global variables"
       export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
   fi
@@ -949,10 +949,10 @@ function download_ocp_installer() {
   mkdir -p $GOBIN
   /usr/bin/install ./oc $GOBIN/oc
 
-  echo "# Install OC into user HOME bin:"
+  echo -e "\n# Install OC into user HOME bin:"
   /usr/bin/install ./oc ~/.local/bin/oc
 
-  echo "# Add user HOME bin to system PATH:"
+  echo -e "\n# Add user HOME bin to system PATH:"
   export PATH="$HOME/.local/bin:$PATH"
 
   ${OC} -h
@@ -971,7 +971,7 @@ function build_ocpup_tool_latest() {
 
   cd ${WORKDIR}
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
-  git clone https://github.com/redhat-openshift/ocpup || echo "# OCPUP directory already exists"
+  git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
   cd ocpup
 
   # To cleanup GOLANG mod files:
@@ -985,7 +985,7 @@ function build_ocpup_tool_latest() {
   go install -mod vendor # Compile binary and moves it to $GOBIN
   # go build -mod vendor # Saves binary in current directory
 
-  echo "# Check OCPUP command:"
+  echo -e "\n# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
   which ocpup
 
@@ -1031,7 +1031,7 @@ function destroy_ocp_cluster() {
     TITLE "Previous OCP Installation found: ${ocp_install_dir}"
     # cd "${ocp_install_dir}"
     if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
-      echo "# Destroying OCP cluster ${cluster_name}:"
+      echo -e "\n# Destroying OCP cluster ${cluster_name}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${ocp_install_dir}" || \
       ( [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
@@ -1047,7 +1047,7 @@ function destroy_ocp_cluster() {
     backup_and_remove_dir "$ocp_install_dir" "${parent_dir}/_${base_dir}_${DATE_TIME}"
 
     # Remove existing OCP install-config directory:
-    #rm -r "_${ocp_install_dir}/" || echo "# Old config dir removed."
+    #rm -r "_${ocp_install_dir}/" || echo -e "\n# Old config dir removed."
     TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
     # find -maxdepth 1 -type d -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
@@ -1159,7 +1159,7 @@ function prepare_install_ocp_cluster() {
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
-  echo "# Update OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
+  echo -e "\n# Update OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
 
   # Set the same region for ALL clusters (even on different clouds)
@@ -1329,27 +1329,27 @@ function export_active_clusters_kubeconfig() {
   # ocp_yaml_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
   export CLUSTER_A_NAME="${CLUSTER_A_NAME}${ocp_yaml_base_dns:+-$ocp_yaml_base_dns}${ocp_yaml_platform:+-$ocp_yaml_platform}"
 
-  echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME (Cluster A is also the ACM Hub)"
+  echo -e "\n# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME (Cluster A is also the ACM Hub)"
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
   export KUBECONF_HUB=${CLUSTER_A_DIR}/auth/kubeconfig
 
   # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_B for $CLUSTER_B_NAME"
+    echo -e "\n# Exporting \$KUBECONF_CLUSTER_B for $CLUSTER_B_NAME"
     CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
     export CLUSTER_B_DIR
     KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     export KUBECONF_CLUSTER_B
     export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
   else
-    echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
+    echo -e "\n# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
     unset KUBECONF_CLUSTER_B
     unset CLUSTER_B_NAME
   fi
 
   # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
+    echo -e "\n# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
 
     # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
     ocp_yaml_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}' || :)"
@@ -1360,7 +1360,7 @@ function export_active_clusters_kubeconfig() {
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
     export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
   else
-    echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
+    echo -e "\n# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
     unset KUBECONF_CLUSTER_C
     unset CLUSTER_C_NAME
   fi
@@ -1411,7 +1411,7 @@ function update_kubeconfig_default_context() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${KUBECONFIG}"
 
-  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  echo -e "\n# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
   local admin_user="admin"
@@ -1422,11 +1422,11 @@ function update_kubeconfig_default_context() {
 
   if [[ -z "$master_context" ]] ; then
     admin_user="master"
-    echo "# Warning: Admin user not found, looking for context of '${admin_user}' user instead"
+    echo -e "\n# Warning: Admin user not found, looking for context of '${admin_user}' user instead"
     master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${admin_user}\")).name][0] // empty")
   fi
 
-  echo "# Switch to the cluster of the '$admin_user' user"
+  echo -e "\n# Switch to the cluster of the '$admin_user' user"
   ${OC} config use-context "$master_context"
 
   local cur_context
@@ -1455,7 +1455,7 @@ function update_kubeconfig_default_context() {
     "https://github.com/submariner-io/submariner/issues/245"
 
     if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
-      echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+      echo -e "\n# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
       ${OC} config delete-context "${renamed_context}_old" || :
       ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
     fi
@@ -1526,7 +1526,7 @@ function test_cluster_status() {
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
-  echo "# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
+  echo -e "\n# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
   cp -f "$KUBECONFIG" "${kubeconfig_copy}" || :
 
   ${OC} config view
@@ -1588,7 +1588,7 @@ function add_elevated_user() {
   # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
   touch -a "${WORKDIR}/${http_sec_name}"
   if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
-    echo "# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
+    echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
       local ocp_pwd
@@ -1654,7 +1654,7 @@ EOF
   # # Workaround:
   # local renamed_context="${cur_context//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
   # if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
-  #   echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+  #   echo -e "\n# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
   #   ${OC} config delete-context "${renamed_context}_old" || :
   #   ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
   # fi
@@ -1975,13 +1975,13 @@ function delete_old_submariner_images_from_current_cluster() {
   #   local img_sha="$1"
   #   local img_name="$2"
   #
-  #   echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
+  #   echo -e "\n# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
   #   ${OC} delete image $img_sha --ignore-not-found
   # done
   #
   # # Delete image-stream tags
   # ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
-  #   echo "# Deleting image stream tag: $img_tag"
+  #   echo -e "\n# Deleting image stream tag: $img_tag"
   #   ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
   # done
 
@@ -2044,7 +2044,7 @@ function configure_namespace_for_submariner_tests() {
   "Set the default namespace to \"${TEST_NS}\"" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
   # Workaround:
-  echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS:-default}"
+  echo -e "\n# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS:-default}"
   cur_context="$(${OC} config current-context)"
   ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS:-default}"
 
@@ -2184,14 +2184,14 @@ function set_subm_version_tag_var() {
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
     subm_version_tag=$(get_subctl_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
-    echo "# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
+    echo -e "\n# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
     subm_version_tag=v${subm_version_tag}
   fi
 
   # export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
-  # echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
+  # echo -e "\n# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
   # subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
-  # echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
+  # echo -e "\n# New \$${tag_var_name} for registry images: $subm_version_tag"
 
   # Reevaluate $tag_var_name value
   local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
@@ -2238,10 +2238,10 @@ function download_subctl_by_tag() {
       subctl_xz="$(ls -1 -tc subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
-      echo "# SubCtl binary will be extracted from [${subctl_xz}]"
+      echo -e "\n# SubCtl binary will be extracted from [${subctl_xz}]"
       tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-      echo "# Rename last extracted file to subctl"
+      echo -e "\n# Rename last extracted file to subctl"
       local extracted_file
       extracted_file="$(ls -1 -tc subctl* | head -1)"
       [[ -f "$extracted_file" ]] || FATAL "subctl binary was not found in ${subctl_xz}"
@@ -2250,12 +2250,12 @@ function download_subctl_by_tag() {
       mv "$extracted_file" subctl
       chmod +x subctl
 
-      echo "# Install subctl into ${GOBIN}:"
+      echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
       # cp -f ./subctl $GOBIN/
       /usr/bin/install ./subctl $GOBIN/subctl
 
-      echo "# Install subctl into user HOME bin:"
+      echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
       /usr/bin/install ./subctl ~/.local/bin/subctl
 
@@ -2305,27 +2305,27 @@ function download_subctl_by_tag() {
         [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
         chmod +x subctl
 
-        echo "# Install subctl into ${GOBIN}:"
+        echo -e "\n# Install subctl into ${GOBIN}:"
         mkdir -p $GOBIN
         # cp -f ./subctl $GOBIN/
         /usr/bin/install ./subctl $GOBIN/subctl
 
-        echo "# Install subctl into user HOME bin:"
+        echo -e "\n# Install subctl into user HOME bin:"
         # cp -f ./subctl ~/.local/bin/
         /usr/bin/install ./subctl ~/.local/bin/subctl
       fi
 
     fi
 
-    echo "# Copy subctl from user HOME bin into ${GOBIN}:"
+    echo -e "\n# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
     # cp -f ./subctl $GOBIN/
     /usr/bin/install "$HOME/.local/bin/subctl" $GOBIN/subctl
 
-    echo "# Add user HOME bin to system PATH:"
+    echo -e "\n# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
 
-    echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
+    echo -e "\n# Store SubCtl version in $SUBCTL_VERSION_FILE"
     subctl version | awk '{print $3}' > "$SUBCTL_VERSION_FILE"
 
 }
@@ -2431,7 +2431,7 @@ function create_subctl_join_file() {
   # Workaround
   cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
-  echo "# Write the join parameters into the join command file: $join_cmd_file"
+  echo -e "\n# Write the join parameters into the join command file: $join_cmd_file"
   JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo "$JOIN_CMD" > "$join_cmd_file"
@@ -2475,7 +2475,7 @@ function append_custom_images_to_join_cmd_file() {
   trap_to_debug_commands;
 
   local join_cmd_file="$1"
-  echo "# Read subctl join command from file: $join_cmd_file"
+  echo -e "\n# Read subctl join command from file: $join_cmd_file"
   local JOIN_CMD
   JOIN_CMD="$(< $join_cmd_file)"
 
@@ -2722,7 +2722,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   # download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" # "${github_dir}"
 
-  # echo "# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
+  # echo -e "\n# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
   # mkdir -p "${target_path}"
   # cp -rf "${github_dir}"/* "${target_path}"
   # cd "${target_path}/"
@@ -3260,7 +3260,7 @@ EOF
 
   local ocp_version
   ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "# Checking API ignition version for OCP version: $ocp_version"
+  echo -e "\n# Checking API ignition version for OCP version: $ocp_version"
 
   ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
 
@@ -3380,7 +3380,7 @@ function run_subctl_join_cmd_from_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
 
-  echo "# Read subctl join command from file: $1"
+  echo -e "\n# Read subctl join command from file: $1"
   local JOIN_CMD
   JOIN_CMD="$(< $1)"
 
@@ -3638,7 +3638,7 @@ function export_variable_name_of_active_gateway_pod() {
   cat $gateways_output | highlight "${gw_id}"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  echo "# Eval and export the variable '${var_name}=${gw_id}'"
+  echo -e "\n# Eval and export the variable '${var_name}=${gw_id}'"
 
   local eval_cmd="export ${var_name}=${gw_id}"
   eval $eval_cmd
@@ -3968,7 +3968,7 @@ function export_nginx_headless_namespace_managed_cluster() {
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
-  echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
+  echo -e "\n# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
   \n# $KUBECONFIG : ${HEADLESS_TEST_NS}"
 
   export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$HEADLESS_TEST_NS"
@@ -4016,7 +4016,7 @@ function export_service_in_lighthouse() {
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
-  echo "# Show $svc_name Service info:"
+  echo -e "\n# Show $svc_name Service info:"
   ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
@@ -4120,7 +4120,7 @@ function test_clusters_connected_by_service_ip() {
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
-  echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
+  echo -e "\n# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
@@ -4480,13 +4480,13 @@ function export_merged_kubeconfigs() {
   # local active_context_names="${CLUSTER_A_NAME}"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
+    echo -e "\n# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
     # active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
+    echo -e "\n# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
     # active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
   fi
@@ -4494,12 +4494,12 @@ function export_merged_kubeconfigs() {
   export KUBECONFIG="${merged_kubeconfigs}"
   ${OC} config get-contexts
 
-  # echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
+  # echo -e "\n# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
   # local context_changed
   #
   # ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
   # | while read -r context_name ; do
-  #   echo "# Deleting kubeconfig context: $context_name"
+  #   echo -e "\n# Deleting kubeconfig context: $context_name"
   #   ${OC} config delete-context "${context_name}" || :
   #   context_changed=YES
   # done
@@ -4595,13 +4595,13 @@ function test_project_e2e_with_go() {
   e2e_dp_context="--dp-context $(${OC} config current-context)"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
@@ -4752,7 +4752,7 @@ function build_operator_latest() {  # [DEPRECATED]
 
   # Download Submariner Operator with go
   # export PATH=$PATH:$GOROOT/bin
-  GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo "# GO Get Submariner Operator finished"
+  GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo -e "\n# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
   cd $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -4824,13 +4824,13 @@ function test_submariner_e2e_with_subctl() {
   e2e_subctl_context="$(${OC} config current-context)"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
+    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
+    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
@@ -4914,7 +4914,7 @@ function create_all_test_results_in_polarion() {
   # Upload UNIT tests to Polarion (skipping, not really required)
 
   # if [[ (! "$skip_tests" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
-  #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
+  #   echo -e "\n# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
   #   upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
@@ -6074,7 +6074,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   "
 
   if [[ -n "$REPORT_FILE" ]] ; then
-    echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
+    echo -e "\n# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
     REPORT_FILE="$(basename ${REPORT_FILE// /_})"
   fi
 
@@ -6084,7 +6084,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 # ------------------------------------------
 
 
-echo "# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
+echo -e "\n# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
 TITLE "Set Html report headlines with important test and environment info"
@@ -6092,7 +6092,7 @@ html_report_headlines=""
 
 if [[ -s "$POLARION_RESULTS" ]] ; then
   headline="Polarion results:"
-  echo "# ${headline}"
+  echo -e "\n# ${headline}"
   cat "$POLARION_RESULTS"
 
   html_report_headlines+="<b>${headline}</b>
@@ -6113,7 +6113,7 @@ done
 
 if [[ -s "$SUBMARINER_IMAGES" ]] ; then
   headline="Submariner images:"
-  echo "# ${headline}"
+  echo -e "\n# ${headline}"
   cat "$SUBMARINER_IMAGES"
 
   html_report_headlines+="
@@ -6145,7 +6145,7 @@ TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARC
 
 # Artifact OCP clusters kubeconfigs and logs
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster A"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
   cp -f "$KUBECONF_HUB" "kubconf_${CLUSTER_A_NAME}" || :
 
@@ -6154,7 +6154,7 @@ if [[ -s "$CLUSTER_A_YAML" ]] ; then
 fi
 
 if [[ -s "$CLUSTER_B_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster B"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
   cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}" || :
 
@@ -6163,7 +6163,7 @@ if [[ -s "$CLUSTER_B_YAML" ]] ; then
 fi
 
 if [[ -s "$CLUSTER_C_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster C"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
   cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}" || :
 

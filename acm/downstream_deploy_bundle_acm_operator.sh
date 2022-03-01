@@ -36,7 +36,7 @@ function remove_acm_managed_cluster() {
     fi
 
   else
-    echo "# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
+    echo -e "\n# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
   fi
 
 }
@@ -118,9 +118,9 @@ function install_acm_operator() {
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     if [[ -z "$acm_current_version" ]] ; then
-      echo "# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
+      echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
     else
-      echo "# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
+      echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
     fi
 
     local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
@@ -132,7 +132,7 @@ function install_acm_operator() {
     # Deploy ACM operator as an OCP bundle
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
 
-    echo "# ACM $acm_version installation completed"
+    echo -e "\n# ACM $acm_version installation completed"
 
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
@@ -162,7 +162,7 @@ function create_acm_subscription() {
   # Create Automatic Subscription (channel without a specific version) for ACM operator
   create_subscription "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
 
-  echo "# ACM Subscription ${ACM_SUBSCRIPTION} created"
+  echo -e "\n# ACM Subscription ${ACM_SUBSCRIPTION} created"
 
 }
 
@@ -179,7 +179,7 @@ function create_acm_multiclusterhub() {
 
   PROMPT "Create ACM MultiClusterHub instance on cluster ${cluster_name}"
 
-  echo "# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
+  echo -e "\n# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
 
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
@@ -480,7 +480,7 @@ function install_submariner_via_acm_managed_cluster() {
 
   export KUBECONFIG="$kubeconfig_file"
 
-  echo "# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
+  echo -e "\n# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
 
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name || :)"
@@ -538,7 +538,7 @@ function configure_submariner_addon_for_amazon() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Amazon"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Amazon"
 
   ( # subshell to hide commands
     ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
@@ -569,7 +569,7 @@ function configure_submariner_addon_for_google() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Google"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Google"
 
   ( # subshell to hide commands
     [[ -s "$GCP_CRED_JSON" ]] || FATAL "GCP credentials file (json) is missing"
@@ -598,7 +598,7 @@ function configure_submariner_addon_for_openstack() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Openstack"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Openstack"
 
   BUG "Openstack Gateway creation is not yet supported with Submariner Addon" \
   "The Gateway should be configured externally with 'configure_osp.sh'"
@@ -672,7 +672,7 @@ function create_submariner_config_in_acm_managed_cluster() {
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
-  echo "# Apply SubmarinerConfig (if failed once - apply again)"
+  echo -e "\n# Apply SubmarinerConfig (if failed once - apply again)"
 
   ${OC} apply --dry-run='server' -f $submariner_conf | highlight "unchanged" \
   || ${OC} apply -f $submariner_conf || ${OC} apply -f $submariner_conf
@@ -814,7 +814,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
     fi
 
   else
-    echo "# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
+    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
   fi
 
 }
