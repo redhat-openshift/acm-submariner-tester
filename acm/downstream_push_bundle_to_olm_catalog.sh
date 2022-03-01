@@ -234,20 +234,19 @@ function create_subscription() {
 
   # Input args
   local subscription_display_name="$1"
-  local operator_name="$2"
-  local operator_version="$3"
+  local catalog_source="$2"
+  local operator_name="$3"
   local operator_channel="$4"
-  local catalog_source="$5"
 
-  # Optional args: "openshift-operators" or "openshift-marketplace" are only required if deploying as a global operator
+  # Optional input args:
+  # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
+  local operator_version="$5"
+  # If deploying as a global operator, set different namespaces (e.g. "openshift-operators" and "openshift-marketplace")
   local operator_namespace="${6:-$OPERATORS_NAMESPACE}"
   local subscription_namespace="${6:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
-
-  echo "# Delete previous Subscription '${subscription_display_name}' if exists"
-  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   if [[ -n "${operator_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"
@@ -268,7 +267,21 @@ EOF
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
   fi
 
-  TITLE "Apply InstallPlan with 'Manual' approval (instead of 'Automatic'), in order to pin the Operator version (startingCSV) to '${operator_name}.${operator_version}'"
+  echo "# Delete previous Subscription '${subscription_display_name}' if exists"
+  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+
+  echo "# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
+  local install_plan
+  local starting_csv
+
+  if [[ -n "${operator_version}" ]] ; then
+    install_plan="Manual"
+    starting_csv="${operator_name}.${operator_version}"
+    TITLE "Apply InstallPlan with 'Manual' approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
+  else
+    TITLE "Apply InstallPlan with 'Automatic' approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
+    install_plan="Automatic"
+  fi
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -278,11 +291,11 @@ EOF
     namespace: ${subscription_namespace}
   spec:
     channel: ${operator_channel}
-    installPlanApproval: Manual
+    installPlanApproval: ${install_plan}
     name: ${operator_name}
     source: ${catalog_source}
     sourceNamespace: ${operator_namespace}
-    startingCSV: ${operator_name}.${operator_version}
+    ${starting_csv:+startingCSV: $starting_csv}
 EOF
 
   local duration=5m

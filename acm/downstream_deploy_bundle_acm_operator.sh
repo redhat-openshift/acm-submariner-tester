@@ -153,14 +153,14 @@ function create_acm_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
+  PROMPT "Create Automatic Subscription '${ACM_SUBSCRIPTION}' on channel '${acm_channel} for ${ACM_OPERATOR} in cluster ${cluster_name}"
 
   local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local acm_channel
   acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
 
-  # Create Subscription for ACM operator
-  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_OPERATOR}" "${acm_version}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
+  # Create Automatic Subscription (channel without a specific version) for ACM operator
+  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
 
   echo "# ACM Subscription ${ACM_SUBSCRIPTION} created"
 
