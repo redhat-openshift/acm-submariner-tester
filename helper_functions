@@ -139,7 +139,7 @@ function trap_function_on_error() {
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
-  trap_cmd='rc=$?; echo "# $FUNCNAME[$@] returned EXIT $rc:
+  trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
   [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
@@ -372,7 +372,7 @@ function install_anaconda() {
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
   if conda env list | grep -o "^$CONDA_ENV_NAME" | grep . ; then
-    echo "# Anaconda is already installed and has environment '$CONDA_ENV_NAME' configured"
+    echo -e "\n# Anaconda is already installed and has environment '$CONDA_ENV_NAME' configured"
     conda info
     source activate $CONDA_ENV_NAME
     return
@@ -384,7 +384,7 @@ function install_anaconda() {
     # rm -rf "${install_dir}" || :
   fi
 
-  echo "# Installing Anaconda"
+  echo -e "\n# Installing Anaconda"
   # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
   # miniconda_installer="Miniconda3-py38_4.9.2-Linux-x86_64.sh"
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
@@ -398,13 +398,13 @@ function install_anaconda() {
   env_base=$(conda env list | awk '/base/ { print $NF }')
 
   if [[ -z "$env_dir" ]] ; then
-    echo "# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
+    echo -e "\n# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
     conda env remove -y -n $CONDA_ENV_NAME || :
     conda env remove -y -p "$env_base/envs/$CONDA_ENV_NAME" || :
     rm -rf "$env_base/envs/$CONDA_ENV_NAME" || :
   fi
 
-  echo "# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exist already)"
+  echo -e "\n# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exist already)"
   [[ -d "$env_base/envs/$CONDA_ENV_NAME" ]] || conda create -y -n $CONDA_ENV_NAME
 }
 # ------------------------------------------
@@ -430,10 +430,10 @@ function install_conda_package() {
   local pkg_version="$3"
   local pkg_label="$4"
 
-  echo "# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
+  echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
   if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
-    echo "# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$CONDA_ENV_NAME'"
+    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$CONDA_ENV_NAME'"
     return
   fi
 
@@ -462,7 +462,7 @@ function install_local_golang() {
 
 # Function to verify that Golang is installed
 function verify_golang() {
-  echo "# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
+  echo -e "\n# Verifying Golang installation, and setting GOROOT, GOPATH, GOBIN, and GO111MODULE=on"
   go version
 
   # export GOROOT=/usr/local/go
@@ -619,7 +619,7 @@ function download_file() {
   # Optional: $2 => $target_file (where to save)
   target_file=${2:-$(basename "$1")}
 
-  echo "# Downloading [$source_file] into $target_file"
+  echo -e "\n# Downloading [$source_file] into $target_file"
   ls -ld
 
   local_file_size=$([[ -f ${target_file} ]] && wc -c < ${target_file} || echo "0")
@@ -628,7 +628,7 @@ function download_file() {
   echo "remote_file_size = $remote_file_size"
   [[ -n "$remote_file_size" ]] || remote_file_size=-1
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
-      echo "# Requested file was not downloaded yet, or remote file size is different. Downloading..."
+      echo -e "\n# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       rm -rf "$target_file"
       if [[ -x "$(command -v wget)" ]] ; then
         target_dir=$(dirname -- "$target_file")
@@ -636,11 +636,11 @@ function download_file() {
         source_file=$(basename -- "$source_file")
         mv "$target_dir/$source_file" "$target_file" || :
       else
-        echo "# Wget is not installed, using Curl instead."
+        echo -e "\n# Wget is not installed, using Curl instead."
         curl -L "$source_file" -o "$target_file" --create-dirs
       fi
   else
-    echo "# $target_file already downloaded, and equals to remote file $source_file"
+    echo -e "\n# $target_file already downloaded, and equals to remote file $source_file"
   fi
 }
 
@@ -680,9 +680,9 @@ function backup_and_remove_dir() {
   dest_dir="${2:-_$1}"
 
   if [[ ! -d ${src_dir} ]] || [[ -z `ls -A "$src_dir"` ]] ; then
-    echo "# Source directory [${src_dir}] doesn't exist (or empty). Skipping backup"
+    echo -e "\n# Source directory [${src_dir}] doesn't exist (or empty). Skipping backup"
   else
-    echo "# Backup directory [${src_dir}] into [${dest_dir}]"
+    echo -e "\n# Backup directory [${src_dir}] into [${dest_dir}]"
     # Make a new directory (skip if exists)
     mkdir -p "$dest_dir"
 
@@ -832,7 +832,7 @@ EOF
 function export_vars_from_json() {
   # Input $1 : Json file to read variables from
   for s in $(grep -E '": [^\{]' "$1" | sed -e 's/: /=/' -e 's/^\s*//' -e "s/\(\,\)$//"); do
-    echo "# export $s"
+    echo -e "\n# export $s"
     eval export $s
   done
 }
@@ -912,13 +912,13 @@ function delete_crds_by_name() {
 
   local delete_crds=FALSE
 
-  echo "# Searching for existing CRDs of previous ${crd_regex} installation on the cluster:"
+  echo -e "\n# Searching for existing CRDs of previous ${crd_regex} installation on the cluster:"
   ${OC} get crds |& highlight "${crd_regex}" && delete_crds=TRUE || :
 
   # If there are existing CRDs on the cluster - remove them all:
   # if [[ $? = 0 ]]; then
   if [[ "$delete_crds" = TRUE ]]; then
-    echo "# Deleting ${crd_regex} CRDs in the cluster"
+    echo -e "\n# Deleting ${crd_regex} CRDs in the cluster"
     crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
     # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
     # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
@@ -930,7 +930,7 @@ function delete_crds_by_name() {
     done
 
   else
-    echo "# No CRD with '${crd_regex}' was found in the current cluster"
+    echo -e "\n# No CRD with '${crd_regex}' was found in the current cluster"
   fi
 
 }
@@ -948,11 +948,11 @@ function force_delete_namespace() {
   local delete_timeout="${2:-30s}"
 
   if [[ ${ns_name} = "default" ]] ; then
-    echo "# Skipping namespace deletion, since it's the \"default\" namespace."
+    echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
     return
   fi
 
-  echo "# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
+  echo -e "\n# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
   ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
 
@@ -961,7 +961,7 @@ function force_delete_namespace() {
   ${OC} delete --timeout=$delete_timeout namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
 
   if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
-    echo "# Warning: Force delete of namespace via API"
+    echo -e "\n# Warning: Force delete of namespace via API"
     ${OC} proxy &
     ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
     curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
@@ -999,7 +999,7 @@ function create_docker_registry_secret() {
     --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
   )
 
-  echo "# Adding '$secret_name' secret:"
+  echo -e "\n# Adding '$secret_name' secret:"
   ${OC} describe secret $secret_name -n $namespace || :
 
   ( # update the cluster global pull-secret
@@ -1028,19 +1028,19 @@ function install_nginx_service() {
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
   if [[ -n "$target_namespace" ]] ; then
-    echo "# Create Namespace for Nginx: $target_namespace"
+    echo -e "\n# Create Namespace for Nginx: $target_namespace"
     create_namespace "${target_namespace}"
   fi
 
-  echo "# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
+  echo -e "\n# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
   ${OC} delete deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} create deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --image=$nginx_image
 
-  echo "# Delete and expose Ngnix service:"
+  echo -e "\n# Delete and expose Ngnix service:"
   ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
   ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
 
-  echo "# Wait 5 minutes for Ngnix service to be ready:"
+  echo -e "\n# Wait 5 minutes for Ngnix service to be ready:"
   ${OC} rollout status --timeout=5m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
   ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
 
@@ -1254,15 +1254,15 @@ function wait_for_all_machines_ready() {
 
   local duration=${1:-20m} # Default is 20 minutes
 
-  echo "# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
+  echo -e "\n# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   local cmd="${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon"
   watch_and_retry "$cmd" $duration || machines_status=DOWN
 
-  echo "# Wait up to $duration for all Machines Config Pool to be updated:"
+  echo -e "\n# Wait up to $duration for all Machines Config Pool to be updated:"
   cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
   watch_and_retry "$cmd" $duration || machines_status=DOWN
 
-  echo "# Status of Machine Config Pool and all Daemon-Sets:"
+  echo -e "\n# Status of Machine Config Pool and all Daemon-Sets:"
   ${OC} get machineconfigpool -o wide || machines_status=DOWN
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
@@ -1367,24 +1367,24 @@ function build_go_repo() {
   # local go_repo_and_branch="${repo_url}/...${branch_or_tag}"
   local go_repo_and_branch="${repo_url}/..."
 
-  echo "# Downloading the repo [${go_repo_and_branch}] with GO: "
-  # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo "# 'go get ${go_repo_and_branch} might have had errors"
-  GO111MODULE="off" go get -v ${go_repo_and_branch} || echo "# GO get '${go_repo_and_branch}' might have had errors"
+  echo -e "\n# Downloading the repo [${go_repo_and_branch}] with GO: "
+  # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo -e "\n# 'go get ${go_repo_and_branch} might have had errors"
+  GO111MODULE="off" go get -v ${go_repo_and_branch} || echo -e "\n# GO get '${go_repo_and_branch}' might have had errors"
 
   local repo_local_path="$GOPATH/src/$repo_url"
-  echo "# Pull latest changes with Git into: $repo_local_path"
+  echo -e "\n# Pull latest changes with Git into: $repo_local_path"
   cd $repo_local_path || ( echo "$repo_local_path was not created, exiting." && exit 1 )
 
   git_reset_local_repo ${branch_or_tag}
 
-  echo "# Build the project with GO: "
+  echo -e "\n# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
   export GO111MODULE=on
   go mod vendor
   # go install -mod vendor # Compile binary and moves it to $GOBIN
-  go build -mod vendor || echo "# No binary to compile in $repo_url"
+  go build -mod vendor || echo -e "\n# No binary to compile in $repo_url"
 
-  echo "# Project main directory content: "
+  echo -e "\n# Project main directory content: "
   ls -la
 }
 
@@ -1401,7 +1401,7 @@ function git_reset_local_repo() {
 
   if [[ -n "$forked_repo" ]] ; then
     remote_name="upstream"
-    echo "# Add the a new remote '${remote_name}' to pull from: $forked_repo"
+    echo -e "\n# Add the a new remote '${remote_name}' to pull from: $forked_repo"
     git remote -v | grep -w ${remote_name} || git remote add ${remote_name} ${forked_repo}
     git remote set-url ${remote_name} ${forked_repo}
   fi
@@ -1480,7 +1480,7 @@ function create_polarion_testcases_doc_from_junit() {
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
 
-    echo "# Set output xml for Polarion test-cases"
+    echo -e "\n# Set output xml for Polarion test-cases"
 
     local testsuite_name
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
@@ -1488,7 +1488,7 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_testcases_xml="${testsuite_name}_polarion_testcases.xml" # Append "polarion_testcases.xml"
     polarion_testcases_xml="$(dirname ${junit_xml})/${polarion_testcases_xml}" # Append full directory path of the original junit_xml file
 
-    echo "# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
+    echo -e "\n# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
     grep '<testcase ' "$junit_xml" | \
     sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/[0-9]+ : //' > "$tc_list"
     #sed -r 's/.*name="([^"]+).*classname="([^"]+).*/\2.\1/ ; s/ /_/g ; s/[0-9]+_:_//' > "$tc_list"
@@ -1518,23 +1518,23 @@ function create_polarion_testcases_doc_from_junit() {
       Test class [${class_name}]
       Test name [${test_name}]"
 
-      echo "# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
+      echo -e "\n# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
 
-      echo "# Get testcase description headline, if defined within '###' tags"
+      echo -e "\n# Get testcase description headline, if defined within '###' tags"
       local testcase_headline
       testcase_headline="$(grep -ozP '(?<=### ).+\n?.*(?= ###)' "$temp_test_output")"
       [[ -n "$testcase_headline" ]] || testcase_headline="${testsuite_name}.${test_name}"
 
-      echo "# Save all output lines starting with # as testcase description"
+      echo -e "\n# Save all output lines starting with # as testcase description"
       local testcase_description
       testcase_description=$(sed -nr 's/^#+\s*([A-Z][^#]*)[\s#]*/\1/p' "$temp_test_output" | sed 's/\://g')
 
-      echo "# Save all output lines starting with $ as testcase steps"
+      echo -e "\n# Save all output lines starting with $ as testcase steps"
       local testcase_steps
       testcase_steps=$(sed -nr '/^\$ .*/p' "$temp_test_output")
 
-      echo "# Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100"
+      echo -e "\n# Crop 50 lines from head and tail, if number of lines in $temp_test_output is larger than 100"
       local num_of_lines
       num_of_lines=$(wc -l < "$temp_test_output")
       if (( num_of_lines > 100 )) ; then
@@ -1543,17 +1543,17 @@ function create_polarion_testcases_doc_from_junit() {
         $(tail -n 50 $temp_test_output)" > $temp_test_output
       fi
 
-      echo "# Remove everything before the <system-out>, and save as testcase_output"
+      echo -e "\n# Remove everything before the <system-out>, and save as testcase_output"
       local testcase_output
       testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
 
-      echo "# Add pre-line and replace all end of lines with <br> in testcase output"
+      echo -e "\n# Add pre-line and replace all end of lines with <br> in testcase output"
       testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/ <br>} </span>"
 
-      echo "# Escape all < and > in testcase output"
+      echo -e "\n# Escape all < and > in testcase output"
       testcase_output="$(echo "${testcase_output}" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
 
-      echo "# Create testcase title and description"
+      echo -e "\n# Create testcase title and description"
 
       echo "<testcase approver-ids=\"${polarion_user_name}:approved\" status-id=\"approved\" assignee-id=\"${polarion_user_name}\">
           <title>${testsuite_name}.${test_name}</title>
@@ -1570,7 +1570,7 @@ function create_polarion_testcases_doc_from_junit() {
       </description>
       <test-steps>" >> "$polarion_testcases_xml"
 
-      echo "# Create testcase steps"
+      echo -e "\n# Create testcase steps"
 
       echo "$testcase_steps" | while read step ; do
         # echo "<test-step>
@@ -1581,7 +1581,7 @@ function create_polarion_testcases_doc_from_junit() {
         " >> "$polarion_testcases_xml"
       done
 
-      echo "# Close steps, and create testcase custom fields"
+      echo -e "\n# Close steps, and create testcase custom fields"
 
       echo "</test-steps>
       <custom-fields>
@@ -1625,7 +1625,7 @@ function create_polarion_testcases_doc_from_junit() {
       # </linked-work-items>
       echo "</testcases>" >> "$polarion_testcases_xml"
 
-      echo "# Watch Polarion testcase-log status"
+      echo -e "\n# Watch Polarion testcase-log status"
       local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
       watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
@@ -1657,7 +1657,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Set output xml for Polarion test-run results"
+    echo -e "\n# Set output xml for Polarion test-run results"
 
     local testsuite_name
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
@@ -1667,7 +1667,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_xml%%.*})"
 
-    echo "# Set Polarion test-run ID with plain text only, and lowercase"
+    echo -e "\n# Set Polarion test-run ID with plain text only, and lowercase"
     local polarion_testrun_id
     polarion_testrun_id="${polarion_team_name//[^a-zA-Z0-9]/-}_${testsuite_name//[^a-zA-Z0-9]/-}"
     polarion_testrun_id="${polarion_testrun_id,,*}"
@@ -1686,10 +1686,10 @@ function create_polarion_testrun_result_from_junit() {
 
     cp "$junit_xml" "$polarion_testrun_xml"
 
-    echo "# Remove Test-Cases Junit index (if added within sh2ju): "
+    echo -e "\n# Remove Test-Cases Junit index (if added within sh2ju): "
     sed -r 's/(<testcase.* name=")([0-9]+ : )(.*)/\1\3/' -i "$polarion_testrun_xml"
 
-    echo "# Remove first <testsuiteS> tag (if exists)"
+    echo -e "\n# Remove first <testsuiteS> tag (if exists)"
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_xml"
     # sed -r "s:<testsuites>::" -i "$polarion_testrun_xml"
 
@@ -1724,7 +1724,7 @@ function create_polarion_testrun_result_from_junit() {
     #
     # This is commented out since Polarion Testcase verdict does not support rich text output
     #
-    # echo "# Add rich text into each Test Case Verdict in $polarion_testrun_xml (change 'system-out' to 'polarion-testcase-comment')"
+    # echo -e "\n# Add rich text into each Test Case Verdict in $polarion_testrun_xml (change 'system-out' to 'polarion-testcase-comment')"
     #
     # # Define Polarion <testcase> property (it is passed into SED), make sure new lines ends with " \n\ ")
     #
@@ -1742,7 +1742,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment'):"
+    echo -e "\n# Add plain text into each Test Case Verdict in $polarion_testrun_xml (add 'polarion-testcase-comment'):"
 
     local testrun_comment="Auto generated ${BUILD_URL:+in Jenkins Build $BUILD_URL }from Junit file: $junit_xml"
     echo "$testrun_comment"
@@ -1761,7 +1761,7 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Add escaped HTML <br> tags at the end of all textual lines in $polarion_testrun_xml"
+    echo -e "\n# Add escaped HTML <br> tags at the end of all textual lines in $polarion_testrun_xml"
 
     local temp_testrun
     temp_testrun="`mktemp`_testrun"
@@ -1772,13 +1772,13 @@ function create_polarion_testrun_result_from_junit() {
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Update <testsuite name> to: $testsuite_name"
+    echo -e "\n# Update <testsuite name> to: $testsuite_name"
 
     sed -r "s/(testsuite name=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
-    echo "# Update <classname> to: $testsuite_name"
+    echo -e "\n# Update <classname> to: $testsuite_name"
 
     sed -r "s/(classname=\")([^\"]+)/\1${testsuite_name}/" -i "$polarion_testrun_xml"
 
@@ -1883,8 +1883,8 @@ function log_to_html() {
   local html_output="${3:-${title//[ \/]/_}.html}" # html filename to create (default is title with underscores)
   local description="$4"
 
-  echo "# Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || { echo "# Error - The file does not exists, or is not accessible" ; exit 1 ; }
+  echo -e "\n# Generating HTML report from: $log_file"
+  [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; exit 1 ; }
 
   # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"

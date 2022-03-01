@@ -77,7 +77,7 @@ function export_LATEST_IIB() {
     fi
   fi
 
-  echo "# Exporting LATEST_IIB as: $LATEST_IIB"
+  echo -e "\n# Exporting LATEST_IIB as: $LATEST_IIB"
 
   export LATEST_IIB
 
@@ -128,10 +128,10 @@ function deploy_ocp_bundle() {
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  echo "# Create/switch project"
-  ${OC} new-project "${bundle_namespace}" 2>/dev/null || ${OC} project "${bundle_namespace}" -q
+  echo -e "\n# Create/switch project"
+  ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
 
-  echo "# Disable the default remote OperatorHub sources for OLM"
+  echo -e "\n# Disable the default remote OperatorHub sources for OLM"
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   # Set and export the variable ${LATEST_IIB}
@@ -149,7 +149,7 @@ function deploy_ocp_bundle() {
   Target image path: ${target_image_path}"
 
   if ${OC} get is "${bundle_image_name}" -n "${bundle_namespace}" > /dev/null 2>&1; then
-    echo "# Delete previous Image Stream before importing a new Bundle image '${bundle_image_name}'"
+    echo -e "\n# Delete previous Image Stream before importing a new Bundle image '${bundle_image_name}'"
     ${OC} delete is "${bundle_image_name}" -n "${bundle_namespace}" --wait
   fi
 
@@ -159,7 +159,7 @@ function deploy_ocp_bundle() {
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  echo "# Delete previous catalogSource if exists"
+  echo -e "\n# Delete previous catalogSource if exists"
   ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
   local catalog_display_name="${bundle_name} Catalog Source"
@@ -180,7 +180,7 @@ function deploy_ocp_bundle() {
       #     interval: 5m
 EOF
 
-  echo "# Wait for CatalogSource '${catalog_source}' to be created:"
+  echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
@@ -234,27 +234,26 @@ function create_subscription() {
 
   # Input args
   local subscription_display_name="$1"
-  local operator_name="$2"
-  local operator_version="$3"
+  local catalog_source="$2"
+  local operator_name="$3"
   local operator_channel="$4"
-  local catalog_source="$5"
 
-  # Optional args: "openshift-operators" or "openshift-marketplace" are only required if deploying as a global operator
+  # Optional input args:
+  # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
+  local operator_version="$5"
+  # If deploying as a global operator, set different namespaces (e.g. "openshift-operators" and "openshift-marketplace")
   local operator_namespace="${6:-$OPERATORS_NAMESPACE}"
   local subscription_namespace="${6:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  echo "# Delete previous Subscription '${subscription_display_name}' if exists"
-  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
-
   if [[ -n "${operator_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"
     TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
 
     cat <<EOF | ${OC} apply -f -
-    apiVersion: operators.coreos.com/v1alpha2
+    apiVersion: operators.coreos.com/v1
     kind: OperatorGroup
     metadata:
       name: ${operator_group_name}
@@ -264,11 +263,27 @@ function create_subscription() {
       - ${operator_namespace}
 EOF
 
-    echo "# Display all Operator Groups in '${operator_namespace}' namespace"
+    echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
   fi
 
-  TITLE "Apply InstallPlan with 'Manual' approval (instead of 'Automatic'), in order to pin the Operator version (startingCSV) to '${operator_name}.${operator_version}'"
+  echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
+  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+
+  echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
+  local install_plan
+  local starting_csv
+
+  if [[ -n "${operator_version}" ]] ; then
+    install_plan="Manual"
+    starting_csv="${operator_name}.${operator_version}"
+    TITLE "Apply Manual InstallPlan approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
+  else
+    install_plan="Automatic"
+    # There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version (e.g. v2.4.1), and not latest (e.g. v2.4.2)
+    # TODO: might need to set: starting_csv="${operator_name}.${operator_version}"
+    TITLE "Apply Automatic InstallPlan approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
+  fi
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: operators.coreos.com/v1alpha1
@@ -278,15 +293,15 @@ EOF
     namespace: ${subscription_namespace}
   spec:
     channel: ${operator_channel}
-    installPlanApproval: Manual
+    installPlanApproval: ${install_plan}
     name: ${operator_name}
     source: ${catalog_source}
     sourceNamespace: ${operator_namespace}
-    startingCSV: ${operator_name}.${operator_version}
+    ${starting_csv:+startingCSV: $starting_csv}
 EOF
 
   local duration=5m
-  echo "# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
+  echo -e "\n# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED

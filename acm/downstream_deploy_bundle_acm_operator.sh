@@ -36,7 +36,7 @@ function remove_acm_managed_cluster() {
     fi
 
   else
-    echo "# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
+    echo -e "\n# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
   fi
 
 }
@@ -98,6 +98,17 @@ function clean_acm_namespace_and_resources() {
 
 # ------------------------------------------
 
+function print_major_minor_version() {
+  ### Trim version into major.minor (X.Y.Z ==> X.Y) ###
+
+  local full_numeric_version="$1"
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+  echo "$full_numeric_version" | grep -Po "$regex_to_major_minor"
+
+}
+
+# ------------------------------------------
+
 function install_acm_operator() {
   ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
@@ -118,21 +129,20 @@ function install_acm_operator() {
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     if [[ -z "$acm_current_version" ]] ; then
-      echo "# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
+      echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
     else
-      echo "# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
+      echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
     fi
 
-    local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
     local acm_channel
-    acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+    acm_channel="$(print_major_minor_version "$acm_version" "$ACM_CHANNEL_PREFIX")"
 
     TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
 
     # Deploy ACM operator as an OCP bundle
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
 
-    echo "# ACM $acm_version installation completed"
+    echo -e "\n# ACM $acm_version installation completed"
 
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
@@ -153,16 +163,15 @@ function create_acm_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create ACM Subscription '${ACM_SUBSCRIPTION}' for the Operator ${ACM_OPERATOR} in cluster ${cluster_name}"
+  PROMPT "Create Automatic Subscription '${ACM_SUBSCRIPTION}' on channel '${acm_channel} for ${ACM_OPERATOR} in cluster ${cluster_name}"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local acm_channel
-  acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+  acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
-  # Create Subscription for ACM operator
-  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_OPERATOR}" "${acm_version}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
+  # Create Automatic Subscription (channel without a specific version) for ACM operator
+  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
 
-  echo "# ACM Subscription ${ACM_SUBSCRIPTION} created"
+  echo -e "\n# ACM Subscription ${ACM_SUBSCRIPTION} created"
 
 }
 
@@ -179,7 +188,7 @@ function create_acm_multiclusterhub() {
 
   PROMPT "Create ACM MultiClusterHub instance on cluster ${cluster_name}"
 
-  echo "# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
+  echo -e "\n# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
 
   cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
@@ -192,23 +201,28 @@ function create_acm_multiclusterhub() {
   metadata:
     name: multiclusterhub
     namespace: ${ACM_NAMESPACE}
+    annotations: {}
   spec:
     disableHubSelfManagement: true
 EOF
 
-  TITLE "Wait for ACM console url to be available"
-  cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
-  watch_and_retry "$cmd" 15m || FATAL "ACM Console url is not ready"
+  {
+    TITLE "Wait for ACM console url to be available"
+    local duration=15m
+    cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
+    watch_and_retry "$cmd" "$duration"
 
-  TITLE "Wait for multiclusterhub to be ready"
+    TITLE "Wait for multiclusterhub to be ready"
+    # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
+    cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
+    watch_and_retry "$cmd" "$duration" "Running"
 
-  # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
-  cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
-  duration=15m
-  watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
+  } || acm_status=FAILED
+
+  TITLE "All MultiClusterHub resources status:"
+  ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
   if [[ "$acm_status" = FAILED ]] ; then
-    ${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}
     FATAL "ACM Hub is not ready after $duration"
   fi
 
@@ -444,9 +458,8 @@ function configure_submariner_bundle_on_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
-  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
@@ -479,7 +492,7 @@ function install_submariner_via_acm_managed_cluster() {
 
   export KUBECONFIG="$kubeconfig_file"
 
-  echo "# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
+  echo -e "\n# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
 
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name || :)"
@@ -537,7 +550,7 @@ function configure_submariner_addon_for_amazon() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Amazon"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Amazon"
 
   ( # subshell to hide commands
     ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
@@ -568,7 +581,7 @@ function configure_submariner_addon_for_google() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Google"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Google"
 
   ( # subshell to hide commands
     [[ -s "$GCP_CRED_JSON" ]] || FATAL "GCP credentials file (json) is missing"
@@ -597,7 +610,7 @@ function configure_submariner_addon_for_openstack() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo "# Using '${cluster_secret_name}' for Submariner on Openstack"
+  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Openstack"
 
   BUG "Openstack Gateway creation is not yet supported with Submariner Addon" \
   "The Gateway should be configured externally with 'configure_osp.sh'"
@@ -635,9 +648,8 @@ function create_submariner_config_in_acm_managed_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
-  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
@@ -671,7 +683,7 @@ function create_submariner_config_in_acm_managed_cluster() {
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF
 
-  echo "# Apply SubmarinerConfig (if failed once - apply again)"
+  echo -e "\n# Apply SubmarinerConfig (if failed once - apply again)"
 
   ${OC} apply --dry-run='server' -f $submariner_conf | highlight "unchanged" \
   || ${OC} apply -f $submariner_conf || ${OC} apply -f $submariner_conf
@@ -813,7 +825,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
     fi
 
   else
-    echo "# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
+    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
   fi
 
 }
