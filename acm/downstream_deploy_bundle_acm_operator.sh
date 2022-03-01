@@ -98,6 +98,17 @@ function clean_acm_namespace_and_resources() {
 
 # ------------------------------------------
 
+function print_major_minor_version() {
+  ### Trim version into major.minor (X.Y.Z ==> X.Y) ###
+
+  local full_numeric_version="$1"
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+  echo "$full_numeric_version" | grep -Po "$regex_to_major_minor"
+
+}
+
+# ------------------------------------------
+
 function install_acm_operator() {
   ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
@@ -123,9 +134,8 @@ function install_acm_operator() {
       echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
     fi
 
-    local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
     local acm_channel
-    acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+    acm_channel="$(print_major_minor_version "$acm_version" "$ACM_CHANNEL_PREFIX")"
 
     TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
 
@@ -155,9 +165,8 @@ function create_acm_subscription() {
 
   PROMPT "Create Automatic Subscription '${ACM_SUBSCRIPTION}' on channel '${acm_channel} for ${ACM_OPERATOR} in cluster ${cluster_name}"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local acm_channel
-  acm_channel="release-$(echo $acm_version | grep -Po "$regex_to_major_minor")"
+  acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
   # Create Automatic Subscription (channel without a specific version) for ACM operator
   create_subscription "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
@@ -197,19 +206,23 @@ function create_acm_multiclusterhub() {
     disableHubSelfManagement: true
 EOF
 
-  TITLE "Wait for ACM console url to be available"
-  cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
-  watch_and_retry "$cmd" 15m || FATAL "ACM Console url is not ready"
+  {
+    TITLE "Wait for ACM console url to be available"
+    local duration=15m
+    cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
+    watch_and_retry "$cmd" "$duration"
 
-  TITLE "Wait for multiclusterhub to be ready"
+    TITLE "Wait for multiclusterhub to be ready"
+    # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
+    cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
+    watch_and_retry "$cmd" "$duration" "Running"
 
-  # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
-  cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
-  duration=15m
-  watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
+  } || acm_status=FAILED
+
+  TITLE "All MultiClusterHub resources status:"
+  ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
   if [[ "$acm_status" = FAILED ]] ; then
-    ${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}
     FATAL "ACM Hub is not ready after $duration"
   fi
 
@@ -445,9 +458,8 @@ function configure_submariner_bundle_on_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
-  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
@@ -636,9 +648,8 @@ function create_submariner_config_in_acm_managed_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
-  local regex_to_major_minor='[0-9]+\.[0-9]+' # Regex to trim version into major.minor (X.Y.Z ==> X.Y)
   local submariner_channel
-  submariner_channel=alpha-$(echo $submariner_version | grep -Po "$regex_to_major_minor")
+  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
