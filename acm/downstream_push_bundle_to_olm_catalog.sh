@@ -253,7 +253,7 @@ function create_subscription() {
     TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
 
     cat <<EOF | ${OC} apply -f -
-    apiVersion: operators.coreos.com/v1alpha2
+    apiVersion: operators.coreos.com/v1
     kind: OperatorGroup
     metadata:
       name: ${operator_group_name}

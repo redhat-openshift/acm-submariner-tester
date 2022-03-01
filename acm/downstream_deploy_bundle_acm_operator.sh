@@ -192,6 +192,7 @@ function create_acm_multiclusterhub() {
   metadata:
     name: multiclusterhub
     namespace: ${ACM_NAMESPACE}
+    annotations: {}
   spec:
     disableHubSelfManagement: true
 EOF
