@@ -135,7 +135,12 @@ function install_acm_operator() {
     fi
 
     local acm_channel
-    acm_channel="$(print_major_minor_version "$acm_version" "$ACM_CHANNEL_PREFIX")"
+    acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
+
+    TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
+
+    # TODO: Might need to deploy MCE operator for ACM 2.5
+    # deploy_ocp_bundle "mce-operator-bundle" "v2.0.0" "multi-cluster-engine"" "release-2.0" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
 
     TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
 
