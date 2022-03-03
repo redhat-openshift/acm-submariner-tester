@@ -251,17 +251,22 @@ function create_subscription() {
   # Optional input args:
   # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
   local operator_version="$4"
-  # If deploying as a global operator, set different namespaces (e.g. "openshift-operators" and "openshift-marketplace")
-  local operator_namespace="${5:-$OPERATORS_NAMESPACE}"
-  local subscription_namespace="${5:-$MARKETPLACE_NAMESPACE}"
+  # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
+  local operator_namespace="$5"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  local subscription_namespace
+
   # Create the OperatorGroup
   if [[ -n "${operator_namespace}" ]]; then
-    local operator_group_name="my-${operator_name}-group"
-    TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
+    local operator_group_name="my-${operator_namespace}-operators-group"
+    subscription_namespace="${operator_namespace}"
+
+    TITLE "Create one OperatorGroup '${operator_group_name}' in the specified namespace '${operator_namespace}' of cluster ${cluster_name}"
+
+    ${OC} delete operatorgroup --all -n ${operator_namespace} --wait || :
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: operators.coreos.com/v1
@@ -276,6 +281,12 @@ EOF
 
     echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
+
+  else
+    TITLE "Deploying as a global Operator in the Openshift marketplace of cluster ${cluster_name}"
+    operator_namespace="${OPERATORS_NAMESPACE}"
+    subscription_namespace="${MARKETPLACE_NAMESPACE}"
+
   fi
 
   # Create the Subscription
