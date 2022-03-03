@@ -279,15 +279,19 @@ EOF
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
+    echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
     install_plan="Manual"
     starting_csv="${operator_name}.${operator_version}"
-    echo -e "\n# Apply Manual InstallPlan approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
-  else
+
+    BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
+    "Use Automatic installPlanApproval (instead of Manual)"
+    # Workaround:
     install_plan="Automatic"
-    # There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version (e.g. v2.4.1), and not latest (e.g. v2.4.2)
-    # TODO: might need to set: starting_csv="${operator_name}.${operator_version}"
-    starting_csv="${operator_name}.${operator_version}"
-    echo -e "\n# Apply Automatic InstallPlan approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
+
+  else
+    echo -e "\n# No specific ${operator_name} version was requested - Apply Automatic installPlanApproval"
+    install_plan="Automatic"
+
   fi
 
   cat <<EOF | ${OC} apply -f -
