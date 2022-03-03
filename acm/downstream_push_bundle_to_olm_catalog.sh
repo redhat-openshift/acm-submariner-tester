@@ -159,8 +159,8 @@ function deploy_ocp_bundle() {
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  echo -e "\n# Delete previous catalogSource if exists"
-  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
+  # echo -e "\n# Delete previous catalogSource if exists"
+  # ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
   local catalog_display_name="${bundle_name} Catalog Source"
 
@@ -175,9 +175,9 @@ function deploy_ocp_bundle() {
       image: ${target_image_path}
       displayName: ${catalog_display_name}
       publisher: Red Hat Partner (Test)
-      # updateStrategy:
-      #   registryPoll:
-      #     interval: 5m
+      updateStrategy:
+        registryPoll:
+          interval: 5m
 EOF
 
   echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
@@ -233,21 +233,21 @@ function create_subscription() {
   trap_to_debug_commands;
 
   # Input args
-  local subscription_display_name="$1"
-  local catalog_source="$2"
-  local operator_name="$3"
-  local operator_channel="$4"
+  local catalog_source="$1"
+  local operator_name="$2"
+  local operator_channel="$3"
 
   # Optional input args:
   # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
-  local operator_version="$5"
+  local operator_version="$4"
   # If deploying as a global operator, set different namespaces (e.g. "openshift-operators" and "openshift-marketplace")
-  local operator_namespace="${6:-$OPERATORS_NAMESPACE}"
-  local subscription_namespace="${6:-$MARKETPLACE_NAMESPACE}"
+  local operator_namespace="${5:-$OPERATORS_NAMESPACE}"
+  local subscription_namespace="${5:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  # Create the OperatorGroup
   if [[ -n "${operator_namespace}" ]]; then
     local operator_group_name="my-${operator_name}-group"
     TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
@@ -267,6 +267,10 @@ EOF
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
   fi
 
+  # Create the Subscription
+  local subscription_display_name="my-${operator_name}-subscription"
+  TITLE "Create Subscription '${subscription_display_name}' in namespace '${subscription_namespace}' (Channel '${operator_channel}', Catalog '${catalog_source}')"
+
   echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
   ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
 
@@ -277,13 +281,13 @@ EOF
   if [[ -n "${operator_version}" ]] ; then
     install_plan="Manual"
     starting_csv="${operator_name}.${operator_version}"
-    TITLE "Apply Manual InstallPlan approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
+    echo -e "\n# Apply Manual InstallPlan approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
   else
     install_plan="Automatic"
     # There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version (e.g. v2.4.1), and not latest (e.g. v2.4.2)
     # TODO: might need to set: starting_csv="${operator_name}.${operator_version}"
     starting_csv="${operator_name}.${operator_version}"
-    TITLE "Apply Automatic InstallPlan approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
+    echo -e "\n# Apply Automatic InstallPlan approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
   fi
 
   cat <<EOF | ${OC} apply -f -

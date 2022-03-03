@@ -109,18 +109,19 @@ function print_major_minor_version() {
 
 # ------------------------------------------
 
-function install_acm_operator() {
+function install_acm_operators() {
   ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
+  local mce_version="v${2:-$MCE_VER_TAG}" # e.g. v2.2.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Install ACM bundle $acm_version on the Hub cluster ${cluster_name}"
+  PROMPT "Install ACM $acm_version and MCE $mce_version bundles on the Hub cluster ${cluster_name}"
 
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
@@ -134,24 +135,59 @@ function install_acm_operator() {
       echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
     fi
 
+    # TODO: Run only if ACM version > 2.5: Need to deploy MCE operator before ACM operator
+    local mce_channel
+    mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+
+    TITLE "Install MCE bundle $mce_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
+    Catalog: ${MCE_CATALOG}
+    Channel: ${mce_channel}
+    "
+
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${ACM_NAMESPACE}"
+    echo -e "\n# ACM $acm_version installation completed"
+
+
+    # Deploy ACM operator as an OCP bundle
     local acm_channel
     acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
-    TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
+    TITLE "Install MCE bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
+    Catalog: ${ACM_CATALOG}
+    Channel: ${mce_channel}
+    "
 
-    # TODO: Might need to deploy MCE operator for ACM 2.5
-    # deploy_ocp_bundle "mce-operator-bundle" "v2.0.0" "multi-cluster-engine"" "release-2.0" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
-
-    TITLE "Install ACM bundle $acm_version (Subscription '${ACM_SUBSCRIPTION}', channel '${acm_channel}') on the Hub ${cluster_name}"
-
-    # Deploy ACM operator as an OCP bundle
-    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}" "${ACM_SUBSCRIPTION}"
-
+    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
     echo -e "\n# ACM $acm_version installation completed"
 
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
   fi
+
+}
+
+# ------------------------------------------
+
+function create_mce_subscription() {
+  ### Create MCE subscription - It should be run only on the Hub cluster ###
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local mce_version="v${1:-$MCE_VER_TAG}" # e.g. v2.2.0
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in ${ACM_NAMESPACE} (catalog ${MCE_CATALOG}) on cluster ${cluster_name}"
+
+  local mce_channel
+  mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+
+  # Create Automatic Subscription (channel without a specific version) for MCE operator
+  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${ACM_NAMESPACE}"
+
+  echo -e "\n# ACM Subscription for "${MCE_OPERATOR}" is ready"
 
 }
 
@@ -163,20 +199,20 @@ function create_acm_subscription() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.4.0
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Automatic Subscription '${ACM_SUBSCRIPTION}' on channel '${acm_channel} for ${ACM_OPERATOR} in cluster ${cluster_name}"
+  PROMPT "Create Automatic Subscription for ${ACM_OPERATOR} in ${ACM_NAMESPACE} (catalog ${ACM_CATALOG}) on cluster ${cluster_name}"
 
   local acm_channel
   acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
   # Create Automatic Subscription (channel without a specific version) for ACM operator
-  create_subscription "${ACM_SUBSCRIPTION}" "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
+  create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
 
-  echo -e "\n# ACM Subscription ${ACM_SUBSCRIPTION} created"
+  echo -e "\n# ACM Subscription for "${ACM_OPERATOR}" is ready"
 
 }
 

@@ -125,7 +125,7 @@ export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
 export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
-export SUBM_SUBSCRIPTION="my-submariner-subscription"
+# export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
 export SUBM_CHANNEL_PREFIX="alpha-"
 
@@ -134,14 +134,25 @@ export SUBM_CHANNEL_PREFIX="alpha-"
 
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
+
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
 
 export ACM_VER_TAG=${ACM_VER_TAG:-latest}
-export ACM_SUBSCRIPTION="my-acm-subscription"
+# export ACM_SUBSCRIPTION="my-acm-subscription"
 export ACM_CATALOG="my-acm-catalog"
 export ACM_CHANNEL_PREFIX="release-"
+
+
+### MCE subscription vars ###
+
+export MCE_OPERATOR="multicluster-engine"
+export MCE_BUNDLE="multicluster-engine-operator-bundle"
+
+export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
+export MCE_CATALOG="my-mce-catalog"
+export MCE_CHANNEL_PREFIX="stable-"
 
 
 ### Polarion vars ###

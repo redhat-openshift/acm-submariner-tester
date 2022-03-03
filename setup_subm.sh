@@ -5720,7 +5720,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Setup ACM Hub
 
-    ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
+    ${junit_cmd} install_acm_operators # "$ACM_VER_TAG" "$MCE_VER_TAG"
+
+    ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
