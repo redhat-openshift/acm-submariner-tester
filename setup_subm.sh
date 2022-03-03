@@ -1,49 +1,58 @@
 #!/bin/bash
 #######################################################################################################
 #                                                                                                     #
-# Setup Submariner on AWS and OSP (Upshift)                                                           #
+# Setup ACM with Submariner on public clouds (Amazon and Google) and On-premise (OpenStack)           #
 # By Noam Manos, nmanos@redhat.com                                                                    #
 #                                                                                                     #
-# You can find latest script here:                                                                    #
+# You can find latest script files here:                                                              #
 # https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
-# for both cluster A (AWS) and cluster B (OSP), in the current directory.                             #
+# for both cluster A (AWS) and clusters B or C (OSP/GCP/AWS), in the current directory.               #
 #                                                                                                     #
-# For cluster A, use Openshift-installer config format:                                               #
+# For cluster A - use Openshift-installer config format. For example on Amazon cloud:                 #
 # https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
 #                                                                                                     #
-# For cluster B, use OCPUP config format:                                                             #
-# https://github.com/dimaunx/ocpup#create-config-file                                                 #
+# For cluster B - use OCPUP config format:                                                            #
+# https://github.com/redhat-openshift/ocpup#create-config-file                                        #
+#                                                                                                     #
+# For cluster C - use Openshift-installer config format. For example on Google cloud:                 #
+# https://github.com/openshift/installer/blob/master/docs/user/gcp/customization.md#examples          #
 #                                                                                                     #
 # To create those config files, you need to supply your AWS pull secret, and SSH public key:          #
 #                                                                                                     #
-# (1) Get access to Upshift account.                                                                  #
+# (1) Get access to OpenStack on PSI account:                                                         #
 # - Follow PnT Resource Workflow:                                                                     #
 # https://docs.engineering.redhat.com/display/HSSP/PnT+Resource+Request+Workflow+including+PSI        #
-# - PSI Resource (Openstack, Upshift) request form:                                                   #
-# https://docs.google.com/forms/d/e/1FAIpQLScxbNCO1fNFeIeFUghlCSr9uqVZncYwYmgSR2CLNIQv5AUTaw/viewform #
-# - OpenShift on OpenStack (using PSI) Mojo page:                                                     #
-# https://mojo.redhat.com/docs/DOC-1207953                                                            #
+# - PSI Resource (Openstack, OpenStack on PSI) request form:                                          #
+# https://redhat.service-now.com/help?id=sc_cat_item&sys_id=0430d9eedb2150d0d8a333f3b9961927          #
 # - Make sure your user is included in the Rover group with the same OSP project name:                #
 # https://rover.redhat.com/groups/group/{your-rover-group-name}                                       #
 # - Login to Openstack Admin with your kerberos credentials (and your company domain.com):            #
-# https://rhos-d.infra.prod.upshift.rdu2.redhat.com/dashboard/project/                                #
+# https://openstack.psi.redhat.com/dashboard/auth/login/?next=/dashboard/                             #
 # - Support email: psi-openstack-users@redhat.com                                                     #
 # - Support IRC: #psi , #ops-escalation                                                               #
 # - Support Google-Chat: exd-infra-escalation                                                         #
 #                                                                                                     #
-# (2) Get access to AWS account.                                                                      #
+# (2) Get access to AWS account:                                                                      #
 # - To get it, please fill AWS request form:                                                          #
-# https://docs.google.com/forms/d/e/1FAIpQLSeBi_walgnC4555JEHk5rw-muFUiOf2VCWa1yuEgSl0vDeyQw/viewform #
+# https://devservices.dpp.openshift.com/support/aws_iam_account_request/                              #
 # - Once you get approved, login to AWS openshift-dev account via the web console:                    #
-# https://{AWS Account ID}.signin.aws.amazon.com/console                                              #
+# https://{aws-account-id}.signin.aws.amazon.com/console                                              #
 #                                                                                                     #
-# (3) Your Red Hat Openshift pull secret, found in:                                                   #
+# (3) Get access to GCP account:                                                                      #
+# - Create a personal service account (SA) with a user email, in:                                     #
+# https://cloud.google.com/iam/docs/creating-managing-service-accounts#creating_a_service_account     #
+# - Grant these roles to your SA: Compute Admin, Security Admin, Service Account Admin,               #
+#   Service Account User, Storage Admin, DNS Administrator, Service Account Key Admin.                #
+# - Download your personal GCP credentials from:                                                      #
+# https://console.cloud.google.com/iam-admin/serviceaccounts?project={gcp-project}                    #
+#                                                                                                     #
+# (4) Your Red Hat Openshift pull secret, found in:                                                   #
 # https://cloud.redhat.com/openshift/install/aws/installer-provisioned                                #
 # It is used by Openshift-installer to download OCP images from Red Hat repositories.                 #
 #                                                                                                     #
-# (4) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
+# (5) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
 # cat ~/.ssh/id_rsa.pub                                                                               #
 # It is required by Openshift-installer for authentication.                                           #
 #                                                                                                     #
@@ -53,7 +62,7 @@
 # Script description
 disclosure='----------------------------------------------------------------------
 
-Interactive script to create Openshift multi-clusters on private and public clouds, and test inter-connectivity with Submariner.
+Interactive script to install Advanced Cluster Manager on private and public OpenShift clusters, and test inter-connectivity with Submariner.
 
 Running with pre-defined parameters (optional):
 
@@ -109,21 +118,20 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.0 --subctl-version 0.11.0 --registry-images --globalnet`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.0 release
-  * Install Submariner 0.11.0 release
+  * Install ACM 2.4.2 release
+  * Install Submariner 0.11.2 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
-  * Configure GlobalNet (for overlapping clusters CIDRs)
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer 4.5.1 --reset-cluster-a --clean-cluster-b --subctl-version subctl-devel --build-tests --junit`
+`./setup_subm.sh --get-ocp-installer nightly --reset-cluster-c --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
 
-  * Download OCP installer version 4.5.1
-  * Recreate new cluster on OCP (cluster A)
-  * Clean existing cluster on OSP (cluster B)
+  * Download OCP installer pre-release (nightly)
+  * Recreate new cluster C (e.g. on GCP)
+  * Clean existing cluster A (e.g. on AWS)
   * Install "subctl-devel" (subctl development branch)
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
@@ -242,7 +250,7 @@ export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
 ####################################################################################
 
 check_cli_args() {
-  [[ -n "$1" ]] || ( echo "# Missing arguments. Please see Help with: -h" && exit 1 )
+  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
 }
 
 POSITIONAL=()
@@ -251,7 +259,7 @@ while [[ $# -gt 0 ]]; do
   # Consume next (1st) argument
   case $1 in
   -h|--help)
-    echo "# ${disclosure}" && exit 0
+    echo -e "\n# ${disclosure}" && exit 0
     shift ;;
   -d|--debug)
     script_debug_mode=YES
@@ -361,7 +369,8 @@ while [[ $# -gt 0 ]]; do
   --import-vars)
     check_cli_args "$2"
     export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file: $GLOBAL_VARS"
+    TITLE "Importing additional variables from file:
+    $GLOBAL_VARS"
     source "$GLOBAL_VARS"
     shift 2 ;;
   -*)
@@ -379,7 +388,7 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
-  echo "# ${disclosure}"
+  echo -e "\n# ${disclosure}"
 
   # User input: $skip_ocp_setup - to skip OCP clusters setup (destroy / create / clean)
   while [[ ! "$skip_ocp_setup" =~ ^(yes|no)$ ]]; do
@@ -489,7 +498,7 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_acm and ACM_VER_TAG - to install_acm_operator
+  # User input: $install_acm and ACM_VER_TAG - to Install ACM and add managed clusters
   if [[ "$install_acm" =~ ^(yes|y)$ ]]; then
     while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
@@ -688,8 +697,7 @@ function show_test_plan() {
   - configure_images_prune_cluster_b / c
   - configure_custom_registry_cluster_a: $registry_images
   - configure_custom_registry_cluster_b / c: $registry_images
-  - upload_submariner_images_to_registry_cluster_a: $registry_images
-  - upload_submariner_images_to_registry_cluster_b / c: $registry_images
+  - upload_submariner_images_to_cluster_registry: $registry_images
   - configure_namespace_for_submariner_tests_on_cluster_a
   - configure_namespace_for_submariner_tests_on_managed_cluster
   - test_kubeconfig_cluster_a
@@ -825,7 +833,7 @@ function setup_workspace() {
     verify_golang
 
     if [[ -e ${GOBIN} ]] ; then
-      echo "# Re-exporting global variables"
+      echo -e "\n# Re-exporting global variables"
       export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
   fi
@@ -941,10 +949,10 @@ function download_ocp_installer() {
   mkdir -p $GOBIN
   /usr/bin/install ./oc $GOBIN/oc
 
-  echo "# Install OC into user HOME bin:"
+  echo -e "\n# Install OC into user HOME bin:"
   /usr/bin/install ./oc ~/.local/bin/oc
 
-  echo "# Add user HOME bin to system PATH:"
+  echo -e "\n# Add user HOME bin to system PATH:"
   export PATH="$HOME/.local/bin:$PATH"
 
   ${OC} -h
@@ -963,7 +971,7 @@ function build_ocpup_tool_latest() {
 
   cd ${WORKDIR}
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
-  git clone https://github.com/dimaunx/ocpup || echo "# OCPUP directory already exists"
+  git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
   cd ocpup
 
   # To cleanup GOLANG mod files:
@@ -977,7 +985,7 @@ function build_ocpup_tool_latest() {
   go install -mod vendor # Compile binary and moves it to $GOBIN
   # go build -mod vendor # Saves binary in current directory
 
-  echo "# Check OCPUP command:"
+  echo -e "\n# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
   which ocpup
 
@@ -1023,7 +1031,7 @@ function destroy_ocp_cluster() {
     TITLE "Previous OCP Installation found: ${ocp_install_dir}"
     # cd "${ocp_install_dir}"
     if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
-      echo "# Destroying OCP cluster ${cluster_name}:"
+      echo -e "\n# Destroying OCP cluster ${cluster_name}:"
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${ocp_install_dir}" || \
       ( [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
@@ -1039,7 +1047,7 @@ function destroy_ocp_cluster() {
     backup_and_remove_dir "$ocp_install_dir" "${parent_dir}/_${base_dir}_${DATE_TIME}"
 
     # Remove existing OCP install-config directory:
-    #rm -r "_${ocp_install_dir}/" || echo "# Old config dir removed."
+    #rm -r "_${ocp_install_dir}/" || echo -e "\n# Old config dir removed."
     TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
     # find -maxdepth 1 -type d -name "_*" -mtime +1 -exec rm -rf {} \;
     delete_old_files_or_dirs "${parent_dir}/_${base_dir}_*" "d" 1
@@ -1092,7 +1100,7 @@ function destroy_osp_cluster() {
   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
     TITLE "Using last created OCPUP yaml configuration file"
     local ocpup_yml
-    ocpup_yml="$(ls -1 -tu *ocpup*.yaml | head -1 )" || :
+    ocpup_yml="$(ls -1 -tc *ocpup*.yaml | head -1 )" || :
 
     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
 
@@ -1151,7 +1159,7 @@ function prepare_install_ocp_cluster() {
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
-  echo "# Update OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
+  echo -e "\n# Update OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
 
   # Set the same region for ALL clusters (even on different clouds)
@@ -1321,27 +1329,27 @@ function export_active_clusters_kubeconfig() {
   # ocp_yaml_base_dns="$(grep -Poz 'baseDomain:\s*\K\w+' ${CLUSTER_A_NAME} | awk -F'\0' '{print $1; exit}}' || :)"
   export CLUSTER_A_NAME="${CLUSTER_A_NAME}${ocp_yaml_base_dns:+-$ocp_yaml_base_dns}${ocp_yaml_platform:+-$ocp_yaml_platform}"
 
-  echo "# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME (Cluster A is also the ACM Hub)"
+  echo -e "\n# Exporting \$KUBECONF_HUB for $CLUSTER_A_NAME (Cluster A is also the ACM Hub)"
   export CLUSTER_A_DIR=${WORKDIR}/${CLUSTER_A_NAME}
   export KUBECONF_HUB=${CLUSTER_A_DIR}/auth/kubeconfig
 
   # Setting Cluster B config ($OCPUP_DIR and $CLUSTER_B_YAML were set in subm_variables file)
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_B for $CLUSTER_B_NAME"
+    echo -e "\n# Exporting \$KUBECONF_CLUSTER_B for $CLUSTER_B_NAME"
     CLUSTER_B_DIR=${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${CLUSTER_B_YAML}")
     export CLUSTER_B_DIR
     KUBECONF_CLUSTER_B=${CLUSTER_B_DIR}/auth/kubeconfig
     export KUBECONF_CLUSTER_B
     export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
   else
-    echo "# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
+    echo -e "\n# Cluster B was not installed - Unset \$KUBECONF_CLUSTER_B"
     unset KUBECONF_CLUSTER_B
     unset CLUSTER_B_NAME
   fi
 
   # Setting Cluster C config ($WORKDIR and $CLUSTER_C_NAME were set in subm_variables file)
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
+    echo -e "\n# Exporting \$KUBECONF_CLUSTER_C for $CLUSTER_C_NAME"
 
     # Get cluster platform and base domain from OCP installer yaml, and append it to the cluster name
     ocp_yaml_platform="$(grep -Poz 'platform:\s*\K\w+' ${CLUSTER_C_YAML} | awk -F'\0' '{print $1; exit}' || :)"
@@ -1352,7 +1360,7 @@ function export_active_clusters_kubeconfig() {
     export KUBECONF_CLUSTER_C=${CLUSTER_C_DIR}/auth/kubeconfig
     export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
   else
-    echo "# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
+    echo -e "\n# Cluster C was not installed - Unset \$KUBECONF_CLUSTER_C"
     unset KUBECONF_CLUSTER_C
     unset CLUSTER_C_NAME
   fi
@@ -1403,22 +1411,22 @@ function update_kubeconfig_default_context() {
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${KUBECONFIG}"
 
-  echo "# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
+  echo -e "\n# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
   [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
 
-  TITLE "Set current context of cluster '$cluster_name' to the first context with master (or admin) user"
+  local admin_user="admin"
+  TITLE "Set current context of cluster '$cluster_name' to the first context with '${admin_user}' user"
 
   local master_context
-  local master_user="master"
-
-  master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+  master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${admin_user}\")).name][0] // empty")
 
   if [[ -z "$master_context" ]] ; then
-    master_user="admin"
-    master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${master_user}\")).name][0] // empty")
+    admin_user="master"
+    echo -e "\n# Warning: Admin user not found, looking for context of '${admin_user}' user instead"
+    master_context=$(${OC} config view -o json | jq -r "[.contexts[] | select(.context.user | test(\"${admin_user}\")).name][0] // empty")
   fi
 
-  echo "# Switch to the cluster of the '$master_user' user"
+  echo -e "\n# Switch to the cluster of the '$admin_user' user"
   ${OC} config use-context "$master_context"
 
   local cur_context
@@ -1447,13 +1455,12 @@ function update_kubeconfig_default_context() {
     "https://github.com/submariner-io/submariner/issues/245"
 
     if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
-      echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+      echo -e "\n# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
       ${OC} config delete-context "${renamed_context}_old" || :
       ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
     fi
 
     ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
-    # ${OC} config use-context "$renamed_context" || :
   fi
 
   TITLE "Updating KUBECONFIG current context '$renamed_context' to use:
@@ -1519,7 +1526,7 @@ function test_cluster_status() {
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
-  echo "# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
+  echo -e "\n# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
   cp -f "$KUBECONFIG" "${kubeconfig_copy}" || :
 
   ${OC} config view
@@ -1581,7 +1588,7 @@ function add_elevated_user() {
   # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
   touch -a "${WORKDIR}/${http_sec_name}"
   if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
-    echo "# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
+    echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
       local ocp_pwd
@@ -1647,7 +1654,7 @@ EOF
   # # Workaround:
   # local renamed_context="${cur_context//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
   # if ${OC} config get-contexts -o name | grep "${renamed_context}" 2>/dev/null ; then
-  #   echo "# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
+  #   echo -e "\n# Rename existing kubeconfig context '${renamed_context}' to: ${renamed_context}_old"
   #   ${OC} config delete-context "${renamed_context}_old" || :
   #   ${OC} config rename-context "${renamed_context}" "${renamed_context}_old" || :
   # fi
@@ -1725,12 +1732,13 @@ function delete_submariner_namespace_and_crds() {
 
   # force_delete_namespace "${SUBM_NAMESPACE}"
 
-  delete_crds_by_name "submariner"
+  delete_crds_by_name 'submariner\.io'
 
   ${OC} delete namespace ${SUBM_NAMESPACE} --wait || :
   ${OC} wait --for=delete namespace ${SUBM_NAMESPACE} || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
+  # ${OC} delete namespace ${BROKER_NAMESPACE} --wait || :
   force_delete_namespace "${BROKER_NAMESPACE}"
 
 }
@@ -1967,13 +1975,13 @@ function delete_old_submariner_images_from_current_cluster() {
   #   local img_sha="$1"
   #   local img_name="$2"
   #
-  #   echo "# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
+  #   echo -e "\n# Deleting registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|')"
   #   ${OC} delete image $img_sha --ignore-not-found
   # done
   #
   # # Delete image-stream tags
   # ${OC} get istag -n ${SUBM_NAMESPACE} | awk '{print $1}' | while read -r img_tag ; do
-  #   echo "# Deleting image stream tag: $img_tag"
+  #   echo -e "\n# Deleting image stream tag: $img_tag"
   #   ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
   # done
 
@@ -2036,7 +2044,7 @@ function configure_namespace_for_submariner_tests() {
   "Set the default namespace to \"${TEST_NS}\"" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=1826676"
   # Workaround:
-  echo "# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS:-default}"
+  echo -e "\n# Change the default namespace in [${KUBECONFIG}] to: ${TEST_NS:-default}"
   cur_context="$(${OC} config current-context)"
   ${OC} config set "contexts.${cur_context}.namespace" "${TEST_NS:-default}"
 
@@ -2122,7 +2130,7 @@ function test_clusters_disconnected_before_submariner() {
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
-  # Trying to connect from cluster A to cluster B, will fails (after 5 seconds).
+  # Trying to connect from cluster A to cluster B/C, will fails (after 5 seconds).
   # It’s also worth looking at the clusters to see that Submariner is nowhere to be seen.
 
   # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
@@ -2172,18 +2180,18 @@ function set_subm_version_tag_var() {
 
   [[ -n "${subm_version_tag}" ]] || FATAL "Submariner version to use was not defined. Try to run again with option '--subctl-version x.y.z'"
 
-  TITLE "Retrieve correct tag for SubCtl version \$${tag_var_name} : $subm_version_tag"
+  TITLE "Retrieve correct tag for Submariner version \$${tag_var_name} : $subm_version_tag"
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
     subm_version_tag=$(get_subctl_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
-    echo "# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
+    echo -e "\n# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
     subm_version_tag=v${subm_version_tag}
   fi
 
   # export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
-  # echo "# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
+  # echo -e "\n# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
   # subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
-  # echo "# New \$${tag_var_name} for registry images: $subm_version_tag"
+  # echo -e "\n# New \$${tag_var_name} for registry images: $subm_version_tag"
 
   # Reevaluate $tag_var_name value
   local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
@@ -2227,27 +2235,27 @@ function download_subctl_by_tag() {
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
       echo -e "# Getting last downloaded subctl archive filename"
-      subctl_xz="$(ls -1 -tu subctl-*-linux-amd64.tar.xz | head -1 )" || :
+      subctl_xz="$(ls -1 -tc subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
-      echo "# SubCtl binary will be extracted from [${subctl_xz}]"
+      echo -e "\n# SubCtl binary will be extracted from [${subctl_xz}]"
       tar -xvf ${subctl_xz} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
-      echo "# Rename last extracted file to subctl"
+      echo -e "\n# Rename last extracted file to subctl"
       local extracted_file
-      extracted_file="$(ls -1 -tu subctl* | head -1)"
+      extracted_file="$(ls -1 -tc subctl* | head -1)"
       [[ -f "$extracted_file" ]] || FATAL "subctl binary was not found in ${subctl_xz}"
       ls -l "${extracted_file}"
 
       mv "$extracted_file" subctl
       chmod +x subctl
 
-      echo "# Install subctl into ${GOBIN}:"
+      echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p $GOBIN
       # cp -f ./subctl $GOBIN/
       /usr/bin/install ./subctl $GOBIN/subctl
 
-      echo "# Install subctl into user HOME bin:"
+      echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
       /usr/bin/install ./subctl ~/.local/bin/subctl
 
@@ -2292,32 +2300,32 @@ function download_subctl_by_tag() {
         tar -xvf ${file_name} --strip-components 1 --wildcards --no-anchored  "subctl*"
 
         # Rename last extracted file to subctl
-        extracted_file="$(ls -1 -tu subctl* | head -1)"
+        extracted_file="$(ls -1 -tc subctl* | head -1)"
 
         [[ ! -e "$extracted_file" ]] || mv "$extracted_file" subctl
         chmod +x subctl
 
-        echo "# Install subctl into ${GOBIN}:"
+        echo -e "\n# Install subctl into ${GOBIN}:"
         mkdir -p $GOBIN
         # cp -f ./subctl $GOBIN/
         /usr/bin/install ./subctl $GOBIN/subctl
 
-        echo "# Install subctl into user HOME bin:"
+        echo -e "\n# Install subctl into user HOME bin:"
         # cp -f ./subctl ~/.local/bin/
         /usr/bin/install ./subctl ~/.local/bin/subctl
       fi
 
     fi
 
-    echo "# Copy subctl from user HOME bin into ${GOBIN}:"
+    echo -e "\n# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p $GOBIN
     # cp -f ./subctl $GOBIN/
     /usr/bin/install "$HOME/.local/bin/subctl" $GOBIN/subctl
 
-    echo "# Add user HOME bin to system PATH:"
+    echo -e "\n# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
 
-    echo "# Store SubCtl version in $SUBCTL_VERSION_FILE"
+    echo -e "\n# Store SubCtl version in $SUBCTL_VERSION_FILE"
     subctl version | awk '{print $3}' > "$SUBCTL_VERSION_FILE"
 
 }
@@ -2423,7 +2431,7 @@ function create_subctl_join_file() {
   # Workaround
   cluster_id=$(${OC} config view -o jsonpath='{.contexts[?(@.context.user == "admin")].context.cluster}' | awk '{print $1}')
 
-  echo "# Write the join parameters into the join command file: $join_cmd_file"
+  echo -e "\n# Write the join parameters into the join command file: $join_cmd_file"
   JOIN_CMD="${JOIN_CMD} --clusterid ${cluster_id//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
 
   echo "$JOIN_CMD" > "$join_cmd_file"
@@ -2467,7 +2475,7 @@ function append_custom_images_to_join_cmd_file() {
   trap_to_debug_commands;
 
   local join_cmd_file="$1"
-  echo "# Read subctl join command from file: $join_cmd_file"
+  echo -e "\n# Read subctl join command from file: $join_cmd_file"
   local JOIN_CMD
   JOIN_CMD="$(< $join_cmd_file)"
 
@@ -2714,7 +2722,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   # download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" # "${github_dir}"
 
-  # echo "# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
+  # echo -e "\n# Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
   # mkdir -p "${target_path}"
   # cp -rf "${github_dir}"/* "${target_path}"
   # cd "${target_path}/"
@@ -3019,8 +3027,7 @@ function configure_cluster_custom_registry_secrets() {
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
-  (
-    # ocp_usr=$(${OC} whoami | tr -d ':')
+  ( # subshell to hide commands
     ocp_token=$(${OC} whoami -t)
 
     TITLE "Configure OCP registry local secret"
@@ -3054,12 +3061,22 @@ function configure_cluster_custom_registry_mirror() {
   ocp_registry_url=$(${OC} registry info --internal)
   local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
-  TITLE "Add OCP Registry mirror for ACM and Submariner:"
+  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner (${SUBM_NAMESPACE}) and ACM (${SUBM_NAMESPACE})"
 
-  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
+  )
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
+  )
 
-  create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
+  TITLE "Add OCP Registry mirrors to all OCP cluster nodes using MachineConfig"
 
+  BUG "Using image tags for ImageContentSourcePolicy resource is not supported" \
+  "Create MachineConfig (instead of ImageContentSourcePolicy) to configure registry mirrors on all nodes" \
+  "https://issues.redhat.com/browse/RFE-1608"
+  # Workaround: deprecating creation of ImageContentSourcePolicy in favor of MachineConfig
+  # add_image_content_source_policy
   add_acm_registry_mirror_to_ocp_node "master" "${local_registry_path}" || :
   add_acm_registry_mirror_to_ocp_node "worker" "${local_registry_path}" || :
 
@@ -3071,6 +3088,42 @@ function configure_cluster_custom_registry_mirror() {
 
   TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
   ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
+
+}
+
+# ------------------------------------------
+
+function add_image_content_source_policy() {
+### Helper function to add OCP registry mirror for ACM and Submariner on all master or all worker nodes
+  trap_to_debug_commands
+
+  TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy in current cluster"
+
+  local img_policy
+  img_policy="`mktemp`_ImageContentSourcePolicy.yaml"
+
+  cat <<-EOF > $img_policy
+  apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    name: brew-registry
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${OFFICIAL_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${STAGING_REGISTRY}
+    - mirrors:
+      - ${BREW_REGISTRY}
+      source: ${VPN_REGISTRY}
+EOF
+
+  ${OC} apply --dry-run='server' -f $img_policy | highlight "unchanged" \
+  || ${OC} apply -f $img_policy
+
+  ${OC} get ImageContentSourcePolicy -o yaml
 
 }
 
@@ -3090,10 +3143,31 @@ function add_acm_registry_mirror_to_ocp_node() {
   local_registry_path = $local_registry_path"
 
   if [[ -z "$local_registry_path" ]] || [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
-    FATAL "Expected Openshift Registry values are missing: $reg_values"
+    FATAL "Openshift Registry values are missing: $reg_values"
   else
-    TITLE "Adding Submariner registry mirror to all OCP cluster nodes"
-    echo -e "$reg_values"
+    TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes:
+    * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+
+    * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+
+    * ${VPN_REGISTRY} -->
+          - ${BREW_REGISTRY}
+
+    * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}
+
+    * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW} -->
+          - ${local_registry_path}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}
+
+    * ${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH} -->
+          - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
+    "
   fi
 
   config_source=$(cat <<EOF | raw_to_url_encode
@@ -3150,7 +3224,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
       insecure = false
 
   [[registry]]
@@ -3165,19 +3239,19 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}"
       insecure = false
 
-  [[registry]]
-    prefix = ""
-    location = "registry.access.redhat.com/openshift4/ose-oauth-proxy"
-    mirror-by-digest-only = true
-    insecure = false
-    blocked = false
-
-    [[registry.mirror]]
-      location = "registry.redhat.io/openshift4/ose-oauth-proxy"
+    [[registry]]
+      prefix = ""
+      location = "${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
+      mirror-by-digest-only = true
       insecure = false
+      blocked = false
+
+      [[registry.mirror]]
+        location = "${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
+        insecure = false
 EOF
   )
 
@@ -3186,7 +3260,7 @@ EOF
 
   local ocp_version
   ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
-  echo "# Checking API ignition version for OCP version: $ocp_version"
+  echo -e "\n# Checking API ignition version for OCP version: $ocp_version"
 
   ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
 
@@ -3222,51 +3296,22 @@ EOF
 
 # ------------------------------------------
 
-function upload_submariner_images_to_registry_cluster_a() {
-# Upload custom images to the registry - OCP cluster A (public)
-  PROMPT "Upload custom images to the registry of cluster A"
+function upload_submariner_images_to_cluster_registry() {
+# Upload custom images to the registry of the requested OCP cluster
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_HUB}"
+  local kubeconfig_file="$1"
 
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
+  export KUBECONFIG="$kubeconfig_file"
 
-# ------------------------------------------
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
 
-function upload_submariner_images_to_registry_cluster_b() {
-# Upload custom images to the registry - OSP cluster B (on-prem)
-  PROMPT "Upload custom images to the registry of cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function upload_submariner_images_to_registry_cluster_c() {
-# Upload custom images to the registry - OSP cluster C
-  PROMPT "Upload custom images to the registry of cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  upload_submariner_images_to_registry "$SUBM_VER_TAG"
-}
-
-# ------------------------------------------
-
-function upload_submariner_images_to_registry() {
-# Join Submariner member - of current cluster kubeconfig
-  trap_to_debug_commands;
-
-  local image_tag="${1:-$SUBM_VER_TAG}"
-
+  local image_tag="$SUBM_VER_TAG"
   # Fix the $image_tag value for custom images
   set_subm_version_tag_var "image_tag"
 
-  # [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-  # local image_tag="$(subctl version | awk '{print $3}')"
+  PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
 
   TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
   \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
@@ -3335,7 +3380,7 @@ function run_subctl_join_cmd_from_file() {
 # Join Submariner member - of current cluster kubeconfig
   trap_to_debug_commands;
 
-  echo "# Read subctl join command from file: $1"
+  echo -e "\n# Read subctl join command from file: $1"
   local JOIN_CMD
   JOIN_CMD="$(< $1)"
 
@@ -3449,7 +3494,7 @@ function test_submariner_resources_status() {
 
 function test_public_ip_on_gateway_node() {
 # Testing that Submariner Gateway node received public (external) IP
-  PROMPT "Testing that Submariner Gateway node received public (external) IP"
+  PROMPT "Testing that Submariner Gateway node received public (external) IP on the Broker cluster A"
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
@@ -3471,7 +3516,7 @@ function test_public_ip_on_gateway_node() {
 
 function test_disaster_recovery_of_gateway_nodes() {
 # Check that submariner tunnel works if broker nodes External-IPs (on gateways) is changed
-  PROMPT "Testing Disaster Recovery: Reboot Submariner-Gateway VM, to verify re-allocation of public (external) IP"
+  PROMPT "Testing Disaster Recovery: Reboot Submariner Gateway VM on the Broker cluster A, to verify re-allocation of public (external) IP"
   trap_to_debug_commands;
 
   aws --version || FATAL "AWS-CLI is missing. Try to run again with option '--config-aws-cli'"
@@ -3520,7 +3565,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 
 function test_renewal_of_gateway_and_public_ip() {
 # Testing that Submariner Gateway was re-created with new public IP
-  PROMPT "Testing that Submariner Gateway was re-created with new public IP"
+  PROMPT "Testing that Submariner Gateway was re-created with new public IP on the Broker cluster A"
   trap_to_debug_commands;
 
   # Should be run on the Broker cluster
@@ -3593,7 +3638,7 @@ function export_variable_name_of_active_gateway_pod() {
   cat $gateways_output | highlight "${gw_id}"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  echo "# Eval and export the variable '${var_name}=${gw_id}'"
+  echo -e "\n# Eval and export the variable '${var_name}=${gw_id}'"
 
   local eval_cmd="export ${var_name}=${gw_id}"
   eval $eval_cmd
@@ -3923,7 +3968,7 @@ function export_nginx_headless_namespace_managed_cluster() {
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
 
-  echo "# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
+  echo -e "\n# The ServiceExport should be created on the default Namespace, as configured in KUBECONFIG:
   \n# $KUBECONFIG : ${HEADLESS_TEST_NS}"
 
   export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$HEADLESS_TEST_NS"
@@ -3971,7 +4016,7 @@ function export_service_in_lighthouse() {
   ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
-  echo "# Show $svc_name Service info:"
+  echo -e "\n# Show $svc_name Service info:"
   ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
@@ -4075,7 +4120,7 @@ function test_clusters_connected_by_service_ip() {
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
   netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
 
-  echo "# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
+  echo -e "\n# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
 
   export KUBECONFIG="${KUBECONF_MANAGED}"
@@ -4083,7 +4128,7 @@ function test_clusters_connected_by_service_ip() {
   # nginx_IP_cluster_bc=$(${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}')
   ${OC} get svc -l app=${NGINX_CLUSTER_BC} ${TEST_NS:+-n $TEST_NS} | awk 'FNR == 2 {print $3}' > "$TEMP_FILE"
   nginx_IP_cluster_bc="$(< $TEMP_FILE)"
-  TITLE "Nginx service on cluster B, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+  TITLE "Nginx service on cluster B/C, will be identified by its IP (without DNS from service-discovery): ${nginx_IP_cluster_bc}:${NGINX_PORT}"
     # nginx_IP_cluster_bc: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_HUB}"
@@ -4122,7 +4167,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing GlobalNet: There should be NO-connectivity if clusters A and B have Overlapping CIDRs"
 
     msg="# Negative Test - Clusters have Overlapping CIDRs:
-    \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B, should NOT be reachable outside cluster, if using GlobalNet."
+    \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
     ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
   fi
@@ -4163,7 +4208,7 @@ function test_clusters_connected_overlapping_cidrs() {
 
 
   PROMPT "Testing GlobalNet connectivity - From Netshoot pod ${netshoot_pod_cluster_a} (IP ${netshoot_global_ip}) on cluster A
-  To Nginx service on cluster B, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
+  To Nginx service on cluster B/C, by its Global IP: $nginx_global_ip:${NGINX_PORT}"
 
   export KUBECONFIG="${KUBECONF_HUB}"
   ${OC} exec ${netshoot_pod_cluster_a} ${TEST_NS:+-n $TEST_NS} \
@@ -4175,7 +4220,7 @@ function test_clusters_connected_overlapping_cidrs() {
 # ------------------------------------------
 
 function test_clusters_connected_full_domain_name() {
-### Nginx service on cluster B, will be identified by its Domain Name ###
+### Nginx service on cluster B/C, will be identified by its Domain Name ###
 # This is to test service-discovery (Lighthouse) of NON-headless $NGINX_CLUSTER_BC service, on the default namespace
 
   trap_to_debug_commands;
@@ -4184,7 +4229,7 @@ function test_clusters_connected_full_domain_name() {
   local nginx_cl_b_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
-  To the default Nginx service on cluster B${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
+  To the default Nginx service on cluster B/C${TEST_NS:+ (Namespace ${TEST_NS:-default})}, by DNS hostname: $nginx_cl_b_dns"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4221,7 +4266,7 @@ function test_clusters_cannot_connect_short_service_name() {
   local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B/C: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4319,7 +4364,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
 # ------------------------------------------
 
 function test_clusters_connected_headless_service_on_new_namespace() {
-### Nginx service on cluster B, will be identified by its Domain Name (with service-discovery) ###
+### Nginx service on cluster B/C, will be identified by its Domain Name (with service-discovery) ###
 
   trap_to_debug_commands;
 
@@ -4327,7 +4372,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
   local nginx_headless_cl_b_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}.svc.${MULTI_CLUSTER_DOMAIN}"
 
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
-  To the HEADLESS Nginx service on cluster B${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
+  To the HEADLESS Nginx service on cluster B/C${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
 
   if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
@@ -4375,7 +4420,7 @@ function test_clusters_cannot_connect_headless_short_service_name() {
   local nginx_cl_b_short_dns="${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS}"
 
   PROMPT "Testing Service-Discovery:
-  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
+  There should be NO DNS resolution from cluster A to the local Nginx address on cluster B/C: $nginx_cl_b_short_dns (FQDN without \"clusterset\")"
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -4397,11 +4442,17 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  # export_active_clusters_kubeconfig
+  local subctl_version="${SUBM_VER_TAG}"
+
+  # Fix the $subctl_version value for custom images
+  set_subm_version_tag_var "subctl_version"
 
   export_merged_kubeconfigs
 
-  subctl show versions || subctl_info=ERROR
+  subctl show versions |& highlight "submariner.*${subctl_version}" || \
+  BUG "Subctl shows wrong Submariner version - it should have been v${subctl_version}" \
+  "Please verify that all Submariner components (e.g. Gateway) have image version = v${subctl_version}" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
 
   subctl show networks || subctl_info=ERROR
 
@@ -4429,13 +4480,13 @@ function export_merged_kubeconfigs() {
   # local active_context_names="${CLUSTER_A_NAME}"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
+    echo -e "\n# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
     # active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
+    echo -e "\n# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
     # active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
   fi
@@ -4443,12 +4494,12 @@ function export_merged_kubeconfigs() {
   export KUBECONFIG="${merged_kubeconfigs}"
   ${OC} config get-contexts
 
-  # echo "# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
+  # echo -e "\n# Deleting all contexts except \"${active_context_names}\" from current kubeconfig:"
   # local context_changed
   #
   # ${OC} config get-contexts -o name | grep -E --invert-match "^(${active_context_names})\$" \
   # | while read -r context_name ; do
-  #   echo "# Deleting kubeconfig context: $context_name"
+  #   echo -e "\n# Deleting kubeconfig context: $context_name"
   #   ${OC} config delete-context "${context_name}" || :
   #   context_changed=YES
   # done
@@ -4544,13 +4595,13 @@ function test_project_e2e_with_go() {
   e2e_dp_context="--dp-context $(${OC} config current-context)"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
   fi
@@ -4605,8 +4656,6 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
   local subctl_diagnose
 
-  # export_active_clusters_kubeconfig
-
   export_merged_kubeconfigs
 
   # For SubCtl > 0.8 : Run subctl diagnose:
@@ -4649,8 +4698,6 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 function test_subctl_benchmarks() {
   PROMPT "Testing subctl benchmark: latency and throughput tests"
   trap_to_debug_commands;
-
-  # export_active_clusters_kubeconfig
 
   subctl benchmark latency ${KUBECONF_HUB} ${KUBECONF_MANAGED} --verbose || benchmark_status=ERROR
 
@@ -4705,7 +4752,7 @@ function build_operator_latest() {  # [DEPRECATED]
 
   # Download Submariner Operator with go
   # export PATH=$PATH:$GOROOT/bin
-  GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo "# GO Get Submariner Operator finished"
+  GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo -e "\n# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
   cd $GOPATH/src/github.com/submariner-io/submariner-operator
@@ -4768,8 +4815,6 @@ function test_submariner_e2e_with_subctl() {
   PROMPT "Testing Submariner End-to-End tests with SubCtl command"
   trap_to_debug_commands;
 
-  # export_active_clusters_kubeconfig
-
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
   subctl version
 
@@ -4779,13 +4824,13 @@ function test_submariner_e2e_with_subctl() {
   e2e_subctl_context="$(${OC} config current-context)"
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
+    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo "# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
+    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
@@ -4795,8 +4840,6 @@ function test_submariner_e2e_with_subctl() {
   "https://github.com/submariner-io/submariner-operator/issues/509"
 
   TITLE "SubCtl E2E output will be printed both to stdout and to the file $E2E_LOG"
-
-  # export_active_clusters_kubeconfig
 
   export_merged_kubeconfigs
 
@@ -4871,7 +4914,7 @@ function create_all_test_results_in_polarion() {
   # Upload UNIT tests to Polarion (skipping, not really required)
 
   # if [[ (! "$skip_tests" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
-  #   echo "# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
+  #   echo -e "\n# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
   #   upload_junit_xml_to_polarion "$PKG_JUNIT_XML" || polarion_rc=1
@@ -4915,15 +4958,13 @@ function add_polarion_testrun_url_to_report_headlines() {
 function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
-    TITLE "Showing product versions (since CLI option --print-logs was used)"
+  TITLE "Showing product versions on script teardown"
 
-    ${junit_cmd} test_products_versions_cluster_a || :
+  ${junit_cmd} test_products_versions_cluster_a || :
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
+  [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
-  fi
+  [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
 
 }
 
@@ -4976,9 +5017,14 @@ function test_products_versions() {
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
+  # Get ACM version if ACM hub is install on current cluster
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+
   TITLE "OCP cluster ${cluster_name} information"
   echo -e "\n# Cloud platform: ${ocp_cloud}"
   echo -e "\n# OCP version: ${cluster_version}"
+  [[ -z "$acm_current_version" ]] || echo -e "\n# ACM version: ${acm_current_version}"
 
   echo -e "\n### Submariner components ###\n"
 
@@ -4999,11 +5045,12 @@ function test_products_versions() {
     echo -e "\n\n"
   fi
 
+  # Show Submariner and ACM CSVs (Cluster service versions)
+  print_csvs_in_namespace "$SUBM_NAMESPACE"
+  print_csvs_in_namespace "$ACM_NAMESPACE"
+
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
-
-  # Show Submariner CSVs (Cluster service versions)
-  print_csvs_in_namespace "$SUBM_NAMESPACE"
 
   # Show Submariner image-stream tags
   print_image_tags_info "${SUBM_NAMESPACE}"
@@ -5096,11 +5143,13 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    TITLE "Submariner information (subctl show and diagnose)"
+    TITLE "Submariner information (using subctl show, diagnose and gather logs)"
 
     subctl show all || :
 
     subctl diagnose all || :
+
+    subctl gather || :
 
     export KUBECONFIG="${KUBECONF_HUB}"
     print_resources_and_pod_logs "$CLUSTER_A_NAME"
@@ -5229,9 +5278,15 @@ function print_resources_and_pod_logs() {
 
 # ------------------------------------------
 
-# Functions to debug this script
+
+###################################################################
+#         Internal usage functions to debug this script           #
+###################################################################
+
 
 function debug_test_polarion() {
+  # Internal debugging function for Polarion
+
   trap_to_debug_commands;
   PROMPT "DEBUG Polarion setup"
 
@@ -5246,16 +5301,20 @@ function debug_test_polarion() {
   fi
 
   echo 1 > $TEST_STATUS_FILE
-
 }
 
+# ------------------------------------------
+
 function debug_test_pass() {
+  # Internal debugging function to test juint with arguments and special characters
+
   trap_to_debug_commands;
   PROMPT "PASS test for DEBUG"
 
-  local test="TRUE"
+  local arg1="$1"
+  local arg2="$2"
 
-  if [[ -n "$test" ]] ; then
+  if [[ "$arg1" != "$arg2" ]] ; then
     BUG "A dummy bug" \
      "A workaround" \
     "A link"
@@ -5273,7 +5332,11 @@ function debug_test_pass() {
 
 }
 
+# ------------------------------------------
+
 function debug_test_fail() {
+  # Internal debugging function to mark junit test as failed, without exiting script on error
+
   trap_to_debug_commands;
   PROMPT "FAIL test for DEBUG"
   echo "Should not get here if calling after a bad exit code (e.g. FAILURE or FATAL)"
@@ -5289,7 +5352,11 @@ function debug_test_fail() {
 
 }
 
+# ------------------------------------------
+
 function debug_test_fatal() {
+  # Internal debugging function to test FATAL error (tests should not continue afterwards)
+
   trap_to_debug_commands;
   PROMPT "FATAL test for DEBUG"
   FATAL "Terminating script here"
@@ -5330,18 +5397,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### Script debug calls (should be left as a comment) ###
 
     # ${junit_cmd} debug_test_polarion
-    # ${junit_cmd} debug_test_pass
-    # ${junit_cmd} debug_test_fail
+    # ${junit_cmd} debug_test_pass "junit" "junit"
+    # ${junit_cmd} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
     # rc=$?
     # BUG "debug_test_fail - Exit code: $rc" \
     # "If RC $rc = 5 - junit_cmd should continue execution"
-    # ${junit_cmd} debug_test_pass
+    # ${junit_cmd} debug_test_pass 100 200 300
     # ${junit_cmd} debug_test_fatal
 
   ### END Script debug ###
-
-  # Print planned steps according to CLI/User inputs
-  ${junit_cmd} show_test_plan
 
   # Setup and verify environment
   setup_workspace
@@ -5349,10 +5413,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Set script trap functions
   set_trap_functions
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
+  # Print planned steps according to CLI/User inputs
+  ${junit_cmd} show_test_plan
 
-  # Exporting active clusters KUBECONFIGs
-  # export_active_clusters_kubeconfig
+  ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
 
   if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
 
@@ -5482,7 +5546,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # Running cleanup on cluster A if requested
       if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
 
-        # ${junit_cmd} clean_acm_namespace_and_resources_cluster_a  # Skipping ACM cleanup, as it might not be required for Submariner tests
+        # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
         ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
 
@@ -5490,14 +5556,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
-      fi
+      fi # End of cluster A cleanup
 
       # Running cleanup on cluster B if requested
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
         if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_b  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
 
@@ -5506,14 +5572,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
         fi
-      fi
+      fi # End of cluster B cleanup
 
       # Running cleanup on cluster C if requested
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
         if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
 
-          # ${junit_cmd} clean_acm_namespace_and_resources_cluster_c  # Skipping ACM cleanup, as it might not be required for Submariner tests
+          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
           ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
 
@@ -5522,9 +5588,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
         fi
-      fi
+      fi # End of cluster C cleanup
 
-      # Configure firewall ports, gateway labels, and images prune on all clusters
+      ### Configure firewall ports, gateway labels, and images prune on all clusters ###
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -5560,22 +5626,24 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} configure_images_prune_cluster_c
 
-      fi
+      fi # End of configure firewall, labels, and images prune
 
-      # Overriding Submariner images with custom images from registry, if requested with --registry-images
+
+      ### Configuring clusters registry with custom (downstream) mirrors, secrets and images, if using --registry-images ###
+
       if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
 
         # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
 
         ${junit_cmd} configure_custom_registry_cluster_a
 
-        ${junit_cmd} upload_submariner_images_to_registry_cluster_a
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
         if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
           ${junit_cmd} configure_custom_registry_cluster_b
 
-          ${junit_cmd} upload_submariner_images_to_registry_cluster_b
+          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
         fi
 
@@ -5583,11 +5651,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
           ${junit_cmd} configure_custom_registry_cluster_c
 
-          ${junit_cmd} upload_submariner_images_to_registry_cluster_c
+          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
         fi
 
-      fi # End of configure custom images in OCP registry
+      fi # End of configure custom clusters registry
+
+
+      ### Create namespace and services for submariner system tests ###
 
       ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
 
@@ -5611,7 +5682,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} test_clusters_disconnected_before_submariner
 
-    fi ### END of prerequisites for submariner system tests ###
+    fi
+    ### END of prerequisites for submariner system tests ###
 
   else  # When using --skip-ocp-setup :
 
@@ -5633,8 +5705,16 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
+  ### Download and install SUBCTL ###
+  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
 
-  ### INSTALL ACM with Submariner on all Clusters ###
+    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+    ${junit_cmd} test_subctl_command
+
+  fi
+
+  ### Install ACM Hub, and create cluster set of the manged clusters for Submariner ###
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
@@ -5642,25 +5722,17 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
+    ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
+
     ${junit_cmd} create_acm_multiclusterhub
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
 
     ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
-    # Setup Submariner Addon on the managed clusters
-
-    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
-
-    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
-
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
@@ -5668,27 +5740,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
     fi
-
   fi
-
-  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
-  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
-
-  echo 2 > $TEST_STATUS_FILE
-
   ### END of ACM Install ###
-
-  ### Download and install SUBCTL ###
-  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
-
-    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-  fi
 
   ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
 
@@ -5696,8 +5750,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Running build_operator_latest if requested  # [DEPRECATED]
     # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
-
-    ${junit_cmd} test_subctl_command
 
     ${junit_cmd} set_join_parameters_for_cluster_a
 
@@ -5726,14 +5778,47 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
 
+  else
+
+    ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters as OCP bundle  ###
+
+    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
+
+    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
+
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
+
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+    fi
+
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
+
+      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+    fi
+
   fi
   ### END of install_with_subctl ###
+
+
+  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
+  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
+
+  echo 2 > $TEST_STATUS_FILE
+
 
   ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
   if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
+
+    # Testing the Submariner gateway disaster recovery just on the Broker cluster (using $KUBECONF_HUB)
 
     ${junit_cmd} test_public_ip_on_gateway_node
 
@@ -5743,9 +5828,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} test_submariner_resources_cluster_a
 
+    # Testing Submariner resources on all clusters
+
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_c
+
+    # Testing Submariner cable-driver on all clusters
 
     ${junit_cmd} test_cable_driver_cluster_a
 
@@ -5753,11 +5842,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_cable_driver_cluster_c
 
+    # Testing Submariner HA (High Availability) status on all clusters
+
     ${junit_cmd} test_ha_status_cluster_a
 
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ha_status_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ha_status_cluster_c
+
+    # Testing Submariner connectivity status on all clusters
 
     ${junit_cmd} test_submariner_connection_cluster_a
 
@@ -5765,13 +5858,19 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_c
 
+    # Testing SubCtl (Submariner CLI tool) info on all clusters
+
     ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+
+    # Testing IPSec status on all clusters
 
     ${junit_cmd} test_ipsec_status_cluster_a
 
     [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_b
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_c
+
+    # Testing GlobalNet connectivity (if enabled) on all clusters
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
@@ -5782,7 +5881,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_globalnet_status_cluster_c
     fi
 
-    # Test service-discovery (lighthouse)
+    # Test service-discovery (lighthouse) on all clusters
 
     ${junit_cmd} test_lighthouse_status_cluster_a
 
@@ -5790,8 +5889,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_lighthouse_status_cluster_c
 
-    ### Running connectivity tests between the On-Premise and Public clusters,
-    # To validate that now Submariner made the connection possible.
+    ### Running connectivity tests between the clusters ###
+    # (Validating that now Submariner made the connection possible)
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
@@ -5824,7 +5923,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
-    # Test the new netshoot and headless nginx service discovery
+    # Test the new netshoot and headless Nginx service-discovery
 
     if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
 
@@ -5975,7 +6074,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   "
 
   if [[ -n "$REPORT_FILE" ]] ; then
-    echo "# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
+    echo -e "\n# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
     REPORT_FILE="$(basename ${REPORT_FILE// /_})"
   fi
 
@@ -5985,7 +6084,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 # ------------------------------------------
 
 
-echo "# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
+echo -e "\n# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
 [[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
 TITLE "Set Html report headlines with important test and environment info"
@@ -5993,7 +6092,7 @@ html_report_headlines=""
 
 if [[ -s "$POLARION_RESULTS" ]] ; then
   headline="Polarion results:"
-  echo "# ${headline}"
+  echo -e "\n# ${headline}"
   cat "$POLARION_RESULTS"
 
   html_report_headlines+="<b>${headline}</b>
@@ -6014,7 +6113,7 @@ done
 
 if [[ -s "$SUBMARINER_IMAGES" ]] ; then
   headline="Submariner images:"
-  echo "# ${headline}"
+  echo -e "\n# ${headline}"
   cat "$SUBMARINER_IMAGES"
 
   html_report_headlines+="
@@ -6028,7 +6127,7 @@ fi
   log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
 
   # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tu *.html | head -1)}"
+  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}"
 
 } || :
 
@@ -6044,11 +6143,9 @@ fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
 
-# export_active_clusters_kubeconfig
-
 # Artifact OCP clusters kubeconfigs and logs
 if [[ -s "$CLUSTER_A_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster A"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
   cp -f "$KUBECONF_HUB" "kubconf_${CLUSTER_A_NAME}" || :
 
@@ -6057,7 +6154,7 @@ if [[ -s "$CLUSTER_A_YAML" ]] ; then
 fi
 
 if [[ -s "$CLUSTER_B_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster B"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
   cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}" || :
 
@@ -6066,7 +6163,7 @@ if [[ -s "$CLUSTER_B_YAML" ]] ; then
 fi
 
 if [[ -s "$CLUSTER_C_YAML" ]] ; then
-  echo "# Saving kubeconfig and OCP installer log of Cluster C"
+  echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
   cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}" || :
 

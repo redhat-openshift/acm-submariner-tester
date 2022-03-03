@@ -4,14 +4,17 @@
 # To override variable with an existing environment variable from active session:
 # Change variable assignment format from VAR="value" to VAR="${VAR:-value}"
 
-export WORKDIR=~/submariner-install
+### Workspace vars ###
 
+export WORKDIR=~/submariner-install
 export GOROOT="/usr/local/go"
 export PATH="${GOROOT}/bin:${PATH}"
 export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
-
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
+
+
+### Env and test vars ###
 
 export CLUSTER_A_NAME="user-cloud-project-a" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_A_YAML="${CLUSTER_A_YAML:-${WORKDIR}/setup-cluster-a.yaml}"
@@ -33,7 +36,18 @@ export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
 export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
-# For AWS
+# Do not use the same IPSEC port numbers multiple times in one project
+export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}
+export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-500}
+export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
+
+export TEST_NS="${TEST_NS:-test-submariner}"
+export MULTI_CLUSTER_DOMAIN="clusterset.local"
+export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+
+
+### AWS vars ###
+
 # Wrap credentials with single quotes:
 export AWS_KEY='user-aws-access-key'
 export AWS_SECRET='user-aws-secret-access-key'
@@ -46,7 +60,9 @@ export AWS_ZONE_ID="aws-zone-id"
 export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
 
-# For OpenStack
+
+### OpenStack vars ###
+
 # Wrap credentials with single quotes:
 export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
 export OS_USERNAME='openstack-user'
@@ -56,40 +72,39 @@ export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
 
-# For Google Cloud
+
+### Google vars ###
+
 GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}"
 
-# Do not use the same IPSEC port numbers multiple times in one project
-export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}
-export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-500}
-export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
-export MULTI_CLUSTER_DOMAIN="clusterset.local"
+### OpenShift registry vars ###
 
-### Define the submariner-registries.conf
-# When mirroring from registry.redhat.io to OCP_REGISTRY_URL the user is not identical
-# In this case we must specify the user/namespace in the location
-#
 # The official and staging Redhat products registry, that is accessible on the internet (external)
 export OFFICIAL_REGISTRY="registry.redhat.io"
 export STAGING_REGISTRY="registry.stage.redhat.io"
-#
+
 # Snapshot registry for Redhat product container images that can be accessed within Redhat's internal network (internal, vpn)
 export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
-#
+
 # Snapshot registry for redhat product container images that is accessible on the internet (external)
 export BREW_REGISTRY="brew.registry.redhat.io"
 export REGISTRY_IMAGE_PREFIX="rhacm2"
 export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
 export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 
+# Another official Redhat registry catalog (external)
+export CATALOG_REGISTRY="registry.access.redhat.com"
+export CATALOG_IMAGE_PREFIX="openshift4"
+export CATALOG_IMAGE_IMPORT_PATH="ose-oauth-proxy"
+
 # Wrap credentials with single quotes:
 export REGISTRY_USR='mirror-user'
 export REGISTRY_PWD='mirror-pass'
 export OCP_USR='ocp_user'
 
-export ACM_VER_TAG=${ACM_VER_TAG:-latest}
-export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
+
+### Submariner subscription vars ###
 
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"
@@ -109,23 +124,27 @@ export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
 export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
+export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
 export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
+export SUBM_CHANNEL_PREFIX="alpha-"
 
-# ACM vars
+
+### ACM subscription vars ###
+
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+
+export ACM_VER_TAG=${ACM_VER_TAG:-latest}
 export ACM_SUBSCRIPTION="my-acm-subscription"
 export ACM_CATALOG="my-acm-catalog"
+export ACM_CHANNEL_PREFIX="release-"
 
-# export ACM_VERSION="v2.4.0"
-# export ACM_CHANNEL="release-$(echo ${ACM_VERSION} | cut -d'-' -f1 | cut -c2- | cut -d'.' -f1,2)"
 
-export TEST_NS="${TEST_NS:-test-submariner}"
-export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+### Polarion vars ###
 
 export POLARION_SERVER="polarion.server.name" # without " https:// "
 # Wrap credentials with single quotes:
