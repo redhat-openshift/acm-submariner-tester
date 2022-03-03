@@ -187,7 +187,12 @@ EOF
 
   ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify that the Package Manifest '${operator_name}' includes the required '${catalog_display_name}', channel '${operator_channel}' and version '${operator_version}' before installing the Bundle '${bundle_name}'"
+  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}':
+  Catalog: ${catalog_display_name}
+  Operator: ${operator_name}
+  Channel: ${operator_channel}
+  Version ${operator_version}
+  "
 
   local packagemanifests_status
 
@@ -210,17 +215,23 @@ EOF
 
   TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
 
+  local olm_status
+
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
-  --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
+  --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
   TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
+  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
     FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
     Channel '${operator_channel}', Version '${operator_version}', or OLM deployment"
+  fi
+
+  if [[ "$olm_status" = FAILED ]] ; then
+    BUG "OLM deployment logs have some failures/warnings, please check"
   fi
 
 }

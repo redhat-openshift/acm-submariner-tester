@@ -152,7 +152,7 @@ function install_acm_operators() {
     local acm_channel
     acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
-    TITLE "Install MCE bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
+    TITLE "Install ACM bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
     Catalog: ${ACM_CATALOG}
     Channel: ${mce_channel}
     "
