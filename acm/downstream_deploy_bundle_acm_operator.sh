@@ -139,12 +139,12 @@ function install_acm_operators() {
     local mce_channel
     mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
 
-    TITLE "Install MCE bundle $mce_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
+    TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
     Catalog: ${MCE_CATALOG}
     Channel: ${mce_channel}
     "
 
-    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${ACM_NAMESPACE}"
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${MCE_NAMESPACE}"
     echo -e "\n# ACM $acm_version installation completed"
 
 
@@ -179,16 +179,16 @@ function create_mce_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in ${ACM_NAMESPACE} (catalog ${MCE_CATALOG}) on cluster ${cluster_name}"
+  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in ${MCE_NAMESPACE} (catalog ${MCE_CATALOG}) on cluster ${cluster_name}"
 
   local mce_channel
   mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
 
   # Create Automatic Subscription (channel without a specific version) for MCE operator
-  # create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${ACM_NAMESPACE}"
+  # create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${MCE_NAMESPACE}"
 
   # Create Automatic Subscription with a specific version for MCE operator
-  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_version}" "${ACM_NAMESPACE}"
+  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_version}" "${MCE_NAMESPACE}"
 
   echo -e "\n# ACM Subscription for "${MCE_OPERATOR}" is ready"
 

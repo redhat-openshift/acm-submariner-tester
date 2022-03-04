@@ -147,6 +147,7 @@ export ACM_CHANNEL_PREFIX="release-"
 
 ### MCE subscription vars ###
 
+export MCE_NAMESPACE="mce"
 export MCE_OPERATOR="multicluster-engine"
 export MCE_BUNDLE="multicluster-engine-operator-bundle"
 
