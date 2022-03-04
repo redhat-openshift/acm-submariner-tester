@@ -208,14 +208,34 @@ EOF
   regex="${operator_version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  TITLE "Display OLM and ${bundle_namespace} pods in cluster ${cluster_name}"
+  TITLE "Display running pods in Bundle namespace ${bundle_namespace} in cluster ${cluster_name}"
 
-  ${OC} -n ${bundle_namespace} get pods --ignore-not-found
+  ${OC} -n ${bundle_namespace} get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
+  || packagemanifests_status=FAILED
+
+  if [[ "$packagemanifests_status" = FAILED ]] ; then
+    FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
+    Channel '${operator_channel}', Version '${operator_version}', or Images deployment"
+  fi
+
+}
+
+# ------------------------------------------
+
+function check_olm_in_current_cluster() {
+  ### Check OLM pods and logs ###
+
+  trap_to_debug_commands;
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+  local olm_status
+
+  TITLE "Display OLM pods in cluster ${cluster_name}"
+
   ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
   TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
-
-  local olm_status
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
   --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
@@ -225,13 +245,8 @@ EOF
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
   --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
-  if [[ "$packagemanifests_status" = FAILED ]] ; then
-    FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
-    Channel '${operator_channel}', Version '${operator_version}', or OLM deployment"
-  fi
-
   if [[ "$olm_status" = FAILED ]] ; then
-    BUG "OLM deployment logs have some failures/warnings, please check"
+    FAILURE "OLM deployment logs have some failures/warnings, please check"
   fi
 
 }

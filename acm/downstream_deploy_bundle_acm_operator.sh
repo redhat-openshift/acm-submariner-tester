@@ -160,6 +160,10 @@ function install_acm_operators() {
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
     echo -e "\n# ACM $acm_version installation completed"
 
+    # Check OLM logs
+    # TODO: Should be run as a separate test, so if deploy_ocp_bundle() fails, this will still be executed
+    check_olm_in_current_cluster
+
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
   fi
