@@ -3057,20 +3057,28 @@ function configure_cluster_custom_registry_mirror() {
 
   ${OC} get clusteroperators authentication kube-apiserver
 
-  local ocp_registry_url
-  ocp_registry_url=$(${OC} registry info --internal)
-  local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
+  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner, ACM, and MCE"
 
-  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner (${SUBM_NAMESPACE}) and ACM (${SUBM_NAMESPACE})"
-
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${SUBM_NAMESPACE}"
   ( # subshell to hide commands
     create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
   )
+
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${ACM_NAMESPACE}"
   ( # subshell to hide commands
     create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
   )
 
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${MCE_NAMESPACE}"
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$MCE_NAMESPACE"
+  )
+
   TITLE "Add OCP Registry mirrors to all OCP cluster nodes using MachineConfig"
+
+  local ocp_registry_url
+  ocp_registry_url=$(${OC} registry info --internal)
+  local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
   BUG "Using image tags for ImageContentSourcePolicy resource is not supported" \
   "Create MachineConfig (instead of ImageContentSourcePolicy) to configure registry mirrors on all nodes" \
@@ -3167,6 +3175,9 @@ function add_acm_registry_mirror_to_ocp_node() {
 
     * ${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH} -->
           - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
+
+    * ${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
+          - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}
     "
   fi
 
@@ -3252,7 +3263,51 @@ function add_acm_registry_mirror_to_ocp_node() {
       [[registry.mirror]]
         location = "${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
         insecure = false
+
+    [[registry]]
+      prefix = ""
+      location = "${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+      mirror-by-digest-only = false
+      insecure = false
+      blocked = false
+
+      [[registry.mirror]]
+        location = "${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}-"
+        insecure = false
+
+      [[registry.mirror]]
+        location = "${BREW_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+        insecure = false
+
+      [[registry.mirror]]
+        location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+        insecure = false
 EOF
+
+# Maybe also:
+#
+# [[registry]]
+#   prefix = ""
+#   location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}"
+#   mirror-by-digest-only = true
+#   insecure = false
+#   blocked = false
+#
+#   [[registry.mirror]]
+#     location = "${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+#     insecure = false
+#
+# [[registry]]
+#   prefix = ""
+#   location = "quay.io:443/acm-d"
+#   mirror-by-digest-only = true
+#   insecure = false
+#   blocked = false
+#
+#   [[registry.mirror]]
+#     location = "registry.redhat.io/rhacm2"
+#     insecure = false
+
   )
 
   TITLE "Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"

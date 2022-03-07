@@ -153,9 +153,12 @@ function deploy_ocp_bundle() {
     ${OC} delete is "${bundle_image_name}" -n "${bundle_namespace}" --wait
   fi
 
-  ${OC} import-image "${target_image_path}" --from="${source_image_path}" -n "${bundle_namespace}" --confirm \
-  | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+  # ${OC} import-image "${target_image_path}" --from="${source_image_path}" -n "${bundle_namespace}" --confirm \
+  # | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
+  local cmd="${OC} import-image ${target_image_path} --from=${source_image_path} -n ${bundle_namespace} --confirm"
+
+  watch_and_retry "$cmd" 3m "Image Name:\s+.+${bundle_image_name}:${operator_version}"
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
