@@ -189,10 +189,10 @@ function create_mce_subscription() {
   mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
 
   # Create Automatic Subscription (channel without a specific version) for MCE operator
-  # create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${MCE_NAMESPACE}"
+  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${MCE_NAMESPACE}"
 
-  # Create Automatic Subscription with a specific version for MCE operator
-  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_version}" "${MCE_NAMESPACE}"
+  # # Create Automatic Subscription with a specific version for MCE operator
+  # create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_version}" "${MCE_NAMESPACE}"
 
   echo -e "\n# ACM Subscription for "${MCE_OPERATOR}" is ready"
 
@@ -217,10 +217,10 @@ function create_acm_subscription() {
   acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
 
   # Create Automatic Subscription (channel without a specific version) for ACM operator
-  # create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
+  create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
 
-  # Create Automatic Subscription with a specific version for ACM operator
-  create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_version}" "${ACM_NAMESPACE}"
+  # # Create Automatic Subscription with a specific version for ACM operator
+  # create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_version}" "${ACM_NAMESPACE}"
 
   echo -e "\n# ACM Subscription for "${ACM_OPERATOR}" is ready"
 
