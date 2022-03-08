@@ -3272,41 +3272,13 @@ function add_acm_registry_mirror_to_ocp_node() {
       blocked = false
 
       [[registry.mirror]]
-        location = "${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}-"
-        insecure = false
-
-      [[registry.mirror]]
-        location = "${BREW_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+        location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
         insecure = false
 
       [[registry.mirror]]
         location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
         insecure = false
 EOF
-
-# Maybe also:
-#
-# [[registry]]
-#   prefix = ""
-#   location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}"
-#   mirror-by-digest-only = true
-#   insecure = false
-#   blocked = false
-#
-#   [[registry.mirror]]
-#     location = "${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
-#     insecure = false
-#
-# [[registry]]
-#   prefix = ""
-#   location = "quay.io:443/acm-d"
-#   mirror-by-digest-only = true
-#   insecure = false
-#   blocked = false
-#
-#   [[registry.mirror]]
-#     location = "registry.redhat.io/rhacm2"
-#     insecure = false
 
   )
 
