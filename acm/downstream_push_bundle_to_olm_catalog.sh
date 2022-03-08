@@ -158,7 +158,7 @@ function deploy_ocp_bundle() {
 
   local cmd="${OC} import-image ${target_image_path} --from=${source_image_path} -n ${bundle_namespace} --confirm"
 
-  watch_and_retry "$cmd" 3m "Image Name:\s+.+${bundle_image_name}:${operator_version}"
+  watch_and_retry "$cmd" 3m "Image Name:\s+${bundle_image_name}"
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 

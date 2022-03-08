@@ -5102,7 +5102,6 @@ function test_products_versions() {
 
   # Show Submariner and ACM CSVs (Cluster service versions)
   print_csvs_in_namespace "$SUBM_NAMESPACE"
-  print_csvs_in_namespace "$ACM_NAMESPACE"
 
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
@@ -5128,6 +5127,14 @@ function test_products_versions() {
   #   echo -e "\n### Local registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|') ###"
   #   print_image_info "$img_id"
   # done
+
+  # Show CSVs (Cluster service versions) of ACM and MCE
+  print_csvs_in_namespace "$ACM_NAMESPACE"
+  print_csvs_in_namespace "$MCE_NAMESPACE"
+
+  # Show ACM and MCE images info in the running pods
+  print_images_info_of_namespace_pods "${ACM_NAMESPACE}"
+  print_images_info_of_namespace_pods "${MCE_NAMESPACE}"
 
   echo -e "\n# Current OC user: $(${OC} whoami || : )"
   echo -e "\n# Current Kubeconfig contexts:"
