@@ -835,18 +835,15 @@ function validate_submariner_manifestwork_in_acm_managed_cluster() {
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "5m" || :
-  $cmd |& highlight "$regex" || manifestwork_status=FAILED
+
+  $cmd |& highlight "$regex" || FATAL "Submariner Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
 
   # regex="${cluster_id}-klusterlet-addon-appmgr"
   regex="klusterlet-addon-appmgr"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
   local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "15m" || :
-  $cmd |& highlight "$regex" || manifestwork_status=FAILED
-
-  if [[ "$manifestwork_status" = FAILED ]] ; then
-    FATAL "Submariner Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
-  fi
+  $cmd |& highlight "$regex" || FAILURE "Klusterlet Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
 
 }
 
