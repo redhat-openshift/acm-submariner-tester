@@ -186,7 +186,7 @@ EOF
   echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
   ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
 
@@ -238,18 +238,23 @@ function check_olm_in_current_cluster() {
 
   ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
-  TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
+  TITLE "Check OLM Operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
   --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
-  TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
+  TITLE "Check OLM Catalog deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
   --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
+  TITLE "Check MultiClusterHub Operator deployment logs in cluster ${cluster_name}"
+
+  ${OC} logs deploy/multiclusterhub-operator \
+  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+
   if [[ "$olm_status" = FAILED ]] ; then
-    FAILURE "OLM deployment logs have some failures/warnings, please check"
+    FAILURE "OLM deployment logs have some failures/warnings, please investigate"
   fi
 
 }
@@ -355,14 +360,14 @@ EOF
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
-  local acm_subscription
-  acm_subscription="`mktemp`_acm_subscription"
-  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$acm_subscription'"
+  local subscription_data
+  subscription_data="`mktemp`_subscription_data"
+  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$subscription_data'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
-  watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
+  watch_and_retry "$cmd ; grep -E '$regex' $subscription_data" "$duration" || :
 
-  if cat $acm_subscription |& highlight "$regex" ; then
+  if cat $subscription_data |& highlight "$regex" ; then
 
     local installPlan
     installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
