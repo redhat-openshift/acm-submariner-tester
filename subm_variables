@@ -111,7 +111,7 @@ export QUAY_USR='quay-user'
 export QUAY_PWD='quay-pass'
 
 
-### Submariner subscription vars ###
+### Submariner resources vars ###
 
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"
@@ -137,7 +137,7 @@ export SUBM_CATALOG="my-submariner-catalog"
 export SUBM_CHANNEL_PREFIX="alpha-"
 
 
-### ACM subscription vars ###
+### ACM resources vars ###
 
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
@@ -145,6 +145,7 @@ export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+export ACM_INSTANCE="multiclusterhub"
 
 export ACM_VER_TAG=${ACM_VER_TAG:-latest}
 # export ACM_SUBSCRIPTION="my-acm-subscription"
@@ -152,11 +153,12 @@ export ACM_CATALOG="my-acm-catalog"
 export ACM_CHANNEL_PREFIX="release-"
 
 
-### MCE subscription vars ###
+### MCE resources vars ###
 
 export MCE_NAMESPACE="mce" # instead of "multicluster-engine"
 export MCE_OPERATOR="multicluster-engine"
 export MCE_BUNDLE="multicluster-engine-operator-bundle"
+export MCE_INSTANCE="multiclusterengine"
 
 export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
 export MCE_CATALOG="my-mce-catalog"

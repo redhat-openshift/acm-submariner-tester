@@ -45,7 +45,7 @@ function remove_acm_managed_cluster() {
 
 function clean_acm_namespace_and_resources() {
 ### Uninstall ACM Hub ###
-  PROMPT "Cleaning previous ACM (multiclusterhub, Subscriptions, clusterserviceversion, Namespace) on cluster A"
+  PROMPT "Cleaning previous ACM (${ACM_INSTANCE}, Subscriptions, CSVs, Namespace) on cluster A"
   trap_to_debug_commands;
 
   # Run on ACM hub cluster (Manager)
@@ -75,21 +75,25 @@ function clean_acm_namespace_and_resources() {
   TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM in cluster ${cluster_name}"
 
   delete_crds_by_name "open-cluster-management" || :
+  ${OC} delete MultiClusterEngine --all --wait || :
   ${OC} delete managedcluster --all --wait || :
   ${OC} delete validatingwebhookconfiguration --all --wait || :
   ${OC} delete manifestwork --all --wait || :
 
-  TITLE "Delete all ACM resources in Namespace '${ACM_NAMESPACE}' in cluster ${cluster_name}"
+  TITLE "Delete all MCE and ACM resources in cluster ${cluster_name}"
 
+  ${OC} delete subs --all -n ${MCE_NAMESPACE} --wait || :
   ${OC} delete subs --all -n ${ACM_NAMESPACE} --wait || :
   ${OC} delete catalogsource --all -n ${ACM_NAMESPACE} --wait || :
   ${OC} delete is --all -n ${ACM_NAMESPACE} --wait || :
-  ${OC} delete multiclusterhub --all -n ${ACM_NAMESPACE} --wait || :
-  ${OC} delete clusterserviceversion --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete ${ACM_INSTANCE} --all -n ${ACM_NAMESPACE} --wait || :
+  ${OC} delete csv --all -n ${MCE_NAMESPACE} --wait || :
+  ${OC} delete csv --all -n ${ACM_NAMESPACE} --wait || :
   ${OC} delete cm --all -n ${ACM_NAMESPACE} --wait || :
   ${OC} delete service --all -n ${ACM_NAMESPACE} --wait || :
 
   ${OC} delete namespace ${ACM_NAMESPACE} || :
+  ${OC} delete namespace ${MCE_NAMESPACE} || :
   ${OC} wait --for=delete namespace ${ACM_NAMESPACE} || :
 
   # force_delete_namespace "${ACM_NAMESPACE}" 10m || :
@@ -124,7 +128,7 @@ function install_acm_operators() {
   PROMPT "Install ACM $acm_version and MCE $mce_version bundles on the Hub cluster ${cluster_name}"
 
   local acm_current_version
-  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}')" || :
 
   # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
@@ -228,6 +232,58 @@ function create_acm_subscription() {
 
 # ------------------------------------------
 
+function create_multicluster_engine() {
+  ### Create MCE instance ###
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create Multi-Cluster Engine on cluster ${cluster_name}"
+
+  echo -e "\n# Verify that the MultiClusterEngine CRD exists in cluster ${cluster_name}"
+
+  cmd="${OC} get crd multiclusterengines.multicluster.openshift.io"
+  watch_and_retry "$cmd" 5m || FATAL "MultiClusterEngine CRD does not exist in cluster ${cluster_name}"
+
+  TITLE "Create the MultiClusterEngine in namespace ${MCE_NAMESPACE} on cluster ${cluster_name}"
+
+  cat <<EOF | ${OC} apply -f -
+  apiVersion: multicluster.openshift.io/v1
+  kind: MultiClusterEngine
+  metadata:
+    name: ${MCE_INSTANCE}
+    namespace: ${MCE_NAMESPACE}
+  spec: {}
+EOF
+
+  {
+    TITLE "Wait for MCE instance '${MCE_INSTANCE}' to be available"
+    local duration=15m
+    cmd="${OC} get MultiClusterEngine ${MCE_INSTANCE} -n ${MCE_NAMESPACE}"
+    watch_and_retry "$cmd" "$duration" "Available"
+
+  } || acm_status=FAILED
+
+  TITLE "All MultiClusterEngine resources status:"
+  ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
+
+  if [[ "$acm_status" = FAILED ]] ; then
+    FATAL "MultiClusterEngine is not ready after $duration"
+  fi
+
+  local mce_current_version
+  mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" ${MCE_INSTANCE} -o jsonpath='{.status.currentVersion}')" || :
+
+  echo -e "\n# MultiClusterEngine version '${mce_current_version}' is installed"
+  # TITLE "MCE ${mce_current_version} console url: $(${OC} get routes -n ${MCE_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
+
+}
+
+# ------------------------------------------
+
 function create_acm_multiclusterhub() {
   ### Create ACM MultiClusterHub instance ###
   trap_to_debug_commands;
@@ -241,7 +297,7 @@ function create_acm_multiclusterhub() {
 
   echo -e "\n# Verify that the MultiClusterHub CRD exists in cluster ${cluster_name}"
 
-  cmd="${OC} get crds multiclusterhubs.operator.open-cluster-management.io"
+  cmd="${OC} get crd multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
 
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
@@ -250,7 +306,7 @@ function create_acm_multiclusterhub() {
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
   metadata:
-    name: multiclusterhub
+    name: ${ACM_INSTANCE}
     namespace: ${ACM_NAMESPACE}
     annotations: {}
   spec:
@@ -263,9 +319,9 @@ EOF
     cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
     watch_and_retry "$cmd" "$duration"
 
-    TITLE "Wait for multiclusterhub to be ready"
-    # cmd="${OC} get MultiClusterHub multiclusterhub -o jsonpath='{.status.phase}'"
-    cmd="${OC} get MultiClusterHub multiclusterhub -n ${ACM_NAMESPACE}"
+    TITLE "Wait for ACM Instance '${ACM_INSTANCE}' to be running"
+    # cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -o jsonpath='{.status.phase}'"
+    cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -n ${ACM_NAMESPACE}"
     watch_and_retry "$cmd" "$duration" "Running"
 
   } || acm_status=FAILED
@@ -278,7 +334,7 @@ EOF
   fi
 
   local acm_current_version
-  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" multiclusterhub -o jsonpath='{.status.currentVersion}')" || :
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}')" || :
 
   TITLE "ACM ${acm_current_version} console url: $(${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
@@ -398,7 +454,7 @@ function create_new_managed_cluster_in_acm_hub() {
 
   ${OC} label namespace ${cluster_id} cluster.open-cluster-management.io/managedCluster=${cluster_id} --overwrite
 
-  TITLE "Create ACM managed cluster by ID: $cluster_id, Type: $cluster_type"
+  TITLE "Create ACM ManagedCluster by ID: $cluster_id, Type: $cluster_type"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
@@ -415,7 +471,7 @@ function create_new_managed_cluster_in_acm_hub() {
     leaseDurationSeconds: 60
 EOF
 
-  ### TODO: Wait for managedcluster
+  ### TODO: Wait for the new ManagedCluster $cluster_id
 
 
   TITLE "Create ACM klusterlet Addon config for cluster '$cluster_id'"

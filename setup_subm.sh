@@ -5760,6 +5760,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
+    ${junit_cmd} create_multicluster_engine
+
     ${junit_cmd} create_acm_multiclusterhub
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
