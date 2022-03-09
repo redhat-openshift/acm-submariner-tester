@@ -325,6 +325,13 @@ function BUG() {
   [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
 }
 
+# ------------------------------------------
+
+# Function to check if version (e.g. v2.5) is greater or equal to another version (e.g. v2.4.1)
+function check_version_greater_or_equal() {
+  # If version input $1 is lower than version input $2 (digits and dots only), then the returned exit code will be 1
+  printf '%s\n%s\n' "${2//[!0-9.]/}" "${1//[!0-9.]/}" | sort --check=quiet --version-sort
+}
 
 # ------------------------------------------
 

@@ -25,7 +25,7 @@ function remove_acm_managed_cluster() {
   ${OC} get managedcluster -o wide || :
 
   if ${OC} get managedcluster ${cluster_id} ; then
-    ${OC} delete managedcluster ${cluster_id} || force_managedcluster_delete=TRUE
+    ${OC} delete managedcluster ${cluster_id} --timeout=30s || force_managedcluster_delete=TRUE
 
     if [[ "$force_managedcluster_delete" = TRUE && $(${OC} get managedcluster ${cluster_id}) ]]; then
       TITLE "Resetting finalizers of managed cluster '${cluster_id}' and force deleting its namespace"
@@ -826,22 +826,29 @@ function validate_submariner_manifestwork_in_acm_managed_cluster() {
   trap_to_debug_commands;
 
   local cluster_id="${1}"
-
   local manifestwork_status
-
   local regex
+  local cmd
 
+  # Check Submariner manifests
   regex="submariner"
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
-  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "5m" || :
-
   $cmd |& highlight "$regex" || FATAL "Submariner Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
 
-  # regex="${cluster_id}-klusterlet-addon-appmgr"
-  regex="klusterlet-addon-appmgr"
+
+  # Check Klusterlet manifests
+
+  # For ACM > 2.5 : the addon manifest was renamed
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+    regex="addon-application-manager-deploy"
+  else
+    regex="klusterlet-addon-appmgr"
+  fi
+
   TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
-  local cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
+  cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "15m" || :
   $cmd |& highlight "$regex" || FAILURE "Klusterlet Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
 
