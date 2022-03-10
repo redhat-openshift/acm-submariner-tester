@@ -17,7 +17,7 @@ function remove_acm_managed_cluster() {
 
   PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
 
-  # Following steps should be run on ACM hub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
@@ -44,11 +44,11 @@ function remove_acm_managed_cluster() {
 # ------------------------------------------
 
 function clean_acm_namespace_and_resources() {
-### Uninstall ACM Hub ###
+### Uninstall ACM MultiClusterHub ###
   PROMPT "Cleaning previous ACM (${ACM_INSTANCE}, Subscriptions, CSVs, Namespace) on cluster A"
   trap_to_debug_commands;
 
-  # Run on ACM hub cluster (Manager)
+  # Run on ACM MultiClusterHub cluster (Manager)
   export KUBECONFIG="${KUBECONF_HUB}"
 
   local acm_uninstaller_url="https://raw.githubusercontent.com/open-cluster-management/deploy/master/multiclusterhub/uninstall.sh"
@@ -58,7 +58,7 @@ function clean_acm_namespace_and_resources() {
   chmod +x "${acm_uninstaller_file}"
 
   export TARGET_NAMESPACE="${ACM_NAMESPACE}"
-  ${acm_uninstaller_file} || FAILURE "Uninstalling ACM Hub did not complete successfully"
+  ${acm_uninstaller_file} || FAILURE "Uninstalling ACM MultiClusterHub did not complete successfully"
 
   # TODO: Use script from https://github.com/open-cluster-management/acm-qe/wiki/Cluster-Life-Cycle-Component
     # https://raw.githubusercontent.com/open-cluster-management/deploy/master/hack/cleanup-managed-cluster.sh
@@ -128,7 +128,7 @@ function install_acm_operators() {
   PROMPT "Install ACM $acm_version and MCE $mce_version bundles on the Hub cluster ${cluster_name}"
 
   local acm_current_version
-  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}')" || :
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
@@ -327,10 +327,16 @@ EOF
   } || acm_status=FAILED
 
   TITLE "All MultiClusterHub resources status:"
+
   ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
   if [[ "$acm_status" = FAILED ]] ; then
-    FATAL "ACM Hub is not ready after $duration"
+    TITLE "Checking for errors in MultiClusterHub deployment logs in cluster ${cluster_name}"
+
+    ${OC} logs deploy/multiclusterhub-operator \
+    --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
+
+    FATAL "ACM MultiClusterHub is not ready after $duration"
   fi
 
   local acm_current_version
@@ -351,7 +357,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
   acm_resource="`mktemp`_acm_resource"
   local duration=5m
 
-  # Run on ACM hub cluster
+  # Run on ACM MultiClusterHub cluster
   export KUBECONFIG="${KUBECONF_HUB}"
 
   cmd="${OC} api-resources | grep ManagedClusterSet"
@@ -444,7 +450,7 @@ function create_new_managed_cluster_in_acm_hub() {
   local cluster_id="${1}"
   local cluster_type="${2:-Amazon}" # temporarily use Amazon as default cluster type
 
-  # Run on ACM hub cluster (Manager)
+  # Run on ACM MultiClusterHub cluster (Manager)
   export KUBECONFIG="${KUBECONF_HUB}"
 
   TITLE "Create the namespace for the managed cluster: ${cluster_id}"
@@ -606,7 +612,7 @@ function install_submariner_via_acm_managed_cluster() {
 
   PROMPT "Install Submariner $SUBM_VER_TAG via ACM on managed cluster: $cluster_id"
 
-  # Following steps should be run on ACM hub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
@@ -832,10 +838,10 @@ function validate_submariner_manifestwork_in_acm_managed_cluster() {
 
   # Check Submariner manifests
   regex="submariner"
-  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM MultiClusterHub under namespace ${cluster_id}"
   cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "5m" || :
-  $cmd |& highlight "$regex" || FATAL "Submariner Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
+  $cmd |& highlight "$regex" || FATAL "Submariner Manifestworks were not created in ACM MultiClusterHub for the cluster id: $cluster_id"
 
 
   # Check Klusterlet manifests
@@ -847,10 +853,10 @@ function validate_submariner_manifestwork_in_acm_managed_cluster() {
     regex="klusterlet-addon-appmgr"
   fi
 
-  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM Hub under namespace ${cluster_id}"
+  TITLE "Wait for ManifestWork of '${regex}' to be ready in the ACM MultiClusterHub under namespace ${cluster_id}"
   cmd="${OC} get manifestwork -n ${cluster_id} --ignore-not-found"
   watch_and_retry "$cmd | grep -E '$regex'" "15m" || :
-  $cmd |& highlight "$regex" || FAILURE "Klusterlet Manifestworks were not created in ACM Hub for the cluster id: $cluster_id"
+  $cmd |& highlight "$regex" || FAILURE "Klusterlet Manifestworks were not created in ACM MultiClusterHub for the cluster id: $cluster_id"
 
 }
 
@@ -865,7 +871,7 @@ function validate_submariner_config_in_acm_managed_cluster() {
 
   local config_status
 
-  TITLE "Verify SubmarinerConfig '${SUBM_OPERATOR}' in the ACM Hub under namespace ${cluster_id}"
+  TITLE "Verify SubmarinerConfig '${SUBM_OPERATOR}' in the ACM MultiClusterHub under namespace ${cluster_id}"
 
   ${OC} get submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || :
 
@@ -895,7 +901,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
 
   local managed_cluster_status
 
-  TITLE "Verify ManagedClusterAddons '${SUBM_OPERATOR}' in the ACM Hub under namespace ${cluster_id}"
+  TITLE "Verify ManagedClusterAddons '${SUBM_OPERATOR}' in ACM MultiClusterHub under namespace ${cluster_id}"
 
   ${OC} get managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} || :
 

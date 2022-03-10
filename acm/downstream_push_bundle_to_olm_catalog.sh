@@ -248,11 +248,6 @@ function check_olm_in_current_cluster() {
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
   --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
-  TITLE "Check MultiClusterHub Operator deployment logs in cluster ${cluster_name}"
-
-  ${OC} logs deploy/multiclusterhub-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
-
   if [[ "$olm_status" = FAILED ]] ; then
     FAILURE "OLM deployment logs have some failures/warnings, please investigate"
   fi
