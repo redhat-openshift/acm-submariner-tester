@@ -645,11 +645,11 @@ function install_submariner_via_acm_managed_cluster() {
   # Validate manifestwork
   validate_submariner_manifestwork_in_acm_managed_cluster "$cluster_id"
 
-  # Validate submarinerconfig
-  validate_submariner_config_in_acm_managed_cluster "$cluster_id"
-
   # Validate managedclusteraddons
   validate_submariner_addon_status_in_acm_managed_cluster "$cluster_id"
+  
+  # Validate submarinerconfig
+  validate_submariner_config_in_acm_managed_cluster "$cluster_id"
 
 }
 
