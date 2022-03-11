@@ -817,6 +817,8 @@ EOF
     installNamespace: ${SUBM_NAMESPACE}
 EOF
 
+  ${OC} describe managedclusteraddons -n ${cluster_id} ${SUBM_OPERATOR}
+
   TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
   # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
@@ -885,6 +887,9 @@ function validate_submariner_config_in_acm_managed_cluster() {
   ${OC} describe submarinerconfig ${SUBM_OPERATOR} -n ${cluster_id} || config_status=FAILED
 
   if [[ "$config_status" = FAILED ]] ; then
+    ${OC} logs deploy/submariner-addon \
+    --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
+
     FATAL "SubmarinerConfig resource has unhealthy conditions in ACM cluster id: $cluster_id"
   fi
 

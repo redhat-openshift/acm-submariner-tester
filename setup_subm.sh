@@ -5297,6 +5297,8 @@ function print_resources_and_pod_logs() {
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
+  print_pod_logs_in_namespace "$cluster_name" "$ACM_NAMESPACE" "app=submariner-addon"
+
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
 
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "component=kube-controller-manager"
