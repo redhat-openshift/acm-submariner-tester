@@ -752,20 +752,6 @@ function configure_submariner_addon_for_openstack() {
 
 # ------------------------------------------
 
-# TODO: Create Broker :
-#
-# clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
-#
-# cat <<EOF | oc apply -f -
-# apiVersion: submariner.io/v1alpha1
-# kind: Broker
-# metadata:
-#   name: submariner-broker
-#   namespace: ${clusterset_broker_namespace}
-# spec:
-#   globalnetEnabled: <true/false>
-# EOF
-
 
 function create_submariner_config_in_acm_managed_cluster() {
   ### Create the SubmarinerConfig on the managed cluster_id with specified submariner version ###
@@ -866,7 +852,7 @@ function validate_submariner_manifestwork_in_acm_managed_cluster() {
 
   # Check Klusterlet manifests
 
-  # For ACM > 2.5 : the addon manifest was renamed
+  # In ACM 2.5 the addon manifest was renamed to "addon-application-manager-deploy"
   if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
     regex="addon-application-manager-deploy"
   else

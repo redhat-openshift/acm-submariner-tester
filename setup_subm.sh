@@ -719,7 +719,7 @@ function show_test_plan() {
     - set_join_parameters_for_cluster_b / c
     - append_custom_images_to_join_cmd_cluster_a
     - append_custom_images_to_join_cmd_cluster_b / c
-    - install_broker_cluster_a
+    - install_broker_via_subctl_on_cluster_a
     - test_broker_before_join
     - run_subctl_join_on_cluster_a
     - run_subctl_join_on_cluster_b / c
@@ -2515,7 +2515,7 @@ function append_custom_images_to_join_cmd_file() {
 
 # ------------------------------------------
 
-function install_broker_cluster_a() {
+function install_broker_via_subctl_on_cluster_a() {
 ### Installing Submariner Broker on OCP cluster A (public) ###
   echo -e "\n# TODO: Should test broker deployment also on different Public cluster (C), rather than on Public cluster A."
   echo -e "\n# TODO: Call kubeconfig of broker cluster"
@@ -2556,6 +2556,51 @@ function install_broker_cluster_a() {
   "https://github.com/submariner-io/submariner-website/issues/483"
 
   $DEPLOY_CMD
+}
+
+# ------------------------------------------
+
+function install_broker_via_api_on_cluster() {
+  ### Create the Submariner Broker via API - Only on the first cluster (usually the Hub) ###
+
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  local submariner_version="${2:-$SUBM_VER_TAG}"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create the Submariner Broker via API on cluster ${cluster_name}"
+
+  # Since Submariner 0.12 it is required to create Broker CRD
+  if check_version_greater_or_equal "$submariner_version" "0.12" ; then
+
+    local clusterset_broker_namespace
+    clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner \
+    -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
+
+    local enable_globalnet="true"
+    [[ "$globalnet" =~ ^(y|yes)$ ]] || enable_globalnet="false"
+
+    TITLE "Creating the Submariner Broker resource in namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+
+    cat <<EOF | oc apply -f -
+    apiVersion: submariner.io/v1alpha1
+    kind: Broker
+    metadata:
+      name: submariner-broker
+      namespace: ${clusterset_broker_namespace}
+    spec:
+      globalnetEnabled: ${enable_globalnet}
+EOF
+
+  else
+    echo -e "\n# Submariner version $submariner_version is less than 0.12 - Broker creation is not supported via API"
+  fi
+
 }
 
 # ------------------------------------------
@@ -3980,6 +4025,8 @@ function export_nginx_default_namespace_managed_cluster() {
 
   local current_namespace
   current_namespace="$(${OC} config view -o jsonpath='{.contexts[].context.namespace}')"
+
+  ${OC} config get-contexts
 
   TITLE "# The ServiceExport should be created on the default Namespace '${current_namespace}', as configured in KUBECONFIG:
   \n# $KUBECONFIG"
@@ -5808,7 +5855,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    ${junit_cmd} install_broker_cluster_a
+    ${junit_cmd} install_broker_via_subctl_on_cluster_a
 
     ${junit_cmd} test_broker_before_join
 
@@ -5821,6 +5868,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   else
 
     ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters as OCP bundle  ###
+
+    ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
 
     ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
 
