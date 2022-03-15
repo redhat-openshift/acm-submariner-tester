@@ -113,19 +113,67 @@ function print_major_minor_version() {
 
 # ------------------------------------------
 
-function install_acm_operators() {
+function install_mce_operator() {
+  ### Install MCE operator - It should be run only on the Hub cluster ###
+  trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local mce_version="v${2:-$MCE_VER_TAG}" # e.g. v2.2.0
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Install MCE $mce_version bundle on the Hub cluster ${cluster_name}"
+
+  # TODO: Move the following logic into deploy_ocp_bundle
+
+  local mce_current_version
+  mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" ${MCE_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
+
+  # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
+  if [[ "$mce_version" != "$mce_current_version" ]] ; then
+
+    if [[ -z "$mce_current_version" ]] ; then
+      echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
+    else
+      echo -e "\n# MCE $mce_current_version is already installed on current cluster ${cluster_name} - Re-installing MCE $mce_version"
+    fi
+
+    local mce_channel
+    mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+
+    TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
+    Catalog: ${MCE_CATALOG}
+    Channel: ${mce_channel}
+    "
+
+    # Deploy MCE operator as an OCP bundle
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${MCE_NAMESPACE}"
+    echo -e "\n# MCE $mce_version installation completed"
+
+  else
+    TITLE "MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
+  fi
+
+}
+
+# ------------------------------------------
+
+function install_acm_operator() {
   ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
   local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
-  local mce_version="v${2:-$MCE_VER_TAG}" # e.g. v2.2.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Install ACM $acm_version and MCE $mce_version bundles on the Hub cluster ${cluster_name}"
+  PROMPT "Install ACM $acm_version bundle on the Hub cluster ${cluster_name}"
+
+  # TODO: Move the following logic into deploy_ocp_bundle
 
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
@@ -139,19 +187,6 @@ function install_acm_operators() {
       echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
     fi
 
-    # TODO: Run only if ACM version > 2.5: Need to deploy MCE operator before ACM operator
-    local mce_channel
-    mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
-
-    TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
-    Catalog: ${MCE_CATALOG}
-    Channel: ${mce_channel}
-    "
-
-    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${MCE_NAMESPACE}"
-    echo -e "\n# ACM $acm_version installation completed"
-
-
     # Deploy ACM operator as an OCP bundle
     local acm_channel
     acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
@@ -163,10 +198,6 @@ function install_acm_operators() {
 
     deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
     echo -e "\n# ACM $acm_version installation completed"
-
-    # Check OLM logs
-    # TODO: Should be run as a separate test, so if deploy_ocp_bundle() fails, this will still be executed
-    check_olm_in_current_cluster
 
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"

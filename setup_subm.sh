@@ -5802,17 +5802,29 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
+    # Since ACM 2.5 it is required to pre-install MCE before ACM
+
+    if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+
+      ${junit_cmd} install_mce_operator "$MCE_VER_TAG"
+
+      ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+
+      ${junit_cmd} create_multicluster_engine
+
+    fi
+
     # Setup ACM Hub
 
-    ${junit_cmd} install_acm_operators # "$ACM_VER_TAG" "$MCE_VER_TAG"
-
-    ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+    ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
-    ${junit_cmd} create_multicluster_engine
+    ${junit_cmd} check_olm_in_current_cluster
 
     ${junit_cmd} create_acm_multiclusterhub
+
+    # Setup ACM Managed Clusters
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
 
