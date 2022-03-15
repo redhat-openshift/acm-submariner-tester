@@ -1585,9 +1585,9 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
+  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or accessed more than 1 day ago
   touch -a "${WORKDIR}/${http_sec_name}"
-  if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
+  if find "${WORKDIR}/${http_sec_name}" \( -atime +1 -o -empty \) | grep . ; then
     echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
@@ -4158,6 +4158,7 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
+# TODO: Should be refactored for GlobalNet v2 - Since Submariner 0.12
 function test_global_ip_created_for_svc_or_pod() {
   # Check that the Service or Pod was annotated with GlobalNet IP
   # Set external variable GLOBAL_IP if there's a GlobalNet IP
@@ -4243,7 +4244,7 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
+    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
@@ -4262,8 +4263,8 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS})"
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on Nginx service (${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS})"
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on OCP cluster A (public) should get a GlobalNet IP"
@@ -4274,8 +4275,8 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod pod "$netshoot_pod_cluster_a" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
+  test_global_ip_created_for_svc_or_pod pod "$netshoot_pod_cluster_a" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
   netshoot_global_ip="$GLOBAL_IP"
 
   echo -e "\n# TODO: Ping to the netshoot_global_ip"
@@ -4388,8 +4389,8 @@ function test_new_netshoot_global_ip_cluster_a() {
 
   # Should fail if NEW_NETSHOOT_CLUSTER_A was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${NEW_NETSHOOT_CLUSTER_A}${TEST_NS:+ in $TEST_NS})"
+  test_global_ip_created_for_svc_or_pod pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on NEW Netshoot Pod (${NEW_NETSHOOT_CLUSTER_A}${TEST_NS:+ in $TEST_NS})"
 }
 
 # ------------------------------------------
@@ -4428,7 +4429,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS || :
   [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   echo -e "\n# TODO: Ping to the new_nginx_global_ip"
