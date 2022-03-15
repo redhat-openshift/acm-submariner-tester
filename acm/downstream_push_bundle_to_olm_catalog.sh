@@ -230,8 +230,12 @@ function check_olm_in_current_cluster() {
 
   trap_to_debug_commands;
 
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
+
   local olm_status
 
   TITLE "Display OLM pods in cluster ${cluster_name}"
@@ -377,7 +381,7 @@ EOF
 
   TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
 
-  ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
+  ${OC} get sub -n "${subscription_namespace}" -o yaml --ignore-not-found
   ${OC} get installplan -n "${subscription_namespace}" --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found

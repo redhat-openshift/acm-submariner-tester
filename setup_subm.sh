@@ -4024,12 +4024,17 @@ function export_nginx_default_namespace_managed_cluster() {
   configure_namespace_for_submariner_tests
 
   local current_namespace
-  current_namespace="$(${OC} config view -o jsonpath='{.contexts[].context.namespace}')"
+  current_namespace="$(${OC} config view --minify -o jsonpath='{..namespace}')"
+
+  TITLE "KUBECONFIG current context is set to the namespace '${current_namespace}', which should include Ngnix service '$NGINX_CLUSTER_BC'"
 
   ${OC} config get-contexts
 
-  TITLE "# The ServiceExport should be created on the default Namespace '${current_namespace}', as configured in KUBECONFIG:
-  \n# $KUBECONFIG"
+  ${OC} get svc -o wide
+
+  ${OC} describe svc "$NGINX_CLUSTER_BC"
+
+  TITLE "The ServiceExport should be created in the current Namespace '${current_namespace}', if exporting service without specifying a Namespace:"
 
   export_service_in_lighthouse "$NGINX_CLUSTER_BC"
 }
@@ -5820,7 +5825,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
-    ${junit_cmd} check_olm_in_current_cluster
+    ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
     ${junit_cmd} create_acm_multiclusterhub
 
