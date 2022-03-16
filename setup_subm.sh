@@ -4044,7 +4044,7 @@ function export_nginx_default_namespace_managed_cluster() {
   "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
   # Workaround:
   export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
-  
+
 }
 
 # ------------------------------------------
@@ -5533,15 +5533,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
-
-    # Verify cluster A status after OCP reset/create, and add elevated user and context
-
-    ${junit_cmd} update_kubeconfig_context_cluster_a
-
-    ${junit_cmd} test_kubeconfig_cluster_a
-
-    ${junit_cmd} add_elevated_user_to_cluster_a
-
     ### END of Cluster A Setup ###
 
 
@@ -5572,14 +5563,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
 
       fi
-
-      # Verify cluster B status after OCP reset/create, and add elevated user and context
-
-      ${junit_cmd} update_kubeconfig_context_cluster_b
-
-      ${junit_cmd} test_kubeconfig_cluster_b
-
-      ${junit_cmd} add_elevated_user_to_cluster_b
 
     fi
     ### END of Cluster B Setup ###
@@ -5615,14 +5598,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      # Verify cluster C status after OCP reset/create, and add elevated user and context
-
-      ${junit_cmd} update_kubeconfig_context_cluster_c
-
-      ${junit_cmd} test_kubeconfig_cluster_c
-
-      ${junit_cmd} add_elevated_user_to_cluster_c
-
     fi
     ### END of Cluster C Setup ###
 
@@ -5630,6 +5605,36 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # It will be skipped if using --skip-tests (except for pkg unit-tests, that does not require submariner deployment)
 
     if [[ ! "$SKIP_TESTS" =~ (all(,|$))+ ]] ; then
+
+      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+
+      ${junit_cmd} update_kubeconfig_context_cluster_a
+
+      ${junit_cmd} test_kubeconfig_cluster_a
+
+      ${junit_cmd} add_elevated_user_to_cluster_a
+
+      # Verify cluster B (if it is expected to be an active cluster)
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        ${junit_cmd} update_kubeconfig_context_cluster_b
+
+        ${junit_cmd} test_kubeconfig_cluster_b
+
+        ${junit_cmd} add_elevated_user_to_cluster_b
+
+      fi
+
+      # Verify cluster C (if it is expected to be an active cluster)
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        ${junit_cmd} update_kubeconfig_context_cluster_c
+
+        ${junit_cmd} test_kubeconfig_cluster_c
+
+        ${junit_cmd} add_elevated_user_to_cluster_c
+
+      fi
 
       ### Cleanup Submariner from all clusters ###
 
