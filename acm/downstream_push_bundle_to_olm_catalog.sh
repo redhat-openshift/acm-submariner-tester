@@ -238,7 +238,7 @@ function check_olm_in_current_cluster() {
 
   local olm_status
 
-  TITLE "Display OLM pods in cluster ${cluster_name}"
+  PROMPT "Check OLM status in cluster ${cluster_name}"
 
   ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
 
@@ -381,7 +381,7 @@ EOF
 
   TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
 
-  ${OC} get sub -n "${subscription_namespace}" -o yaml --ignore-not-found
+  ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
   ${OC} get installplan -n "${subscription_namespace}" --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found

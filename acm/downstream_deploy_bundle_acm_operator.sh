@@ -602,8 +602,13 @@ function configure_submariner_bundle_on_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
+  echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
-  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+  else
+    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+  fi
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
@@ -796,8 +801,13 @@ function create_submariner_config_in_acm_managed_cluster() {
   # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
   set_subm_version_tag_var "submariner_version"
 
+  echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
-  submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+  else
+    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+  fi
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 

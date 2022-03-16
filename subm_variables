@@ -134,7 +134,8 @@ export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
 # export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
-export SUBM_CHANNEL_PREFIX="alpha-"
+export SUBM_CHANNEL_PREFIX_TECH_PREVIEW="alpha-"
+export SUBM_CHANNEL_PREFIX="stable-"
 
 
 ### ACM resources vars ###

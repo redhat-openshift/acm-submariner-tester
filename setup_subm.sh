@@ -667,7 +667,7 @@ function show_test_plan() {
 
   TITLE "Execution plan: Submariner deployment and environment preparations"
 
-  echo -e "# OCP and Submariner setup and test tools:
+  echo -e "\n# OCP and Submariner setup and test tools:
   - CONFIG_GOLANG: $CONFIG_GOLANG
   - CONFIG_AWS_CLI: $CONFIG_AWS_CLI
   - build_ocpup_tool_latest: $GET_OCPUP_TOOL
@@ -675,7 +675,7 @@ function show_test_plan() {
   - build_submariner_repos: $BUILD_GO_TESTS
   "
 
-  echo -e "# Submariner deployment and environment setup for the tests:
+  echo -e "\n# Submariner deployment and environment setup for the tests:
 
   - update_kubeconfig_context_cluster_a
   - update_kubeconfig_context_cluster_b / c
@@ -1065,9 +1065,9 @@ function destroy_ocp_cluster() {
   AWS_DNS_ALIAS1="api.${cluster_name}.${AWS_ZONE_NAME}."
   AWS_DNS_ALIAS2="\052.apps.${cluster_name}.${AWS_ZONE_NAME}."
 
-  TITLE "Deleting AWS DNS record sets from Route53"
-  echo -e "# $AWS_DNS_ALIAS1
-  # $AWS_DNS_ALIAS2
+  TITLE "Deleting AWS DNS record sets from Route53:
+  $AWS_DNS_ALIAS1
+  $AWS_DNS_ALIAS2
   "
 
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
@@ -1238,10 +1238,10 @@ function prepare_install_osp_cluster() {
 #   }
 # EOF
 #
-#   echo -e "# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
+#   echo -e "\n# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
 
   local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
-  echo -e "# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
+  echo -e "\n# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
   cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
 
   ls -l "$installer_yaml_new"
@@ -1272,7 +1272,7 @@ function create_osp_cluster() {
 
   local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
 
-  echo -e "# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
+  echo -e "\n# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
   mv -f ocpup.yaml ${ocpup_yml} || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
 
   ls -l "$ocpup_yml"
@@ -1285,7 +1285,7 @@ function create_osp_cluster() {
   local ocpup_user_name
   ocpup_user_name="$(awk '/userName:/ {print $NF}' $ocpup_yml)"
 
-  echo -e "# Running OCPUP to create OpenStack cluster B (on-prem):
+  echo -e "\n# Running OCPUP to create OpenStack cluster B (on-prem):
   \n# Cluster name: $ocpup_cluster_name
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
@@ -1918,7 +1918,7 @@ function remove_submariner_machine_sets() {
 #     $SUBM_IMG_OPERATOR \
 #     $SUBM_IMG_BUNDLE \
 #     ; do
-#       echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
+#       echo -e "\n# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
 #
 #       podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
 #       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
@@ -2226,16 +2226,23 @@ function download_subctl_by_tag() {
       # Fix the $subctl_branch_tag value for custom images
       set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
-      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+      echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+      local subctl_image_url
 
-      # Check if $subctl_xz exists in $subctl_image_url
+      if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+      else
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+        # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+      fi
+
+      echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
       |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_branch_tag' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
-      echo -e "# Getting last downloaded subctl archive filename"
+      echo -e "\n# Getting last downloaded subctl archive filename"
       subctl_xz="$(ls -1 -tc subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
@@ -2492,24 +2499,21 @@ function append_custom_images_to_join_cmd_file() {
   "No workaround" \
   "https://github.com/submariner-io/submariner-operator/issues/1018"
 
-  # To be deprecated:
-  export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
+  echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+  local submariner_operator_image
 
-  TITLE "Append \"--image-override\" for custom images to subctl join command"
-  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag}"
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_OPERATOR}:${image_tag}"
+  else
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_OPERATOR}:${image_tag}"
+  fi
 
-  # BUG ? : this is a potential bug - overriding with comma separated:
-  # JOIN_CMD="${JOIN_CMD} --image-override \
-  # submariner=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GATEWAY}:${image_tag},\
-  # submariner-route-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_ROUTE}:${image_tag}, \
-  # submariner-networkplugin-syncer=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_NETWORK}:${image_tag},\
-  # lighthouse-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_LIGHTHOUSE}:${image_tag},\
-  # lighthouse-coredns=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_COREDNS}:${image_tag},\
-  # submariner-globalnet=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GLOBALNET}:${image_tag},\
-  # submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag},\
-  # submariner-bundle=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_BUNDLE}:${image_tag}"
+  TITLE "Append \"--image-override\" to subctl join command with a custom image:
+  ${submariner_operator_image}"
 
-  echo -e "# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
+  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${submariner_operator_image}"
+
+  echo -e "\n# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
   echo "$JOIN_CMD" > "$join_cmd_file"
 
 }
@@ -3223,7 +3227,8 @@ function add_acm_registry_mirror_to_ocp_node() {
           - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
 
     * ${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
-          - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
+          - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
     "
   fi
 
@@ -3402,7 +3407,7 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${img}:${image_tag}"
+      local img_source="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${img}:${image_tag}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
       local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"
@@ -5029,7 +5034,7 @@ function add_polarion_testrun_url_to_report_headlines() {
     echo "$polarion_testrun_result_page" >> "$POLARION_RESULTS" || :
     # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
-    echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
+    echo -e "\n# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
   fi
 
 }
@@ -5813,12 +5818,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$INSTALL_ACM" =~ ^(y|yes)$ ]] ; then
 
+    # Setup ACM Hub and MCE (for ACM > 2.5 it is required to pre-install MCE, before ACM)
     if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
-      # Since ACM 2.5 it is required to pre-install MCE before ACM
-      INSTALL_MCE=YES
+      export INSTALL_MCE=YES
     fi
-
-    # Setup ACM Hub and MCE (if ACM > 2.5)
 
     [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator "$MCE_VER_TAG"
 
@@ -6180,10 +6183,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   PROMPT "$message" "$color"
 
-  TITLE "Creating HTML Report"
-  echo -e "# SYS_LOG = $SYS_LOG
-  # REPORT_NAME = $REPORT_NAME
-  # REPORT_FILE = $REPORT_FILE
+  TITLE "Creating HTML Report
+  SYS_LOG = $SYS_LOG
+  REPORT_NAME = $REPORT_NAME
+  REPORT_FILE = $REPORT_FILE
   "
 
   if [[ -n "$REPORT_FILE" ]] ; then
