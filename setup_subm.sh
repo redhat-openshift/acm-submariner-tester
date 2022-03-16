@@ -601,6 +601,7 @@ get_ocpup_tool=${get_ocpup_tool:-NO}
 # build_operator=${build_operator:-NO} # [DEPRECATED]
 build_go_tests=${build_go_tests:-NO}
 install_acm=${install_acm:-NO}
+INSTALL_MCE=${INSTALL_MCE:-NO}
 download_subctl=${download_subctl:-NO}
 registry_images=${registry_images:-NO}
 destroy_cluster_a=${destroy_cluster_a:-NO}
@@ -5807,27 +5808,27 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
 
-    # Since ACM 2.5 it is required to pre-install MCE before ACM
-
     if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
-
-      ${junit_cmd} install_mce_operator "$MCE_VER_TAG"
-
-      ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
-
-      ${junit_cmd} create_multicluster_engine
-
+      # Since ACM 2.5 it is required to pre-install MCE before ACM
+      INSTALL_MCE=YES
     fi
 
-    # Setup ACM Hub
+    # Setup ACM Hub and MCE (if ACM > 2.5)
+
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator "$MCE_VER_TAG"
 
     ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
 
-    ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
-
     ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+
+    ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
+
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_multicluster_engine
+
     ${junit_cmd} create_acm_multiclusterhub
+
 
     # Setup ACM Managed Clusters
 
