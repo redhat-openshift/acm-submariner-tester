@@ -4037,7 +4037,14 @@ function export_nginx_default_namespace_managed_cluster() {
 
   TITLE "The ServiceExport should be created in the current Namespace '${current_namespace}', if exporting service without specifying a Namespace:"
 
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+  # export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+
+  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
+  "Explicitly set target namespace" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
+  # Workaround:
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+  
 }
 
 # ------------------------------------------
@@ -4064,13 +4071,6 @@ function export_service_in_lighthouse() {
   subctl export service -h
 
   subctl export service "${svc_name}" ${namespace:+ -n $namespace}
-
-  #   ${OC} ${namespace:+-n $namespace} apply -f - <<EOF
-  #     apiVersion: lighthouse.submariner.io/v2alpha1
-  #     kind: ServiceExport
-  #     metadata:
-  #       name: ${svc_name}
-  # EOF
 
   TITLE "Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
