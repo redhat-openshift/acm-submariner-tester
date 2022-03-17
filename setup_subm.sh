@@ -5511,9 +5511,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
+  ### OCP Clusters Setups and preparations (if not requested to --skip-ocp-setup) ###
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+
+    ### Destroy / Create / Clean OCP Clusters ###
 
     # Running download_ocp_installer for cluster A
 
@@ -5523,8 +5525,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    # Running destroy or create or both (reset) for cluster A
+    ### Cluster A Setup (mandatory cluster)
 
+    # Running destroy or create or both (reset) for cluster A
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
@@ -5538,8 +5541,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
-    ### END of Cluster A Setup ###
-
 
     ### Cluster B Setup (if it is expected to be an active cluster) ###
 
@@ -5570,8 +5571,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
     fi
-    ### END of Cluster B Setup ###
-
 
     ### Cluster C Setup (if it is expected to be an active cluster) ###
 
@@ -5604,159 +5603,170 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
     fi
-    ### END of Cluster C Setup ###
 
-    ### Running prerequisites for submariner tests ###
-    # It will be skipped if using --skip-tests (except for pkg unit-tests, that does not require submariner deployment)
+    ### END of all Clusters Setup ###
 
-    if [[ ! "$SKIP_TESTS" =~ (all(,|$))+ ]] ; then
+    ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
-      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+    ${junit_cmd} update_kubeconfig_context_cluster_a
 
-      ${junit_cmd} update_kubeconfig_context_cluster_a
+    ${junit_cmd} test_kubeconfig_cluster_a
 
-      ${junit_cmd} test_kubeconfig_cluster_a
+    ${junit_cmd} add_elevated_user_to_cluster_a
 
-      ${junit_cmd} add_elevated_user_to_cluster_a
+    # Verify cluster B (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # Verify cluster B (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      ${junit_cmd} update_kubeconfig_context_cluster_b
 
-        ${junit_cmd} update_kubeconfig_context_cluster_b
+      ${junit_cmd} test_kubeconfig_cluster_b
 
-        ${junit_cmd} test_kubeconfig_cluster_b
+      ${junit_cmd} add_elevated_user_to_cluster_b
 
-        ${junit_cmd} add_elevated_user_to_cluster_b
+    fi
+
+    # Verify cluster C (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} update_kubeconfig_context_cluster_c
+
+      ${junit_cmd} test_kubeconfig_cluster_c
+
+      ${junit_cmd} add_elevated_user_to_cluster_c
+
+    fi
+
+
+    ### Clusters Cleanup (of ACM and Submariner resources) - Only for existing clusters ###
+
+    # Running cleanup on cluster A if requested
+    if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+      # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+
+      ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
+
+      ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
+
+      ${junit_cmd} delete_old_submariner_images_from_cluster_a
+
+    fi
+    # End of cluster A cleanup
+
+    # Running cleanup on cluster B if requested
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
+
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
+
+        ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
       fi
+    fi
+    # End of cluster B cleanup
 
-      # Verify cluster C (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    # Running cleanup on cluster C if requested
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        ${junit_cmd} update_kubeconfig_context_cluster_c
+      if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} test_kubeconfig_cluster_c
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} add_elevated_user_to_cluster_c
+        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
+
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
+
+        ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
       fi
+    fi
+    # End of cluster C cleanup
 
-      ### Cleanup Submariner from all clusters ###
 
-      # Running cleanup on cluster A if requested
-      if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+    ### Clusters general preparations (firewall ports, gateway labels, and images prune on all clusters) ###
 
-        # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+    echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+    \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+    # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
-        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
+    # Cluster A preparations
+    ${junit_cmd} configure_images_prune_cluster_a
 
-        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
+    # Cluster B custom preparations for OpenStack
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
+      echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster_a
+      # ${junit_cmd} open_firewall_ports_on_cluster_a
 
-      fi # End of cluster A cleanup
+      # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
-      # Running cleanup on cluster B if requested
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-        if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} label_first_gateway_cluster_b
 
-          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} configure_images_prune_cluster_b
 
-          ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
+    fi
 
-          ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
-
-          ${junit_cmd} delete_old_submariner_images_from_cluster_b
-
-        fi
-      fi # End of cluster B cleanup
-
-      # Running cleanup on cluster C if requested
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-        if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-          ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
-
-          ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
-
-          ${junit_cmd} delete_old_submariner_images_from_cluster_c
-
-        fi
-      fi # End of cluster C cleanup
-
-      ### Configure firewall ports, gateway labels, and images prune on all clusters ###
+    # Cluster C preparations
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+      #
+      # ${junit_cmd} open_firewall_ports_on_cluster_c
+      #
+      # ${junit_cmd} label_first_gateway_cluster_c
 
-      ${junit_cmd} configure_images_prune_cluster_a
+      ${junit_cmd} configure_images_prune_cluster_c
+
+    fi
+
+    # End of all Clusters general preparations
+
+
+    ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
+
+    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
+
+      # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+
+      ${junit_cmd} configure_custom_registry_cluster_a
+
+      ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+        ${junit_cmd} configure_custom_registry_cluster_b
 
-        # ${junit_cmd} open_firewall_ports_on_cluster_a
-
-        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
-
-        ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
-
-        ${junit_cmd} label_first_gateway_cluster_b
-
-        ${junit_cmd} configure_images_prune_cluster_b
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
       fi
 
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-        #
-        # ${junit_cmd} open_firewall_ports_on_cluster_c
-        #
-        # ${junit_cmd} label_first_gateway_cluster_c
+        ${junit_cmd} configure_custom_registry_cluster_c
 
-        ${junit_cmd} configure_images_prune_cluster_c
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
-      fi # End of configure firewall, labels, and images prune
+      fi
 
+    fi
+    # End of configure custom clusters registry
 
-      ### Configuring clusters registry with custom (downstream) mirrors, secrets and images, if using --registry-images ###
+    ### Submariner system tests prerequisites ###
+    # It will be skipped if using --skip-tests sys,all (useful for deployment without system tests, or if just running pkg unit-tests)
 
-      if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
-
-        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
-
-        ${junit_cmd} configure_custom_registry_cluster_a
-
-        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
-
-        if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-          ${junit_cmd} configure_custom_registry_cluster_b
-
-          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
-
-        fi
-
-        if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-          ${junit_cmd} configure_custom_registry_cluster_c
-
-          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
-
-        fi
-
-      fi # End of configure custom clusters registry
-
+    if [[ ! "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
 
       ### Create namespace and services for submariner system tests ###
 
@@ -5783,7 +5793,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} test_clusters_disconnected_before_submariner
 
     fi
-    ### END of prerequisites for submariner system tests ###
+    ### END of prerequisites for Submariner system tests  ###
 
   else  # When using --skip-ocp-setup :
 
@@ -5796,6 +5806,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
 
   fi
+
+  ### END of OCP Setup and preparations ###
+
 
   TITLE "OCP clusters and environment setup is ready"
   echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
