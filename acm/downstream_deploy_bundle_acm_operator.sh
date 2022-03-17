@@ -4,6 +4,36 @@
 
 # ------------------------------------------
 
+function remove_multicluster_engine() {
+### Removing Multi Cluster Engine from ACM hub (if exists) ###
+  trap_to_debug_commands;
+
+  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Removing Multi Cluster Engine from cluster: $cluster_name"
+
+  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+
+  TITLE "Deleting the multiclusterengine custom resource"
+
+  ${OC} delete multiclusterengine --all --timeout=30s || :
+
+  TITLE "Deleting the MultiCluster Engine CSV, Subscription, and namespace"
+
+  ${OC} delete csv --all -n ${MCE_NAMESPACE} --timeout=30s || :
+  ${OC} delete subs --all -n ${MCE_NAMESPACE} --timeout=30s || :
+
+  force_delete_namespace "${MCE_NAMESPACE}"
+  force_delete_namespace "${MCE_NAMESPACE}"
+
+}
+
+# ------------------------------------------
+
 function remove_acm_managed_cluster() {
 ### Removing Cluster-ID from ACM managed clusters (if exists) ###
   trap_to_debug_commands;

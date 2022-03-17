@@ -5651,6 +5651,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+      ${junit_cmd} remove_multicluster_engine # Required only for the Hub cluster
 
       ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
