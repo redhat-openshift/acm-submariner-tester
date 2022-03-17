@@ -3391,9 +3391,17 @@ function upload_submariner_images_to_cluster_registry() {
 
   PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
 
-  TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
-  \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
-  \n# Images version tag: ${image_tag}"
+  local image_path_prefix
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-"
+  else
+    image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-"
+  fi
+
+  TITLE "Overriding submariner images with custom images from mirror registry (Brew):
+  Source registry path: ${image_path_prefix}
+  Images version tag: ${image_tag}
+  "
 
   create_namespace "$SUBM_NAMESPACE"
 
@@ -3407,7 +3415,7 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${img}:${image_tag}"
+      local img_source="${image_path_prefix}${img}:${image_tag}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
       local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"

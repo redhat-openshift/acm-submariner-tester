@@ -281,12 +281,14 @@ function TITLE() {
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
+  echo
   echo -e "$color_line"
   echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
 
   # Print rest of message (from line 2), with # at the beginning
   echo -e "${message}" | tail -n +2 | sed 's/^/# /'
+  echo
 
 }
 
@@ -1136,7 +1138,7 @@ function print_images_info_of_namespace_pods() {
 
   local namespace=$1 # Default is current context namespace
 
-  TITLE "Images of Pods ${namespace:+(in namespace $namespace) }"
+  TITLE "Images of Pods ${namespace:+in namespace $namespace }"
 
   for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
