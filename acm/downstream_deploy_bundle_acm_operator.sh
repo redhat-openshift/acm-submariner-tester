@@ -143,7 +143,7 @@ function print_major_minor_version() {
 
 # ------------------------------------------
 
-function install_mce_operator() {
+function install_mce_operator_on_hub() {
   ### Install MCE operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
 
@@ -190,7 +190,7 @@ function install_mce_operator() {
 
 # ------------------------------------------
 
-function install_acm_operator() {
+function install_acm_operator_on_hub() {
   ### Install ACM operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
 
@@ -616,7 +616,7 @@ function import_managed_cluster() {
 
 # ------------------------------------------
 
-function configure_submariner_bundle_on_cluster() {
+function install_submariner_operator_on_cluster() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -662,7 +662,7 @@ function configure_submariner_bundle_on_cluster() {
 
 # ------------------------------------------
 
-function install_submariner_via_acm_managed_cluster() {
+function configure_submariner_addon_for_acm_managed_cluster() {
   # TODO: This funtion should be split and executed as several junit tests
 
   trap_to_debug_commands;
@@ -676,7 +676,7 @@ function install_submariner_via_acm_managed_cluster() {
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name || :)"
 
-  PROMPT "Install Submariner $SUBM_VER_TAG via ACM on managed cluster: $cluster_id"
+  PROMPT "Configure Submariner $SUBM_VER_TAG Addon for ACM managed cluster: $cluster_id"
 
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"

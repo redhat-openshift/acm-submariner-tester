@@ -707,7 +707,8 @@ function show_test_plan() {
   - install_nginx_svc_on_managed_cluster
   - test_basic_cluster_connectivity_before_submariner
   - test_clusters_disconnected_before_submariner
-  - install_acm_operator $ACM_VER_TAG
+  - install_mce_operator_on_hub $MCE_VER_TAG
+  - install_acm_operator_on_hub $ACM_VER_TAG
   - download_and_install_subctl $SUBM_VER_TAG
   "
 
@@ -5845,9 +5846,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export INSTALL_MCE=YES
     fi
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
 
-    ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
+    ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
 
     ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
@@ -5920,23 +5921,23 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
+    ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
+    ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
+      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
 
