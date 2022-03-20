@@ -4178,7 +4178,7 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
-# TODO: Should be refactored for GlobalNet v2 - Since Submariner 0.12
+# TODO: Should be re-factored for GlobalNet v2 - Since Submariner 0.12
 function test_global_ip_created_for_svc_or_pod() {
   # Check that the Service or Pod was annotated with GlobalNet IP
   # Set external variable GLOBAL_IP if there's a GlobalNet IP
@@ -6047,11 +6047,21 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} install_nginx_headless_namespace_managed_cluster
 
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
+    # Since Submariner 0.12, globalnet (v2) supports headless services, but not pod to pod connectivity
+    if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+      export GN_VER=V2
+    else
+      export GN_VER=V1
+    fi
+
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
       ${junit_cmd} test_new_netshoot_global_ip_cluster_a
 
       ${junit_cmd} test_nginx_headless_global_ip_managed_cluster
+
+    else
+      echo -e "\n# TODO: Need new system tests for GlobalNet V2 (Pod to Pod connectivity is not supported since Submariner 0.12)"
     fi
 
     # Test the default (pre-installed) netshoot and nginx with service-discovery
@@ -6063,18 +6073,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
     # Test the new netshoot and headless Nginx service-discovery
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
-
-        ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
-        echo -e "\n# TODO: Test headless service with GLobalnet - when the feature of is supported"
-        BUG "HEADLESS Service is not supported with GlobalNet" \
-         "No workaround yet - Skip the whole test" \
-        "https://github.com/submariner-io/lighthouse/issues/273"
-        # No workaround yet
+      # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
+      ${junit_cmd} test_clusters_connected_overlapping_cidrs
 
     else
+
       ${junit_cmd} export_nginx_headless_namespace_managed_cluster
 
       ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace

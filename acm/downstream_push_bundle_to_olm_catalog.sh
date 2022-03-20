@@ -250,7 +250,7 @@ function check_olm_in_current_cluster() {
   TITLE "Check OLM Catalog deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+  --all-containers --tail=15 |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
   if [[ "$olm_status" = FAILED ]] ; then
     FAILURE "OLM deployment logs have some failures/warnings, please investigate"
