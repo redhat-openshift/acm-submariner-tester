@@ -4084,20 +4084,26 @@ function export_service_in_lighthouse() {
 
   subctl export service -h
 
-  subctl export service "${svc_name}" ${namespace:+ -n $namespace}
+  TITLE "Exporting the following service $svc_name :"
+
+  subctl export service "${svc_name}" ${namespace:+-n $namespace}
+
+  ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
 
   TITLE "Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
-  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+ -n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+-n $namespace}
+  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+-n $namespace}
   # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
   BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status" \
+  "Skip checking for ServiceExport creation status with rollout command" \
   "https://github.com/submariner-io/submariner/issues/640"
   # Workaround:
-  # Do not run this rollout status, but watch pod description:
+  # Do not run this rollout status, but watch serviceexport description
 
-  #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+  BUG "kubectl get serviceexport with '-o wide' does not show more info" \
+  "Use 'describe serviceexport' instead" \
+  "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
   local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
 
@@ -4106,22 +4112,12 @@ function export_service_in_lighthouse() {
   local regex='Message:.*successfully synced'
   watch_and_retry "$cmd" 3m "$regex"
 
-  TITLE "Show $svc_name ServiceExport status is Valid:"
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  TITLE "Verify that $svc_name ServiceExport status is Valid:"
+  ${OC} get serviceexport "${svc_name}" ${namespace:+-n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
-  echo -e "\n# Show $svc_name Service info:"
-  ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
-
-  BUG "kubectl get serviceexport with '-o wide' does not show more info" \
-  "Use '-o yaml' instead" \
-  "https://github.com/submariner-io/submariner/issues/739"
-  # Workaround:
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
-
-  echo -e "\n# Describe Lighthouse Exported Services:\n"
-  ${OC} describe serviceexports --all-namespaces
+  echo -e "\n# Show all exported services:"
+  ${OC} get serviceexport -A -o wide
 
 }
 
