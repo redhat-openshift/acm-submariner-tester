@@ -1023,8 +1023,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
   # i.e. To establish actual inter-cluster data-plane connections between ManagedClusters (which are part of the same ManagedClusterSet).
 
   local clusterset_count
-  clusterset_count="$(${OC} get managedcluster -l "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" -o name | wc -w)"
-  # Can also count with: ${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${SUBM_OPERATOR}')].metadata.name}" | wc -w
+  clusterset_count="$(${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${SUBM_OPERATOR}')].metadata.name}" | wc -w)"
 
   if (( clusterset_count > 1 )) ; then
     ${OC} wait --timeout=15m managedclusteraddons ${SUBM_OPERATOR} -n ${cluster_id} --for=condition=SubmarinerConnectionDegraded=false || managed_cluster_status=FAILED
