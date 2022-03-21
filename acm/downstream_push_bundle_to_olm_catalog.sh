@@ -245,12 +245,14 @@ function check_olm_in_current_cluster() {
   TITLE "Check OLM Operator deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
-  --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+  --all-containers --limit-bytes=100000 --since=10m --timestamps \
+  |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
   TITLE "Check OLM Catalog deployment logs in cluster ${cluster_name}"
 
   ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --tail=15 |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+  --all-containers --tail=15 --timestamps \
+  |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
   if [[ "$olm_status" = FAILED ]] ; then
     FAILURE "OLM deployment logs have some failures/warnings, please investigate"
