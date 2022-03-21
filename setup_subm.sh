@@ -757,9 +757,9 @@ function show_test_plan() {
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
     - install_nginx_headless_namespace_managed_cluster
-    - test_clusters_connected_overlapping_cidrs: $GLOBALNET
-    - test_new_netshoot_global_ip_cluster_a: $GLOBALNET
-    - test_nginx_headless_global_ip_managed_cluster: $GLOBALNET
+    - test_clusters_connected_overlapping_cidrs_globalnet_v1: $GLOBALNET
+    - test_new_netshoot_ip_cluster_a_globalnet_v1: $GLOBALNET
+    - test_nginx_headless_ip_globalnet_v1: $GLOBALNET
     - test_clusters_connected_full_domain_name
     - test_clusters_cannot_connect_short_service_name
     - test_clusters_connected_headless_service_on_new_namespace
@@ -4119,6 +4119,14 @@ function export_service_in_lighthouse() {
   echo -e "\n# Show all exported services:"
   ${OC} get serviceexport -A -o wide
 
+  # Only if GlobalNet is enabled - there should be global IPs allocated after the service export
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
+
+    TITLE "Show GlobalNet Ingress IPs:"
+    ${OC} get globalingressips -A -o wide || :
+    ${OC} describe globalingressips ${namespace:+-n $namespace} || :
+  fi
+
 }
 
 # ------------------------------------------
@@ -4174,7 +4182,7 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
-# TODO: Should be re-factored for GlobalNet v2 - Since Submariner 0.12
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
 function test_global_ip_created_for_svc_or_pod() {
   # Check that the Service or Pod was annotated with GlobalNet IP
   # Set external variable GLOBAL_IP if there's a GlobalNet IP
@@ -4266,7 +4274,8 @@ function test_clusters_connected_by_service_ip() {
 
 # ------------------------------------------
 
-function test_clusters_connected_overlapping_cidrs() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_clusters_connected_overlapping_cidrs_globalnet_v1() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
   trap_to_debug_commands;
@@ -4392,7 +4401,8 @@ function install_new_netshoot_cluster_a() {
 
 # ------------------------------------------
 
-function test_new_netshoot_global_ip_cluster_a() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_new_netshoot_ip_cluster_a_globalnet_v1() {
 ### Check that $NEW_NETSHOOT_CLUSTER_A on the $TEST_NS is annotated with GlobalNet IP ###
 
   trap_to_debug_commands;
@@ -4425,7 +4435,8 @@ function install_nginx_headless_namespace_managed_cluster() {
 
 # ------------------------------------------
 
-function test_nginx_headless_global_ip_managed_cluster() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_nginx_headless_ip_globalnet_v1() {
 ### Check that $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
   trap_to_debug_commands;
 
@@ -6056,9 +6067,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
-      ${junit_cmd} test_new_netshoot_global_ip_cluster_a
+      ${junit_cmd} test_new_netshoot_ip_cluster_a_globalnet_v1
 
-      ${junit_cmd} test_nginx_headless_global_ip_managed_cluster
+      ${junit_cmd} test_nginx_headless_ip_globalnet_v1
 
     else
       echo -e "\n# TODO: Need new system tests for GlobalNet V2 (Pod to Pod connectivity is not supported since Submariner 0.12)"
@@ -6076,7 +6087,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
       # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
-      ${junit_cmd} test_clusters_connected_overlapping_cidrs
+      ${junit_cmd} test_clusters_connected_overlapping_cidrs_globalnet_v1
 
     else
 
