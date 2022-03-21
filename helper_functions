@@ -1422,7 +1422,7 @@ function git_reset_local_repo() {
   git config user.email '<>'
   git config --get-all remote.${remote_name}.fetch
   git config --unset-all remote.${remote_name}.fetch
-  git fetch --prune --all
+  git fetch --prune --all --tags
   git branch -m ${branch_or_tag}
   # git branch -u ${remote_name} ${branch_or_tag}
   git remote set-branches --add ${remote_name} ${branch_or_tag}
