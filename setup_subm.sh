@@ -280,7 +280,7 @@ while [[ $# -gt 0 ]]; do
   --subctl-version)
     check_cli_args "$2"
     export SUBM_VER_TAG="$2"
-    DOWNLOAD_SUBCTL=YES
+    INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
     REGISTRY_IMAGES=YES
@@ -508,8 +508,8 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $DOWNLOAD_SUBCTL and SUBM_VER_TAG - to download_and_install_subctl
-  if [[ "$DOWNLOAD_SUBCTL" =~ ^(yes|y)$ ]]; then
+  # User input: $INSTALL_SUBMARINER and SUBM_VER_TAG - to download_and_install_subctl
+  if [[ "$INSTALL_SUBMARINER" =~ ^(yes|y)$ ]]; then
     while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"latest\" version: "
@@ -602,7 +602,8 @@ export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
 export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
 export INSTALL_ACM=${INSTALL_ACM:-NO}
 export INSTALL_MCE=${INSTALL_MCE:-NO}
-export DOWNLOAD_SUBCTL=${DOWNLOAD_SUBCTL:-NO}
+export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
+export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
 export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
 export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
 export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
@@ -616,7 +617,6 @@ export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
 export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
 export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
 export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
-export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
 export GLOBALNET=${GLOBALNET:-NO}
 # export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
 export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
@@ -5824,8 +5824,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
-  ### Download and install SUBCTL ###
-  if [[ "$DOWNLOAD_SUBCTL" =~ ^(y|yes)$ ]] ; then
+  ### Download subctl binary, even if using it just for tests (e.g. when installing Submariner with API) ###
+  if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
 
     ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
 
@@ -5877,75 +5877,79 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of ACM Install ###
 
-  ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
+  ### Install Submariner (if using --subctl-version) ###
 
-  if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
+  if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
 
-    # Running build_operator_latest if requested  # [DEPRECATED]
-    # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
+    ### Deploy Submariner on the clusters with subctl CLI tool (if using --subctl-install) ###
 
-    ${junit_cmd} set_join_parameters_for_cluster_a
+    if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_b
+      # Running build_operator_latest if requested  # [DEPRECATED]
+      # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
+      ${junit_cmd} set_join_parameters_for_cluster_a
 
-    # Overriding Submariner images with custom images from registry
-    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]]; then
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_b
 
-      ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+      # Overriding Submariner images with custom images from registry
+      if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]]; then
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+        ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+
+        [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+
+        [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+
+      fi
+
+      ${junit_cmd} install_broker_via_subctl_on_cluster_a
+
+      ${junit_cmd} test_broker_before_join
+
+      ${junit_cmd} run_subctl_join_on_cluster_a
+
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
+
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
+
+    else
+      ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters via API ###
+
+      ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
+
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+      fi
+
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+      fi
 
     fi
-
-    ${junit_cmd} install_broker_via_subctl_on_cluster_a
-
-    ${junit_cmd} test_broker_before_join
-
-    ${junit_cmd} run_subctl_join_on_cluster_a
-
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
-
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
-
-  else
-
-    ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters as OCP bundle  ###
-
-    ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
-
-    ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
-
-    ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
-
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-    fi
-
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
-
-      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-    fi
-
+    ### END of INSTALL_WITH_SUBCTL ###
   fi
-  ### END of INSTALL_WITH_SUBCTL ###
+  ### END of INSTALL_SUBMARINER ###
 
 
   TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
   echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
 
   echo 2 > $TEST_STATUS_FILE
-
 
   ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
