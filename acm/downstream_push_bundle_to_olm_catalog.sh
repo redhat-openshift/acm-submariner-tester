@@ -153,14 +153,17 @@ function deploy_ocp_bundle() {
     ${OC} delete is "${bundle_image_name}" -n "${bundle_namespace}" --wait
   fi
 
-  ${OC} import-image "${target_image_path}" --from="${source_image_path}" -n "${bundle_namespace}" --confirm \
-  | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
+  # ${OC} import-image "${target_image_path}" --from="${source_image_path}" -n "${bundle_namespace}" --confirm \
+  # | grep -E 'com.redhat.component|version|release|com.github.url|com.github.commit|vcs-ref'
 
+  local cmd="${OC} import-image ${target_image_path} --from=${source_image_path} -n ${bundle_namespace} --confirm"
+
+  watch_and_retry "$cmd" 3m "Image Name:\s+${bundle_image_name}"
 
   TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  echo -e "\n# Delete previous catalogSource if exists"
-  ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
+  # echo -e "\n# Delete previous catalogSource if exists"
+  # ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
   local catalog_display_name="${bundle_name} Catalog Source"
 
@@ -175,19 +178,24 @@ function deploy_ocp_bundle() {
       image: ${target_image_path}
       displayName: ${catalog_display_name}
       publisher: Red Hat Partner (Test)
-      # updateStrategy:
-      #   registryPoll:
-      #     interval: 5m
+      updateStrategy:
+        registryPoll:
+          interval: 5m
 EOF
 
   echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "ACM CatalogSource '${catalog_source}' was not created"
+  watch_and_retry "$cmd" 5m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
   ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify that the Package Manifest '${operator_name}' includes the required '${catalog_display_name}', channel '${operator_channel}' and version '${operator_version}' before installing the Bundle '${bundle_name}'"
+  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}':
+  Catalog: ${catalog_display_name}
+  Operator: ${operator_name}
+  Channel: ${operator_channel}
+  Version ${operator_version}
+  "
 
   local packagemanifests_status
 
@@ -203,24 +211,51 @@ EOF
   regex="${operator_version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  TITLE "Display OLM and ${bundle_namespace} pods in cluster ${cluster_name}"
+  TITLE "Display running pods in Bundle namespace ${bundle_namespace} in cluster ${cluster_name}"
 
-  ${OC} -n ${bundle_namespace} get pods --ignore-not-found
-  ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
-
-  TITLE "Check OLM operator deployment logs in cluster ${cluster_name}"
-
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
-  --all-containers --limit-bytes=100000 --since=1h |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
-
-  TITLE "Check Catalog operator deployment logs in cluster ${cluster_name}"
-
-  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
-  --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || packagemanifests_status=FAILED
+  ${OC} -n ${bundle_namespace} get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
+  || packagemanifests_status=FAILED
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
     FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
-    Channel '${operator_channel}', Version '${operator_version}', or OLM deployment"
+    Channel '${operator_channel}', Version '${operator_version}', or Images deployment"
+  fi
+
+}
+
+# ------------------------------------------
+
+function check_olm_in_current_cluster() {
+  ### Check OLM pods and logs ###
+
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  local olm_status
+
+  PROMPT "Check OLM status in cluster ${cluster_name}"
+
+  ${OC} get pods -n openshift-operator-lifecycle-manager --ignore-not-found
+
+  TITLE "Check OLM Operator deployment logs in cluster ${cluster_name}"
+
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/olm-operator \
+  --all-containers --limit-bytes=100000 --since=10m --timestamps \
+  |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+
+  TITLE "Check OLM Catalog deployment logs in cluster ${cluster_name}"
+
+  ${OC} logs -n openshift-operator-lifecycle-manager deploy/catalog-operator \
+  --all-containers --tail=15 --timestamps \
+  |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
+
+  if [[ "$olm_status" = FAILED ]] ; then
+    FAILURE "OLM deployment logs have some failures/warnings, please investigate"
   fi
 
 }
@@ -233,24 +268,29 @@ function create_subscription() {
   trap_to_debug_commands;
 
   # Input args
-  local subscription_display_name="$1"
-  local catalog_source="$2"
-  local operator_name="$3"
-  local operator_channel="$4"
+  local catalog_source="$1"
+  local operator_name="$2"
+  local operator_channel="$3"
 
   # Optional input args:
   # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
-  local operator_version="$5"
-  # If deploying as a global operator, set different namespaces (e.g. "openshift-operators" and "openshift-marketplace")
-  local operator_namespace="${6:-$OPERATORS_NAMESPACE}"
-  local subscription_namespace="${6:-$MARKETPLACE_NAMESPACE}"
+  local operator_version="$4"
+  # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
+  local operator_namespace="$5"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  local subscription_namespace
+
+  # Create the OperatorGroup
   if [[ -n "${operator_namespace}" ]]; then
-    local operator_group_name="my-${operator_name}-group"
-    TITLE "Create the OperatorGroup '${operator_group_name}' for the Operator in a target namespace '${operator_namespace}' in cluster ${cluster_name}"
+    local operator_group_name="my-${operator_namespace}-operators-group"
+    subscription_namespace="${operator_namespace}"
+
+    TITLE "Create one OperatorGroup '${operator_group_name}' in the specified namespace '${operator_namespace}' of cluster ${cluster_name}"
+
+    ${OC} delete operatorgroup --all -n ${operator_namespace} --wait || :
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: operators.coreos.com/v1
@@ -265,7 +305,17 @@ EOF
 
     echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
     ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
+
+  else
+    TITLE "Deploying as a global Operator in the Openshift marketplace of cluster ${cluster_name}"
+    operator_namespace="${OPERATORS_NAMESPACE}"
+    subscription_namespace="${MARKETPLACE_NAMESPACE}"
+
   fi
+
+  # Create the Subscription
+  local subscription_display_name="my-${operator_name}-subscription"
+  TITLE "Create Subscription '${subscription_display_name}' in namespace '${subscription_namespace}' (Channel '${operator_channel}', Catalog '${catalog_source}')"
 
   echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
   ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
@@ -275,14 +325,19 @@ EOF
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
+    echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
     install_plan="Manual"
     starting_csv="${operator_name}.${operator_version}"
-    TITLE "Apply Manual InstallPlan approval, in order to pin ${operator_name} version (startingCSV) on '${starting_csv}'"
-  else
+
+    BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
+    "Use Automatic installPlanApproval (instead of Manual)"
+    # Workaround:
     install_plan="Automatic"
-    # There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version (e.g. v2.4.1), and not latest (e.g. v2.4.2)
-    # TODO: might need to set: starting_csv="${operator_name}.${operator_version}"
-    TITLE "Apply Automatic InstallPlan approval, in order to get latest ${operator_name} version from channel '${operator_channel}'"
+
+  else
+    echo -e "\n# No specific ${operator_name} version was requested - Apply Automatic installPlanApproval"
+    install_plan="Automatic"
+
   fi
 
   cat <<EOF | ${OC} apply -f -
@@ -306,14 +361,14 @@ EOF
   local subscription_status
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
-  local acm_subscription
-  acm_subscription="`mktemp`_acm_subscription"
-  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$acm_subscription'"
+  local subscription_data
+  subscription_data="`mktemp`_subscription_data"
+  local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$subscription_data'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
-  watch_and_retry "$cmd ; grep -E '$regex' $acm_subscription" "$duration" || :
+  watch_and_retry "$cmd ; grep -E '$regex' $subscription_data" "$duration" || :
 
-  if cat $acm_subscription |& highlight "$regex" ; then
+  if cat $subscription_data |& highlight "$regex" ; then
 
     local installPlan
     installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :

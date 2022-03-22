@@ -281,12 +281,14 @@ function TITLE() {
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
+  echo
   echo -e "$color_line"
   echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
 
   # Print rest of message (from line 2), with # at the beginning
   echo -e "${message}" | tail -n +2 | sed 's/^/# /'
+  echo
 
 }
 
@@ -325,6 +327,13 @@ function BUG() {
   [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
 }
 
+# ------------------------------------------
+
+# Function to check if version (e.g. v2.5) is greater or equal to another version (e.g. v2.4.1)
+function check_version_greater_or_equal() {
+  # If version input $1 is lower than version input $2 (digits and dots only), then the returned exit code will be 1
+  printf '%s\n%s\n' "${2//[!0-9.]/}" "${1//[!0-9.]/}" | sort --check=quiet --version-sort
+}
 
 # ------------------------------------------
 
@@ -1129,7 +1138,7 @@ function print_images_info_of_namespace_pods() {
 
   local namespace=$1 # Default is current context namespace
 
-  TITLE "Images of Pods ${namespace:+(in namespace $namespace) }"
+  TITLE "Images of Pods ${namespace:+in namespace $namespace }"
 
   for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
@@ -1413,7 +1422,7 @@ function git_reset_local_repo() {
   git config user.email '<>'
   git config --get-all remote.${remote_name}.fetch
   git config --unset-all remote.${remote_name}.fetch
-  git fetch --prune --all
+  git fetch --prune --all --tags
   git branch -m ${branch_or_tag}
   # git branch -u ${remote_name} ${branch_or_tag}
   git remote set-branches --add ${remote_name} ${branch_or_tag}

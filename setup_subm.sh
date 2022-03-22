@@ -262,109 +262,109 @@ while [[ $# -gt 0 ]]; do
     echo -e "\n# ${disclosure}" && exit 0
     shift ;;
   -d|--debug)
-    script_debug_mode=YES
+    SCRIPT_DEBUG_MODE=YES
     shift ;;
   --get-ocp-installer)
     check_cli_args "$2"
     export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-    get_ocp_installer=YES
+    GET_OCP_INSTALLER=YES
     shift 2 ;;
   --get-ocpup-tool)
-    get_ocpup_tool=YES
+    GET_OCPUP_TOOL=YES
     shift ;;
   --acm-version)
     check_cli_args "$2"
     export ACM_VER_TAG="$2"
-    install_acm=YES
+    INSTALL_ACM=YES
     shift 2 ;;
   --subctl-version)
     check_cli_args "$2"
     export SUBM_VER_TAG="$2"
-    download_subctl=YES
+    INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
-    registry_images=YES
+    REGISTRY_IMAGES=YES
     shift ;;
   --build-tests)
-    build_go_tests=YES
+    BUILD_GO_TESTS=YES
     shift ;;
   --destroy-cluster-a)
     ocp_installer_required=YES
-    destroy_cluster_a=YES
+    DESTROY_CLUSTER_A=YES
     shift ;;
   --create-cluster-a)
     ocp_installer_required=YES
-    create_cluster_a=YES
+    CREATE_CLUSTER_A=YES
     shift ;;
   --reset-cluster-a)
     ocp_installer_required=YES
-    reset_cluster_a=YES
+    RESET_CLUSTER_A=YES
     shift ;;
   --clean-cluster-a)
-    clean_cluster_a=YES
+    CLEAN_CLUSTER_A=YES
     shift ;;
   --destroy-cluster-b)
     ocpup_tool_required=YES
-    destroy_cluster_b=YES
+    DESTROY_CLUSTER_B=YES
     shift ;;
   --create-cluster-b)
     ocpup_tool_required=YES
-    create_cluster_b=YES
+    CREATE_CLUSTER_B=YES
     shift ;;
   --reset-cluster-b)
     ocpup_tool_required=YES
-    reset_cluster_b=YES
+    RESET_CLUSTER_B=YES
     shift ;;
   --clean-cluster-b)
-    clean_cluster_b=YES
+    CLEAN_CLUSTER_B=YES
     shift ;;
   --destroy-cluster-c)
     ocp_installer_required=YES
-    destroy_cluster_c=YES
+    DESTROY_CLUSTER_C=YES
     shift ;;
   --create-cluster-c)
     ocp_installer_required=YES
-    create_cluster_c=YES
+    CREATE_CLUSTER_C=YES
     shift ;;
   --reset-cluster-c)
     ocp_installer_required=YES
-    reset_cluster_c=YES
+    RESET_CLUSTER_C=YES
     shift ;;
   --clean-cluster-c)
-    clean_cluster_c=YES
+    CLEAN_CLUSTER_C=YES
     shift ;;
   --subctl-install)
-    install_with_subctl=YES
+    INSTALL_WITH_SUBCTL=YES
     shift ;;
   --globalnet)
-    globalnet=YES
+    GLOBALNET=YES
     shift ;;
   --cable-driver)
     check_cli_args "$2"
     subm_cable_driver="$2" # libreswan / strongswan [Deprecated]
     shift 2 ;;
   --skip-ocp-setup)
-    skip_ocp_setup=YES
+    SKIP_OCP_SETUP=YES
     shift ;;
   --skip-tests)
     check_cli_args "$2"
-    skip_tests="$2" # sys,e2e,pkg,all
+    SKIP_TESTS="$2" # sys,e2e,pkg,all
     shift 2 ;;
   --print-logs)
-    print_logs=YES
+    PRINT_LOGS=YES
     shift ;;
   --config-golang)
-    config_golang=YES
+    CONFIG_GOLANG=YES
     shift ;;
   --config-aws-cli)
-    config_aws_cli=YES
+    CONFIG_AWS_CLI=YES
     shift ;;
   --junit)
-    create_junit_xml=YES
+    CREATE_JUNIT_XML=YES
     export junit_cmd="record_junit $SHELL_JUNIT_XML"
     shift ;;
   --polarion)
-    upload_to_polarion=YES
+    UPLOAD_TO_POLARION=YES
     shift ;;
   --import-vars)
     check_cli_args "$2"
@@ -390,26 +390,26 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 if [[ -z "$got_user_input" ]]; then
   echo -e "\n# ${disclosure}"
 
-  # User input: $skip_ocp_setup - to skip OCP clusters setup (destroy / create / clean)
-  while [[ ! "$skip_ocp_setup" =~ ^(yes|no)$ ]]; do
+  # User input: $SKIP_OCP_SETUP - to skip OCP clusters setup (destroy / create / clean)
+  while [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    skip_ocp_setup=${input:-NO}
+    SKIP_OCP_SETUP=${input:-NO}
   done
 
-  if [[ ! "$skip_ocp_setup" =~ ^(yes|y)$ ]]; then
+  if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
 
-    # User input: $get_ocp_installer - to download_ocp_installer
-    while [[ ! "$get_ocp_installer" =~ ^(yes|no)$ ]]; do
+    # User input: $GET_OCP_INSTALLER - to download_ocp_installer
+    while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
-      get_ocp_installer=${input:-no}
+      GET_OCP_INSTALLER=${input:-no}
     done
 
     # User input: $OCP_VERSION - to download_ocp_installer with specific version
-    if [[ "$get_ocp_installer" =~ ^(yes|y)$ ]]; then
+    if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
       while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
         echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
         Enter version number, or nothing to install latest version: "
@@ -418,76 +418,76 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $get_ocpup_tool - to build_ocpup_tool_latest
-    while [[ ! "$get_ocpup_tool" =~ ^(yes|no)$ ]]; do
+    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest
+    while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
-      get_ocpup_tool=${input:-no}
+      GET_OCPUP_TOOL=${input:-no}
     done
 
-    # User input: $reset_cluster_a - to destroy_ocp_cluster AND create_ocp_cluster
-    while [[ ! "$reset_cluster_a" =~ ^(yes|no)$ ]]; do
+    # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
+    while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OpenShift cluster A ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
-      reset_cluster_a=${input:-no}
+      RESET_CLUSTER_A=${input:-no}
     done
 
-    # User input: $clean_cluster_a - to clean cluster A
-    if [[ "$reset_cluster_a" =~ ^(no|n)$ ]]; then
-      while [[ ! "$clean_cluster_a" =~ ^(yes|no)$ ]]; do
+    # User input: $CLEAN_CLUSTER_A - to clean cluster A
+    if [[ "$RESET_CLUSTER_A" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_A" =~ ^(yes|no)$ ]]; do
         echo -e "\n${YELLOW}Do you want to clean OpenShift cluster A ? ${NO_COLOR}
         Enter \"yes\", or nothing to skip: "
         read -r input
-        clean_cluster_a=${input:-no}
+        CLEAN_CLUSTER_A=${input:-no}
       done
     fi
 
-    # User input: $reset_cluster_b - to destroy_osp_cluster AND create_osp_cluster
-    while [[ ! "$reset_cluster_b" =~ ^(yes|no)$ ]]; do
+    # User input: $RESET_CLUSTER_B - to destroy_osp_cluster AND create_osp_cluster
+    while [[ ! "$RESET_CLUSTER_B" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
-      reset_cluster_b=${input:-no}
+      RESET_CLUSTER_B=${input:-no}
     done
 
-    # User input: $clean_cluster_b - to clean cluster B
-    if [[ "$reset_cluster_b" =~ ^(no|n)$ ]]; then
-      while [[ ! "$clean_cluster_b" =~ ^(yes|no)$ ]]; do
+    # User input: $CLEAN_CLUSTER_B - to clean cluster B
+    if [[ "$RESET_CLUSTER_B" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_B" =~ ^(yes|no)$ ]]; do
         echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
         Enter \"yes\", or nothing to skip: "
         read -r input
-        clean_cluster_b=${input:-no}
+        CLEAN_CLUSTER_B=${input:-no}
       done
     fi
 
-    # User input: $reset_cluster_c - to destroy_ocp_cluster AND create_cluster_c
-    while [[ ! "$reset_cluster_c" =~ ^(yes|no)$ ]]; do
+    # User input: $RESET_CLUSTER_C - to destroy_ocp_cluster AND CREATE_CLUSTER_C
+    while [[ ! "$RESET_CLUSTER_C" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OCP cluster C ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
       read -r input
-      reset_cluster_c=${input:-no}
+      RESET_CLUSTER_C=${input:-no}
     done
 
-    # User input: $clean_cluster_c - to clean cluster C
-    if [[ "$reset_cluster_c" =~ ^(no|n)$ ]]; then
-      while [[ ! "$clean_cluster_c" =~ ^(yes|no)$ ]]; do
+    # User input: $CLEAN_CLUSTER_C - to clean cluster C
+    if [[ "$RESET_CLUSTER_C" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_C" =~ ^(yes|no)$ ]]; do
         echo -e "\n${YELLOW}Do you want to clean OCP cluster C ? ${NO_COLOR}
         Enter \"yes\", or nothing to skip: "
         read -r input
-        clean_cluster_c=${input:-no}
+        CLEAN_CLUSTER_C=${input:-no}
       done
     fi
 
-  fi # End of skip_ocp_setup options
+  fi # End of SKIP_OCP_SETUP options
 
-  # User input: $globalnet - to deploy with --globalnet
-  while [[ ! "$globalnet" =~ ^(yes|no)$ ]]; do
+  # User input: $GLOBALNET - to deploy with --globalnet
+  while [[ ! "$GLOBALNET" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install Global Net ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    globalnet=${input:-no}
+    GLOBALNET=${input:-no}
   done
 
   # User input: $build_operator - to build_operator_latest # [DEPRECATED]
@@ -498,8 +498,8 @@ if [[ -z "$got_user_input" ]]; then
   #   build_operator=${input:-no}
   # done
 
-  # User input: $install_acm and ACM_VER_TAG - to Install ACM and add managed clusters
-  if [[ "$install_acm" =~ ^(yes|y)$ ]]; then
+  # User input: $INSTALL_ACM and ACM_VER_TAG - to Install ACM and add managed clusters
+  if [[ "$INSTALL_ACM" =~ ^(yes|y)$ ]]; then
     while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"latest\" version: "
@@ -508,8 +508,8 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $download_subctl and SUBM_VER_TAG - to download_and_install_subctl
-  if [[ "$download_subctl" =~ ^(yes|y)$ ]]; then
+  # User input: $INSTALL_SUBMARINER and SUBM_VER_TAG - to download_and_install_subctl
+  if [[ "$INSTALL_SUBMARINER" =~ ^(yes|y)$ ]]; then
     while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
       echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
       Enter version number, or nothing to install \"latest\" version: "
@@ -518,75 +518,75 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
-  # User input: $registry_images - to configure_cluster_custom_registry
-  while [[ ! "$registry_images" =~ ^(yes|no)$ ]]; do
+  # User input: $REGISTRY_IMAGES - to configure_cluster_custom_registry
+  while [[ ! "$REGISTRY_IMAGES" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    registry_images=${input:-no}
+    REGISTRY_IMAGES=${input:-no}
   done
 
-  # User input: $build_go_tests - to build and run ginkgo tests from all submariner repos
-  while [[ ! "$build_go_tests" =~ ^(yes|no)$ ]]; do
+  # User input: $BUILD_GO_TESTS - to build and run ginkgo tests from all submariner repos
+  while [[ ! "$BUILD_GO_TESTS" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    build_go_tests=${input:-YES}
+    BUILD_GO_TESTS=${input:-YES}
   done
 
-  # User input: $install_with_subctl - to install using SUBCTL tool
-  while [[ ! "$install_with_subctl" =~ ^(yes|no)$ ]]; do
+  # User input: $INSTALL_WITH_SUBCTL - to install using SUBCTL tool
+  while [[ ! "$INSTALL_WITH_SUBCTL" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install Submariner with SubCtl tool ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    install_with_subctl=${input:-NO}
+    INSTALL_WITH_SUBCTL=${input:-NO}
   done
 
-  # User input: $skip_tests - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
-  while [[ ! "$skip_tests" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
+  # User input: $SKIP_TESTS - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
+  while [[ ! "$SKIP_TESTS" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
     echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
     Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
     read -r input
-    skip_tests=${input:-NO}
+    SKIP_TESTS=${input:-NO}
   done
 
-  while [[ ! "$print_logs" =~ ^(yes|no)$ ]]; do
+  while [[ ! "$PRINT_LOGS" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to print full Submariner diagnostics (Pods logs, etc.) on failure ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    print_logs=${input:-NO}
+    PRINT_LOGS=${input:-NO}
   done
 
-  # User input: $config_golang - to install latest golang if missing
-  while [[ ! "$config_golang" =~ ^(yes|no)$ ]]; do
+  # User input: $CONFIG_GOLANG - to install latest golang if missing
+  while [[ ! "$CONFIG_GOLANG" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install latest Golang on the environment ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    config_golang=${input:-NO}
+    CONFIG_GOLANG=${input:-NO}
   done
 
-  # User input: $config_aws_cli - to install latest aws-cli and configure aws access
-  while [[ ! "$config_aws_cli" =~ ^(yes|no)$ ]]; do
+  # User input: $CONFIG_AWS_CLI - to install latest aws-cli and configure aws access
+  while [[ ! "$CONFIG_AWS_CLI" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to install aws-cli and configure AWS access ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    config_aws_cli=${input:-NO}
+    CONFIG_AWS_CLI=${input:-NO}
   done
 
-  # User input: $create_junit_xml - to record shell results into Junit xml output
-  while [[ ! "$create_junit_xml" =~ ^(yes|no)$ ]]; do
+  # User input: $CREATE_JUNIT_XML - to record shell results into Junit xml output
+  while [[ ! "$CREATE_JUNIT_XML" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to record shell results into Junit xml output ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    create_junit_xml=${input:-NO}
+    CREATE_JUNIT_XML=${input:-NO}
   done
 
-  # User input: $upload_to_polarion - to upload junit xml results to Polarion
-  while [[ ! "$upload_to_polarion" =~ ^(yes|no)$ ]]; do
+  # User input: $UPLOAD_TO_POLARION - to upload junit xml results to Polarion
+  while [[ ! "$UPLOAD_TO_POLARION" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to upload junit xml results to Polarion ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    upload_to_polarion=${input:-NO}
+    UPLOAD_TO_POLARION=${input:-NO}
   done
 
 fi
@@ -595,37 +595,38 @@ fi
 ### Set missing user variable ###
 TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset value)"
 
-get_ocp_installer=${get_ocp_installer:-NO}
-# OCP_VERSION=${OCP_VERSION}
-get_ocpup_tool=${get_ocpup_tool:-NO}
-# build_operator=${build_operator:-NO} # [DEPRECATED]
-build_go_tests=${build_go_tests:-NO}
-install_acm=${install_acm:-NO}
-download_subctl=${download_subctl:-NO}
-registry_images=${registry_images:-NO}
-destroy_cluster_a=${destroy_cluster_a:-NO}
-create_cluster_a=${create_cluster_a:-NO}
-reset_cluster_a=${reset_cluster_a:-NO}
-clean_cluster_a=${clean_cluster_a:-NO}
-destroy_cluster_b=${destroy_cluster_b:-NO}
-create_cluster_b=${create_cluster_b:-NO}
-reset_cluster_b=${reset_cluster_b:-NO}
-clean_cluster_b=${clean_cluster_b:-NO}
-destroy_cluster_c=${destroy_cluster_c:-NO}
-create_cluster_c=${create_cluster_c:-NO}
-reset_cluster_c=${reset_cluster_c:-NO}
-clean_cluster_c=${clean_cluster_c:-NO}
-install_with_subctl=${install_with_subctl:-NO}
-globalnet=${globalnet:-NO}
-# subm_cable_driver=${subm_cable_driver:-libreswan} [Deprecated]
-config_golang=${config_golang:-NO}
-config_aws_cli=${config_aws_cli:-NO}
-skip_ocp_setup=${skip_ocp_setup:-NO}
-skip_tests=${skip_tests:-NO}
-print_logs=${print_logs:-NO}
-create_junit_xml=${create_junit_xml:-NO}
-upload_to_polarion=${upload_to_polarion:-NO}
-script_debug_mode=${script_debug_mode:-NO}
+export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
+# export OCP_VERSION=${OCP_VERSION}
+export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
+# export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
+export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
+export INSTALL_ACM=${INSTALL_ACM:-NO}
+export INSTALL_MCE=${INSTALL_MCE:-NO}
+export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
+export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
+export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
+export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
+export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
+export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
+export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
+export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
+export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
+export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
+export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
+export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
+export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
+export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
+export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
+export GLOBALNET=${GLOBALNET:-NO}
+# export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
+export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
+export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
+export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
+export SKIP_TESTS=${SKIP_TESTS:-NO}
+export PRINT_LOGS=${PRINT_LOGS:-NO}
+export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
+export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
+export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
 
 
 ####################################################################################
@@ -637,44 +638,44 @@ script_debug_mode=${script_debug_mode:-NO}
 function show_test_plan() {
   PROMPT "Input parameters and Test Plan steps"
 
-  if [[ "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $skip_ocp_setup \n"
+  if [[ "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+    echo -e "\n# Skipping OCP clusters setup (destroy / create / clean): $SKIP_OCP_SETUP \n"
   else
     echo "### Execution plan: Openshift clusters creation/cleanup before Submariner deployment:
 
-    - download_ocp_installer: $get_ocp_installer $OCP_VERSION
+    - download_ocp_installer: $GET_OCP_INSTALLER $OCP_VERSION
 
     AWS cluster A (public):
-    - destroy_cluster_a: $destroy_cluster_a
-    - create_cluster_a: $create_cluster_a
-    - reset_cluster_a: $reset_cluster_a
-    - clean_cluster_a: $clean_cluster_a
+    - DESTROY_CLUSTER_A: $DESTROY_CLUSTER_A
+    - CREATE_CLUSTER_A: $CREATE_CLUSTER_A
+    - RESET_CLUSTER_A: $RESET_CLUSTER_A
+    - CLEAN_CLUSTER_A: $CLEAN_CLUSTER_A
 
     OSP cluster B (on-prem):
-    - destroy_cluster_b: $destroy_cluster_b
-    - create_cluster_b: $create_cluster_b
-    - reset_cluster_b: $reset_cluster_b
-    - clean_cluster_b: $clean_cluster_b
+    - DESTROY_CLUSTER_B: $DESTROY_CLUSTER_B
+    - CREATE_CLUSTER_B: $CREATE_CLUSTER_B
+    - RESET_CLUSTER_B: $RESET_CLUSTER_B
+    - CLEAN_CLUSTER_B: $CLEAN_CLUSTER_B
 
     AWS/GCP cluster C:
-    - destroy_cluster_c: $destroy_cluster_c
-    - create_cluster_c: $create_cluster_c
-    - reset_cluster_c: $reset_cluster_c
-    - clean_cluster_c: $clean_cluster_c
+    - DESTROY_CLUSTER_C: $DESTROY_CLUSTER_C
+    - CREATE_CLUSTER_C: $CREATE_CLUSTER_C
+    - RESET_CLUSTER_C: $RESET_CLUSTER_C
+    - CLEAN_CLUSTER_C: $CLEAN_CLUSTER_C
     "
   fi
 
   TITLE "Execution plan: Submariner deployment and environment preparations"
 
-  echo -e "# OCP and Submariner setup and test tools:
-  - config_golang: $config_golang
-  - config_aws_cli: $config_aws_cli
-  - build_ocpup_tool_latest: $get_ocpup_tool
+  echo -e "\n# OCP and Submariner setup and test tools:
+  - CONFIG_GOLANG: $CONFIG_GOLANG
+  - CONFIG_AWS_CLI: $CONFIG_AWS_CLI
+  - build_ocpup_tool_latest: $GET_OCPUP_TOOL
   - build_operator_latest: \$build_operator # [DEPRECATED]
-  - build_submariner_repos: $build_go_tests
+  - build_submariner_repos: $BUILD_GO_TESTS
   "
 
-  echo -e "# Submariner deployment and environment setup for the tests:
+  echo -e "\n# Submariner deployment and environment setup for the tests:
 
   - update_kubeconfig_context_cluster_a
   - update_kubeconfig_context_cluster_b / c
@@ -695,9 +696,9 @@ function show_test_plan() {
   - open_firewall_ports_on_cluster_c
   - label_first_gateway_cluster_b / c
   - configure_images_prune_cluster_b / c
-  - configure_custom_registry_cluster_a: $registry_images
-  - configure_custom_registry_cluster_b / c: $registry_images
-  - upload_submariner_images_to_cluster_registry: $registry_images
+  - configure_custom_registry_cluster_a: $REGISTRY_IMAGES
+  - configure_custom_registry_cluster_b / c: $REGISTRY_IMAGES
+  - upload_submariner_images_to_cluster_registry: $REGISTRY_IMAGES
   - configure_namespace_for_submariner_tests_on_cluster_a
   - configure_namespace_for_submariner_tests_on_managed_cluster
   - test_kubeconfig_cluster_a
@@ -706,11 +707,12 @@ function show_test_plan() {
   - install_nginx_svc_on_managed_cluster
   - test_basic_cluster_connectivity_before_submariner
   - test_clusters_disconnected_before_submariner
-  - install_acm_operator $ACM_VER_TAG
+  - install_mce_operator_on_hub $MCE_VER_TAG
+  - install_acm_operator_on_hub $ACM_VER_TAG
   - download_and_install_subctl $SUBM_VER_TAG
   "
 
-  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
+  if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
     TITLE "Installing Submariner with SubCtl tool"
 
     echo -e "
@@ -719,18 +721,18 @@ function show_test_plan() {
     - set_join_parameters_for_cluster_b / c
     - append_custom_images_to_join_cmd_cluster_a
     - append_custom_images_to_join_cmd_cluster_b / c
-    - install_broker_cluster_a
+    - install_broker_via_subctl_on_cluster_a
     - test_broker_before_join
     - run_subctl_join_on_cluster_a
     - run_subctl_join_on_cluster_b / c
-    $([[ ! "$globalnet" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
+    $([[ ! "$GLOBALNET" =~ ^(y|yes)$ ]] || echo "- test globalnet") \
     "
   fi
 
   echo -e "\n# TODO: Should add function to manipulate opetshift clusters yamls, to have overlapping CIDRs"
 
-  if [[ "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
-    echo -e "\n# Skipping high-level (system) tests: $skip_tests \n"
+  if [[ "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
+    echo -e "\n# Skipping high-level (system) tests: $SKIP_TESTS \n"
   else
   TITLE "Execution plan: High-level (System) tests of Submariner"
   echo -e "
@@ -746,8 +748,8 @@ function show_test_plan() {
     - test_ha_status_cluster_b / c
     - test_submariner_connection_cluster_a
     - test_submariner_connection_cluster_b / c
-    - test_globalnet_status_cluster_a: $globalnet
-    - test_globalnet_status_cluster_b / c: $globalnet
+    - test_globalnet_status_cluster_a: $GLOBALNET
+    - test_globalnet_status_cluster_b / c: $GLOBALNET
     - export_nginx_default_namespace_managed_cluster
     - export_nginx_headless_namespace_managed_cluster
     - test_lighthouse_status_cluster_a
@@ -755,9 +757,9 @@ function show_test_plan() {
     - test_clusters_connected_by_service_ip
     - install_new_netshoot_cluster_a
     - install_nginx_headless_namespace_managed_cluster
-    - test_clusters_connected_overlapping_cidrs: $globalnet
-    - test_new_netshoot_global_ip_cluster_a: $globalnet
-    - test_nginx_headless_global_ip_managed_cluster: $globalnet
+    - test_clusters_connected_overlapping_cidrs_globalnet_v1: $GLOBALNET
+    - test_new_netshoot_ip_cluster_a_globalnet_v1: $GLOBALNET
+    - test_nginx_headless_ip_globalnet_v1: $GLOBALNET
     - test_clusters_connected_full_domain_name
     - test_clusters_cannot_connect_short_service_name
     - test_clusters_connected_headless_service_on_new_namespace
@@ -765,8 +767,8 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ((pkg|all)(,|$))+ ]]; then
-    echo -e "\n# Skipping Submariner unit-tests: $skip_tests \n"
+  if [[ "$SKIP_TESTS" =~ ((pkg|all)(,|$))+ ]]; then
+    echo -e "\n# Skipping Submariner unit-tests: $SKIP_TESTS \n"
   else
     echo -e "\n### Execution plan: Unit-tests (Ginkgo Packages) of Submariner:
 
@@ -774,13 +776,13 @@ function show_test_plan() {
     "
   fi
 
-  if [[ "$skip_tests" =~ ((e2e|all)(,|$))+ ]]; then
-    echo -e "\n# Skipping Submariner E2E tests: $skip_tests \n"
+  if [[ "$SKIP_TESTS" =~ ((e2e|all)(,|$))+ ]]; then
+    echo -e "\n# Skipping Submariner E2E tests: $SKIP_TESTS \n"
   else
     echo -e "\n### Execution plan: End-to-End (Ginkgo E2E) tests of Submariner:
 
-    - test_submariner_e2e_with_go: $([[ "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
-    - test_submariner_e2e_with_subctl: $([[ ! "$build_go_tests" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_go: $([[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
+    - test_submariner_e2e_with_subctl: $([[ ! "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] && echo 'YES' || echo 'NO' )
     "
   fi
 
@@ -820,8 +822,8 @@ function setup_workspace() {
   TITLE "Installing Anaconda (virtual environment)"
   install_anaconda "${WORKDIR}"
 
-  # Installing GoLang with Anaconda, if $config_golang = yes/y
-  if [[ "$config_golang" =~ ^(y|yes)$ ]] ; then
+  # Installing GoLang with Anaconda, if $CONFIG_GOLANG = yes/y
+  if [[ "$CONFIG_GOLANG" =~ ^(y|yes)$ ]] ; then
     TITLE "Installing GoLang with Anaconda"
     install_local_golang "${WORKDIR}"
 
@@ -850,8 +852,8 @@ function setup_workspace() {
   TITLE "Installing JQ (JSON processor) with Anaconda"
   install_local_jq "${WORKDIR}"
 
-  # Set Polarion access if $upload_to_polarion = yes/y
-  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+  # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
+  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
     TITLE "Set Polarion access for the user [$POLARION_USR]"
     ( # subshell to hide commands
       local polauth
@@ -863,8 +865,8 @@ function setup_workspace() {
   # Trim trailing and leading spaces from $TEST_NS
   TEST_NS="$(echo "$TEST_NS" | xargs)"
 
-  # Installing AWS-CLI if $config_aws_cli = yes/y
-  if [[ "$config_aws_cli" =~ ^(y|yes)$ ]] ; then
+  # Installing AWS-CLI if $CONFIG_AWS_CLI = yes/y
+  if [[ "$CONFIG_AWS_CLI" =~ ^(y|yes)$ ]] ; then
     TITLE "Installing and configuring AWS-CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
     ( # subshell to hide commands
     configure_aws_access \
@@ -889,7 +891,7 @@ function set_trap_functions() {
   TITLE "Will run env_teardown() when exiting the script"
   trap 'env_teardown' EXIT
 
-  if [[ "$print_logs" =~ ^(y|yes)$ ]]; then
+  if [[ "$PRINT_LOGS" =~ ^(y|yes)$ ]]; then
     TITLE "Will collect Submariner information on test failure (CLI option --print-logs)"
     trap_function_on_error collect_submariner_info
   fi
@@ -1064,9 +1066,9 @@ function destroy_ocp_cluster() {
   AWS_DNS_ALIAS1="api.${cluster_name}.${AWS_ZONE_NAME}."
   AWS_DNS_ALIAS2="\052.apps.${cluster_name}.${AWS_ZONE_NAME}."
 
-  TITLE "Deleting AWS DNS record sets from Route53"
-  echo -e "# $AWS_DNS_ALIAS1
-  # $AWS_DNS_ALIAS2
+  TITLE "Deleting AWS DNS record sets from Route53:
+  $AWS_DNS_ALIAS1
+  $AWS_DNS_ALIAS2
   "
 
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
@@ -1237,10 +1239,10 @@ function prepare_install_osp_cluster() {
 #   }
 # EOF
 #
-#   echo -e "# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
+#   echo -e "\n# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
 
   local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
-  echo -e "# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
+  echo -e "\n# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
   cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
 
   ls -l "$installer_yaml_new"
@@ -1271,7 +1273,7 @@ function create_osp_cluster() {
 
   local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
 
-  echo -e "# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
+  echo -e "\n# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
   mv -f ocpup.yaml ${ocpup_yml} || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
 
   ls -l "$ocpup_yml"
@@ -1284,7 +1286,7 @@ function create_osp_cluster() {
   local ocpup_user_name
   ocpup_user_name="$(awk '/userName:/ {print $NF}' $ocpup_yml)"
 
-  echo -e "# Running OCPUP to create OpenStack cluster B (on-prem):
+  echo -e "\n# Running OCPUP to create OpenStack cluster B (on-prem):
   \n# Cluster name: $ocpup_cluster_name
   \n# OSP Project: $ocpup_project_name
   \n# OSP User: $ocpup_user_name"
@@ -1585,9 +1587,9 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or older than 1 day
+  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or accessed more than 1 day ago
   touch -a "${WORKDIR}/${http_sec_name}"
-  if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
+  if find "${WORKDIR}/${http_sec_name}" \( -atime +1 -o -empty \) | grep . ; then
     echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
@@ -1917,7 +1919,7 @@ function remove_submariner_machine_sets() {
 #     $SUBM_IMG_OPERATOR \
 #     $SUBM_IMG_BUNDLE \
 #     ; do
-#       echo -e "# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
+#       echo -e "\n# Removing Submariner image from local Podman registry: $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION \n"
 #
 #       podman image rm -f $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION # > /dev/null 2>&1
 #       podman pull $SUBM_SNAPSHOT_REGISTRY/$SUBM_IMG_PREFIX-$img:$VERSION
@@ -2213,7 +2215,7 @@ function download_subctl_by_tag() {
     # Downloading SubCtl from VPN_REGISTRY (downstream)
     # if using --registry-images and if $subctl_branch_tag is not devel
     if [[ ! "$subctl_branch_tag" =~ devel ]] && \
-        [[ "$registry_images" =~ ^(y|yes)$ ]] && \
+        [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       TITLE "Backup previous subctl archive (if exists)"
@@ -2225,16 +2227,23 @@ function download_subctl_by_tag() {
       # Fix the $subctl_branch_tag value for custom images
       set_subm_version_tag_var "subctl_branch_tag"
 
-      local subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
-      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+      echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+      local subctl_image_url
 
-      # Check if $subctl_xz exists in $subctl_image_url
+      if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+      else
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+        # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+      fi
+
+      echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
       |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_branch_tag' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
-      echo -e "# Getting last downloaded subctl archive filename"
+      echo -e "\n# Getting last downloaded subctl archive filename"
       subctl_xz="$(ls -1 -tc subctl-*-linux-amd64.tar.xz | head -1 )" || :
       ls -l "${subctl_xz}" || FATAL "subctl archive was not downloaded"
 
@@ -2491,31 +2500,28 @@ function append_custom_images_to_join_cmd_file() {
   "No workaround" \
   "https://github.com/submariner-io/submariner-operator/issues/1018"
 
-  # To be deprecated:
-  export REGISTRY_IMAGE_PREFIX="rh-osbs/rhacm2-tech-preview-"
+  echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+  local submariner_operator_image
 
-  TITLE "Append \"--image-override\" for custom images to subctl join command"
-  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag}"
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_OPERATOR}:${image_tag}"
+  else
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_OPERATOR}:${image_tag}"
+  fi
 
-  # BUG ? : this is a potential bug - overriding with comma separated:
-  # JOIN_CMD="${JOIN_CMD} --image-override \
-  # submariner=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GATEWAY}:${image_tag},\
-  # submariner-route-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_ROUTE}:${image_tag}, \
-  # submariner-networkplugin-syncer=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_NETWORK}:${image_tag},\
-  # lighthouse-agent=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_LIGHTHOUSE}:${image_tag},\
-  # lighthouse-coredns=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_COREDNS}:${image_tag},\
-  # submariner-globalnet=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_GLOBALNET}:${image_tag},\
-  # submariner-operator=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_OPERATOR}:${image_tag},\
-  # submariner-bundle=${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}/${SUBM_IMG_BUNDLE}:${image_tag}"
+  TITLE "Append \"--image-override\" to subctl join command with a custom image:
+  ${submariner_operator_image}"
 
-  echo -e "# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
+  JOIN_CMD="${JOIN_CMD} --image-override submariner-operator=${submariner_operator_image}"
+
+  echo -e "\n# Write into the join command file [${join_cmd_file}]: \n${JOIN_CMD}"
   echo "$JOIN_CMD" > "$join_cmd_file"
 
 }
 
 # ------------------------------------------
 
-function install_broker_cluster_a() {
+function install_broker_via_subctl_on_cluster_a() {
 ### Installing Submariner Broker on OCP cluster A (public) ###
   echo -e "\n# TODO: Should test broker deployment also on different Public cluster (C), rather than on Public cluster A."
   echo -e "\n# TODO: Call kubeconfig of broker cluster"
@@ -2523,7 +2529,7 @@ function install_broker_cluster_a() {
 
   local DEPLOY_CMD="subctl deploy-broker"
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]]; then
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]]; then
     echo -e "\n# TODO: Move to a separate function"
     PROMPT "Adding GlobalNet to Submariner Deploy command"
 
@@ -2560,6 +2566,51 @@ function install_broker_cluster_a() {
 
 # ------------------------------------------
 
+function install_broker_via_api_on_cluster() {
+  ### Create the Submariner Broker via API - Only on the first cluster (usually the Hub) ###
+
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  local submariner_version="${2:-$SUBM_VER_TAG}"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Create the Submariner Broker via API on cluster ${cluster_name}"
+
+  # Since Submariner 0.12 it is required to create Broker CRD
+  if check_version_greater_or_equal "$submariner_version" "0.12" ; then
+
+    local clusterset_broker_namespace
+    clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner \
+    -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
+
+    local enable_globalnet="true"
+    [[ "$GLOBALNET" =~ ^(y|yes)$ ]] || enable_globalnet="false"
+
+    TITLE "Creating the Submariner Broker resource in namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+
+    cat <<EOF | oc apply -f -
+    apiVersion: submariner.io/v1alpha1
+    kind: Broker
+    metadata:
+      name: submariner-broker
+      namespace: ${clusterset_broker_namespace}
+    spec:
+      globalnetEnabled: ${enable_globalnet}
+EOF
+
+  else
+    echo -e "\n# Submariner version $submariner_version is less than 0.12 - Broker creation is not supported via API"
+  fi
+
+}
+
+# ------------------------------------------
+
 function test_broker_before_join() {
   PROMPT "Verify Submariner resources on the Broker cluster"
   trap_to_debug_commands;
@@ -2583,7 +2634,7 @@ function test_broker_before_join() {
   # For SubCtl <= 0.8 : "No resources found" is expected on the broker after deploy command
   [[ $(subctl version | grep --invert-match "v0.8") ]] || regex="No resources found"
 
-  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
     ${OC} get pods -n ${SUBM_NAMESPACE} --show-labels |& highlight "$regex" \
      || FATAL "Submariner Broker which was created with $(subctl version) deploy command (before join) \
       should have \"$regex\" in the Broker namespace '${SUBM_NAMESPACE}'"
@@ -3057,20 +3108,28 @@ function configure_cluster_custom_registry_mirror() {
 
   ${OC} get clusteroperators authentication kube-apiserver
 
-  local ocp_registry_url
-  ocp_registry_url=$(${OC} registry info --internal)
-  local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
+  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner, ACM, and MCE"
 
-  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner (${SUBM_NAMESPACE}) and ACM (${SUBM_NAMESPACE})"
-
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${SUBM_NAMESPACE}"
   ( # subshell to hide commands
     create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$SUBM_NAMESPACE"
   )
+
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${ACM_NAMESPACE}"
   ( # subshell to hide commands
     create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$ACM_NAMESPACE"
   )
 
+  echo -e "\n# Adding access to ${BREW_REGISTRY} in ${MCE_NAMESPACE}"
+  ( # subshell to hide commands
+    create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$MCE_NAMESPACE"
+  )
+
   TITLE "Add OCP Registry mirrors to all OCP cluster nodes using MachineConfig"
+
+  local ocp_registry_url
+  ocp_registry_url=$(${OC} registry info --internal)
+  local local_registry_path="${ocp_registry_url}/${SUBM_NAMESPACE}"
 
   BUG "Using image tags for ImageContentSourcePolicy resource is not supported" \
   "Create MachineConfig (instead of ImageContentSourcePolicy) to configure registry mirrors on all nodes" \
@@ -3167,6 +3226,10 @@ function add_acm_registry_mirror_to_ocp_node() {
 
     * ${CATALOG_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH} -->
           - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
+
+    * ${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
+          - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
     "
   fi
 
@@ -3252,7 +3315,23 @@ function add_acm_registry_mirror_to_ocp_node() {
       [[registry.mirror]]
         location = "${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}"
         insecure = false
+
+    [[registry]]
+      prefix = ""
+      location = "${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+      mirror-by-digest-only = false
+      insecure = false
+      blocked = false
+
+      [[registry.mirror]]
+        location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+        insecure = false
+
+      [[registry.mirror]]
+        location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+        insecure = false
 EOF
+
   )
 
   TITLE "Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
@@ -3313,9 +3392,17 @@ function upload_submariner_images_to_cluster_registry() {
 
   PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
 
-  TITLE "Overriding submariner images with custom images from mirror registry (Brew): \
-  \n# Source registry: ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH} \
-  \n# Images version tag: ${image_tag}"
+  local image_path_prefix
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+    image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-"
+  else
+    image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-"
+  fi
+
+  TITLE "Overriding submariner images with custom images from mirror registry (Brew):
+  Source registry path: ${image_path_prefix}
+  Images version tag: ${image_tag}
+  "
 
   create_namespace "$SUBM_NAMESPACE"
 
@@ -3329,7 +3416,7 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${img}:${image_tag}"
+      local img_source="${image_path_prefix}${img}:${image_tag}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
       local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"
@@ -3952,12 +4039,26 @@ function export_nginx_default_namespace_managed_cluster() {
   configure_namespace_for_submariner_tests
 
   local current_namespace
-  current_namespace="$(${OC} config view -o jsonpath='{.contexts[].context.namespace}')"
+  current_namespace="$(${OC} config view --minify -o jsonpath='{..namespace}')"
 
-  TITLE "# The ServiceExport should be created on the default Namespace '${current_namespace}', as configured in KUBECONFIG:
-  \n# $KUBECONFIG"
+  TITLE "KUBECONFIG current context is set to the namespace '${current_namespace}', which should include Ngnix service '$NGINX_CLUSTER_BC'"
 
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+  ${OC} config get-contexts
+
+  ${OC} get svc -o wide
+
+  ${OC} describe svc "$NGINX_CLUSTER_BC"
+
+  TITLE "The ServiceExport should be created in the current Namespace '${current_namespace}', if exporting service without specifying a Namespace:"
+
+  # export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+
+  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
+  "Explicitly set target namespace" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
+  # Workaround:
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+
 }
 
 # ------------------------------------------
@@ -3983,27 +4084,26 @@ function export_service_in_lighthouse() {
 
   subctl export service -h
 
-  subctl export service "${svc_name}" ${namespace:+ -n $namespace}
+  TITLE "Exporting the following service $svc_name :"
 
-  #   ${OC} ${namespace:+-n $namespace} apply -f - <<EOF
-  #     apiVersion: lighthouse.submariner.io/v2alpha1
-  #     kind: ServiceExport
-  #     metadata:
-  #       name: ${svc_name}
-  # EOF
+  subctl export service "${svc_name}" ${namespace:+-n $namespace}
+
+  ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
 
   TITLE "Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
-  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+ -n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+-n $namespace}
+  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+-n $namespace}
   # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
   BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status" \
+  "Skip checking for ServiceExport creation status with rollout command" \
   "https://github.com/submariner-io/submariner/issues/640"
   # Workaround:
-  # Do not run this rollout status, but watch pod description:
+  # Do not run this rollout status, but watch serviceexport description
 
-  #local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
+  BUG "kubectl get serviceexport with '-o wide' does not show more info" \
+  "Use 'describe serviceexport' instead" \
+  "https://github.com/submariner-io/submariner/issues/739"
   # Workaround:
   local cmd="${OC} describe serviceexport $svc_name ${namespace:+-n $namespace}"
 
@@ -4012,22 +4112,20 @@ function export_service_in_lighthouse() {
   local regex='Message:.*successfully synced'
   watch_and_retry "$cmd" 3m "$regex"
 
-  TITLE "Show $svc_name ServiceExport status is Valid:"
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace}
+  TITLE "Verify that $svc_name ServiceExport status is Valid:"
+  ${OC} get serviceexport "${svc_name}" ${namespace:+-n $namespace}
   ${OC} get serviceexport $svc_name ${namespace:+-n $namespace} -o jsonpath='{.status.conditions[?(@.status=="True")].type}' | grep "Valid"
 
-  echo -e "\n# Show $svc_name Service info:"
-  ${OC} get svc "${svc_name}" ${namespace:+ -n $namespace}
+  echo -e "\n# Show all exported services:"
+  ${OC} get serviceexport -A -o wide
 
-  BUG "kubectl get serviceexport with '-o wide' does not show more info" \
-  "Use '-o yaml' instead" \
-  "https://github.com/submariner-io/submariner/issues/739"
-  # Workaround:
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o wide
-  ${OC} get serviceexport "${svc_name}" ${namespace:+ -n $namespace} -o yaml
+  # Only if GlobalNet is enabled - there should be global IPs allocated after the service export
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
 
-  echo -e "\n# Describe Lighthouse Exported Services:\n"
-  ${OC} describe serviceexports --all-namespaces
+    TITLE "Show GlobalNet Ingress IPs:"
+    ${OC} get globalingressips -A -o wide || :
+    ${OC} describe globalingressips ${namespace:+-n $namespace} || :
+  fi
 
 }
 
@@ -4084,6 +4182,7 @@ function test_lighthouse_status() {
 
 # ------------------------------------------
 
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
 function test_global_ip_created_for_svc_or_pod() {
   # Check that the Service or Pod was annotated with GlobalNet IP
   # Set external variable GLOBAL_IP if there's a GlobalNet IP
@@ -4134,7 +4233,7 @@ function test_clusters_connected_by_service_ip() {
   export KUBECONFIG="${KUBECONF_HUB}"
   CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
-  if [[ ! "$globalnet" =~ ^(y|yes)$ ]] ; then
+  if [[ ! "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on OCP cluster A (public), to Nginx service IP on managed cluster"
 
     if ! ${OC} exec ${CURL_CMD} ; then
@@ -4169,13 +4268,14 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect" && FAILURE "$msg") || echo -e "$msg"
+    ${OC} exec ${CURL_CMD} |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
 # ------------------------------------------
 
-function test_clusters_connected_overlapping_cidrs() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_clusters_connected_overlapping_cidrs_globalnet_v1() {
 ### Run Connectivity tests between the On-Premise and Public clusters ###
 # To validate that now Submariner made the connection possible!
   trap_to_debug_commands;
@@ -4188,8 +4288,8 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Nginx service (${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS})"
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on Nginx service (${NGINX_CLUSTER_BC}${TEST_NS:+.$TEST_NS})"
   nginx_global_ip="$GLOBAL_IP"
 
   PROMPT "Testing GlobalNet annotation - Netshoot pod on OCP cluster A (public) should get a GlobalNet IP"
@@ -4200,8 +4300,8 @@ function test_clusters_connected_overlapping_cidrs() {
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod pod "$netshoot_pod_cluster_a" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
+  test_global_ip_created_for_svc_or_pod pod "$netshoot_pod_cluster_a" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on Netshoot Pod (${netshoot_pod_cluster_a}${TEST_NS:+ in $TEST_NS})"
   netshoot_global_ip="$GLOBAL_IP"
 
   echo -e "\n# TODO: Ping to the netshoot_global_ip"
@@ -4301,7 +4401,8 @@ function install_new_netshoot_cluster_a() {
 
 # ------------------------------------------
 
-function test_new_netshoot_global_ip_cluster_a() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_new_netshoot_ip_cluster_a_globalnet_v1() {
 ### Check that $NEW_NETSHOOT_CLUSTER_A on the $TEST_NS is annotated with GlobalNet IP ###
 
   trap_to_debug_commands;
@@ -4314,8 +4415,8 @@ function test_new_netshoot_global_ip_cluster_a() {
 
   # Should fail if NEW_NETSHOOT_CLUSTER_A was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS
-  [[ -n "$GLOBAL_IP" ]] || FATAL "GlobalNet error on NEW Netshoot Pod (${NEW_NETSHOOT_CLUSTER_A}${TEST_NS:+ in $TEST_NS})"
+  test_global_ip_created_for_svc_or_pod pod "$NEW_NETSHOOT_CLUSTER_A" $TEST_NS || :
+  [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on NEW Netshoot Pod (${NEW_NETSHOOT_CLUSTER_A}${TEST_NS:+ in $TEST_NS})"
 }
 
 # ------------------------------------------
@@ -4334,7 +4435,8 @@ function install_nginx_headless_namespace_managed_cluster() {
 
 # ------------------------------------------
 
-function test_nginx_headless_global_ip_managed_cluster() {
+# Test for Submariner < 0.12 with old GlobalNet V1 (deprecated)
+function test_nginx_headless_ip_globalnet_v1() {
 ### Check that $NGINX_CLUSTER_BC on the $HEADLESS_TEST_NS is annotated with GlobalNet IP ###
   trap_to_debug_commands;
 
@@ -4342,7 +4444,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
   cluster_name="$(print_current_cluster_name || :)"
   PROMPT "Testing GlobalNet annotation - The HEADLESS Nginx service on managed cluster $cluster_name should get a GlobalNet IP"
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     BUG "HEADLESS Service is not supported with GlobalNet" \
      "No workaround yet - Skip the whole test" \
     "https://github.com/submariner-io/lighthouse/issues/273"
@@ -4354,7 +4456,7 @@ function test_nginx_headless_global_ip_managed_cluster() {
 
   # Should fail if NGINX_CLUSTER_BC was not annotated with GlobalNet IP
   GLOBAL_IP=""
-  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS
+  test_global_ip_created_for_svc_or_pod svc "$NGINX_CLUSTER_BC" $HEADLESS_TEST_NS || :
   [[ -n "$GLOBAL_IP" ]] || FAILURE "GlobalNet error on the HEADLESS Nginx service (${NGINX_CLUSTER_BC}${HEADLESS_TEST_NS:+.$HEADLESS_TEST_NS})"
 
   echo -e "\n# TODO: Ping to the new_nginx_global_ip"
@@ -4374,7 +4476,7 @@ function test_clusters_connected_headless_service_on_new_namespace() {
   PROMPT "Testing Service-Discovery: From NEW Netshoot pod on cluster A${TEST_NS:+ (Namespace $TEST_NS)}
   To the HEADLESS Nginx service on cluster B/C${HEADLESS_TEST_NS:+ (Namespace $HEADLESS_TEST_NS)}, by DNS hostname: $nginx_headless_cl_b_dns"
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
 
     BUG "HEADLESS Service is not supported with GlobalNet" \
      "No workaround yet - Skip the whole test" \
@@ -4528,7 +4630,7 @@ function test_submariner_packages() {
   # export CGO_ENABLED=1 # required for go test -race
   go env
 
-  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
     echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
     junit_params="-ginkgo.reportFile $PKG_JUNIT_XML"
   fi
@@ -4566,7 +4668,7 @@ function test_lighthouse_e2e_with_go() {
 
   local test_params
 
-  if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+  if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     test_params="--globalnet"
   fi
 
@@ -4621,7 +4723,7 @@ function test_project_e2e_with_go() {
   echo -e "$msg" >> "$E2E_LOG"
 
   local junit_params
-  if [[ "$create_junit_xml" =~ ^(y|yes)$ ]]; then
+  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
     msg="# Junit report file will be created: \n# $junit_output_file \n"
     echo -e "$msg"
     echo -e "$msg" >> "$E2E_LOG"
@@ -4891,7 +4993,7 @@ function create_all_test_results_in_polarion() {
 
 
   # Upload Ginkgo E2E tests to Polarion
-  if [[ (! "$skip_tests" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
+  if [[ (! "$SKIP_TESTS" =~ ((e2e|all)(,|$))+) && -s "$E2E_JUNIT_XML" ]] ; then
 
     TITLE "Upload Junit results of Submariner E2E (Ginkgo) tests to Polarion:"
 
@@ -4913,7 +5015,7 @@ function create_all_test_results_in_polarion() {
 
   # Upload UNIT tests to Polarion (skipping, not really required)
 
-  # if [[ (! "$skip_tests" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
+  # if [[ (! "$SKIP_TESTS" =~ ((pkg|all)(,|$))+) && -s "$PKG_JUNIT_XML" ]] ; then
   #   echo -e "\n# Upload Junit results of PKG (Ginkgo) unit-tests to Polarion:"
   #   sed -r 's/(<\/?)(passed>)/\1system-out>/g' -i "$PKG_JUNIT_XML" || :
   #
@@ -4948,7 +5050,7 @@ function add_polarion_testrun_url_to_report_headlines() {
     echo "$polarion_testrun_result_page" >> "$POLARION_RESULTS" || :
     # echo -e " (${polarion_testrun_name}) \n" >> "$POLARION_RESULTS" || :
   else
-    echo -e "# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
+    echo -e "\n# Error reading Polarion Test results link for ${polarion_testrun_name}: \n ${polarion_testrun_result_page}" 1>&2
   fi
 
 }
@@ -5047,7 +5149,6 @@ function test_products_versions() {
 
   # Show Submariner and ACM CSVs (Cluster service versions)
   print_csvs_in_namespace "$SUBM_NAMESPACE"
-  print_csvs_in_namespace "$ACM_NAMESPACE"
 
   # Show Submariner images info of running pods
   print_images_info_of_namespace_pods "${SUBM_NAMESPACE}"
@@ -5073,6 +5174,14 @@ function test_products_versions() {
   #   echo -e "\n### Local registry image: $(echo $img_name | sed -r 's|.*/([^@]+).*|\1|') ###"
   #   print_image_info "$img_id"
   # done
+
+  # Show CSVs (Cluster service versions) of ACM and MCE
+  print_csvs_in_namespace "$ACM_NAMESPACE"
+  print_csvs_in_namespace "$MCE_NAMESPACE"
+
+  # Show ACM and MCE images info in the running pods
+  print_images_info_of_namespace_pods "${ACM_NAMESPACE}"
+  print_images_info_of_namespace_pods "${MCE_NAMESPACE}"
 
   echo -e "\n# Current OC user: $(${OC} whoami || : )"
   echo -e "\n# Current Kubeconfig contexts:"
@@ -5263,6 +5372,8 @@ function print_resources_and_pod_logs() {
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
+  print_pod_logs_in_namespace "$cluster_name" "$ACM_NAMESPACE" "app=submariner-addon"
+
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
 
   print_pod_logs_in_namespace "$cluster_name" "kube-system" "component=kube-controller-manager"
@@ -5290,8 +5401,8 @@ function debug_test_polarion() {
   trap_to_debug_commands;
   PROMPT "DEBUG Polarion setup"
 
-  # Set Polarion access if $upload_to_polarion = yes/y
-  if [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+  # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
+  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
     TITLE "Set Polarion access for the user [$POLARION_USR]"
     ( # subshell to hide commands
       local polauth
@@ -5371,7 +5482,7 @@ function debug_test_fatal() {
 ####################################################################################
 
 ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
-if [[ "$script_debug_mode" =~ ^(yes|y)$ ]]; then
+if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
   # Extra verbosity for oc commands:
   # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
   # export VERBOSE_FLAG="--v=2"
@@ -5416,55 +5527,58 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
-  ### Destroy / Create / Clean OCP Clusters (if not requested to --skip-ocp-setup) ###
+  ### OCP Clusters Setups and preparations (if not requested to --skip-ocp-setup) ###
 
-  if [[ ! "$skip_ocp_setup" =~ ^(y|yes)$ ]]; then
+  if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+
+    ### Destroy / Create / Clean OCP Clusters ###
 
     # Running download_ocp_installer for cluster A
 
-    if [[ "$get_ocp_installer" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+    if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} download_ocp_installer ${OCP_VERSION}
 
     fi
 
-    # Running destroy or create or both (reset) for cluster A
+    ### Cluster A Setup (mandatory cluster)
 
-    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+    # Running destroy or create or both (reset) for cluster A
+    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
-    if [[ "$reset_cluster_a" =~ ^(y|yes)$ ]] || [[ "$create_cluster_a" =~ ^(y|yes)$ ]] ; then
+    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} prepare_install_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
       ${junit_cmd} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
-    ### END of Cluster A Setup ###
+
+    ### Cluster B Setup (if it is expected to be an active cluster) ###
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       # Running build_ocpup_tool_latest if requested, for cluster B
 
-      if [[ "$get_ocpup_tool" =~ ^(y|yes)$ ]] && [[ "$ocpup_tool_required" =~ ^(y|yes)$ ]] ; then
+      if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$ocpup_tool_required" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} build_ocpup_tool_latest
 
       fi
 
-
       # Running destroy or create or both (reset) for cluster B
 
-      if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
       fi
 
-      if [[ "$reset_cluster_b" =~ ^(y|yes)$ ]] || [[ "$create_cluster_b" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
@@ -5473,13 +5587,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
     fi
-    ### END of Cluster B Setup ###
+
+    ### Cluster C Setup (if it is expected to be an active cluster) ###
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       # Running download_ocp_installer if requested, for cluster C
 
-      if [[ "$get_ocp_installer" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+      if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
 
         echo -e "\n# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
 
@@ -5489,13 +5604,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # Running destroy or create or both (reset) for cluster C
 
-      if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] || [[ "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} destroy_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
-      if [[ "$reset_cluster_c" =~ ^(y|yes)$ ]] || [[ "$create_cluster_c" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} prepare_install_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
@@ -5504,159 +5619,171 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
     fi
-    ### END of Cluster C Setup ###
 
-    ### Running prerequisites for submariner tests ###
-    # It will be skipped if using --skip-tests (except for pkg unit-tests, that does not require submariner deployment)
+    ### END of all Clusters Setup ###
 
-    if [[ ! "$skip_tests" =~ (all(,|$))+ ]] ; then
+    ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
-      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+    ${junit_cmd} update_kubeconfig_context_cluster_a
 
-      ${junit_cmd} update_kubeconfig_context_cluster_a
+    ${junit_cmd} test_kubeconfig_cluster_a
 
-      ${junit_cmd} test_kubeconfig_cluster_a
+    ${junit_cmd} add_elevated_user_to_cluster_a
 
-      ${junit_cmd} add_elevated_user_to_cluster_a
+    # Verify cluster B (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # Verify cluster B (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      ${junit_cmd} update_kubeconfig_context_cluster_b
 
-        ${junit_cmd} update_kubeconfig_context_cluster_b
+      ${junit_cmd} test_kubeconfig_cluster_b
 
-        ${junit_cmd} test_kubeconfig_cluster_b
+      ${junit_cmd} add_elevated_user_to_cluster_b
 
-        ${junit_cmd} add_elevated_user_to_cluster_b
+    fi
+
+    # Verify cluster C (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+      ${junit_cmd} update_kubeconfig_context_cluster_c
+
+      ${junit_cmd} test_kubeconfig_cluster_c
+
+      ${junit_cmd} add_elevated_user_to_cluster_c
+
+    fi
+
+
+    ### Clusters Cleanup (of ACM and Submariner resources) - Only for existing clusters ###
+
+    # Running cleanup on cluster A if requested
+    if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+      # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+      ${junit_cmd} remove_multicluster_engine # Required only for the Hub cluster
+
+      ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
+
+      ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
+
+      ${junit_cmd} delete_old_submariner_images_from_cluster_a
+
+    fi
+    # End of cluster A cleanup
+
+    # Running cleanup on cluster B if requested
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+      if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
+
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
+
+        ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
       fi
+    fi
+    # End of cluster B cleanup
 
-      # Verify cluster C (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    # Running cleanup on cluster C if requested
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        ${junit_cmd} update_kubeconfig_context_cluster_c
+      if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} test_kubeconfig_cluster_c
+        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} add_elevated_user_to_cluster_c
+        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
+
+        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
+
+        ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
       fi
+    fi
+    # End of cluster C cleanup
 
-      ### Cleanup Submariner from all clusters ###
 
-      # Running cleanup on cluster A if requested
-      if [[ "$clean_cluster_a" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_a" =~ ^(y|yes)$ ]] ; then
+    ### Clusters general preparations (firewall ports, gateway labels, and images prune on all clusters) ###
 
-        # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+    echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+    \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+    # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
-        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
+    # Cluster A preparations
+    ${junit_cmd} configure_images_prune_cluster_a
 
-        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
+    # Cluster B custom preparations for OpenStack
+    if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
+      echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster_a
+      # ${junit_cmd} open_firewall_ports_on_cluster_a
 
-      fi # End of cluster A cleanup
+      # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
-      # Running cleanup on cluster B if requested
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
 
-        if [[ "$clean_cluster_b" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_b" =~ ^(y|yes)$ ]] ; then
+      ${junit_cmd} label_first_gateway_cluster_b
 
-          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${junit_cmd} configure_images_prune_cluster_b
 
-          ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
+    fi
 
-          ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
-
-          ${junit_cmd} delete_old_submariner_images_from_cluster_b
-
-        fi
-      fi # End of cluster B cleanup
-
-      # Running cleanup on cluster C if requested
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-        if [[ "$clean_cluster_c" =~ ^(y|yes)$ ]] && [[ ! "$destroy_cluster_c" =~ ^(y|yes)$ ]] ; then
-
-          ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-          ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
-
-          ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
-
-          ${junit_cmd} delete_old_submariner_images_from_cluster_c
-
-        fi
-      fi # End of cluster C cleanup
-
-      ### Configure firewall ports, gateway labels, and images prune on all clusters ###
+    # Cluster C preparations
+    if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+      #
+      # ${junit_cmd} open_firewall_ports_on_cluster_c
+      #
+      # ${junit_cmd} label_first_gateway_cluster_c
 
-      ${junit_cmd} configure_images_prune_cluster_a
+      ${junit_cmd} configure_images_prune_cluster_c
+
+    fi
+
+    # End of all Clusters general preparations
+
+
+    ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
+
+    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
+
+      # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+
+      ${junit_cmd} configure_custom_registry_cluster_a
+
+      ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+        ${junit_cmd} configure_custom_registry_cluster_b
 
-        # ${junit_cmd} open_firewall_ports_on_cluster_a
-
-        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
-
-        ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
-
-        ${junit_cmd} label_first_gateway_cluster_b
-
-        ${junit_cmd} configure_images_prune_cluster_b
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
       fi
 
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-        #
-        # ${junit_cmd} open_firewall_ports_on_cluster_c
-        #
-        # ${junit_cmd} label_first_gateway_cluster_c
+        ${junit_cmd} configure_custom_registry_cluster_c
 
-        ${junit_cmd} configure_images_prune_cluster_c
+        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
-      fi # End of configure firewall, labels, and images prune
+      fi
 
+    fi
+    # End of configure custom clusters registry
 
-      ### Configuring clusters registry with custom (downstream) mirrors, secrets and images, if using --registry-images ###
+    ### Submariner system tests prerequisites ###
+    # It will be skipped if using --skip-tests sys,all (useful for deployment without system tests, or if just running pkg unit-tests)
 
-      if [[ "$registry_images" =~ ^(y|yes)$ ]] ; then
-
-        # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
-
-        ${junit_cmd} configure_custom_registry_cluster_a
-
-        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
-
-        if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-          ${junit_cmd} configure_custom_registry_cluster_b
-
-          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
-
-        fi
-
-        if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-          ${junit_cmd} configure_custom_registry_cluster_c
-
-          ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
-
-        fi
-
-      fi # End of configure custom clusters registry
-
+    if [[ ! "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
 
       ### Create namespace and services for submariner system tests ###
 
@@ -5683,7 +5810,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} test_clusters_disconnected_before_submariner
 
     fi
-    ### END of prerequisites for submariner system tests ###
+    ### END of prerequisites for Submariner system tests  ###
 
   else  # When using --skip-ocp-setup :
 
@@ -5697,6 +5824,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   fi
 
+  ### END of OCP Setup and preparations ###
+
+
   TITLE "OCP clusters and environment setup is ready"
   echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
   \n# ($TEST_STATUS_FILE with exit code 1)"
@@ -5705,8 +5835,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
 
-  ### Download and install SUBCTL ###
-  if [[ "$download_subctl" =~ ^(y|yes)$ ]] ; then
+  ### Download subctl binary, even if using it just for tests (e.g. when installing Submariner with API) ###
+  if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
 
     ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
 
@@ -5716,15 +5846,29 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Install ACM Hub, and create cluster set of the manged clusters for Submariner ###
 
-  if [[ "$install_acm" =~ ^(y|yes)$ ]] ; then
+  if [[ "$INSTALL_ACM" =~ ^(y|yes)$ ]] ; then
 
-    # Setup ACM Hub
+    # Setup ACM Hub and MCE (for ACM > 2.5 it is required to pre-install MCE, before ACM)
+    if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+      export INSTALL_MCE=YES
+    fi
 
-    ${junit_cmd} install_acm_operator "$ACM_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
+
+    ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
+
+    ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
+
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_multicluster_engine
+
     ${junit_cmd} create_acm_multiclusterhub
+
+
+    # Setup ACM Managed Clusters
 
     ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
 
@@ -5744,66 +5888,73 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of ACM Install ###
 
-  ### Deploy Submariner on the clusters with SUBCTL tool (if using --subctl-install) ###
+  ### Install Submariner (if using --subctl-version) ###
 
-  if [[ "$install_with_subctl" =~ ^(y|yes)$ ]]; then
+  if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
 
-    # Running build_operator_latest if requested  # [DEPRECATED]
-    # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
+    ### Deploy Submariner on the clusters with subctl CLI tool (if using --subctl-install) ###
 
-    ${junit_cmd} set_join_parameters_for_cluster_a
+    if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_b
+      # Running build_operator_latest if requested  # [DEPRECATED]
+      # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
+      ${junit_cmd} set_join_parameters_for_cluster_a
 
-    # Overriding Submariner images with custom images from registry
-    if [[ "$registry_images" =~ ^(y|yes)$ ]]; then
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_b
 
-      ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+      # Overriding Submariner images with custom images from registry
+      if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]]; then
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+        ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+
+        [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+
+        [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+
+      fi
+
+      ${junit_cmd} install_broker_via_subctl_on_cluster_a
+
+      ${junit_cmd} test_broker_before_join
+
+      ${junit_cmd} run_subctl_join_on_cluster_a
+
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
+
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
+
+    else
+      ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters via API ###
+
+      ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
+
+      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
+
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+      fi
+
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+      fi
 
     fi
-
-    ${junit_cmd} install_broker_cluster_a
-
-    ${junit_cmd} test_broker_before_join
-
-    ${junit_cmd} run_subctl_join_on_cluster_a
-
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
-
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
-
-  else
-
-    ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters as OCP bundle  ###
-
-    ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_HUB}"
-
-    ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_HUB}"
-
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-    fi
-
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-      ${junit_cmd} configure_submariner_bundle_on_cluster "${KUBECONF_CLUSTER_C}"
-
-      ${junit_cmd} install_submariner_via_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-    fi
-
+    ### END of INSTALL_WITH_SUBCTL ###
   fi
-  ### END of install_with_subctl ###
+  ### END of INSTALL_SUBMARINER ###
 
 
   TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
@@ -5811,10 +5962,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   echo 2 > $TEST_STATUS_FILE
 
-
   ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
-  if [[ ! "$skip_tests" =~ ((sys|all)(,|$))+ ]]; then
+  if [[ ! "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
 
@@ -5872,7 +6022,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Testing GlobalNet connectivity (if enabled) on all clusters
 
-    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} test_globalnet_status_cluster_a
 
@@ -5908,11 +6058,21 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} install_nginx_headless_namespace_managed_cluster
 
-    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
+    # Since Submariner 0.12, globalnet (v2) supports headless services, but not pod to pod connectivity
+    if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+      export GN_VER=V2
+    else
+      export GN_VER=V1
+    fi
 
-      ${junit_cmd} test_new_netshoot_global_ip_cluster_a
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
-      ${junit_cmd} test_nginx_headless_global_ip_managed_cluster
+      ${junit_cmd} test_new_netshoot_ip_cluster_a_globalnet_v1
+
+      ${junit_cmd} test_nginx_headless_ip_globalnet_v1
+
+    else
+      echo -e "\n# TODO: Need new system tests for GlobalNet V2 (Pod to Pod connectivity is not supported since Submariner 0.12)"
     fi
 
     # Test the default (pre-installed) netshoot and nginx with service-discovery
@@ -5924,18 +6084,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
     # Test the new netshoot and headless Nginx service-discovery
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
 
-    if [[ "$globalnet" =~ ^(y|yes)$ ]] ; then
-
-        ${junit_cmd} test_clusters_connected_overlapping_cidrs
-
-        echo -e "\n# TODO: Test headless service with GLobalnet - when the feature of is supported"
-        BUG "HEADLESS Service is not supported with GlobalNet" \
-         "No workaround yet - Skip the whole test" \
-        "https://github.com/submariner-io/lighthouse/issues/273"
-        # No workaround yet
+      # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
+      ${junit_cmd} test_clusters_connected_overlapping_cidrs_globalnet_v1
 
     else
+
       ${junit_cmd} export_nginx_headless_namespace_managed_cluster
 
       ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
@@ -5955,11 +6110,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Running Submariner tests with Ginkgo or with subctl commands
 
-  if [[ ! "$skip_tests" =~ all ]]; then
+  if [[ ! "$SKIP_TESTS" =~ all ]]; then
 
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
-    if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+    if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
       verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
       ${junit_cmd} build_submariner_repos
@@ -5967,7 +6122,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ### Running Unit-tests in Submariner project with Ginkgo
 
-    if [[ ! "$skip_tests" =~ pkg ]] && [[ "$build_go_tests" =~ ^(y|yes)$ ]]; then
+    if [[ ! "$SKIP_TESTS" =~ pkg ]] && [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]]; then
       ${junit_cmd} test_submariner_packages
 
       if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
@@ -5979,9 +6134,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    if [[ ! "$skip_tests" =~ e2e ]]; then
+    if [[ ! "$SKIP_TESTS" =~ e2e ]]; then
 
-      if [[ "$build_go_tests" =~ ^(y|yes)$ ]] ; then
+      if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
 
       ### Running E2E tests in Submariner and Lighthouse projects with Ginkgo
 
@@ -6050,7 +6205,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${test_status}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $test_status is set ###
-  if [[ -n "$test_status" ]] && [[ "$upload_to_polarion" =~ ^(y|yes)$ ]] ; then
+  if [[ -n "$test_status" ]] && [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
       create_all_test_results_in_polarion || :
   fi
 
@@ -6067,10 +6222,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   PROMPT "$message" "$color"
 
-  TITLE "Creating HTML Report"
-  echo -e "# SYS_LOG = $SYS_LOG
-  # REPORT_NAME = $REPORT_NAME
-  # REPORT_FILE = $REPORT_FILE
+  TITLE "Creating HTML Report
+  SYS_LOG = $SYS_LOG
+  REPORT_NAME = $REPORT_NAME
+  REPORT_FILE = $REPORT_FILE
   "
 
   if [[ -n "$REPORT_FILE" ]] ; then
@@ -6085,7 +6240,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 
 echo -e "\n# Clean $SYS_LOG from sh2ju debug lines (+++), if CLI option: --debug was NOT used"
-[[ "$script_debug_mode" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
+[[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]] || sed -i 's/+++.*//' "$SYS_LOG"
 
 TITLE "Set Html report headlines with important test and environment info"
 html_report_headlines=""

@@ -80,31 +80,38 @@ GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}"
 
 ### OpenShift registry vars ###
 
+export OCP_USR='ocp_user' # Local registry user
+
 # The official and staging Redhat products registry, that is accessible on the internet (external)
 export OFFICIAL_REGISTRY="registry.redhat.io"
 export STAGING_REGISTRY="registry.stage.redhat.io"
-
-# Snapshot registry for Redhat product container images that can be accessed within Redhat's internal network (internal, vpn)
-export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
-
-# Snapshot registry for redhat product container images that is accessible on the internet (external)
-export BREW_REGISTRY="brew.registry.redhat.io"
-export REGISTRY_IMAGE_PREFIX="rhacm2"
-export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
-export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 
 # Another official Redhat registry catalog (external)
 export CATALOG_REGISTRY="registry.access.redhat.com"
 export CATALOG_IMAGE_PREFIX="openshift4"
 export CATALOG_IMAGE_IMPORT_PATH="ose-oauth-proxy"
 
+# PROXY Snapshot registry for Redhat product container images that can be accessed within Redhat's network (interanl with VPN)
+export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
+
+# BREW Snapshot registry for redhat product container images that is accessible on the internet with credentials (external)
+export BREW_REGISTRY="brew.registry.redhat.io"
+export REGISTRY_IMAGE_PREFIX="rhacm2"
+export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
+export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 # Wrap credentials with single quotes:
-export REGISTRY_USR='mirror-user'
-export REGISTRY_PWD='mirror-pass'
-export OCP_USR='ocp_user'
+export REGISTRY_USR='brew-user'
+export REGISTRY_PWD='brew-pass'
+
+# QUAY.IO registry - also accessible on the internet with credentials
+export QUAY_REGISTRY="quay.io:443"
+export QUAY_IMAGE_IMPORT_PATH="acm-d" # supports digests (hash) and floating tags
+export QUAY_IMAGE_MCE_PREFIX="multicluster-engine"
+export QUAY_USR='quay-user'
+export QUAY_PWD='quay-pass'
 
 
-### Submariner subscription vars ###
+### Submariner resources vars ###
 
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"
@@ -125,23 +132,38 @@ export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
 export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
-export SUBM_SUBSCRIPTION="my-submariner-subscription"
+# export SUBM_SUBSCRIPTION="my-submariner-subscription"
 export SUBM_CATALOG="my-submariner-catalog"
-export SUBM_CHANNEL_PREFIX="alpha-"
+export SUBM_CHANNEL_PREFIX_TECH_PREVIEW="alpha-"
+export SUBM_CHANNEL_PREFIX="stable-"
 
 
-### ACM subscription vars ###
+### ACM resources vars ###
 
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
+
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+export ACM_INSTANCE="multiclusterhub"
 
 export ACM_VER_TAG=${ACM_VER_TAG:-latest}
-export ACM_SUBSCRIPTION="my-acm-subscription"
+# export ACM_SUBSCRIPTION="my-acm-subscription"
 export ACM_CATALOG="my-acm-catalog"
 export ACM_CHANNEL_PREFIX="release-"
+
+
+### MCE resources vars ###
+
+export MCE_NAMESPACE="mce" # instead of "multicluster-engine"
+export MCE_OPERATOR="multicluster-engine"
+export MCE_BUNDLE="multicluster-engine-operator-bundle"
+export MCE_INSTANCE="multiclusterengine"
+
+export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
+export MCE_CATALOG="my-mce-catalog"
+export MCE_CHANNEL_PREFIX="stable-"
 
 
 ### Polarion vars ###
