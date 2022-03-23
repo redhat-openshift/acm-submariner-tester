@@ -3211,11 +3211,11 @@ function add_acm_registry_mirror_to_ocp_node() {
     TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes:
     * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
           - ${local_registry_path}
-          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}
 
     * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
           - ${local_registry_path}
-          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}
 
     * ${VPN_REGISTRY} -->
           - ${BREW_REGISTRY}
@@ -3250,7 +3250,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}"
       insecure = false
 
   [[registry]]
@@ -3265,7 +3265,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}"
       insecure = false
 
   [[registry]]
