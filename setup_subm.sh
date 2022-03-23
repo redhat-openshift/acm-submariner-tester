@@ -5146,19 +5146,21 @@ function test_products_versions() {
 
   subctl version || :
 
-  subctl show versions || :
+  if subctl show versions ; then
 
-  # Show Libreswan (cable driver) version in the active gateway pod
-  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+    # Show Libreswan (cable driver) version in the active gateway pod
+    export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
 
-  if [[ -n "$active_gateway_pod" ]] ; then
-    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
-    echo -e "\n\n"
+    if [[ -n "$active_gateway_pod" ]] ; then
+      echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
+      ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+      echo -e "\n\n"
 
-    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-    echo -e "\n\n"
+      echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
+      ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+      echo -e "\n\n"
+    fi
+
   fi
 
   # Show Submariner and ACM CSVs (Cluster service versions)
@@ -6347,22 +6349,30 @@ if [[ -s "$CLUSTER_C_YAML" ]] ; then
   sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
-# Artifact other WORKDIR files
-[[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
-[[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
+# Artifact ${OCP_USR}.sec file
+find ${WORKDIR} -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
 
-# Compress all artifacts
-tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
- "$REPORT_FILE" \
- "$SYS_LOG" \
- kubconf_* \
- subm_* \
- *.sec \
- *.xml \
- *.yaml \
- *.log \
- *.ver \
- 2>/dev/null)
+# Artifact broker.info file (if created with subctl deploy)
+find ${WORKDIR} -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
+
+# Artifact "submariner" directory (if created with subctl gather)
+find ${WORKDIR} -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
+
+# Compress the required artifacts (either files or directories)
+
+find . -maxdepth 1 \( \
+-name "$REPORT_FILE" -o \
+-name "$SYS_LOG" -o \
+-name "kubconf_*" -o \
+-name "submariner*" -o \
+-name "*.sec" -o \
+-name "*.xml" -o \
+-name "*.yaml" -o \
+-name "*.log" -o \
+-name "*.ver" \
+\) -print0 | \
+tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE --null -T - || :
+
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf $ARCHIVE_FILE
