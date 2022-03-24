@@ -220,6 +220,10 @@ export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
 export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
 : > $SUBCTL_VERSION_FILE
 
+# File to store Submariner installed versions
+export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
+: > $SUBMARINER_VERSIONS_FILE
+
 # File to store SubCtl JOIN command for cluster A
 export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
 : > $SUBCTL_JOIN_CLUSTER_A_FILE
@@ -480,7 +484,7 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-  fi # End of SKIP_OCP_SETUP options
+  fi # END of SKIP_OCP_SETUP options
 
   # User input: $GLOBALNET - to deploy with --globalnet
   while [[ ! "$GLOBALNET" =~ ^(yes|no)$ ]]; do
@@ -2184,7 +2188,7 @@ function set_subm_version_tag_var() {
 
   TITLE "Retrieve correct tag for Submariner version \$${tag_var_name} : $subm_version_tag"
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
-    subm_version_tag=$(get_subctl_branch_tag)
+    subm_version_tag=$(get_submariner_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
     echo -e "\n# Version ${subm_version_tag} is considered as 'v${subm_version_tag}' tag"
     subm_version_tag=v${subm_version_tag}
@@ -2208,38 +2212,38 @@ function download_subctl_by_tag() {
 
     # Optional param: $1 => SubCtl version by tag to download
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
-    local subctl_branch_tag="${1:-v[0-9]}"
+    local subm_branch_tag="${1:-v[0-9]}"
 
     cd ${WORKDIR}
 
     # Downloading SubCtl from VPN_REGISTRY (downstream)
-    # if using --registry-images and if $subctl_branch_tag is not devel
-    if [[ ! "$subctl_branch_tag" =~ devel ]] && \
+    # if using --registry-images and if $subm_branch_tag is not devel
+    if [[ ! "$subm_branch_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       TITLE "Backup previous subctl archive (if exists)"
-      local subctl_xz="subctl-${subctl_branch_tag}-linux-amd64.tar.xz"
+      local subctl_xz="subctl-${subm_branch_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f ${subctl_xz} ${subctl_xz}.bak
 
       TITLE "Downloading SubCtl from $SUBM_IMG_SUBCTL"
 
-      # Fix the $subctl_branch_tag value for custom images
-      set_subm_version_tag_var "subctl_branch_tag"
+      # Fix the $subm_branch_tag value for custom images
+      set_subm_version_tag_var "subm_branch_tag"
 
       echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
       local subctl_image_url
 
       if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subm_branch_tag}"
       else
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subctl_branch_tag}"
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subm_branch_tag}"
         # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
       fi
 
       echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subctl_branch_tag' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subm_branch_tag' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2272,18 +2276,18 @@ function download_subctl_by_tag() {
       # Downloading SubCtl from Github (upstream)
 
       local repo_tag
-      repo_tag=$(get_subctl_branch_tag "${subctl_branch_tag}")
+      repo_tag=$(get_submariner_branch_tag "${subm_branch_tag}")
 
       TITLE "Downloading SubCtl '${repo_tag}' with getsubctl.sh from: https://get.submariner.io/"
 
-      # curl https://get.submariner.io/ | VERSION=${subctl_branch_tag} bash -x
+      # curl https://get.submariner.io/ | VERSION=${subm_branch_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
       PATH="/usr/bin:$PATH" which install
 
-      #curl https://get.submariner.io/ | VERSION=${subctl_branch_tag} PATH="/usr/bin:$PATH" bash -x
+      #curl https://get.submariner.io/ | VERSION=${subm_branch_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
       "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
       "https://github.com/submariner-io/submariner-operator/issues/526"
@@ -2341,7 +2345,7 @@ function download_subctl_by_tag() {
 
 # ------------------------------------------
 
-function get_subctl_branch_tag() {
+function get_submariner_branch_tag() {
   ### Print the tag of latest subctl version released ###
   # Do not echo more info, since the output is the returned value
 
@@ -3207,11 +3211,11 @@ function add_acm_registry_mirror_to_ocp_node() {
     TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes:
     * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
           - ${local_registry_path}
-          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}
 
     * ${STAGING_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
           - ${local_registry_path}
-          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}
 
     * ${VPN_REGISTRY} -->
           - ${BREW_REGISTRY}
@@ -3246,7 +3250,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}"
       insecure = false
 
   [[registry]]
@@ -3261,7 +3265,7 @@ function add_acm_registry_mirror_to_ocp_node() {
       insecure = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_PREFIX}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}"
       insecure = false
 
   [[registry]]
@@ -4057,7 +4061,10 @@ function export_nginx_default_namespace_managed_cluster() {
   "Explicitly set target namespace" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
   # Workaround:
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+  # export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+  local cur_context
+  cur_context="$(${OC} config current-context)"
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "" "$cur_context"
 
 }
 
@@ -4080,13 +4087,16 @@ function export_nginx_headless_namespace_managed_cluster() {
 function export_service_in_lighthouse() {
   trap_to_debug_commands;
   local svc_name="$1"
+
+  # Optional args:
   local namespace="$2"
+  local kubeconfig_context="$3"
 
   subctl export service -h
 
   TITLE "Exporting the following service $svc_name :"
 
-  subctl export service "${svc_name}" ${namespace:+-n $namespace}
+  subctl export service "${svc_name}" ${kubeconfig_context:+--kubecontext $kubeconfig_context} ${namespace:+-n $namespace}
 
   ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
 
@@ -4551,7 +4561,10 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   export_merged_kubeconfigs
 
-  subctl show versions |& highlight "submariner.*${subctl_version}" || \
+  echo -e "\n# Store SubCtl version in $SUBMARINER_VERSIONS_FILE"
+  subctl show versions > "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
+
+  cat "$SUBMARINER_VERSIONS_FILE" |& highlight "submariner.*${subctl_version}" || \
   BUG "Subctl shows wrong Submariner version - it should have been v${subctl_version}" \
   "Please verify that all Submariner components (e.g. Gateway) have image version = v${subctl_version}" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
@@ -4816,25 +4829,32 @@ function test_subctl_benchmarks() {
 
 function build_submariner_repos() {
 ### Building latest Submariner code and tests ###
-  PROMPT "Building Submariner-IO code of E2E and unit-tests for version $SUBM_VER_TAG"
+  PROMPT "Building submariner-io repositories for the E2E and unit-tests"
   trap_to_debug_commands;
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  TITLE "Retrieve correct branch to pull for Submariner version '$SUBM_VER_TAG'"
+  local subm_branch_tag="$1"
 
-  local subctl_branch_tag
-  if [[ "$SUBM_VER_TAG" =~ latest|devel ]]; then
-    # Find the latest release branch name
-    subctl_branch_tag="$(get_subctl_branch_tag)"
-  else
-    # Find the latest release branch name that includes ${SUBM_VER_TAG} regex
-    subctl_branch_tag=$(get_subctl_branch_tag "${SUBM_VER_TAG}")
+  TITLE "Retrieve correct branch to pull for Submariner version '$subm_branch_tag'"
+
+  if [[ -z "$subm_branch_tag" ]] ; then
+    echo -e "\n# No Submariner version was specified, retrieving installed version with subctl:"
+    subctl show versions > "$SUBMARINER_VERSIONS_FILE"
+    subm_branch_tag="$(grep -m 1 "submariner" "$SUBMARINER_VERSIONS_FILE" | awk '{print $3}')"
   fi
 
-  build_go_repo "https://github.com/submariner-io/submariner" $subctl_branch_tag
+  if [[ "$subm_branch_tag" =~ latest|devel ]]; then
+    echo -e "\n# Find the latest branch (devel) in Submariner repository:"
+    subm_branch_tag="$(get_submariner_branch_tag)"
+  else
+    echo -e "\n# Find branch name that includes '${subm_branch_tag}' in Submariner repository:"
+    subm_branch_tag=$(get_submariner_branch_tag "${subm_branch_tag}")
+  fi
 
-  build_go_repo "https://github.com/submariner-io/lighthouse" $subctl_branch_tag
+  build_go_repo "https://github.com/submariner-io/submariner" "$subm_branch_tag"
+
+  build_go_repo "https://github.com/submariner-io/lighthouse" "$subm_branch_tag"
 }
 
 # ------------------------------------------
@@ -5132,19 +5152,21 @@ function test_products_versions() {
 
   subctl version || :
 
-  subctl show versions || :
+  if subctl show versions ; then
 
-  # Show Libreswan (cable driver) version in the active gateway pod
-  export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+    # Show Libreswan (cable driver) version in the active gateway pod
+    export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
 
-  if [[ -n "$active_gateway_pod" ]] ; then
-    echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
-    echo -e "\n\n"
+    if [[ -n "$active_gateway_pod" ]] ; then
+      echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"
+      ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "cat /etc/os-release" | awk -F\" '/PRETTY_NAME/ {print $2}' || :
+      echo -e "\n\n"
 
-    echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
-    ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
-    echo -e "\n\n"
+      echo -e "\n### LibreSwan version on the running Gateway pod: $active_gateway_pod ###"
+      ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "rpm -qa libreswan" || :
+      echo -e "\n\n"
+    fi
+
   fi
 
   # Show Submariner and ACM CSVs (Cluster service versions)
@@ -5531,7 +5553,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
-    ### Destroy / Create / Clean OCP Clusters ###
+    ### Destroy / Create OCP Clusters ###
 
     # Running download_ocp_installer for cluster A
 
@@ -5620,9 +5642,18 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    ### END of all Clusters Setup ###
+    echo 0 > $TEST_STATUS_FILE
 
-    ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+  fi
+  ### END of OCP Setup (Create or Destroy) ###
+
+
+  ### OCP general preparations for ALL tests ###
+  # Skipping if using "--skip-tests all", to run clusters create/destroy, without further tests ###
+
+  if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
+
+  ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
     ${junit_cmd} update_kubeconfig_context_cluster_a
 
@@ -5670,7 +5701,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
     fi
-    # End of cluster A cleanup
+    # END of cluster A cleanup
 
     # Running cleanup on cluster B if requested
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -5687,7 +5718,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
     fi
-    # End of cluster B cleanup
+    # END of cluster B cleanup
 
     # Running cleanup on cluster C if requested
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
@@ -5704,19 +5735,19 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
     fi
-    # End of cluster C cleanup
+    # END of cluster C cleanup
 
 
-    ### Clusters general preparations (firewall ports, gateway labels, and images prune on all clusters) ###
+    ### Clusters configurations (firewall ports, gateway labels, and images prune on all clusters) ###
 
     echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
     \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
     # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
-    # Cluster A preparations
+    # Cluster A configurations
     ${junit_cmd} configure_images_prune_cluster_a
 
-    # Cluster B custom preparations for OpenStack
+    # Cluster B custom configurations for OpenStack
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
@@ -5733,7 +5764,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    # Cluster C preparations
+    # Cluster C configurations
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
@@ -5748,7 +5779,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    # End of all Clusters general preparations
+    ### END of all Clusters configurations
 
 
     ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
@@ -5778,12 +5809,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
     fi
-    # End of configure custom clusters registry
+    ### END of configure custom clusters registry
+
 
     ### Submariner system tests prerequisites ###
-    # It will be skipped if using --skip-tests sys,all (useful for deployment without system tests, or if just running pkg unit-tests)
+    # It will be skipped if using "--skip-tests sys" (useful for deployment without system tests, or if just running pkg unit-tests)
 
-    if [[ ! "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
+    if [[ ! "$SKIP_TESTS" =~ ((sys)(,|$))+ ]]; then
 
       ### Create namespace and services for submariner system tests ###
 
@@ -5809,31 +5841,27 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} test_clusters_disconnected_before_submariner
 
+    else  # When using "--skip-tests sys" :
+
+      # Verify clusters status even if system tests were skipped
+
+      ${junit_cmd} test_kubeconfig_cluster_a
+
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_b
+
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
+
     fi
     ### END of prerequisites for Submariner system tests  ###
 
-  else  # When using --skip-ocp-setup :
+    TITLE "OCP clusters and environment setup is ready"
+    echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will NOT be reported to Polarion.
+    \n# ($TEST_STATUS_FILE with exit code 1)"
 
-    # Verify clusters status even if OCP setup/cleanup was skipped
-
-    ${junit_cmd} test_kubeconfig_cluster_a
-
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_b
-
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
+    echo 1 > $TEST_STATUS_FILE
 
   fi
-
-  ### END of OCP Setup and preparations ###
-
-
-  TITLE "OCP clusters and environment setup is ready"
-  echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will be reported to Polarion.
-  \n# ($TEST_STATUS_FILE with exit code 1)"
-
-  echo 1 > $TEST_STATUS_FILE
-
-  ### END of ALL OCP Clusters Setup, Cleanup and Registry configure ###
+  ### END of OCP general preparations for ALL tests ###
 
   ### Download subctl binary, even if using it just for tests (e.g. when installing Submariner with API) ###
   if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
@@ -5953,14 +5981,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
     ### END of INSTALL_WITH_SUBCTL ###
+
+    TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
+    echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
+
+    echo 2 > $TEST_STATUS_FILE
+
   fi
   ### END of INSTALL_SUBMARINER ###
 
-
-  TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
-  echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
-
-  echo 2 > $TEST_STATUS_FILE
 
   ### Running High-level / E2E / Unit Tests (if not requested to --skip-tests sys / all) ###
 
@@ -6117,7 +6146,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
       verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-      ${junit_cmd} build_submariner_repos
+      ${junit_cmd} build_submariner_repos "$SUBM_VER_TAG"
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo
@@ -6326,21 +6355,30 @@ if [[ -s "$CLUSTER_C_YAML" ]] ; then
   sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
-# Artifact other WORKDIR files
-[[ ! -f "$WORKDIR/$BROKER_INFO" ]] || cp -f "$WORKDIR/$BROKER_INFO" "subm_${BROKER_INFO}"
-[[ ! -f "${WORKDIR}/${OCP_USR}.sec" ]] || cp -f "${WORKDIR}/${OCP_USR}.sec" "${OCP_USR}.sec"
+# Artifact ${OCP_USR}.sec file
+find ${WORKDIR} -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
 
-# Compress all artifacts
-tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE $(ls \
- "$REPORT_FILE" \
- "$SYS_LOG" \
- kubconf_* \
- subm_* \
- *.sec \
- *.xml \
- *.yaml \
- *.log \
- 2>/dev/null)
+# Artifact broker.info file (if created with subctl deploy)
+find ${WORKDIR} -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
+
+# Artifact "submariner" directory (if created with subctl gather)
+find ${WORKDIR} -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
+
+# Compress the required artifacts (either files or directories)
+
+find . -maxdepth 1 \( \
+-name "$REPORT_FILE" -o \
+-name "$SYS_LOG" -o \
+-name "kubconf_*" -o \
+-name "submariner*" -o \
+-name "*.sec" -o \
+-name "*.xml" -o \
+-name "*.yaml" -o \
+-name "*.log" -o \
+-name "*.ver" \
+\) -print0 | \
+tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE --null -T - || :
+
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf $ARCHIVE_FILE
