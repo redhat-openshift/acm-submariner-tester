@@ -4061,7 +4061,10 @@ function export_nginx_default_namespace_managed_cluster() {
   "Explicitly set target namespace" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
   # Workaround:
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+  # export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
+  local cur_context
+  cur_context="$(${OC} config current-context)"
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "" "$cur_context"
 
 }
 
@@ -4084,13 +4087,16 @@ function export_nginx_headless_namespace_managed_cluster() {
 function export_service_in_lighthouse() {
   trap_to_debug_commands;
   local svc_name="$1"
+
+  # Optional args:
   local namespace="$2"
+  local kubeconfig_context="$3"
 
   subctl export service -h
 
   TITLE "Exporting the following service $svc_name :"
 
-  subctl export service "${svc_name}" ${namespace:+-n $namespace}
+  subctl export service "${svc_name}" ${kubeconfig_context:+--kubecontext $kubeconfig_context} ${namespace:+-n $namespace}
 
   ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
 
