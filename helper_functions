@@ -229,7 +229,7 @@ function run_and_tail() {
   # Tail the log, until command has ended or timed-out
   mkdir -p "$(dirname "$log_to_tail")"
   touch "$log_to_tail"
-  tail --pid=$pid -n0 -F "$log_to_tail"
+  tail --pid=$pid -n0 -F "$log_to_tail" | sed 's/\\n/\n/g'
 
   # Check the exit code of the command PID
   wait $pid || process_rc="$?"

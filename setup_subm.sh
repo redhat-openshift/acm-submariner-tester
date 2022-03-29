@@ -1523,16 +1523,18 @@ function test_cluster_status() {
 
   local cluster_name="$1"
 
-  # Get OCP cluster version
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
-
-  PROMPT "Testing status of cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
+  PROMPT "Testing status of cluster $cluster_name"
 
   [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
 
+  # Get OCP cluster version
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" || FATAL "OCP cluster is inaccessible"
+
+  TITLE "Backup Kubeconfig of OCP cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
+
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
-  echo -e "\n# Copy '${KUBECONFIG}' of ${cluster_name} to current workspace: ${kubeconfig_copy}"
+  echo -e "\n# Copy '${KUBECONFIG}' to current workspace: ${kubeconfig_copy}"
   cp -f "$KUBECONFIG" "${kubeconfig_copy}" || :
 
   ${OC} config view
@@ -5129,15 +5131,16 @@ function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
   trap '' DEBUG # DONT trap_to_debug_commands
 
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
+  || BUG "OCP cluster is inaccessible" && return
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
-
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   # Get ACM version if ACM hub is install on current cluster
   local acm_current_version
@@ -5220,14 +5223,15 @@ function save_cluster_info_to_file() {
 # Save important OCP cluster and Submariner information to local files
   trap '' DEBUG # DONT trap_to_debug_commands
 
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
+  || BUG "OCP cluster is inaccessible" && return
+
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
-
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' )" || :
 
   # Print OCP cluster info into file local file "<cluster name>.info"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
