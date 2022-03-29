@@ -736,7 +736,7 @@ function configure_submariner_addon_for_amazon() {
 
   ( # subshell to hide commands
     ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
-    || FATAL "No $managed_cluster_cloud credentials found for Managed cluster '${cluster_id}'"
+    || FATAL "AWS credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: v1
@@ -766,7 +766,7 @@ function configure_submariner_addon_for_google() {
   echo -e "\n# Using '${cluster_secret_name}' for Submariner on Google"
 
   ( # subshell to hide commands
-    [[ -s "$GCP_CRED_JSON" ]] || FATAL "GCP credentials file (json) is missing"
+    [[ -s "$GCP_CRED_JSON" ]] || FATAL "GCP credentials file (json) is required to configure Submariner in the managed cluster '${cluster_id}'"
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: v1
@@ -794,25 +794,42 @@ function configure_submariner_addon_for_openstack() {
 
   echo -e "\n# Using '${cluster_secret_name}' for Submariner on Openstack"
 
-  BUG "Openstack Gateway creation is not yet supported with Submariner Addon" \
-  "The Gateway should be configured externally with 'configure_osp.sh'"
+  # Since ACM 2.5 Openstack cloud prepare is supported
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
 
-#     ( # subshell to hide commands
-        # ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
-        # || FATAL "No $managed_cluster_cloud credentials found for Managed cluster '${cluster_id}'"
+    ( # subshell to hide commands
+        ( [[ -n "$OS_PROJECT_DOMAIN_ID" ]] ) \
+        || FATAL "OSP credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
-#     cat <<EOF | ${OC} apply -f -
-#     apiVersion: v1
-#     kind: Secret
-#     metadata:
-#         name: ${cluster_secret_name}
-#         namespace: ${cluster_id}
-#     type: Opaque
-#     data:
-#         username: $(echo -n ${OS_USERNAME} | base64 -w0)
-#         password: $(echo -n ${OS_PASSWORD} | base64 -w0)
-# EOF
-#     )
+    cat <<EOF | ${OC} apply -f -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+        name: ${cluster_secret_name}
+        namespace: ${cluster_id}
+    type: Opaque
+    data:
+        clouds.yaml: $(echo -n "
+        clouds:
+          openstack:
+            auth:
+              auth_url: ${OS_AUTH_URL}
+              username: '${OS_USERNAME}'
+              project_id: ${OS_PROJECT_DOMAIN_ID}
+              project_name: '${OS_PROJECT_NAME}'
+              user_domain_name: '${OS_USER_DOMAIN_NAME}'
+            region_name: '${OS_REGION_NAME}'
+            interface: 'public'
+            identity_api_version: 3
+         " | base64 -w0)
+        cloud: $(echo -n "openstack" | base64 -w0)
+EOF
+    )
+
+  else
+    BUG "Openstack Gateway creation is not yet supported with Submariner Addon" \
+    "The Gateway should be configured externally with 'configure_osp.sh'"
+  fi
 
 }
 

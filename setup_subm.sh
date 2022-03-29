@@ -5760,9 +5760,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
 
-      ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+      # Since ACM 2.5 Openstack cloud prepare is supported
+      if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
 
-      ${junit_cmd} label_first_gateway_cluster_b
+        ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+
+        ${junit_cmd} label_first_gateway_cluster_b
+
+      fi
 
       ${junit_cmd} configure_images_prune_cluster_b
 
