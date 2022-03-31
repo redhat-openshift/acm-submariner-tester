@@ -4057,16 +4057,7 @@ function export_nginx_default_namespace_managed_cluster() {
 
   TITLE "The ServiceExport should be created in the current Namespace '${current_namespace}', if exporting service without specifying a Namespace:"
 
-  # export_service_in_lighthouse "$NGINX_CLUSTER_BC"
-
-  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
-  "Explicitly set target namespace" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
-  # Workaround:
-  # export_service_in_lighthouse "$NGINX_CLUSTER_BC" "$current_namespace"
-  local cur_context
-  cur_context="$(${OC} config current-context)"
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "" "$cur_context"
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC"
 
 }
 
@@ -4092,13 +4083,19 @@ function export_service_in_lighthouse() {
 
   # Optional args:
   local namespace="$2"
-  local kubeconfig_context="$3"
 
   subctl export service -h
 
   TITLE "Exporting the following service $svc_name :"
 
-  subctl export service "${svc_name}" ${kubeconfig_context:+--kubecontext $kubeconfig_context} ${namespace:+-n $namespace}
+  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
+  "Explicitly set target namespace or use --kubeconfig" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
+
+  # subctl export service "${svc_name}" ${namespace:+-n $namespace}
+  #
+  # Workaound:
+  subctl export service "${svc_name}" --kubeconfig "${KUBECONFIG}" ${namespace:+-n $namespace}
 
   ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
 
@@ -5133,7 +5130,7 @@ function test_products_versions() {
 
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
-  || BUG "OCP cluster is inaccessible" && return
+  || ( BUG "OCP cluster is inaccessible" && return )
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -5225,7 +5222,7 @@ function save_cluster_info_to_file() {
 
   local cluster_version
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
-  || BUG "OCP cluster is inaccessible" && return
+  || ( BUG "OCP cluster is inaccessible" && return )
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
