@@ -1764,6 +1764,9 @@ function delete_submariner_cluster_roles() {
 
   ${OC} delete clusterrole,clusterrolebinding $roles --ignore-not-found || :
 
+  TITLE "Remove ${OCP_USR}.sec file (if exists)"
+  [[ ! -e "${WORKDIR}/${OCP_USR}.sec" ]] || rm "${WORKDIR}/${OCP_USR}.sec"
+
 }
 
 # ------------------------------------------
