@@ -212,8 +212,9 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 #               Saving important test properties in local files                 #
 #################################################################################
 
-# File to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
+# File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
+export EXIT_STATUS
 : > $TEST_STATUS_FILE
 
 # File to store SubCtl version
@@ -5654,6 +5655,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
 
+    # Before starting tests, set the test exit status to 1 (instead of 0)
+    echo 1 > $TEST_STATUS_FILE
+
   ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
     ${junit_cmd} update_kubeconfig_context_cluster_a
@@ -6236,11 +6240,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # ------------------------------------------
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${test_status}] \n"
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${EXIT_STATUS}] \n"
 
-  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $test_status is set ###
-  if [[ -n "$test_status" ]] && [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
+  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
+  if [[ -n "$EXIT_STATUS" ]] && [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
       create_all_test_results_in_polarion || :
   fi
 
@@ -6251,13 +6255,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   message="Creating HTML Report"
 
   # If $TEST_STATUS_FILE does not include 0 (0 = all Tests passed) or 2 (2 = some tests passed) - it means that system tests have failed (or not run at all)
-  if [[ "$test_status" != @(0|2) ]] ; then
-    message="$message - System tests failed with exit status [$test_status]"
+  if [[ "$EXIT_STATUS" != @(0|2) ]] ; then
+    message="$message - System tests failed with exit status [$EXIT_STATUS]"
     color="$RED"
   fi
   PROMPT "$message" "$color"
 
   TITLE "Creating HTML Report
+  EXIT_STATUS = $EXIT_STATUS
   SYS_LOG = $SYS_LOG
   REPORT_NAME = $REPORT_NAME
   REPORT_FILE = $REPORT_FILE
@@ -6391,13 +6396,15 @@ tar tvf $ARCHIVE_FILE
 
 TITLE "To view in your Browser, run:\n tar -xvf ${ARCHIVE_FILE}; firefox ${REPORT_FILE}"
 
-test_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
-TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$test_status]"
+# Get test exit status (from file $TEST_STATUS_FILE)
+EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
 
-if [[ -z "$test_status" ]] ; then
+TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$EXIT_STATUS]"
+
+if [[ -z "$EXIT_STATUS" ]] ; then
   exit 3
 else
-  exit $test_status
+  exit $EXIT_STATUS
 fi
 
 
