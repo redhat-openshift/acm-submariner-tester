@@ -686,14 +686,12 @@ function show_test_plan() {
   - update_kubeconfig_context_cluster_b / c
   - test_kubeconfig_cluster_a
   - test_kubeconfig_cluster_b / c
+  - uninstall_submariner_cluster_a
+  - delete_old_submariner_images_from_cluster_a
+  - uninstall_submariner_cluster_b / c
+  - delete_old_submariner_images_from_cluster_b / c
   - add_elevated_user_to_cluster_a
   - add_elevated_user_to_cluster_b / c
-  - clean_submariner_namespace_and_resources_cluster_a
-  - clean_submariner_labels_and_machine_sets_cluster_a
-  - delete_old_submariner_images_from_cluster_a
-  - clean_submariner_namespace_and_resources_cluster_b / c
-  - clean_submariner_labels_and_machine_sets_cluster_b / c
-  - delete_old_submariner_images_from_cluster_b / c
   - open_firewall_ports_on_cluster_a
   - configure_images_prune_cluster_a
   - open_firewall_ports_on_openstack_cluster_b
@@ -1594,9 +1592,9 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or accessed more than 1 day ago
+  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or modified more than 1 day ago
   touch -a "${WORKDIR}/${http_sec_name}"
-  if find "${WORKDIR}/${http_sec_name}" \( -atime +1 -o -empty \) | grep . ; then
+  if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
     echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
@@ -1675,52 +1673,67 @@ EOF
 
 # ------------------------------------------
 
-function clean_submariner_namespace_and_resources_cluster_a() {
+function uninstall_submariner_cluster_a() {
 ### Run cleanup of previous Submariner on OCP cluster A (public) ###
-  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OCP cluster A (public)"
+  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OCP cluster A (public)"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  clean_submariner_namespace_and_resources
+  uninstall_submariner
 }
 
 # ------------------------------------------
 
-function clean_submariner_namespace_and_resources_cluster_b() {
+function uninstall_submariner_cluster_b() {
 ### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
-  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
+  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  clean_submariner_namespace_and_resources
+  uninstall_submariner
 }
 
 # ------------------------------------------
 
-function clean_submariner_namespace_and_resources_cluster_c() {
+function uninstall_submariner_cluster_c() {
 ### Run cleanup of previous Submariner on cluster C ###
-  PROMPT "Cleaning previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on cluster C"
+  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on cluster C"
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  clean_submariner_namespace_and_resources
+  uninstall_submariner
 }
 
 # ------------------------------------------
 
-function clean_submariner_namespace_and_resources() {
+function uninstall_submariner() {
   trap_to_debug_commands;
 
-  BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
-  "Run cleanup (oc delete) of any existing resource of submariner-operator" \
-  "https://github.com/submariner-io/submariner-operator/issues/88
-  https://github.com/submariner-io/submariner-website/issues/272"
+  PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
 
-  delete_submariner_namespace_and_crds
+  # Since Submariner 0.12 there's an uninstall command
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
 
-  delete_submariner_cluster_roles
+    subctl uninstall --yes
 
-  delete_lighthouse_dns_list
+  else
+
+    BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
+    "Run cleanup (oc delete) of any existing resource of submariner-operator" \
+    "https://github.com/submariner-io/submariner-operator/issues/88
+    https://github.com/submariner-io/submariner-website/issues/272"
+
+    delete_submariner_namespace_and_crds
+
+    delete_submariner_cluster_roles
+
+    delete_lighthouse_dns_list
+
+    remove_submariner_gateway_labels
+
+    remove_submariner_machine_sets
+
+  fi
 
   delete_submariner_test_namespaces
 
@@ -1764,9 +1777,6 @@ function delete_submariner_cluster_roles() {
 
   ${OC} delete clusterrole,clusterrolebinding $roles --ignore-not-found || :
 
-  TITLE "Remove ${OCP_USR}.sec file (if exists)"
-  [[ ! -e "${WORKDIR}/${OCP_USR}.sec" ]] || rm "${WORKDIR}/${OCP_USR}.sec"
-
 }
 
 # ------------------------------------------
@@ -1788,6 +1798,35 @@ function delete_lighthouse_dns_list() {
     servers: []
 EOF
 
+}
+
+# ------------------------------------------
+
+function remove_submariner_gateway_labels() {
+  trap_to_debug_commands;
+
+  TITLE "Remove previous submariner gateway labels from all node in the cluster:"
+
+  ${OC} label --all node submariner.io/gateway- || :
+}
+
+# ------------------------------------------
+
+function remove_submariner_machine_sets() {
+  trap_to_debug_commands;
+
+  TITLE "Remove previous machineset (if it has a template with submariner gateway label)"
+
+  local subm_machineset
+  subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}'`"
+  local ns
+  ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
+
+  if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
+    ${OC} delete machineset $subm_machineset -n $ns || :
+  fi
+
+  ${OC} get machineset -A -o wide || :
 }
 
 # ------------------------------------------
@@ -1832,77 +1871,6 @@ function delete_e2e_namespaces() {
     echo "No 'e2e-tests' namespaces exist to be deleted"
   fi
 
-}
-
-# ------------------------------------------
-
-function clean_submariner_labels_and_machine_sets_cluster_a() {
-### Remove previous Submariner Gateway Node's Labels and MachineSets from OCP cluster A (public) ###
-  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OCP cluster A (public)"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-
-  remove_submariner_gateway_labels
-
-  remove_submariner_machine_sets
-}
-
-# ------------------------------------------
-
-function clean_submariner_labels_and_machine_sets_cluster_b() {
-### Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem) ###
-  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from OSP cluster B (on-prem)"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-
-  remove_submariner_gateway_labels
-
-  remove_submariner_machine_sets
-}
-
-# ------------------------------------------
-
-function clean_submariner_labels_and_machine_sets_cluster_c() {
-### Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C ###
-  PROMPT "Remove previous Submariner Gateway Node's Labels and MachineSets from cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-
-  remove_submariner_gateway_labels
-
-  remove_submariner_machine_sets
-}
-
-# ------------------------------------------
-
-function remove_submariner_gateway_labels() {
-  trap_to_debug_commands;
-
-  TITLE "Remove previous submariner gateway labels from all node in the cluster:"
-
-  ${OC} label --all node submariner.io/gateway- || :
-}
-
-# ------------------------------------------
-
-function remove_submariner_machine_sets() {
-  trap_to_debug_commands;
-
-  TITLE "Remove previous machineset (if it has a template with submariner gateway label)"
-
-  local subm_machineset
-  subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}'`"
-  local ns
-  ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
-
-  if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
-    ${OC} delete machineset $subm_machineset -n $ns || :
-  fi
-
-  ${OC} get machineset -A -o wide || :
 }
 
 # ------------------------------------------
@@ -5667,16 +5635,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} test_kubeconfig_cluster_a
 
-    ${junit_cmd} add_elevated_user_to_cluster_a
-
     # Verify cluster B (if it is expected to be an active cluster)
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
       ${junit_cmd} update_kubeconfig_context_cluster_b
 
       ${junit_cmd} test_kubeconfig_cluster_b
-
-      ${junit_cmd} add_elevated_user_to_cluster_b
 
     fi
 
@@ -5687,10 +5651,17 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} test_kubeconfig_cluster_c
 
-      ${junit_cmd} add_elevated_user_to_cluster_c
-
     fi
 
+    ### Download subctl binary, even if not using subctl deploy and join (e.g. to uninstall Submariner) ###
+
+    if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
+
+      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+
+      ${junit_cmd} test_subctl_command
+
+    fi
 
     ### Clusters Cleanup (of ACM and Submariner resources) - Only for existing clusters ###
 
@@ -5702,9 +5673,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} clean_submariner_namespace_and_resources_cluster_a
-
-      ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_a
+      ${junit_cmd} uninstall_submariner_cluster_a
 
       ${junit_cmd} delete_old_submariner_images_from_cluster_a
 
@@ -5718,9 +5687,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_b
-
-        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_b
+        ${junit_cmd} uninstall_submariner_cluster_b
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_b
 
@@ -5735,9 +5702,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} clean_submariner_namespace_and_resources_cluster_c
-
-        ${junit_cmd} clean_submariner_labels_and_machine_sets_cluster_c
+        ${junit_cmd} uninstall_submariner_cluster_c
 
         ${junit_cmd} delete_old_submariner_images_from_cluster_c
 
@@ -5753,6 +5718,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
     # Cluster A configurations
+
+    ${junit_cmd} add_elevated_user_to_cluster_a
+
     ${junit_cmd} configure_images_prune_cluster_a
 
     # Cluster B custom configurations for OpenStack
@@ -5773,6 +5741,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
+      ${junit_cmd} add_elevated_user_to_cluster_b
+
       ${junit_cmd} configure_images_prune_cluster_b
 
     fi
@@ -5787,6 +5757,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # ${junit_cmd} open_firewall_ports_on_cluster_c
       #
       # ${junit_cmd} label_first_gateway_cluster_c
+
+      ${junit_cmd} add_elevated_user_to_cluster_c
 
       ${junit_cmd} configure_images_prune_cluster_c
 
@@ -5876,14 +5848,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   fi
   ### END of OCP general preparations for ALL tests ###
 
-  ### Download subctl binary, even if using it just for tests (e.g. when installing Submariner with API) ###
-  if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
-
-    ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
-
-    ${junit_cmd} test_subctl_command
-
-  fi
 
   ### Install ACM Hub, and create cluster set of the manged clusters for Submariner ###
 
