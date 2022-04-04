@@ -538,8 +538,6 @@ function create_new_managed_cluster_in_acm_hub() {
     leaseDurationSeconds: 60
 EOF
 
-  ### TODO: Wait for the new ManagedCluster $cluster_id
-
 
   TITLE "Create ACM klusterlet Addon config for cluster '$cluster_id'"
 
@@ -574,14 +572,24 @@ EOF
     version: 2.2.0
 EOF
 
-  # TODO: wait for kluserlet Addon
+  TITLE "Wait for ManagedCluster Opaque secret '${cluster_id}-import' to be created"
+
+  local duration=5m
+
+  # Wait for the new ManagedCluster $cluster_id
+  ${OC} wait --timeout=$duration managedcluster ${cluster_id} -n ${cluster_id} --for=condition=HubAcceptedManagedCluster || :
+
+  # Wait for the Opaque secret
+  local cmd="${OC} get secrets -n ${cluster_id}"
+  local regex="${cluster_id}-import"
+
+  watch_and_retry "$cmd" "$duration" || \
+  FATAL "Opaque secret '${cluster_id}-import' was not created after $duration"
 
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
   TITLE "Save the yamls to be applied on the managed clusters: '${kluster_crd}' and '${kluster_import}'"
-
-  ${OC} get secrets -n ${cluster_id} |& highlight "${cluster_id}-import"
 
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.crds\\.yaml}" | base64 --decode > ${kluster_crd}
   ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.import\\.yaml}" | base64 --decode > ${kluster_import}
