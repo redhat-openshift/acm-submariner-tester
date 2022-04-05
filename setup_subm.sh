@@ -138,502 +138,7 @@ Examples with pre-defined options:
 
 ----------------------------------------------------------------------'
 
-####################################################################################
-#               Global bash configurations and external sources                    #
-####################################################################################
-
-# Set $SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
-# Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
-SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
-export SCRIPT_DIR
-
-### Import Submariner setup variables ###
-source "$SCRIPT_DIR/subm_variables"
-
-### Import General Helpers Function ###
-source "$SCRIPT_DIR/helper_functions"
-
-### Import ACM Functions ###
-source "$SCRIPT_DIR/acm/debug.sh"
-source "$SCRIPT_DIR/acm/downstream_push_bundle_to_olm_catalog.sh"
-source "$SCRIPT_DIR/acm/downstream_deploy_bundle_acm_operator.sh"
-
-# To exit on errors and extended trap
-# set -Eeo pipefail
-set -Ee
-# -e : Exit at the first error
-# -E : Ensures that ERR traps get inherited by functions, command substitutions, and subshell environments.
-# -u : Treats unset variables as errors.
-# -o pipefail : Propagate intermediate errors (not just last command exit code)
-
-# Set Case-insensitive match for string evaluations
-shopt -s nocasematch
-
-# Expend user aliases
-shopt -s expand_aliases
-
-
-#####################################################################################################
-#         Constant variables and files (overrides previous variables from sourced files)            #
-#####################################################################################################
-
-# Date-time signature for log and report files
-DATE_TIME="$(date +%d%m%Y_%H%M)"
-export DATE_TIME
-
-# Global temp file
-TEMP_FILE="`mktemp`_temp"
-export TEMP_FILE
-
-# JOB_NAME is a prefix for files, which is the name of current script directory
-JOB_NAME="$(basename "$SCRIPT_DIR")"
-export JOB_NAME
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
-
-export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
-: > "$E2E_LOG"
-
-# Set SYS_LOG name according to REPORT_NAME (from subm_variables)
-export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-# SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
-# SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-: > "$SYS_LOG"
-
-# Common test variables
-export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
-export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
-
-
-#################################################################################
-#               Saving important test properties in local files                 #
-#################################################################################
-
-# File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
-export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
-export EXIT_STATUS
-: > $TEST_STATUS_FILE
-
-# File to store SubCtl version
-export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-: > $SUBCTL_VERSION_FILE
-
-# File to store Submariner installed versions
-export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
-: > $SUBMARINER_VERSIONS_FILE
-
-# File to store SubCtl JOIN command for cluster A
-export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-: > $SUBCTL_JOIN_CLUSTER_A_FILE
-
-# File to store SubCtl JOIN command for cluster B
-export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-: > $SUBCTL_JOIN_CLUSTER_B_FILE
-
-# File to store SubCtl JOIN command for cluster C
-export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-: > $SUBCTL_JOIN_CLUSTER_C_FILE
-
-# File to store Polarion auth
-export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-: > $POLARION_AUTH
-
-# File to store Polarion test-run report link
-export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-: > $POLARION_RESULTS
-
-# File to store Submariner images version details
-export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
-: > $SUBMARINER_IMAGES
-
-
-####################################################################################
-#                             CLI Script arguments                                 #
-####################################################################################
-
-check_cli_args() {
-  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
-}
-
-POSITIONAL=()
-while [[ $# -gt 0 ]]; do
-  export got_user_input=TRUE
-  # Consume next (1st) argument
-  case $1 in
-  -h|--help)
-    echo -e "\n# ${disclosure}" && exit 0
-    shift ;;
-  -d|--debug)
-    SCRIPT_DEBUG_MODE=YES
-    shift ;;
-  --get-ocp-installer)
-    check_cli_args "$2"
-    export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-    GET_OCP_INSTALLER=YES
-    shift 2 ;;
-  --get-ocpup-tool)
-    GET_OCPUP_TOOL=YES
-    shift ;;
-  --acm-version)
-    check_cli_args "$2"
-    export ACM_VER_TAG="$2"
-    INSTALL_ACM=YES
-    shift 2 ;;
-  --subctl-version)
-    check_cli_args "$2"
-    export SUBM_VER_TAG="$2"
-    INSTALL_SUBMARINER=YES
-    shift 2 ;;
-  --registry-images)
-    REGISTRY_IMAGES=YES
-    shift ;;
-  --build-tests)
-    BUILD_GO_TESTS=YES
-    shift ;;
-  --destroy-cluster-a)
-    ocp_installer_required=YES
-    DESTROY_CLUSTER_A=YES
-    shift ;;
-  --create-cluster-a)
-    ocp_installer_required=YES
-    CREATE_CLUSTER_A=YES
-    shift ;;
-  --reset-cluster-a)
-    ocp_installer_required=YES
-    RESET_CLUSTER_A=YES
-    shift ;;
-  --clean-cluster-a)
-    CLEAN_CLUSTER_A=YES
-    shift ;;
-  --destroy-cluster-b)
-    ocpup_tool_required=YES
-    DESTROY_CLUSTER_B=YES
-    shift ;;
-  --create-cluster-b)
-    ocpup_tool_required=YES
-    CREATE_CLUSTER_B=YES
-    shift ;;
-  --reset-cluster-b)
-    ocpup_tool_required=YES
-    RESET_CLUSTER_B=YES
-    shift ;;
-  --clean-cluster-b)
-    CLEAN_CLUSTER_B=YES
-    shift ;;
-  --destroy-cluster-c)
-    ocp_installer_required=YES
-    DESTROY_CLUSTER_C=YES
-    shift ;;
-  --create-cluster-c)
-    ocp_installer_required=YES
-    CREATE_CLUSTER_C=YES
-    shift ;;
-  --reset-cluster-c)
-    ocp_installer_required=YES
-    RESET_CLUSTER_C=YES
-    shift ;;
-  --clean-cluster-c)
-    CLEAN_CLUSTER_C=YES
-    shift ;;
-  --subctl-install)
-    INSTALL_WITH_SUBCTL=YES
-    shift ;;
-  --globalnet)
-    GLOBALNET=YES
-    shift ;;
-  --cable-driver)
-    check_cli_args "$2"
-    subm_cable_driver="$2" # libreswan / strongswan [Deprecated]
-    shift 2 ;;
-  --skip-ocp-setup)
-    SKIP_OCP_SETUP=YES
-    shift ;;
-  --skip-tests)
-    check_cli_args "$2"
-    SKIP_TESTS="$2" # sys,e2e,pkg,all
-    shift 2 ;;
-  --print-logs)
-    PRINT_LOGS=YES
-    shift ;;
-  --config-golang)
-    CONFIG_GOLANG=YES
-    shift ;;
-  --config-aws-cli)
-    CONFIG_AWS_CLI=YES
-    shift ;;
-  --junit)
-    CREATE_JUNIT_XML=YES
-    export junit_cmd="record_junit $SHELL_JUNIT_XML"
-    shift ;;
-  --polarion)
-    UPLOAD_TO_POLARION=YES
-    shift ;;
-  --import-vars)
-    check_cli_args "$2"
-    export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file:
-    $GLOBAL_VARS"
-    source "$GLOBAL_VARS"
-    shift 2 ;;
-  -*)
-    echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
-    exit 1 ;;
-  *)
-    break ;;
-  esac
-done
-set -- "${POSITIONAL[@]}" # restore positional parameters
-
-
-####################################################################################
-#               Get User input (only for missing CLI arguments)                    #
-####################################################################################
-
-if [[ -z "$got_user_input" ]]; then
-  echo -e "\n# ${disclosure}"
-
-  # User input: $SKIP_OCP_SETUP - to skip OCP clusters setup (destroy / create / clean)
-  while [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    SKIP_OCP_SETUP=${input:-NO}
-  done
-
-  if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
-
-    # User input: $GET_OCP_INSTALLER - to download_ocp_installer
-    while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      GET_OCP_INSTALLER=${input:-no}
-    done
-
-    # User input: $OCP_VERSION - to download_ocp_installer with specific version
-    if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-      while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
-        echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
-        Enter version number, or nothing to install latest version: "
-        read -r input
-        OCP_VERSION=${input:-latest}
-      done
-    fi
-
-    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest
-    while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      GET_OCPUP_TOOL=${input:-no}
-    done
-
-    # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
-    while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to destroy & create OpenShift cluster A ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      RESET_CLUSTER_A=${input:-no}
-    done
-
-    # User input: $CLEAN_CLUSTER_A - to clean cluster A
-    if [[ "$RESET_CLUSTER_A" =~ ^(no|n)$ ]]; then
-      while [[ ! "$CLEAN_CLUSTER_A" =~ ^(yes|no)$ ]]; do
-        echo -e "\n${YELLOW}Do you want to clean OpenShift cluster A ? ${NO_COLOR}
-        Enter \"yes\", or nothing to skip: "
-        read -r input
-        CLEAN_CLUSTER_A=${input:-no}
-      done
-    fi
-
-    # User input: $RESET_CLUSTER_B - to destroy_osp_cluster AND create_osp_cluster
-    while [[ ! "$RESET_CLUSTER_B" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      RESET_CLUSTER_B=${input:-no}
-    done
-
-    # User input: $CLEAN_CLUSTER_B - to clean cluster B
-    if [[ "$RESET_CLUSTER_B" =~ ^(no|n)$ ]]; then
-      while [[ ! "$CLEAN_CLUSTER_B" =~ ^(yes|no)$ ]]; do
-        echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
-        Enter \"yes\", or nothing to skip: "
-        read -r input
-        CLEAN_CLUSTER_B=${input:-no}
-      done
-    fi
-
-    # User input: $RESET_CLUSTER_C - to destroy_ocp_cluster AND CREATE_CLUSTER_C
-    while [[ ! "$RESET_CLUSTER_C" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to destroy & create OCP cluster C ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      RESET_CLUSTER_C=${input:-no}
-    done
-
-    # User input: $CLEAN_CLUSTER_C - to clean cluster C
-    if [[ "$RESET_CLUSTER_C" =~ ^(no|n)$ ]]; then
-      while [[ ! "$CLEAN_CLUSTER_C" =~ ^(yes|no)$ ]]; do
-        echo -e "\n${YELLOW}Do you want to clean OCP cluster C ? ${NO_COLOR}
-        Enter \"yes\", or nothing to skip: "
-        read -r input
-        CLEAN_CLUSTER_C=${input:-no}
-      done
-    fi
-
-  fi # END of SKIP_OCP_SETUP options
-
-  # User input: $GLOBALNET - to deploy with --globalnet
-  while [[ ! "$GLOBALNET" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install Global Net ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    GLOBALNET=${input:-no}
-  done
-
-  # User input: $build_operator - to build_operator_latest # [DEPRECATED]
-  # while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
-  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"devel\" branch) and build subctl ? ${NO_COLOR}
-  #   Enter \"yes\", or nothing to skip: "
-  #   read -r input
-  #   build_operator=${input:-no}
-  # done
-
-  # User input: $INSTALL_ACM and ACM_VER_TAG - to Install ACM and add managed clusters
-  if [[ "$INSTALL_ACM" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
-      echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
-      Enter version number, or nothing to install \"latest\" version: "
-      read -r input
-      ACM_VER_TAG=${input:-latest}
-    done
-  fi
-
-  # User input: $INSTALL_SUBMARINER and SUBM_VER_TAG - to download_and_install_subctl
-  if [[ "$INSTALL_SUBMARINER" =~ ^(yes|y)$ ]]; then
-    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
-      echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
-      Enter version number, or nothing to install \"latest\" version: "
-      read -r input
-      SUBM_VER_TAG=${input:-latest}
-    done
-  fi
-
-  # User input: $REGISTRY_IMAGES - to configure_cluster_custom_registry
-  while [[ ! "$REGISTRY_IMAGES" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    REGISTRY_IMAGES=${input:-no}
-  done
-
-  # User input: $BUILD_GO_TESTS - to build and run ginkgo tests from all submariner repos
-  while [[ ! "$BUILD_GO_TESTS" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    BUILD_GO_TESTS=${input:-YES}
-  done
-
-  # User input: $INSTALL_WITH_SUBCTL - to install using SUBCTL tool
-  while [[ ! "$INSTALL_WITH_SUBCTL" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install Submariner with SubCtl tool ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    INSTALL_WITH_SUBCTL=${input:-NO}
-  done
-
-  # User input: $SKIP_TESTS - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
-  while [[ ! "$SKIP_TESTS" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
-    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
-    read -r input
-    SKIP_TESTS=${input:-NO}
-  done
-
-  while [[ ! "$PRINT_LOGS" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to print full Submariner diagnostics (Pods logs, etc.) on failure ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    PRINT_LOGS=${input:-NO}
-  done
-
-  # User input: $CONFIG_GOLANG - to install latest golang if missing
-  while [[ ! "$CONFIG_GOLANG" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install latest Golang on the environment ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    CONFIG_GOLANG=${input:-NO}
-  done
-
-  # User input: $CONFIG_AWS_CLI - to install latest aws-cli and configure aws access
-  while [[ ! "$CONFIG_AWS_CLI" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install aws-cli and configure AWS access ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    CONFIG_AWS_CLI=${input:-NO}
-  done
-
-  # User input: $CREATE_JUNIT_XML - to record shell results into Junit xml output
-  while [[ ! "$CREATE_JUNIT_XML" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to record shell results into Junit xml output ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    CREATE_JUNIT_XML=${input:-NO}
-  done
-
-  # User input: $UPLOAD_TO_POLARION - to upload junit xml results to Polarion
-  while [[ ! "$UPLOAD_TO_POLARION" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to upload junit xml results to Polarion ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
-    read -r input
-    UPLOAD_TO_POLARION=${input:-NO}
-  done
-
-fi
-
-
-### Set missing user variable ###
-TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset value)"
-
-export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
-# export OCP_VERSION=${OCP_VERSION}
-export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
-# export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
-export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
-export INSTALL_ACM=${INSTALL_ACM:-NO}
-export INSTALL_MCE=${INSTALL_MCE:-NO}
-export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
-export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
-export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
-export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
-export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
-export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
-export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
-export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
-export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
-export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
-export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
-export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
-export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
-export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
-export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
-export GLOBALNET=${GLOBALNET:-NO}
-# export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
-export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
-export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
-export SKIP_TESTS=${SKIP_TESTS:-NO}
-export PRINT_LOGS=${PRINT_LOGS:-NO}
-export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
-export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
-export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
-
-
+# TODO: Move functions to external source file
 ####################################################################################
 #                             Define script functions                                #
 ####################################################################################
@@ -1687,7 +1192,7 @@ function uninstall_submariner() {
   PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) from cluster $cluster_name"
 
   # Since Submariner 0.12 there's an uninstall command
-  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+  if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
 
     subctl uninstall --yes
 
@@ -2092,9 +1597,6 @@ function download_and_install_subctl() {
 
     local subctl_version="${1:-$SUBM_VER_TAG}"
 
-    # Fix the $subctl_version value for custom images
-    set_subm_version_tag_var "subctl_version"
-
     download_subctl_by_tag "$subctl_version"
 
 }
@@ -2139,38 +1641,38 @@ function download_subctl_by_tag() {
 
     # Optional param: $1 => SubCtl version by tag to download
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
-    local subm_branch_tag="${1:-v[0-9]}"
+    local submariner_version_or_tag="${1:-v[0-9]}"
 
     cd ${WORKDIR}
 
     # Downloading SubCtl from VPN_REGISTRY (downstream)
-    # if using --registry-images and if $subm_branch_tag is not devel
-    if [[ ! "$subm_branch_tag" =~ devel ]] && \
+    # if using --registry-images and if $submariner_version_or_tag is not devel
+    if [[ ! "$submariner_version_or_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       TITLE "Backup previous subctl archive (if exists)"
-      local subctl_xz="subctl-${subm_branch_tag}-linux-amd64.tar.xz"
+      local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f ${subctl_xz} ${subctl_xz}.bak
 
       TITLE "Downloading SubCtl from $SUBM_IMG_SUBCTL"
 
-      # Fix the $subm_branch_tag value for custom images
-      set_subm_version_tag_var "subm_branch_tag"
+      # Fix the $submariner_version_or_tag value for custom images
+      set_subm_version_tag_var "submariner_version_or_tag"
 
       echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
       local subctl_image_url
 
-      if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${subm_branch_tag}"
+      if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
       else
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${subm_branch_tag}"
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
         # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
       fi
 
       echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract $subctl_image_url --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$subm_branch_tag' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$submariner_version_or_tag' was not found in $subctl_image_url"
 
       ${OC} image extract $subctl_image_url --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2203,18 +1705,18 @@ function download_subctl_by_tag() {
       # Downloading SubCtl from Github (upstream)
 
       local repo_tag
-      repo_tag=$(get_submariner_branch_tag "${subm_branch_tag}")
+      repo_tag=$(get_submariner_branch_tag "${submariner_version_or_tag}")
 
       TITLE "Downloading SubCtl '${repo_tag}' with getsubctl.sh from: https://get.submariner.io/"
 
-      # curl https://get.submariner.io/ | VERSION=${subm_branch_tag} bash -x
+      # curl https://get.submariner.io/ | VERSION=${submariner_version_or_tag} bash -x
       BUG "getsubctl.sh fails on an unexpected argument, since the local 'install' is not the default" \
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
       PATH="/usr/bin:$PATH" which install
 
-      #curl https://get.submariner.io/ | VERSION=${subm_branch_tag} PATH="/usr/bin:$PATH" bash -x
+      #curl https://get.submariner.io/ | VERSION=${submariner_version_or_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
       "If it has failed - Set 'getsubctl_status=FAILED' in order to download with wget instead" \
       "https://github.com/submariner-io/submariner-operator/issues/526"
@@ -2419,13 +1921,9 @@ function append_custom_images_to_join_cmd_file() {
   local JOIN_CMD
   JOIN_CMD="$(< $join_cmd_file)"
 
-  # # Fix the $SUBM_VER_TAG value for custom images
-  # set_subm_version_tag_var
-  # local image_tag=${SUBM_VER_TAG}"
-
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
-  local image_tag
-  image_tag="$(subctl version | awk '{print $3}')"
+  local submariner_version_or_tag
+  submariner_version_or_tag="$(subctl version | awk '{print $3}')"
 
   BUG "Overriding images with wrong keys should fail first in join command" \
   "No workaround" \
@@ -2434,10 +1932,10 @@ function append_custom_images_to_join_cmd_file() {
   echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
   local submariner_operator_image
 
-  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_OPERATOR}:${image_tag}"
+  if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_OPERATOR}:${submariner_version_or_tag}"
   else
-    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_OPERATOR}:${image_tag}"
+    submariner_operator_image="${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_OPERATOR}:${submariner_version_or_tag}"
   fi
 
   TITLE "Append \"--image-override\" to subctl join command with a custom image:
@@ -2503,7 +2001,7 @@ function install_broker_via_api_on_cluster() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
-  local submariner_version="${2:-$SUBM_VER_TAG}"
+  local submariner_version_or_tag="${2:-$SUBM_VER_TAG}"
 
   export KUBECONFIG="$kubeconfig_file"
 
@@ -2513,7 +2011,7 @@ function install_broker_via_api_on_cluster() {
   PROMPT "Create the Submariner Broker via API on cluster ${cluster_name}"
 
   # Since Submariner 0.12 it is required to create Broker CRD
-  if check_version_greater_or_equal "$submariner_version" "0.12" ; then
+  if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
     local clusterset_broker_namespace
     clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner \
@@ -2535,7 +2033,7 @@ function install_broker_via_api_on_cluster() {
 EOF
 
   else
-    echo -e "\n# Submariner version $submariner_version is less than 0.12 - Broker creation is not supported via API"
+    echo -e "\n# Submariner version $submariner_version_or_tag is less than 0.12 - Broker creation is not supported via API"
   fi
 
 }
@@ -3317,14 +2815,10 @@ function upload_submariner_images_to_cluster_registry() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  local image_tag="$SUBM_VER_TAG"
-  # Fix the $image_tag value for custom images
-  set_subm_version_tag_var "image_tag"
-
-  PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
+  PROMPT "Upload custom Submariner ${SUBM_VER_TAG} images to the registry of cluster $cluster_name"
 
   local image_path_prefix
-  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
+  if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
     image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-"
   else
     image_path_prefix="${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-"
@@ -3332,7 +2826,7 @@ function upload_submariner_images_to_cluster_registry() {
 
   TITLE "Overriding submariner images with custom images from mirror registry (Brew):
   Source registry path: ${image_path_prefix}
-  Images version tag: ${image_tag}
+  Images version tag: ${SUBM_VER_TAG}
   "
 
   create_namespace "$SUBM_NAMESPACE"
@@ -3347,12 +2841,12 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
-      local img_source="${image_path_prefix}${img}:${image_tag}"
+      local img_source="${image_path_prefix}${img}:${SUBM_VER_TAG}"
       echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
 
-      local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${image_tag} --from=${img_source} --confirm"
+      local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
 
-      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${image_tag}"
+      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
   done
 
 }
@@ -4478,19 +3972,14 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   local subctl_info
 
-  local subctl_version="${SUBM_VER_TAG}"
-
-  # Fix the $subctl_version value for custom images
-  set_subm_version_tag_var "subctl_version"
-
   export_merged_kubeconfigs
 
   echo -e "\n# Store SubCtl version in $SUBMARINER_VERSIONS_FILE"
   subctl show versions > "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
 
-  cat "$SUBMARINER_VERSIONS_FILE" |& highlight "submariner.*${subctl_version}" || \
-  BUG "Subctl shows wrong Submariner version - it should have been v${subctl_version}" \
-  "Please verify that all Submariner components (e.g. Gateway) have image version = v${subctl_version}" \
+  cat "$SUBMARINER_VERSIONS_FILE" |& highlight "submariner.*${SUBM_VER_TAG}" || \
+  BUG "Subctl shows wrong Submariner version - it should have been v${SUBM_VER_TAG}" \
+  "Please verify that all Submariner components (e.g. Gateway) have image version = ${SUBM_VER_TAG}" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
 
   subctl show networks || subctl_info=ERROR
@@ -4758,27 +4247,27 @@ function build_submariner_repos() {
 
   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-  local subm_branch_tag="$1"
+  local submariner_version_or_tag="$1"
 
-  TITLE "Retrieve correct branch to pull for Submariner version '$subm_branch_tag'"
+  TITLE "Retrieve correct branch to pull for Submariner version '$submariner_version_or_tag'"
 
-  if [[ -z "$subm_branch_tag" ]] ; then
+  if [[ -z "$submariner_version_or_tag" ]] ; then
     echo -e "\n# No Submariner version was specified, retrieving installed version with subctl:"
     subctl show versions > "$SUBMARINER_VERSIONS_FILE"
-    subm_branch_tag="$(grep -m 1 "submariner" "$SUBMARINER_VERSIONS_FILE" | awk '{print $3}')"
+    submariner_version_or_tag="$(grep -m 1 "submariner" "$SUBMARINER_VERSIONS_FILE" | awk '{print $3}')"
   fi
 
-  if [[ "$subm_branch_tag" =~ latest|devel ]]; then
+  if [[ "$submariner_version_or_tag" =~ latest|devel ]]; then
     echo -e "\n# Find the latest branch (devel) in Submariner repository:"
-    subm_branch_tag="$(get_submariner_branch_tag)"
+    submariner_version_or_tag="$(get_submariner_branch_tag)"
   else
-    echo -e "\n# Find branch name that includes '${subm_branch_tag}' in Submariner repository:"
-    subm_branch_tag=$(get_submariner_branch_tag "${subm_branch_tag}")
+    echo -e "\n# Find branch name that includes '${submariner_version_or_tag}' in Submariner repository:"
+    submariner_version_or_tag=$(get_submariner_branch_tag "${submariner_version_or_tag}")
   fi
 
-  build_go_repo "https://github.com/submariner-io/submariner" "$subm_branch_tag"
+  build_go_repo "https://github.com/submariner-io/submariner" "$submariner_version_or_tag"
 
-  build_go_repo "https://github.com/submariner-io/lighthouse" "$subm_branch_tag"
+  build_go_repo "https://github.com/submariner-io/lighthouse" "$submariner_version_or_tag"
 }
 
 # ------------------------------------------
@@ -5423,6 +4912,504 @@ function debug_test_fatal() {
 
 # ------------------------------------------
 
+####################################################################################
+#               Global bash configurations and external sources                    #
+####################################################################################
+
+# Set $SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
+# Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
+SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+export SCRIPT_DIR
+
+### Import Submariner setup variables ###
+source "$SCRIPT_DIR/subm_variables"
+
+### Import General Helpers Function ###
+source "$SCRIPT_DIR/helper_functions"
+
+### Import ACM Functions ###
+source "$SCRIPT_DIR/acm/debug.sh"
+source "$SCRIPT_DIR/acm/downstream_push_bundle_to_olm_catalog.sh"
+source "$SCRIPT_DIR/acm/downstream_deploy_bundle_acm_operator.sh"
+
+# To exit on errors and extended trap
+# set -Eeo pipefail
+set -Ee
+# -e : Exit at the first error
+# -E : Ensures that ERR traps get inherited by functions, command substitutions, and subshell environments.
+# -u : Treats unset variables as errors.
+# -o pipefail : Propagate intermediate errors (not just last command exit code)
+
+# Set Case-insensitive match for string evaluations
+shopt -s nocasematch
+
+# Expend user aliases
+shopt -s expand_aliases
+
+
+#####################################################################################################
+#         Constant variables and files (overrides previous variables from sourced files)            #
+#####################################################################################################
+
+# Date-time signature for log and report files
+DATE_TIME="$(date +%d%m%Y_%H%M)"
+export DATE_TIME
+
+# Global temp file
+TEMP_FILE="`mktemp`_temp"
+export TEMP_FILE
+
+# JOB_NAME is a prefix for files, which is the name of current script directory
+JOB_NAME="$(basename "$SCRIPT_DIR")"
+export JOB_NAME
+export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
+export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
+export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
+export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
+
+export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
+: > "$E2E_LOG"
+
+# Set SYS_LOG name according to REPORT_NAME (from subm_variables)
+export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+# SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
+# SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+: > "$SYS_LOG"
+
+# Common test variables
+export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
+export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
+
+
+#################################################################################
+#               Saving important test properties in local files                 #
+#################################################################################
+
+# File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
+export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
+export EXIT_STATUS
+: > $TEST_STATUS_FILE
+
+# File to store SubCtl version
+export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
+: > $SUBCTL_VERSION_FILE
+
+# File to store Submariner installed versions
+export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
+: > $SUBMARINER_VERSIONS_FILE
+
+# File to store SubCtl JOIN command for cluster A
+export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
+: > $SUBCTL_JOIN_CLUSTER_A_FILE
+
+# File to store SubCtl JOIN command for cluster B
+export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
+: > $SUBCTL_JOIN_CLUSTER_B_FILE
+
+# File to store SubCtl JOIN command for cluster C
+export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
+: > $SUBCTL_JOIN_CLUSTER_C_FILE
+
+# File to store Polarion auth
+export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
+: > $POLARION_AUTH
+
+# File to store Polarion test-run report link
+export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
+: > $POLARION_RESULTS
+
+# File to store Submariner images version details
+export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
+: > $SUBMARINER_IMAGES
+
+
+####################################################################################
+#                             CLI Script arguments                                 #
+####################################################################################
+
+check_cli_args() {
+  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
+}
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  export got_user_input=TRUE
+  # Consume next (1st) argument
+  case $1 in
+  -h|--help)
+    echo -e "\n# ${disclosure}" && exit 0
+    shift ;;
+  -d|--debug)
+    SCRIPT_DEBUG_MODE=YES
+    shift ;;
+  --get-ocp-installer)
+    check_cli_args "$2"
+    export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    GET_OCP_INSTALLER=YES
+    shift 2 ;;
+  --get-ocpup-tool)
+    GET_OCPUP_TOOL=YES
+    shift ;;
+  --acm-version)
+    check_cli_args "$2"
+    export ACM_VER_TAG="$2"
+    INSTALL_ACM=YES
+    shift 2 ;;
+  --subctl-version)
+    check_cli_args "$2"
+    export SUBM_VER_TAG="$2"
+    INSTALL_SUBMARINER=YES
+    shift 2 ;;
+  --registry-images)
+    REGISTRY_IMAGES=YES
+    shift ;;
+  --build-tests)
+    BUILD_GO_TESTS=YES
+    shift ;;
+  --destroy-cluster-a)
+    ocp_installer_required=YES
+    DESTROY_CLUSTER_A=YES
+    shift ;;
+  --create-cluster-a)
+    ocp_installer_required=YES
+    CREATE_CLUSTER_A=YES
+    shift ;;
+  --reset-cluster-a)
+    ocp_installer_required=YES
+    RESET_CLUSTER_A=YES
+    shift ;;
+  --clean-cluster-a)
+    CLEAN_CLUSTER_A=YES
+    shift ;;
+  --destroy-cluster-b)
+    ocpup_tool_required=YES
+    DESTROY_CLUSTER_B=YES
+    shift ;;
+  --create-cluster-b)
+    ocpup_tool_required=YES
+    CREATE_CLUSTER_B=YES
+    shift ;;
+  --reset-cluster-b)
+    ocpup_tool_required=YES
+    RESET_CLUSTER_B=YES
+    shift ;;
+  --clean-cluster-b)
+    CLEAN_CLUSTER_B=YES
+    shift ;;
+  --destroy-cluster-c)
+    ocp_installer_required=YES
+    DESTROY_CLUSTER_C=YES
+    shift ;;
+  --create-cluster-c)
+    ocp_installer_required=YES
+    CREATE_CLUSTER_C=YES
+    shift ;;
+  --reset-cluster-c)
+    ocp_installer_required=YES
+    RESET_CLUSTER_C=YES
+    shift ;;
+  --clean-cluster-c)
+    CLEAN_CLUSTER_C=YES
+    shift ;;
+  --subctl-install)
+    INSTALL_WITH_SUBCTL=YES
+    shift ;;
+  --globalnet)
+    GLOBALNET=YES
+    shift ;;
+  --cable-driver)
+    check_cli_args "$2"
+    subm_cable_driver="$2" # libreswan / strongswan [Deprecated]
+    shift 2 ;;
+  --skip-ocp-setup)
+    SKIP_OCP_SETUP=YES
+    shift ;;
+  --skip-tests)
+    check_cli_args "$2"
+    SKIP_TESTS="$2" # sys,e2e,pkg,all
+    shift 2 ;;
+  --print-logs)
+    PRINT_LOGS=YES
+    shift ;;
+  --config-golang)
+    CONFIG_GOLANG=YES
+    shift ;;
+  --config-aws-cli)
+    CONFIG_AWS_CLI=YES
+    shift ;;
+  --junit)
+    CREATE_JUNIT_XML=YES
+    export junit_cmd="record_junit $SHELL_JUNIT_XML"
+    shift ;;
+  --polarion)
+    UPLOAD_TO_POLARION=YES
+    shift ;;
+  --import-vars)
+    check_cli_args "$2"
+    export GLOBAL_VARS="$2"
+    TITLE "Importing additional variables from file:
+    $GLOBAL_VARS"
+    source "$GLOBAL_VARS"
+    shift 2 ;;
+  -*)
+    echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
+    exit 1 ;;
+  *)
+    break ;;
+  esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+
+####################################################################################
+#               Get User input (only for missing CLI arguments)                    #
+####################################################################################
+
+if [[ -z "$got_user_input" ]]; then
+  echo -e "\n# ${disclosure}"
+
+  # User input: $SKIP_OCP_SETUP - to skip OCP clusters setup (destroy / create / clean)
+  while [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    SKIP_OCP_SETUP=${input:-NO}
+  done
+
+  if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
+
+    # User input: $GET_OCP_INSTALLER - to download_ocp_installer
+    while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
+      echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
+      Enter \"yes\", or nothing to skip: "
+      read -r input
+      GET_OCP_INSTALLER=${input:-no}
+    done
+
+    # User input: $OCP_VERSION - to download_ocp_installer with specific version
+    if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
+      while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+        echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
+        Enter version number, or nothing to install latest version: "
+        read -r input
+        OCP_VERSION=${input:-latest}
+      done
+    fi
+
+    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest
+    while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
+      echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
+      Enter \"yes\", or nothing to skip: "
+      read -r input
+      GET_OCPUP_TOOL=${input:-no}
+    done
+
+    # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
+    while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
+      echo -e "\n${YELLOW}Do you want to destroy & create OpenShift cluster A ? ${NO_COLOR}
+      Enter \"yes\", or nothing to skip: "
+      read -r input
+      RESET_CLUSTER_A=${input:-no}
+    done
+
+    # User input: $CLEAN_CLUSTER_A - to clean cluster A
+    if [[ "$RESET_CLUSTER_A" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_A" =~ ^(yes|no)$ ]]; do
+        echo -e "\n${YELLOW}Do you want to clean OpenShift cluster A ? ${NO_COLOR}
+        Enter \"yes\", or nothing to skip: "
+        read -r input
+        CLEAN_CLUSTER_A=${input:-no}
+      done
+    fi
+
+    # User input: $RESET_CLUSTER_B - to destroy_osp_cluster AND create_osp_cluster
+    while [[ ! "$RESET_CLUSTER_B" =~ ^(yes|no)$ ]]; do
+      echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
+      Enter \"yes\", or nothing to skip: "
+      read -r input
+      RESET_CLUSTER_B=${input:-no}
+    done
+
+    # User input: $CLEAN_CLUSTER_B - to clean cluster B
+    if [[ "$RESET_CLUSTER_B" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_B" =~ ^(yes|no)$ ]]; do
+        echo -e "\n${YELLOW}Do you want to clean OSP cluster B ? ${NO_COLOR}
+        Enter \"yes\", or nothing to skip: "
+        read -r input
+        CLEAN_CLUSTER_B=${input:-no}
+      done
+    fi
+
+    # User input: $RESET_CLUSTER_C - to destroy_ocp_cluster AND CREATE_CLUSTER_C
+    while [[ ! "$RESET_CLUSTER_C" =~ ^(yes|no)$ ]]; do
+      echo -e "\n${YELLOW}Do you want to destroy & create OCP cluster C ? ${NO_COLOR}
+      Enter \"yes\", or nothing to skip: "
+      read -r input
+      RESET_CLUSTER_C=${input:-no}
+    done
+
+    # User input: $CLEAN_CLUSTER_C - to clean cluster C
+    if [[ "$RESET_CLUSTER_C" =~ ^(no|n)$ ]]; then
+      while [[ ! "$CLEAN_CLUSTER_C" =~ ^(yes|no)$ ]]; do
+        echo -e "\n${YELLOW}Do you want to clean OCP cluster C ? ${NO_COLOR}
+        Enter \"yes\", or nothing to skip: "
+        read -r input
+        CLEAN_CLUSTER_C=${input:-no}
+      done
+    fi
+
+  fi # END of SKIP_OCP_SETUP options
+
+  # User input: $GLOBALNET - to deploy with --globalnet
+  while [[ ! "$GLOBALNET" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to install Global Net ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    GLOBALNET=${input:-no}
+  done
+
+  # User input: $build_operator - to build_operator_latest # [DEPRECATED]
+  # while [[ ! "$build_operator" =~ ^(yes|no)$ ]]; do
+  #   echo -e "\n${YELLOW}Do you want to pull Submariner-Operator repository (\"devel\" branch) and build subctl ? ${NO_COLOR}
+  #   Enter \"yes\", or nothing to skip: "
+  #   read -r input
+  #   build_operator=${input:-no}
+  # done
+
+  # User input: $INSTALL_ACM and ACM_VER_TAG - to Install ACM and add managed clusters
+  if [[ "$INSTALL_ACM" =~ ^(yes|y)$ ]]; then
+    while [[ ! "$ACM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
+      echo -e "\n${YELLOW}Which ACM version do you want to install ? ${NO_COLOR}
+      Enter version number, or nothing to install \"latest\" version: "
+      read -r input
+      ACM_VER_TAG=${input:-latest}
+    done
+  fi
+
+  # User input: $INSTALL_SUBMARINER and SUBM_VER_TAG - to download_and_install_subctl
+  if [[ "$INSTALL_SUBMARINER" =~ ^(yes|y)$ ]]; then
+    while [[ ! "$SUBM_VER_TAG" =~ ^[0-9a-Z]+ ]]; do
+      echo -e "\n${YELLOW}Which Submariner version (or tag) do you want to install ? ${NO_COLOR}
+      Enter version number, or nothing to install \"latest\" version: "
+      read -r input
+      SUBM_VER_TAG=${input:-latest}
+    done
+  fi
+
+  # User input: $REGISTRY_IMAGES - to configure_cluster_custom_registry
+  while [[ ! "$REGISTRY_IMAGES" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    REGISTRY_IMAGES=${input:-no}
+  done
+
+  # User input: $BUILD_GO_TESTS - to build and run ginkgo tests from all submariner repos
+  while [[ ! "$BUILD_GO_TESTS" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to run E2E and unit tests from all Submariner repositories ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    BUILD_GO_TESTS=${input:-YES}
+  done
+
+  # User input: $INSTALL_WITH_SUBCTL - to install using SUBCTL tool
+  while [[ ! "$INSTALL_WITH_SUBCTL" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to install Submariner with SubCtl tool ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    INSTALL_WITH_SUBCTL=${input:-NO}
+  done
+
+  # User input: $SKIP_TESTS - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
+  while [[ ! "$SKIP_TESTS" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
+    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
+    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
+    read -r input
+    SKIP_TESTS=${input:-NO}
+  done
+
+  while [[ ! "$PRINT_LOGS" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to print full Submariner diagnostics (Pods logs, etc.) on failure ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    PRINT_LOGS=${input:-NO}
+  done
+
+  # User input: $CONFIG_GOLANG - to install latest golang if missing
+  while [[ ! "$CONFIG_GOLANG" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to install latest Golang on the environment ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    CONFIG_GOLANG=${input:-NO}
+  done
+
+  # User input: $CONFIG_AWS_CLI - to install latest aws-cli and configure aws access
+  while [[ ! "$CONFIG_AWS_CLI" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to install aws-cli and configure AWS access ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    CONFIG_AWS_CLI=${input:-NO}
+  done
+
+  # User input: $CREATE_JUNIT_XML - to record shell results into Junit xml output
+  while [[ ! "$CREATE_JUNIT_XML" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to record shell results into Junit xml output ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    CREATE_JUNIT_XML=${input:-NO}
+  done
+
+  # User input: $UPLOAD_TO_POLARION - to upload junit xml results to Polarion
+  while [[ ! "$UPLOAD_TO_POLARION" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to upload junit xml results to Polarion ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    UPLOAD_TO_POLARION=${input:-NO}
+  done
+
+fi
+
+
+### Set missing user variables ###
+TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
+
+export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
+# export OCP_VERSION=${OCP_VERSION}
+export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
+# export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
+export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
+export INSTALL_ACM=${INSTALL_ACM:-NO}
+export INSTALL_MCE=${INSTALL_MCE:-NO}
+export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
+export SUBM_VER_TAG=${input:-latest}
+export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
+export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
+export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
+export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
+export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
+export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
+export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
+export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
+export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
+export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
+export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
+export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
+export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
+export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
+export GLOBALNET=${GLOBALNET:-NO}
+# export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
+export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
+export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
+export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
+export SKIP_TESTS=${SKIP_TESTS:-NO}
+export PRINT_LOGS=${PRINT_LOGS:-NO}
+export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
+export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
+export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
+
+# Fix $SUBM_VER_TAG variable for custom images, with the correct version (vX.Y.Z), branch name, or tag
+set_subm_version_tag_var "SUBM_VER_TAG"
 
 
 ####################################################################################
