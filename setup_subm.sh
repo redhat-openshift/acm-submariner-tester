@@ -1592,10 +1592,11 @@ function add_elevated_user() {
 
   TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
 
-  # Update ${OCP_USR}.sec and http.sec - Only if http.sec is empty or modified more than 1 day ago
+  # Update ${OCP_USR}.sec and http.sec - Only if these files are empty or modified more than 1 day ago
   touch -a "${WORKDIR}/${http_sec_name}"
-  if find "${WORKDIR}/${http_sec_name}" \( -mtime +1 -o -empty \) | grep . ; then
-    echo -e "\n# Create random secret for ${OCP_USR}.sec (since ${http_sec_name} is empty or older than 1 day)"
+  touch -a "${WORKDIR}/${OCP_USR}.sec"
+  if find "${WORKDIR}/${http_sec_name}" "${WORKDIR}/${OCP_USR}.sec" \( -mtime +1 -o -empty \) | grep . ; then
+    echo -e "\n# Create random secret for ${OCP_USR}.sec (since secret files are empty or older than 1 day)"
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
       local ocp_pwd
