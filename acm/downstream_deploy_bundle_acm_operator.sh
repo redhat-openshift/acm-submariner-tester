@@ -50,8 +50,6 @@ function remove_acm_managed_cluster() {
   # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
-
   ${OC} get managedcluster -o wide || :
 
   if ${OC} get managedcluster ${cluster_id} ; then
