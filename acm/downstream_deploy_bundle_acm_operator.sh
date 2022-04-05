@@ -581,7 +581,7 @@ EOF
   local cmd="${OC} get secrets -n ${cluster_id}"
   local regex="${cluster_id}-import"
 
-  watch_and_retry "$cmd" "$duration" || \
+  watch_and_retry "$cmd" "$duration" "$regex" || \
   FATAL "Opaque secret '${cluster_id}-import' was not created after $duration"
 
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
@@ -589,8 +589,13 @@ EOF
 
   TITLE "Save the yamls to be applied on the managed clusters: '${kluster_crd}' and '${kluster_import}'"
 
-  ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.crds\\.yaml}" | base64 --decode > ${kluster_crd}
-  ${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.import\\.yaml}" | base64 --decode > ${kluster_import}
+  local json_data
+
+  json_data="$(${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.crds\\.yaml}")"
+  echo "$json_data" | base64 --decode > ${kluster_crd}
+
+  json_data="$(${OC} get secret ${cluster_id}-import -n ${cluster_id} -o jsonpath="{.data.import\\.yaml}")"
+  echo "$json_data" | base64 --decode > ${kluster_import}
 
 }
 
