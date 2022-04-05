@@ -1671,46 +1671,20 @@ EOF
 
 }
 
-
-# ------------------------------------------
-
-function uninstall_submariner_cluster_a() {
-### Run cleanup of previous Submariner on OCP cluster A (public) ###
-  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OCP cluster A (public)"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  uninstall_submariner
-}
-
-# ------------------------------------------
-
-function uninstall_submariner_cluster_b() {
-### Run cleanup of previous Submariner on OSP cluster B (on-prem) ###
-  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on OSP cluster B (on-prem)"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  uninstall_submariner
-}
-
-# ------------------------------------------
-
-function uninstall_submariner_cluster_c() {
-### Run cleanup of previous Submariner on cluster C ###
-  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  uninstall_submariner
-}
-
 # ------------------------------------------
 
 function uninstall_submariner() {
+### Uninstall Submariner from the given cluster
   trap_to_debug_commands;
 
-  PROMPT "Upload custom Submariner ${image_tag} images to the registry of cluster $cluster_name"
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) from cluster $cluster_name"
 
   # Since Submariner 0.12 there's an uninstall command
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
@@ -1906,46 +1880,24 @@ function delete_e2e_namespaces() {
 #   done
 # }
 
-# ------------------------------------------
-
-function delete_old_submariner_images_from_cluster_a() {
-  PROMPT "Delete previous Submariner images in OCP cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  delete_old_submariner_images_from_current_cluster
-}
 
 # ------------------------------------------
 
-function delete_old_submariner_images_from_cluster_b() {
-  PROMPT "Delete previous Submariner images in OSP cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  delete_old_submariner_images_from_current_cluster
-}
-
-# ------------------------------------------
-
-function delete_old_submariner_images_from_cluster_c() {
-  PROMPT "Delete previous Submariner images in cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  delete_old_submariner_images_from_current_cluster
-}
-
-# ------------------------------------------
-
-function delete_old_submariner_images_from_current_cluster() {
-### Configure a mirror server on the cluster registry
+function delete_old_submariner_images_from_cluster() {
+### Delete old Submariner images from the given cluster
   trap_to_debug_commands
 
-  TITLE "Deleting old Submariner images, tags, and image streams (if exist)"
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Delete previous Submariner images in cluster $cluster_name"
 
   for node in $(${OC} get nodes -o name) ; do
-    echo -e "\n### Delete Submariner images in $node ###"
+    TITLE "Delete Submariner images in $node ###"
     ${OC} debug $node -n default -- chroot /host /bin/bash -c "\
     crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi" || :
   done
@@ -5674,9 +5626,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} uninstall_submariner_cluster_a
+      ${junit_cmd} uninstall_submariner "${KUBECONF_HUB}"
 
-      ${junit_cmd} delete_old_submariner_images_from_cluster_a
+      ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
 
     fi
     # END of cluster A cleanup
@@ -5688,9 +5640,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} uninstall_submariner_cluster_b
+        ${junit_cmd} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster_b
+        ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
     fi
@@ -5703,9 +5655,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} uninstall_submariner_cluster_c
+        ${junit_cmd} uninstall_submariner "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster_c
+        ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
