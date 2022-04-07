@@ -599,6 +599,28 @@ if [[ -z "$got_user_input" ]]; then
 fi
 
 
+####################################################################################
+#                    MAIN - ACM and Submariner Deploy and Tests                    #
+####################################################################################
+
+### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
+if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
+  # Extra verbosity for oc commands:
+  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
+  # export VERBOSE_FLAG="--v=2"
+  # export OC="$OC $VERBOSE_FLAG"
+
+  # Debug flag for ocpup and aws commands
+  export DEBUG_FLAG="--debug"
+
+else
+  # Clear trap_to_debug_commands function
+  trap_to_debug_commands() { :; }
+fi
+
+cd ${SCRIPT_DIR}
+
+
 ### Set missing user variables ###
 TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
 
@@ -635,33 +657,11 @@ export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
 export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
 export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
 
-# Fix $SUBM_VER_TAG variable for custom images, with the correct version (vX.Y.Z), branch name, or tag
-set_subm_version_tag_var "SUBM_VER_TAG"
-
-
-####################################################################################
-#                    MAIN - ACM and Submariner Deploy and Tests                    #
-####################################################################################
-
-### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
-if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
-  # Extra verbosity for oc commands:
-  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-  # export VERBOSE_FLAG="--v=2"
-  # export OC="$OC $VERBOSE_FLAG"
-
-  # Debug flag for ocpup and aws commands
-  export DEBUG_FLAG="--debug"
-
-else
-  # Clear trap_to_debug_commands function
-  trap_to_debug_commands() { :; }
-fi
-
-cd ${SCRIPT_DIR}
-
 # Exporting active clusters KUBECONFIGs
 export_active_clusters_kubeconfig
+
+# Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+set_versions_variables
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"

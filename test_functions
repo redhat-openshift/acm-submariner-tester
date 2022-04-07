@@ -1464,19 +1464,39 @@ function download_and_install_subctl() {
 
 # ------------------------------------------
 
-function set_subm_version_tag_var() {
-# update the variable value of $SUBM_VER_TAG (or the $1 input var name)
+function set_versions_variables() {
+# Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
   # trap_to_debug_commands;
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  set_subm_version_tag_var "SUBM_VER_TAG"
+
+  set_acm_version_tag_var "ACM_VER_TAG"
+
+}
+
+# ------------------------------------------
+
+function set_subm_version_tag_var() {
+# Update the variable value of $SUBM_VER_TAG (or the $1 input var name)
+  trap_to_debug_commands;
 
   # Get variable name (default is "SUBM_VER_TAG")
   local tag_var_name="${1:-SUBM_VER_TAG}"
 
   # Set subm_version_tag as the actual value of tag_var_name
-  local subm_version_tag="${!tag_var_name}"
+  local subm_version_tag="${!tag_var_name}" || :
 
-  [[ -n "${subm_version_tag}" ]] || FATAL "Submariner version to use was not defined. Try to run again with option '--subctl-version x.y.z'"
+  if [[ -z "${subm_version_tag}" ]] ; then
+    TITLE "Submariner version to use was not defined. Checking if existing Submariner version is already installed"
+
+    subm_version_tag="$(${OC} get submariner -A -o jsonpath='{.items[0].spec.version}')" || \
+    FATAL "Submariner version to use was not found. Try to run again with option '--subctl-version x.y.z'"
+  fi
 
   TITLE "Retrieve correct tag for Submariner version \$${tag_var_name} : $subm_version_tag"
+
   if [[ "$subm_version_tag" =~ latest|devel ]]; then
     subm_version_tag=$(get_submariner_branch_tag)
   elif [[ "$subm_version_tag" =~ ^[0-9] ]]; then
@@ -1491,6 +1511,32 @@ function set_subm_version_tag_var() {
 
   # Reevaluate $tag_var_name value
   local eval_cmd="export ${tag_var_name}=${subm_version_tag}"
+  eval $eval_cmd
+}
+
+# ------------------------------------------
+
+function set_acm_version_tag_var() {
+# Update the variable value of $ACM_VER_TAG (or the $1 input var name)
+  trap_to_debug_commands;
+
+  # Get variable name (default is "ACM_VER_TAG")
+  local tag_var_name="${1:-ACM_VER_TAG}"
+
+  # Set acm_version_tag as the actual value of tag_var_name
+  local acm_version_tag="${!tag_var_name}" || :
+
+  if [[ -z "${acm_version_tag}" ]] ; then
+    TITLE "ACM version to use was not defined. Checking if existing ACM version is already installed"
+
+    acm_version_tag="$(${OC} get multiclusterhub -A -o jsonpath='{.items[0].status.currentVersion}')" || \
+    FATAL "ACM version to use was not found. Try to run again with option '--acm-version x.y.z'"
+  fi
+
+  TITLE "Retrieve correct tag for ACM version \$${tag_var_name} : $acm_version_tag"
+
+  # Reevaluate $tag_var_name value
+  local eval_cmd="export ${tag_var_name}=${acm_version_tag}"
   eval $eval_cmd
 }
 
@@ -2917,14 +2963,14 @@ function test_disaster_recovery_of_gateway_nodes() {
   echo -e "\n# Stopping all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [${gateway_aws_instance_ids}]"
   aws ${DEBUG_FLAG} ec2 stop-instances --force --instance-ids $gateway_aws_instance_ids || :
   cmd="aws ec2 describe-instances --instance-ids $gateway_aws_instance_ids --output text &> '$TEMP_FILE'"
-  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 3m "stopped" || :
+  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 10m "stopped" || :
 
   cat "$TEMP_FILE"
 
   echo -e "\n# Starting all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [$gateway_aws_instance_ids]"
   aws ${DEBUG_FLAG} ec2 start-instances --instance-ids $gateway_aws_instance_ids || :
   cmd="aws ec2 describe-instances --instance-ids $gateway_aws_instance_ids --output text &> '$TEMP_FILE'"
-  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 3m "running" || aws_reboot=FAILED
+  watch_and_retry "$cmd ; grep 'STATE' $TEMP_FILE" 10m "running" || aws_reboot=FAILED
 
   cat "$TEMP_FILE"
 
