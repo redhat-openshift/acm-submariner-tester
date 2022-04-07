@@ -3337,7 +3337,13 @@ function export_nginx_default_namespace_managed_cluster() {
 
   TITLE "The ServiceExport should be created in the current Namespace '${current_namespace}', if exporting service without specifying a Namespace:"
 
-  export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+  # export_service_in_lighthouse "$NGINX_CLUSTER_BC"
+
+  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
+  "Explicitly set target namespace or use --kubeconfig" \
+  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
+  # Workaound:
+  export_service_in_lighthouse "$NGINX_CLUSTER_BC" "${current_namespace}"
 
 }
 
@@ -3368,13 +3374,6 @@ function export_service_in_lighthouse() {
 
   TITLE "Exporting the following service $svc_name :"
 
-  BUG "Subctl export service uses submariner-operator namespace instead of the current context namespace" \
-  "Explicitly set target namespace or use --kubeconfig" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=2064344"
-
-  # subctl export service "${svc_name}" ${namespace:+-n $namespace}
-  #
-  # Workaound:
   subctl export service "${svc_name}" --kubeconfig "${KUBECONFIG}" ${namespace:+-n $namespace}
 
   ${OC} describe svc "${svc_name}" ${namespace:+-n $namespace}
