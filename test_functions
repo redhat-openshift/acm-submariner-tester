@@ -4612,7 +4612,7 @@ function collect_submariner_info() {
     cluster_name="$(print_current_cluster_name || :)"
     subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
 
-    print_resources_and_pod_logs "$CLUSTER_A_NAME"
+    print_resources_and_pod_logs "${cluster_name}"
 
     # Gather logs for Cluster B
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -4621,7 +4621,7 @@ function collect_submariner_info() {
       cluster_name="$(print_current_cluster_name || :)"
       subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
 
-      print_resources_and_pod_logs "$cluster_name"
+      print_resources_and_pod_logs "${cluster_name}"
     fi
 
     # Gather logs for Cluster C
@@ -4631,7 +4631,7 @@ function collect_submariner_info() {
       cluster_name="$(print_current_cluster_name || :)"
       subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
 
-      print_resources_and_pod_logs "$cluster_name"
+      print_resources_and_pod_logs "${cluster_name}"
     fi
 
   ) |& tee -a $log_file

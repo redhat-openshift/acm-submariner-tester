@@ -1473,28 +1473,31 @@ fi
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
 
 # Artifact OCP clusters kubeconfigs and logs
-if [[ -s "$CLUSTER_A_YAML" ]] ; then
+if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
-  cp -f "$KUBECONF_HUB" "kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "${KUBECONF_HUB}" "kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "${KUBECONF_HUB}.bak" "kubconf_${CLUSTER_A_NAME}.bak" || :
 
   find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
-if [[ -s "$CLUSTER_B_YAML" ]] ; then
+if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
-  cp -f "$KUBECONF_CLUSTER_B" "kubconf_${CLUSTER_B_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_B}" "kubconf_${CLUSTER_B_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_B}.bak" "kubconf_${CLUSTER_B_NAME}.bak" || :
 
   find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
-if [[ -s "$CLUSTER_C_YAML" ]] ; then
+if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
-  cp -f "$KUBECONF_CLUSTER_C" "kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}" "kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "kubconf_${CLUSTER_C_NAME}" || :
 
   find ${CLUSTER_C_DIR} -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
