@@ -1006,9 +1006,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
     ### END of prerequisites for Submariner system tests  ###
 
-    TITLE "OCP clusters and environment setup is ready"
-    echo -e "\n# From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED, and will NOT be reported to Polarion.
-    \n# ($TEST_STATUS_FILE with exit code 1)"
+    TITLE "OCP clusters and environment setup is ready.
+    From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED ($TEST_STATUS_FILE with exit code 1)"
 
     echo 1 > $TEST_STATUS_FILE
 
@@ -1126,8 +1125,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
     ### END of INSTALL_WITH_SUBCTL ###
 
-    TITLE "From this point, if script fails - \$TEST_STATUS_FILE is considered UNSTABLE, and will be reported to Polarion"
-    echo -e "\n# ($TEST_STATUS_FILE with exit code 2)"
+    TITLE "Once Submariner install is completed - \$TEST_STATUS_FILE is considered UNSTABLE.
+    Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
     echo 2 > $TEST_STATUS_FILE
 
@@ -1277,6 +1276,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_subctl_diagnose_on_merged_kubeconfigs
 
     ${junit_cmd} test_subctl_benchmarks
+
+    TITLE "Once System tests are completed - \$TEST_STATUS_FILE is considered UNSTABLE.
+    Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
+
+    echo 2 > $TEST_STATUS_FILE
 
   fi # END of all System tests
 
