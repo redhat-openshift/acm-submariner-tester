@@ -4572,6 +4572,7 @@ function collect_submariner_info() {
   # Ref: https://github.com/submariner-io/shipyard/blob/devel/scripts/shared/post_mortem.sh
 
   local log_file="${1:-subm_pods.log}"
+  local cluster_name
 
   (
     PROMPT "Collecting system information due to test failure" "$RED"
@@ -4582,7 +4583,7 @@ function collect_submariner_info() {
 
     TITLE "Openshift information"
 
-    export_merged_kubeconfigs
+    export KUBECONFIG="${KUBECONF_HUB}"
 
     # oc version
     BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
@@ -4591,29 +4592,46 @@ function collect_submariner_info() {
     # Workaround:
     OC="/usr/bin/oc"
 
-    ${OC} config view || :
     ${OC} status || :
     ${OC} version || :
 
     TITLE "Submariner information (using subctl show, diagnose and gather logs)"
 
+    # export_merged_kubeconfigs
+    BUG "subctl show and subctl diagnose does not support --kubecontexts"
+    # Workaround:
+    # Do not run export_merged_kubeconfigs before subctl show and subctl diagnose
+
     subctl show all || :
 
     subctl diagnose all || :
 
-    subctl gather || :
-
+    # Gather logs for Cluster A
     export KUBECONFIG="${KUBECONF_HUB}"
+
+    cluster_name="$(print_current_cluster_name || :)"
+    subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
+
     print_resources_and_pod_logs "$CLUSTER_A_NAME"
 
+    # Gather logs for Cluster B
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-      print_resources_and_pod_logs "$CLUSTER_B_NAME"
+
+      cluster_name="$(print_current_cluster_name || :)"
+      subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
+
+      print_resources_and_pod_logs "$cluster_name"
     fi
 
+    # Gather logs for Cluster C
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
       export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-      print_resources_and_pod_logs "$CLUSTER_C_NAME"
+
+      cluster_name="$(print_current_cluster_name || :)"
+      subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
+
+      print_resources_and_pod_logs "$cluster_name"
     fi
 
   ) |& tee -a $log_file
