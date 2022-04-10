@@ -262,7 +262,7 @@ function set_trap_functions() {
 
   if [[ "$PRINT_LOGS" =~ ^(y|yes)$ ]]; then
     TITLE "Will collect Submariner information on test failure (CLI option --print-logs)"
-    trap_function_on_error collect_submariner_info
+    trap_function_on_error gather_submariner_info
   fi
 
 }
@@ -740,50 +740,28 @@ function export_active_clusters_kubeconfig() {
 
 # ------------------------------------------
 
-function update_kubeconfig_context_cluster_a() {
-  PROMPT "Updating kubeconfig to the default context on cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  update_kubeconfig_default_context "${CLUSTER_A_NAME}"
-
-}
-
-# ------------------------------------------
-
-function update_kubeconfig_context_cluster_b() {
-  PROMPT "Updating kubeconfig to the default context on cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  update_kubeconfig_default_context "${CLUSTER_B_NAME}"
-
-}
-
-# ------------------------------------------
-
-function update_kubeconfig_context_cluster_c() {
-  PROMPT "Updating kubeconfig to the default context on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  update_kubeconfig_default_context "${CLUSTER_C_NAME}"
-
-}
-
-# ------------------------------------------
-
 function update_kubeconfig_default_context() {
-  # Backup kubeconfig of the cluster, and update its context name
+  # Backup kubeconfig of a cluster, and update its context name
   trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
 
   local cluster_name
-  cluster_name="$1"
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
 
-  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${KUBECONFIG}"
+  PROMPT "Updating kubeconfig to the default context on cluster ${cluster_name}"
 
-  echo -e "\n# Backup current KUBECONFIG to: ${KUBECONFIG}.bak (if it doesn't exists already)"
-  [[ -s ${KUBECONFIG}.bak ]] || cp -f "${KUBECONFIG}" "${KUBECONFIG}.bak"
+  [[ -f ${kubeconfig_file} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${kubeconfig_file}"
+
+  # Backup/restore KUBECONFIG to/from: ${kubeconfig_file}.bak
+  if [[ -s ${kubeconfig_file}.bak ]] ; then
+    echo -e "\n# Restore the original KUBECONFIG from: ${kubeconfig_file}.bak"
+    cp -f "${kubeconfig_file}.bak" "${kubeconfig_file}"
+  else
+    echo -e "\n# Backup the new KUBECONFIG into: ${kubeconfig_file}.bak"
+    cp -f "${kubeconfig_file}" "${kubeconfig_file}.bak"
+  fi
 
   local admin_user="admin"
   TITLE "Set current context of cluster '$cluster_name' to the first context with '${admin_user}' user"
@@ -806,9 +784,8 @@ function update_kubeconfig_default_context() {
   local cur_username
   cur_username="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '${cur_context}')].context.user}")"
 
-  local cluster_url
-  # cluster_url="$(${OC} config get-clusters | tail -1)"
-  cluster_url="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '${cur_context}')].context.cluster}")"
+  local cur_cluster
+  cur_cluster="$(${OC} config view -o jsonpath="{.contexts[?(@.name == '${cur_context}')].context.cluster}")"
 
   BUG "If using managed cluster-id with long name or special characters (from current kubeconfig context),
   Submariner Gateway resource will not be created using Submariner Addon" \
@@ -835,14 +812,18 @@ function update_kubeconfig_default_context() {
   fi
 
   TITLE "Updating KUBECONFIG current context '$renamed_context' to use:
-  Cluster url: $cluster_url
+  Cluster name: $renamed_context
   Auth user: $cur_username
   Namespace: default
   "
 
+  # ${OC} config set "contexts.${renamed_context}.cluster" "${renamed_context}"
   # ${OC} config set "contexts.${renamed_context}.namespace" "default"
-  ${OC} config set-context "$renamed_context" --cluster "$cluster_url" --user "${cur_username}" --namespace "default"
+  ${OC} config set-context "$renamed_context" --cluster "$renamed_context" --user "${cur_username}" --namespace "default"
   ${OC} config use-context "$renamed_context"
+
+  echo -e "\n# Rename cluster '${cur_cluster}' to '${renamed_context}'"
+  sed -E "s/name: ${cur_cluster}\$/name: ${renamed_context}/" -i "${kubeconfig_file}"
 
   ${OC} config get-contexts
 
@@ -852,45 +833,19 @@ function update_kubeconfig_default_context() {
 
 # ------------------------------------------
 
-function test_kubeconfig_cluster_a() {
-# Check that OCP cluster A (public) is up and running
-  trap_to_debug_commands;
-  export KUBECONFIG="${KUBECONF_HUB}"
-
-  test_cluster_status "$CLUSTER_A_NAME"
-}
-
-# ------------------------------------------
-
-function test_kubeconfig_cluster_b() {
-# Check that OSP cluster B (on-prem) is up and running
-  trap_to_debug_commands;
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-
-  test_cluster_status "$CLUSTER_B_NAME"
-}
-
-# ------------------------------------------
-
-function test_kubeconfig_cluster_c() {
-# Check that OCP cluster C (public) is up and running
-  trap_to_debug_commands;
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-
-  test_cluster_status "$CLUSTER_C_NAME"
-}
-
-# ------------------------------------------
-
 function test_cluster_status() {
-  # Verify that current kubeconfig cluster is up and healthy
+  # Verify that OCP cluster is up and healthy
   trap_to_debug_commands;
 
-  local cluster_name="$1"
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
 
   PROMPT "Testing status of cluster $cluster_name"
 
-  [[ -f ${KUBECONFIG} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${KUBECONFIG}"
+  [[ -f ${kubeconfig_file} ]] || FATAL "Openshift deployment configuration for '$cluster_name' is missing: ${kubeconfig_file}"
 
   # Get OCP cluster version
   local cluster_version
@@ -899,11 +854,11 @@ function test_cluster_status() {
   TITLE "Backup Kubeconfig of OCP cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
 
   local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
-  echo -e "\n# Copy '${KUBECONFIG}' to current workspace: ${kubeconfig_copy}"
-  cp -f "$KUBECONFIG" "${kubeconfig_copy}" || :
+  echo -e "\n# Copy '${kubeconfig_file}' to current workspace: ${kubeconfig_copy}"
+  cp -f "$kubeconfig_file" "${kubeconfig_copy}" || :
 
   ${OC} config view
-  ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${KUBECONFIG}"
+  ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${kubeconfig_file}"
   ${OC} version
   ${OC} get all -n default
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
@@ -4567,12 +4522,13 @@ function save_cluster_info_to_file() {
 
 # ------------------------------------------
 
-function collect_submariner_info() {
+function gather_submariner_info() {
   # print submariner pods descriptions and logs
   # Ref: https://github.com/submariner-io/shipyard/blob/devel/scripts/shared/post_mortem.sh
 
   local log_file="${1:-subm_pods.log}"
   local cluster_name
+  local cluster_context
 
   (
     PROMPT "Collecting system information due to test failure" "$RED"
@@ -4595,7 +4551,7 @@ function collect_submariner_info() {
     ${OC} status || :
     ${OC} version || :
 
-    TITLE "Submariner information (using subctl show, diagnose and gather logs)"
+    TITLE "Submariner information (using subctl show and diagnose)"
 
     # export_merged_kubeconfigs
     BUG "subctl show and subctl diagnose does not support --kubecontexts"
@@ -4606,32 +4562,17 @@ function collect_submariner_info() {
 
     subctl diagnose all || :
 
-    # Gather logs for Cluster A
-    export KUBECONFIG="${KUBECONF_HUB}"
+    # Gather logs of cluster A
+    print_resources_and_pod_logs "${KUBECONF_HUB}"
 
-    cluster_name="$(print_current_cluster_name || :)"
-    subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
-
-    print_resources_and_pod_logs "${cluster_name}"
-
-    # Gather logs for Cluster B
+    # Gather logs of cluster B
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
-      export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-
-      cluster_name="$(print_current_cluster_name || :)"
-      subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
-
-      print_resources_and_pod_logs "${cluster_name}"
+      print_resources_and_pod_logs "${KUBECONF_CLUSTER_B}"
     fi
 
-    # Gather logs for Cluster C
+    # Gather logs of cluster C
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
-      export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-
-      cluster_name="$(print_current_cluster_name || :)"
-      subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_name} || :
-
-      print_resources_and_pod_logs "${cluster_name}"
+      print_resources_and_pod_logs "${KUBECONF_CLUSTER_C}"
     fi
 
   ) |& tee -a $log_file
@@ -4642,9 +4583,16 @@ function collect_submariner_info() {
 
 function print_resources_and_pod_logs() {
   trap_to_debug_commands;
-  local cluster_name="$1"
 
-  PROMPT "OCP, ACM and Submariner logs in ${cluster_name}"
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Gather logs of OCP, ACM and Submariner in ${cluster_name}"
+
+  ${OC} config get-contexts
 
   TITLE "Openshift Nodes on ${cluster_name}"
 
@@ -4653,6 +4601,17 @@ function print_resources_and_pod_logs() {
   TITLE "Unready Pods (if any) on ${cluster_name}"
 
   ${OC} get pod -A |  grep -Ev '([1-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
+
+  TITLE "Submariner gather logs in cluster $cluster_name"
+
+  # cluster_context="$cluster_name"
+  BUG "subctl gather does not support multiple kubeconfig contexts"
+  # Workaround:
+  # Use old kubeconfig (.bak) and "admin" context
+  export KUBECONFIG="${kubeconfig_file}.bak"
+  cluster_context="admin"
+
+  subctl gather --dir submariner-gather_${cluster_name} --kubecontexts ${cluster_context} || :
 
   TITLE "ACM and Submariner resources in ${cluster_name}"
 
@@ -4715,7 +4674,7 @@ function print_resources_and_pod_logs() {
     }
   }'
 
-  TITLE "Submariner LOGS on ${cluster_name}"
+  TITLE "All Submariner logs on ${cluster_name}"
 
   print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -4741,7 +4700,7 @@ function print_resources_and_pod_logs() {
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 
-  TITLE "ALL Openshift events on ${cluster_name}"
+  TITLE "All Openshift events on ${cluster_name}"
 
   ${OC} get events -A --sort-by='.metadata.creationTimestamp' \
   -o custom-columns=FirstSeen:.firstTimestamp,LastSeen:.lastTimestamp,Count:.count,From:.source.component,Type:.type,Reason:.reason,Message:.message || :
