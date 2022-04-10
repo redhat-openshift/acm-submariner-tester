@@ -1007,17 +1007,25 @@ function uninstall_submariner() {
 
   PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) from cluster $cluster_name"
 
-  # Since Submariner 0.12 there's an uninstall command
-  if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
+  local cleanup_required=NO
 
-    subctl uninstall --yes
+  # Since Submariner 0.12 there's a subctl uninstall command
+  if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
+    subctl uninstall --yes || {
+
+      BUG "subctl uninstall failed deleting resource 'service-discovery'" \
+      "Run cleanup the old way" \
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2073812"
+
+      cleanup_required=YES
+    }
 
   else
+    cleanup_required=YES
+  fi
 
-    BUG "Deploying broker will fail if previous submariner-operator namespaces and CRDs already exist" \
-    "Run cleanup (oc delete) of any existing resource of submariner-operator" \
-    "https://github.com/submariner-io/submariner-operator/issues/88
-    https://github.com/submariner-io/submariner-website/issues/272"
+
+  if [[ "$cleanup_required" = YES ]] ; then
 
     delete_submariner_namespace_and_crds
 
@@ -1028,7 +1036,6 @@ function uninstall_submariner() {
     remove_submariner_gateway_labels
 
     remove_submariner_machine_sets
-
   fi
 
   delete_submariner_test_namespaces
