@@ -798,25 +798,25 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
-    ${junit_cmd} update_kubeconfig_context_cluster_a
+    ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
-    ${junit_cmd} test_kubeconfig_cluster_a
+    ${junit_cmd} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
     # Verify cluster B (if it is expected to be an active cluster)
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      ${junit_cmd} update_kubeconfig_context_cluster_b
+      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
-      ${junit_cmd} test_kubeconfig_cluster_b
+      ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
     fi
 
     # Verify cluster C (if it is expected to be an active cluster)
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      ${junit_cmd} update_kubeconfig_context_cluster_c
+      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
-      ${junit_cmd} test_kubeconfig_cluster_c
+      ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
     fi
 
@@ -997,11 +997,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # Verify clusters status even if system tests were skipped
 
-      ${junit_cmd} test_kubeconfig_cluster_a
+      ${junit_cmd} test_cluster_status "${KUBECONF_HUB}"
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_b
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}"
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_kubeconfig_cluster_c
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}"
 
     fi
     ### END of prerequisites for Submariner system tests  ###
