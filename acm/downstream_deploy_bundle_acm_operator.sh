@@ -567,15 +567,19 @@ EOF
       enabled: true
     searchCollector:
       enabled: true
-    version: 2.2.0
+    version: ${ACM_VER_TAG}
 EOF
 
-  TITLE "Wait for ManagedCluster Opaque secret '${cluster_id}-import' to be created"
+  TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
 
   local duration=5m
 
   # Wait for the new ManagedCluster $cluster_id
   ${OC} wait --timeout=$duration managedcluster ${cluster_id} -n ${cluster_id} --for=condition=HubAcceptedManagedCluster || :
+
+  ${OC} describe KlusterletAddonConfig -n ${cluster_id} ${cluster_id}
+
+  TITLE "Wait for ManagedCluster Opaque secret '${cluster_id}-import' to be created"
 
   # Wait for the Opaque secret
   local cmd="${OC} get secrets -n ${cluster_id}"
