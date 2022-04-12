@@ -132,8 +132,6 @@ export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
 export SUBM_VER_TAG=${SUBM_VER_TAG}
-# export SUBM_SUBSCRIPTION="my-submariner-subscription"
-export SUBM_CATALOG="my-submariner-catalog"
 export SUBM_CHANNEL_PREFIX_TECH_PREVIEW="alpha-"
 export SUBM_CHANNEL_PREFIX="stable-"
 
@@ -149,8 +147,6 @@ export ACM_BUNDLE="acm-operator-bundle"
 export ACM_INSTANCE="multiclusterhub"
 
 export ACM_VER_TAG=${ACM_VER_TAG}
-# export ACM_SUBSCRIPTION="my-acm-subscription"
-export ACM_CATALOG="my-acm-catalog"
 export ACM_CHANNEL_PREFIX="release-"
 
 
@@ -162,7 +158,6 @@ export MCE_BUNDLE="multicluster-engine-operator-bundle"
 export MCE_INSTANCE="multiclusterengine"
 
 export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
-export MCE_CATALOG="my-mce-catalog"
 export MCE_CHANNEL_PREFIX="stable-"
 
 
