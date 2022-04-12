@@ -273,7 +273,7 @@ function create_subscription() {
   local operator_channel="$3"
 
   # Optional input args:
-  # To set a specific version of an Operator CSV and prevent automatic updates for newer versions in the channel:
+  # To set a specific version of an Operator CSV with a Manual subscription (prevent automatic updates for newer versions in the channel):
   local operator_version="$4"
   # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
   local operator_namespace="$5"
@@ -321,22 +321,22 @@ EOF
   ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
-  local install_plan
+  local install_plan_approval
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
     echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
-    install_plan="Manual"
+    install_plan_approval="Manual"
     starting_csv="${operator_name}.${operator_version}"
 
-    BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
-    "Use Automatic installPlanApproval (instead of Manual)"
-    # Workaround:
-    install_plan="Automatic"
+    # BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
+    # "Use Automatic installPlanApproval (instead of Manual)"
+    # # Workaround:
+    # install_plan_approval="Automatic"
 
   else
     echo -e "\n# No specific ${operator_name} version was requested - Apply Automatic installPlanApproval"
-    install_plan="Automatic"
+    install_plan_approval="Automatic"
 
   fi
 
@@ -348,7 +348,7 @@ EOF
     namespace: ${subscription_namespace}
   spec:
     channel: ${operator_channel}
-    installPlanApproval: ${install_plan}
+    installPlanApproval: ${install_plan_approval}
     name: ${operator_name}
     source: ${catalog_source}
     sourceNamespace: ${operator_namespace}
@@ -370,11 +370,11 @@ EOF
 
   if cat $subscription_data |& highlight "$regex" ; then
 
-    local installPlan
-    installPlan="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
+    local install_plan_name
+    install_plan_name="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
 
-    if [[ -n "${installPlan}" ]] ; then
-      ${OC} patch installplan -n "${subscription_namespace}" "${installPlan}" -p '{"spec":{"approved":true}}' --type merge || subscription_status=FAILED
+    if [[ -n "${install_plan_name}" ]] ; then
+      ${OC} patch installplan -n "${subscription_namespace}" "${install_plan_name}" -p '{"spec":{"approved":true}}' --type merge || subscription_status=FAILED
     fi
 
   else
@@ -384,12 +384,13 @@ EOF
   TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
 
   ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
-  ${OC} get installplan -n "${subscription_namespace}" --ignore-not-found
+  ${OC} get installplan -n "${subscription_namespace}" -o yaml --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
 
   if [[ "$subscription_status" = FAILED ]] ; then
-    FAILURE "InstallPlan for the Subscription '${subscription_display_name}' of Operator '${operator_name}' could not be created"
+    cat ${subscription_data}
+    FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi
 
 }
