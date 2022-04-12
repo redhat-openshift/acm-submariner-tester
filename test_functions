@@ -870,48 +870,21 @@ function test_cluster_status() {
 
 # ------------------------------------------
 
-function add_elevated_user_to_cluster_a() {
-  PROMPT "Adding elevated user to cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  add_elevated_user
-
-}
-
-# ------------------------------------------
-
-function add_elevated_user_to_cluster_b() {
-  PROMPT "Adding elevated user to cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  add_elevated_user
-
-}
-
-# ------------------------------------------
-
-function add_elevated_user_to_cluster_c() {
-  PROMPT "Adding elevated user to cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  add_elevated_user
-
-}
-
-# ------------------------------------------
-
 function add_elevated_user() {
   # Add new elevated user to OCP cluster
   # Ref: https://docs.openshift.com/container-platform/latest/authentication/identity_providers/configuring-htpasswd-identity-provider.html
 
   trap_to_debug_commands;
 
-  local http_sec_name="http.sec"
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
 
-  TITLE "Create an HTPasswd file for OCP user '$OCP_USR'"
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  PROMPT "Adding elevated user to cluster ${cluster_name}"
+
+  local http_sec_name="http.sec"
 
   # Update ${OCP_USR}.sec and http.sec - Only if these files are empty or modified more than 1 day ago
   touch -a "${WORKDIR}/${http_sec_name}"
@@ -925,6 +898,8 @@ function add_elevated_user() {
       printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 ${ocp_pwd})" > "${WORKDIR}/${http_sec_name}"
     )
   fi
+
+  TITLE "Create an HTPasswd from file for OCP user '$OCP_USR'"
 
   ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
@@ -2223,39 +2198,17 @@ function gateway_label_all_nodes_external_ip() {
 
 # ------------------------------------------
 
-function configure_images_prune_cluster_a() {
-  PROMPT "Configure Garbage Collection and Registry Images Prune on OCP cluster A"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_HUB}"
-  configure_ocp_garbage_collection_and_images_prune
-}
-
-# ------------------------------------------
-
-function configure_images_prune_cluster_b() {
-  PROMPT "Configure Garbage Collection and Registry Images Prune on OSP cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  configure_ocp_garbage_collection_and_images_prune
-}
-
-# ------------------------------------------
-
-function configure_images_prune_cluster_c() {
-  PROMPT "Configure Garbage Collection and Registry Images Prune on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  configure_ocp_garbage_collection_and_images_prune
-}
-
-# ------------------------------------------
-
 function configure_ocp_garbage_collection_and_images_prune() {
 ### function to set garbage collection on all cluster nodes
   trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
   TITLE "Setting garbage collection on all OCP cluster nodes"
 

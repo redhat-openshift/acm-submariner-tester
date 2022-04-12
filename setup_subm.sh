@@ -886,9 +886,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Cluster A configurations
 
-    ${junit_cmd} add_elevated_user_to_cluster_a
+    ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
 
-    ${junit_cmd} configure_images_prune_cluster_a
+    ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
     # Cluster B custom configurations for OpenStack
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -908,9 +908,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      ${junit_cmd} add_elevated_user_to_cluster_b
+      ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
-      ${junit_cmd} configure_images_prune_cluster_b
+      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
 
     fi
 
@@ -925,9 +925,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       #
       # ${junit_cmd} label_first_gateway_cluster_c
 
-      ${junit_cmd} add_elevated_user_to_cluster_c
+      ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
-      ${junit_cmd} configure_images_prune_cluster_c
+      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
     fi
 
