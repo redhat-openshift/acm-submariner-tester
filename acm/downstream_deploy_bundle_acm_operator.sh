@@ -130,6 +130,30 @@ function clean_acm_namespace_and_resources() {
 
 # ------------------------------------------
 
+function check_if_mce_is_required() {
+  ### Return 1 if MCE is NOT required to be installed before ACM 2.5 (MCE is not required if upgrading from ACM 2.4) ###
+
+  TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
+
+  if [[ -z "$acm_current_version" ]] ; then
+    echo -e "\n# ACM is not installed - If ACM requested version $ACM_VER_TAG < 2.5: return 1"
+    check_version_greater_or_equal "$ACM_VER_TAG" "2.5" || return 1
+  else
+    echo -e "\n# ACM is installed - If ACM current version $acm_current_version < 2.5: return 1"
+    check_version_greater_or_equal "$acm_current_version" "2.5" || return 1
+  fi
+
+  echo -e "\n# MCE $MCE_VER_TAG should be installed perior to ACM $ACM_VER_TAG"
+
+}
+
+# ------------------------------------------
+
 function install_mce_operator_on_hub() {
   ### Install MCE operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
@@ -143,46 +167,32 @@ function install_mce_operator_on_hub() {
 
   PROMPT "Install MCE $mce_version bundle on the Hub cluster ${cluster_name}"
 
-  local acm_current_version
-  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
+  local mce_current_version
+  mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" ${MCE_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
-  [[ -z "$acm_current_version" ]] || echo -e "\n# ACM current version: $acm_current_version"
+  # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
+  if [[ "$mce_version" != "$mce_current_version" ]] ; then
 
-  # Check if ACM is not installed, or installed with version >= 2.5
-  if [[ -z "$acm_current_version" ]] || check_version_greater_or_equal "$acm_current_version" "2.5" ; then
-
-    echo -e "\n# MCE should be installed perior to ACM 2.5"
-
-    local mce_current_version
-    mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" ${MCE_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
-
-    # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
-    if [[ "$mce_version" != "$mce_current_version" ]] ; then
-
-      if [[ -z "$mce_current_version" ]] ; then
-        echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
-      else
-        echo -e "\n# MCE $mce_current_version is already installed on current cluster ${cluster_name} - Re-installing MCE $mce_version"
-      fi
-
-      local mce_channel
-      mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
-
-      TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
-      Catalog: ${mce_catalog}
-      Channel: ${mce_channel}
-      "
-
-      # Deploy MCE operator as an OCP bundle
-      deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
-      echo -e "\n# MCE $mce_version installation completed"
-
+    if [[ -z "$mce_current_version" ]] ; then
+      echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
     else
-      TITLE "MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
+      echo -e "\n# MCE $mce_current_version is already installed on current cluster ${cluster_name} - Re-installing MCE $mce_version"
     fi
 
+    local mce_channel
+    mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
+
+    TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
+    Catalog: ${mce_catalog}
+    Channel: ${mce_channel}
+    "
+
+    # Deploy MCE operator as an OCP bundle
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
+    echo -e "\n# MCE $mce_version installation completed"
+
   else
-      TITLE "MCE is not required if upgrading from ACM version ${acm_current_version} - Skipping MCE installation"
+    TITLE "MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
   fi
 
 }
