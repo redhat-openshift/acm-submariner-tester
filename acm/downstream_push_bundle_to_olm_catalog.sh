@@ -103,6 +103,9 @@ function deploy_ocp_bundle() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
+
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
   Bundle Name: ${bundle_name}
   Operator Version: ${operator_version}
@@ -284,6 +287,9 @@ function create_subscription() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
+
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
   local subscription_namespace
 
