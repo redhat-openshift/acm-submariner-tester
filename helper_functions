@@ -993,7 +993,8 @@ function create_docker_registry_secret() {
   local namespace="$4"
 
   local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
+  # Replace anything but letters and numbers with "-"
+  local secret_name="${secret_name//[^a-zA-Z0-9]/-}"
 
   TITLE "Creating new docker-registry in '$namespace' namespace
   Server: ${registry_server}
@@ -1099,7 +1100,7 @@ function print_current_cluster_name() {
 
   # Remove the :<port number> if exists
   cluster_name="${cluster_name%%:*}"
-  # Replace special characters with underscore
+  # Replace anything but letters and numbers with "-"
   cluster_name="${cluster_name//[^a-zA-Z0-9]/-}"
 
   echo $cluster_name

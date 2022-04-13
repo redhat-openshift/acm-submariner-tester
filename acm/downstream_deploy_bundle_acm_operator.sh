@@ -130,12 +130,25 @@ function clean_acm_namespace_and_resources() {
 
 # ------------------------------------------
 
-function print_major_minor_version() {
-  ### Trim version into major.minor (X.Y.Z ==> X.Y) ###
+function check_if_mce_is_required() {
+  ### Return 1 if MCE is NOT required to be installed before ACM 2.5 (MCE is not required if upgrading from ACM 2.4) ###
 
-  local full_numeric_version="$1"
-  local regex_to_major_minor='[0-9]+\.[0-9]+'
-  echo "$full_numeric_version" | grep -Po "$regex_to_major_minor"
+  TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
+
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local acm_current_version
+  acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
+
+  if [[ -z "$acm_current_version" ]] ; then
+    echo -e "\n# ACM is not installed - If ACM requested version $ACM_VER_TAG < 2.5: return 1"
+    check_version_greater_or_equal "$ACM_VER_TAG" "2.5" || return 1
+  else
+    echo -e "\n# ACM is installed - If ACM current version $acm_current_version < 2.5: return 1"
+    check_version_greater_or_equal "$acm_current_version" "2.5" || return 1
+  fi
+
+  echo -e "\n# MCE $MCE_VER_TAG should be installed perior to ACM $ACM_VER_TAG"
 
 }
 
@@ -154,8 +167,6 @@ function install_mce_operator_on_hub() {
 
   PROMPT "Install MCE $mce_version bundle on the Hub cluster ${cluster_name}"
 
-  # TODO: Move the following logic into deploy_ocp_bundle
-
   local mce_current_version
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" ${MCE_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
@@ -169,15 +180,15 @@ function install_mce_operator_on_hub() {
     fi
 
     local mce_channel
-    mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+    mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
 
     TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
-    Catalog: ${MCE_CATALOG}
+    Catalog: ${mce_catalog}
     Channel: ${mce_channel}
     "
 
     # Deploy MCE operator as an OCP bundle
-    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${MCE_CATALOG}" "${MCE_NAMESPACE}"
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
     echo -e "\n# MCE $mce_version installation completed"
 
   else
@@ -217,14 +228,17 @@ function install_acm_operator_on_hub() {
 
     # Deploy ACM operator as an OCP bundle
     local acm_channel
-    acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
+    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
+
+    local acm_catalog
+    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     TITLE "Install ACM bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
-    Catalog: ${ACM_CATALOG}
-    Channel: ${mce_channel}
+    Catalog: ${acm_catalog}
+    Channel: ${acm_channel}
     "
 
-    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${ACM_CATALOG}" "${ACM_NAMESPACE}"
+    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${ACM_NAMESPACE}"
     echo -e "\n# ACM $acm_version installation completed"
 
   else
@@ -246,18 +260,21 @@ function create_mce_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in ${MCE_NAMESPACE} (catalog ${MCE_CATALOG}) on cluster ${cluster_name}"
+  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
 
   local mce_channel
-  mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+  mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
+
+  local mce_catalog
+  mce_catalog="$(get_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
   # Create Automatic Subscription (channel without a specific version) for MCE operator
-  create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "" "${MCE_NAMESPACE}"
+  create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
 
   # # Create Manual Subscription with a specific version for MCE operator
-  # create_subscription "${MCE_CATALOG}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_version}" "${MCE_NAMESPACE}"
+  # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
 
-  echo -e "\n# ACM Subscription for "${MCE_OPERATOR}" is ready"
+  echo -e "\n# ACM Subscription for ${MCE_OPERATOR} is ready"
 
 }
 
@@ -274,7 +291,7 @@ function create_acm_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Subscription for ${ACM_OPERATOR} in ${ACM_NAMESPACE} (catalog ${ACM_CATALOG}) on cluster ${cluster_name}"
+  PROMPT "Create Subscription for ${ACM_OPERATOR} in ${ACM_NAMESPACE} (catalog ${acm_catalog}) on cluster ${cluster_name}"
 
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" ${ACM_INSTANCE} -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
@@ -283,22 +300,25 @@ function create_acm_subscription() {
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     local acm_channel
-    acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
+    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
+
+    local acm_catalog
+    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     if [[ -z "$acm_current_version" ]] ; then
       TITLE "ACM is not installed on current cluster ${cluster_name} - Creating Automatic Subscription for ACM $acm_version"
 
       # Create Automatic Subscription (channel without a specific version) for ACM operator
-      create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "" "${ACM_NAMESPACE}"
+      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "" "${ACM_NAMESPACE}"
 
     else
       TITLE "ACM $acm_current_version is already installed on current cluster ${cluster_name} - Changing to Manual Subscription for ACM $acm_version"
 
       # Create Manual Subscription with a specific version for ACM operator
-      create_subscription "${ACM_CATALOG}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_version}" "${ACM_NAMESPACE}"
+      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
     fi
 
-    echo -e "\n# ACM Subscription for "${ACM_OPERATOR}" is ready"
+    echo -e "\n# ACM Subscription for ${ACM_OPERATOR} is ready"
 
   else
     TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM Subscription"
@@ -667,15 +687,18 @@ function install_submariner_operator_on_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
+
+  local submariner_catalog
+  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
   # Deploy Submariner operator as an OCP bundle
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${SUBM_CATALOG}" "${SUBM_NAMESPACE}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
@@ -883,10 +906,13 @@ function create_submariner_config_in_acm_managed_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
+
+  local submariner_catalog
+  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
@@ -915,7 +941,7 @@ function create_submariner_config_in_acm_managed_cluster() {
       submarinerRouteAgentImagePullSpec: ''
     subscriptionConfig:
       channel: ${submariner_channel}
-      source: ${SUBM_CATALOG}
+      source: ${submariner_catalog}
       sourceNamespace: ${SUBM_NAMESPACE}
       startingCSV: ${SUBM_OPERATOR}.${submariner_version}
 EOF

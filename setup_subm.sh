@@ -1019,8 +1019,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ "$INSTALL_ACM" =~ ^(y|yes)$ ]] ; then
 
-    # Setup ACM Hub and MCE (for ACM > 2.5 it is required to pre-install MCE, before ACM)
-    if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+    # Setup ACM Hub and MCE
+
+    # For ACM > 2.5 it is required to pre-install MCE, before ACM
+    if check_if_mce_is_required ; then
       export INSTALL_MCE=YES
     fi
 

@@ -2,6 +2,7 @@
 
 ############ OCP Operators functions ############
 
+# ------------------------------------------
 
 ### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
@@ -90,16 +91,21 @@ function deploy_ocp_bundle() {
 
   trap_to_debug_commands;
 
-  # Input args
+  # Input args:
   local bundle_name="$1"
   local operator_version="$2"
   local operator_name="$3"
   local operator_channel="$4"
-  local catalog_source="$5"
+
+  # Optional args:
+  local catalog_source="${5:-${operator_name}-${operator_channel}-catalog}"
   local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
+
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
   Bundle Name: ${bundle_name}
@@ -165,7 +171,7 @@ function deploy_ocp_bundle() {
   # echo -e "\n# Delete previous catalogSource if exists"
   # ${OC} delete catalogsource/${catalog_source} -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  local catalog_display_name="${bundle_name} Catalog Source"
+  local catalog_display_name="${bundle_name}-${operator_channel} Catalog Source"
 
     cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
     apiVersion: operators.coreos.com/v1alpha1
@@ -268,11 +274,13 @@ function create_subscription() {
   trap_to_debug_commands;
 
   # Input args
-  local catalog_source="$1"
-  local operator_name="$2"
-  local operator_channel="$3"
+  local operator_name="$1"
+  local operator_channel="$2"
 
   # Optional input args:
+
+  # Catalog source name
+  local catalog_source="${3:-${operator_name}-${operator_channel}-catalog}"
   # To set a specific version of an Operator CSV with a Manual subscription (prevent automatic updates for newer versions in the channel):
   local operator_version="$4"
   # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
@@ -280,6 +288,9 @@ function create_subscription() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
+
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
   local subscription_namespace
 
@@ -314,8 +325,8 @@ EOF
   fi
 
   # Create the Subscription
-  local subscription_display_name="my-${operator_name}-subscription"
-  TITLE "Create Subscription '${subscription_display_name}' in namespace '${subscription_namespace}' (Channel '${operator_channel}', Catalog '${catalog_source}')"
+  local subscription_display_name="${operator_name}-${operator_channel}-subscription"
+  TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
 
   echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
   ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
@@ -394,3 +405,39 @@ EOF
   fi
 
 }
+
+# ------------------------------------------
+
+function get_channel_name() {
+  ### Generate and print Subscription Channel from a defined perfix and version number ###
+
+  local prefix="$1"
+  local version="$2"
+
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+
+  # Trim version into major.minor (X.Y.Z ==> X.Y)
+  version="$(echo "$version" | grep -Po "$regex_to_major_minor")"
+
+  # Print channel, after trimming version into major.minor (X.Y.Z ==> X.Y)
+  echo "${prefix}${version}"
+
+}
+
+# ------------------------------------------
+
+function get_catalog_name() {
+  ### Generate and print Catalog Source name from Operator and Channel ###
+
+  local operator_name="$1"
+  local channel_name="$2"
+
+  # Catalog source name
+  local catalog_source="${operator_name}-${channel_name}-catalog"
+
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  echo "${catalog_source//[^a-zA-Z0-9]/-}"
+
+}
+
+# ------------------------------------------
