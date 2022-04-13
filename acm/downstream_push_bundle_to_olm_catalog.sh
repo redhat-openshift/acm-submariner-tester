@@ -2,6 +2,7 @@
 
 ############ OCP Operators functions ############
 
+# ------------------------------------------
 
 ### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
@@ -404,3 +405,39 @@ EOF
   fi
 
 }
+
+# ------------------------------------------
+
+function get_channel_name() {
+  ### Generate and print Subscription Channel from a defined perfix and version number ###
+
+  local prefix="$1"
+  local version="$2"
+
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+
+  # Trim version into major.minor (X.Y.Z ==> X.Y)
+  version="$(echo "$version" | grep -Po "$regex_to_major_minor")"
+
+  # Print channel, after trimming version into major.minor (X.Y.Z ==> X.Y)
+  echo "${prefix}${version}"
+
+}
+
+# ------------------------------------------
+
+function get_catalog_name() {
+  ### Generate and print Catalog Source name from Operator and Channel ###
+
+  local operator_name="$1"
+  local channel_name="$2"
+
+  # Catalog source name
+  local catalog_source="${operator_name}-${channel_name}-catalog"
+
+  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
+  echo "${catalog_source//[^a-zA-Z0-9]/-}"
+
+}
+
+# ------------------------------------------

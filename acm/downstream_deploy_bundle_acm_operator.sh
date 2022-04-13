@@ -130,17 +130,6 @@ function clean_acm_namespace_and_resources() {
 
 # ------------------------------------------
 
-function print_major_minor_version() {
-  ### Trim version into major.minor (X.Y.Z ==> X.Y) ###
-
-  local full_numeric_version="$1"
-  local regex_to_major_minor='[0-9]+\.[0-9]+'
-  echo "$full_numeric_version" | grep -Po "$regex_to_major_minor"
-
-}
-
-# ------------------------------------------
-
 function install_mce_operator_on_hub() {
   ### Install MCE operator - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
@@ -177,7 +166,7 @@ function install_mce_operator_on_hub() {
       fi
 
       local mce_channel
-      mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+      mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
 
       TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
       Catalog: ${mce_catalog}
@@ -229,9 +218,10 @@ function install_acm_operator_on_hub() {
 
     # Deploy ACM operator as an OCP bundle
     local acm_channel
-    acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
+    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
 
-    local acm_catalog="${ACM_OPERATOR}-${acm_channel}-catalog"
+    local acm_catalog
+    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     TITLE "Install ACM bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
     Catalog: ${acm_catalog}
@@ -263,9 +253,10 @@ function create_mce_subscription() {
   PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
 
   local mce_channel
-  mce_channel="${MCE_CHANNEL_PREFIX}$(print_major_minor_version "$mce_version")"
+  mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
 
-  local mce_catalog="${MCE_OPERATOR}-${mce_channel}-catalog"
+  local mce_catalog
+  mce_catalog="$(get_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
   # Create Automatic Subscription (channel without a specific version) for MCE operator
   create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
@@ -299,9 +290,10 @@ function create_acm_subscription() {
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     local acm_channel
-    acm_channel="${ACM_CHANNEL_PREFIX}$(print_major_minor_version "$acm_version")"
+    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
 
-    local acm_catalog="${ACM_OPERATOR}-${acm_channel}-catalog"
+    local acm_catalog
+    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     if [[ -z "$acm_current_version" ]] ; then
       TITLE "ACM is not installed on current cluster ${cluster_name} - Creating Automatic Subscription for ACM $acm_version"
@@ -685,12 +677,13 @@ function install_submariner_operator_on_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
-  local submariner_catalog="${SUBM_OPERATOR}-${submariner_channel}-catalog"
+  local submariner_catalog
+  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
 
@@ -903,12 +896,13 @@ function create_submariner_config_in_acm_managed_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="${SUBM_CHANNEL_PREFIX}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}$(print_major_minor_version "$submariner_version")"
+    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
-  local submariner_catalog="${SUBM_OPERATOR}-${submariner_channel}-catalog"
+  local submariner_catalog
+  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
