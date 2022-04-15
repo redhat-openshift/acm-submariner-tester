@@ -1394,9 +1394,9 @@ function set_versions_variables() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  set_subm_version_tag_var "SUBM_VER_TAG"
+  set_subm_version_tag_var "SUBM_VER_TAG" || :
 
-  set_acm_version_tag_var "ACM_VER_TAG"
+  set_acm_version_tag_var "ACM_VER_TAG" || :
 
 }
 
@@ -1416,7 +1416,7 @@ function set_subm_version_tag_var() {
     TITLE "Submariner version to use was not defined. Checking if existing Submariner version is already installed"
 
     subm_version_tag="$(${OC} get submariner -A -o jsonpath='{.items[0].spec.version}')" || \
-    FATAL "Submariner version to use was not found. Try to run again with option '--subctl-version x.y.z'"
+    FAILURE "Submariner version to use was not found. Try to run again with option '--subctl-version x.y.z'"
   fi
 
   TITLE "Retrieve correct tag for Submariner version \$${tag_var_name} : $subm_version_tag"
@@ -1454,7 +1454,7 @@ function set_acm_version_tag_var() {
     TITLE "ACM version to use was not defined. Checking if existing ACM version is already installed"
 
     acm_version_tag="$(${OC} get multiclusterhub -A -o jsonpath='{.items[0].status.currentVersion}')" || \
-    FATAL "ACM version to use was not found. Try to run again with option '--acm-version x.y.z'"
+    FAILURE "ACM version to use was not found. Try to run again with option '--acm-version x.y.z'"
   fi
 
   TITLE "Retrieve correct tag for ACM version \$${tag_var_name} : $acm_version_tag"
