@@ -470,7 +470,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
-  apiVersion: cluster.open-cluster-management.io/v1beta1
+  apiVersion: cluster.open-cluster-management.io/v1alpha1
   kind: ManagedClusterSet
   metadata:
     name: ${SUBM_OPERATOR}
