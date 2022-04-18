@@ -291,6 +291,12 @@ function create_acm_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  local acm_channel
+  acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")" || :
+
+  local acm_catalog
+  acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")" || :
+
   PROMPT "Create Subscription for ${ACM_OPERATOR} in ${ACM_NAMESPACE} (catalog ${acm_catalog}) on cluster ${cluster_name}"
 
   local acm_current_version
@@ -298,12 +304,6 @@ function create_acm_subscription() {
 
   # Create Automatic Subscription (for new install), or Manual subscription (if upgrading)
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
-
-    local acm_channel
-    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
-
-    local acm_catalog
-    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     if [[ -z "$acm_current_version" ]] ; then
       TITLE "ACM is not installed on current cluster ${cluster_name} - Creating Automatic Subscription for ACM $acm_version"

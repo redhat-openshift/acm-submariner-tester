@@ -1,9 +1,10 @@
 #!/bin/bash
 
-### General Helpers Function ###
+### General Library of helper functions ###
 
-# Constants #
+### Constants ###
 
+# Console print colors 
 export RED='\x1b[0;31m'
 export GREEN='\x1b[38;5;22m'
 export CYAN='\x1b[36m'
@@ -11,7 +12,8 @@ export YELLOW='\x1b[33m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
-export CONDA_ENV_NAME="conda-test"
+# Conda environment test directory
+export CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda-test}"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
 SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
@@ -375,22 +377,27 @@ function record_junit() {
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
   # trap_to_debug_commands
-  work_dir="$(echo "${1:-.}" | tr -s /)" # Remove redundant slashes
-  install_dir="${work_dir}/miniconda"
-  miniconda_bin_dir="${install_dir}/bin"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  miniconda_bin_dir="${conda_install_dir}/bin"
+  conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  if conda env list | grep -o "^$CONDA_ENV_NAME" | grep . ; then
-    echo -e "\n# Anaconda is already installed and has environment '$CONDA_ENV_NAME' configured"
+  if conda env list | grep -o "^$conda_env" | grep . ; then
+    echo -e "\n# Anaconda is already installed and has environment '$conda_env' configured"
     conda info
-    source activate $CONDA_ENV_NAME
+    conda update -n base -c defaults conda -y
+    source activate $conda_env
     return
   fi
 
   if conda info ; then
     # Clean previous conda packages
     conda clean -y --all
-    # rm -rf "${install_dir}" || :
+    # rm -rf "${conda_install_dir}" || :
   fi
 
   echo -e "\n# Installing Anaconda"
@@ -399,33 +406,39 @@ function install_anaconda() {
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
-  ${work_dir}/${miniconda_installer} -b -u -p ${install_dir}
+  ${work_dir}/${miniconda_installer} -b -u -p ${conda_install_dir}
   conda update -y -n base -c defaults conda
 
   # Remove old conda environment dir, if it is not configured
-  env_dir=$(conda env list | awk -v name="$CONDA_ENV_NAME" '$0 ~ name { print $2 }')
+  env_dir=$(conda env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
   env_base=$(conda env list | awk '/base/ { print $NF }')
 
   if [[ -z "$env_dir" ]] ; then
-    echo -e "\n# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
-    conda env remove -y -n $CONDA_ENV_NAME || :
-    conda env remove -y -p "$env_base/envs/$CONDA_ENV_NAME" || :
-    rm -rf "$env_base/envs/$CONDA_ENV_NAME" || :
+    echo -e "\n# Removing old Conda environment \"$conda_env\" directory (since it is not configured):"
+    conda env remove -y -n $conda_env || :
+    conda env remove -y -p "$env_base/envs/$conda_env" || :
+    rm -rf "$env_base/envs/$conda_env" || :
   fi
 
-  echo -e "\n# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exist already)"
-  [[ -d "$env_base/envs/$CONDA_ENV_NAME" ]] || conda create -y -n $CONDA_ENV_NAME
+  echo -e "\n# Creating Conda environment \"$conda_env\" (if it does not exist already)"
+  [[ -d "$env_base/envs/$conda_env" ]] || conda create -y -n $conda_env
 }
 # ------------------------------------------
 
 # Function to verify Anaconda installation
 function verify_anaconda() {
-  # trap_to_debug_commands
-  install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
-  miniconda_bin_dir="${install_dir}/bin"
+  trap_to_debug_commands
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  miniconda_bin_dir="${conda_install_dir}/bin"
+  conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
+
   conda info
-  conda env list | grep "${install_dir}/envs/${CONDA_ENV_NAME}"
+  conda env list | grep "miniconda/envs/${conda_env}"
 }
 
 # ------------------------------------------
@@ -434,23 +447,29 @@ function verify_anaconda() {
 function install_conda_package() {
   # trap_to_debug_commands
 
-  local pkg_name="$1"
-  local install_dir="${2:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_name="$2"
   local pkg_version="$3"
   local pkg_label="$4"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
+  
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
-    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$CONDA_ENV_NAME'"
+    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$conda_env'"
     return
   fi
 
-  verify_anaconda "${install_dir}"
+  verify_anaconda "${conda_install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
+  source activate $conda_env
   conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}
   conda list
 }
@@ -461,10 +480,14 @@ function install_conda_package() {
 function install_local_golang() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "go-nocgo_linux-64" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "go-nocgo_linux-64" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -500,10 +523,14 @@ function verify_golang() {
 function install_local_terraform() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "terraform" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "terraform" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -518,10 +545,14 @@ function install_local_docker() {
   # SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh -s -- --experimental
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+  
   local pkg_version="$2"
 
-  install_conda_package "docker" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "docker" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -530,10 +561,14 @@ function install_local_docker() {
 function install_local_podman() {
   trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "podman" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "podman" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -542,10 +577,14 @@ function install_local_podman() {
 function install_local_jq() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "jq" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "jq" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -554,14 +593,20 @@ function install_local_jq() {
 function install_local_gcloud() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
-  local pkg_version="$2"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+  
+  # local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  # install_conda_package "google-cloud-sdk" "${install_dir}" "${pkg_version}"
-  verify_anaconda "${install_dir}"
-  source activate $CONDA_ENV_NAME
+  # install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+  verify_anaconda "${conda_install_dir}"
+  source activate $conda_env
   conda install -y -c conda-forge google-cloud-sdk
   conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
   conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
@@ -751,7 +796,9 @@ function change_yaml_key_value() {
 function configure_gcp_access() {
   local gcp_cred_json="$1"
 
-  install_local_gcloud
+  work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  install_local_gcloud "$work_dir"
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
@@ -779,18 +826,18 @@ function configure_aws_access() {
   local aws_region="$2"
   local aws_key="$3"
   local aws_secret="$4"
-  local install_dir="${5:-./}"
+  local aws_install_dir="${5:-./}"
   local aws_bin_dir="${6:-$HOME/.local/bin}"
 
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
-  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
-  unzip -n "${install_dir}/${aws_cli_installer}" -d "${install_dir}"
+  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${aws_install_dir}/${aws_cli_installer}"
+  unzip -n "${aws_install_dir}/${aws_cli_installer}" -d "${aws_install_dir}"
 
   # export PATH=$HOME/.local/bin:$PATH
-  # ${install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
+  # ${aws_install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
   [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
-  ${install_dir}/aws/install --update --install-dir "${install_dir}/aws" --bin-dir "${aws_bin_dir}"
+  ${aws_install_dir}/aws/install --update --install-dir "${aws_install_dir}/aws" --bin-dir "${aws_bin_dir}"
 
   aws --version
 
