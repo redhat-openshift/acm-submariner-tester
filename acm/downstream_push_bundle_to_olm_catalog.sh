@@ -373,7 +373,7 @@ EOF
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
   local subscription_data
-  subscription_data="`mktemp`_subscription_data"
+  subscription_data="$(mktemp)_subscription_data"
   local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$subscription_data'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 

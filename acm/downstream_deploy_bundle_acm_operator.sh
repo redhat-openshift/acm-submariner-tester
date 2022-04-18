@@ -450,7 +450,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
   trap_to_debug_commands;
 
   local acm_resource
-  acm_resource="`mktemp`_acm_resource"
+  acm_resource="$(mktemp)_acm_resource"
   local duration=5m
 
   # Run on ACM MultiClusterHub cluster

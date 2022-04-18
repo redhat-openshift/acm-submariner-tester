@@ -1083,9 +1083,9 @@ function remove_submariner_machine_sets() {
   TITLE "Remove previous machineset (if it has a template with submariner gateway label)"
 
   local subm_machineset
-  subm_machineset="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}'`"
+  subm_machineset="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.name}')"
   local ns
-  ns="`${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}'`"
+  ns="$(${OC} get machineset -A -o jsonpath='{.items[?(@.spec.template.spec.metadata.labels.submariner\.io\gateway=="true")].metadata.namespace}')"
 
   if [[ -n "$subm_machineset" && -n "$ns" ]] ; then
     ${OC} delete machineset $subm_machineset -n $ns || :
@@ -1364,7 +1364,7 @@ function test_clusters_disconnected_before_submariner() {
   export KUBECONFIG="${KUBECONF_HUB}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
+  netshoot_pod_cluster_a="$(get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" )"
 
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
@@ -2148,7 +2148,7 @@ function gateway_label_all_nodes_external_ip() {
   trap_to_debug_commands;
 
   local external_ips
-  external_ips="`mktemp`_external_ips"
+  external_ips="$(mktemp)_external_ips"
 
   ${OC} wait --timeout=3m --for=condition=ready nodes -l node-role.kubernetes.io/worker
 
@@ -2398,7 +2398,7 @@ function add_image_content_source_policy() {
   TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy in current cluster"
 
   local img_policy
-  img_policy="`mktemp`_ImageContentSourcePolicy.yaml"
+  img_policy="$(mktemp)_ImageContentSourcePolicy.yaml"
 
   cat <<-EOF > $img_policy
   apiVersion: operator.openshift.io/v1alpha1
@@ -2585,7 +2585,7 @@ EOF
   TITLE "Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
 
   local nodes_conf
-  nodes_conf="`mktemp`_${node_type}.yaml"
+  nodes_conf="$(mktemp)_${node_type}.yaml"
 
   cat <<-EOF > $nodes_conf
   apiVersion: machineconfiguration.openshift.io/v1
@@ -2919,7 +2919,7 @@ function export_variable_name_of_active_gateway_pod() {
   local silent="${2}"
 
   local gateways_output
-  gateways_output="`mktemp`_gateways"
+  gateways_output="$(mktemp)_gateways"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
   TITLE "Wait for Submariner active gateway, and set it into variable '${var_name}'"
@@ -3193,9 +3193,9 @@ function test_ipsec_status() {
   ${OC} exec $active_gateway_pod -n ${SUBM_NAMESPACE} -- bash -c "ipsec status" |& tee -a "$TEMP_FILE" || :
 
   local loaded_con
-  loaded_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1`"
+  loaded_con="$(grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "loaded \K([0-9]+)" | tail -1)"
   local active_con
-  active_con="`grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1`"
+  active_con="$(grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1)"
 
   if [[ ! "$active_con" = "$loaded_con" ]] ; then
     FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
@@ -3243,7 +3243,7 @@ function test_globalnet_status() {
 
   # globalnet_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-globalnet -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$globalnet_pod" ]] || globalnet_status=DOWN
-  globalnet_pod="`get_running_pod_by_label 'app=submariner-globalnet' "$SUBM_NAMESPACE" `"
+  globalnet_pod="$(get_running_pod_by_label 'app=submariner-globalnet' "$SUBM_NAMESPACE" )"
 
 
   TITLE "Tailing logs in GlobalNet pod [$globalnet_pod] to verify that Global IPs were allocated to cluster services"
@@ -3403,7 +3403,7 @@ function test_lighthouse_status() {
 
   # lighthouse_pod=$(${OC} get pod -n ${SUBM_NAMESPACE} -l app=submariner-lighthouse-agent -o jsonpath="{.items[0].metadata.name}")
   # [[ -n "$lighthouse_pod" ]] || FATAL "Lighthouse pod was not created on ${SUBM_NAMESPACE} namespace."
-  lighthouse_pod="`get_running_pod_by_label 'app=submariner-lighthouse-agent' "$SUBM_NAMESPACE" `"
+  lighthouse_pod="$(get_running_pod_by_label 'app=submariner-lighthouse-agent' "$SUBM_NAMESPACE" )"
 
   TITLE "Tailing logs in Lighthouse pod [$lighthouse_pod] to verify Service-Discovery sync with Broker"
   local regex="agent .* started"
@@ -3451,7 +3451,7 @@ function test_clusters_connected_by_service_ip() {
   export KUBECONFIG="${KUBECONF_HUB}"
   # ${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} --field-selector status.phase=Running | awk 'FNR == 2 {print $1}' > "$TEMP_FILE"
   # netshoot_pod_cluster_a="$(< $TEMP_FILE)"
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
+  netshoot_pod_cluster_a="$(get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" )"
 
   echo -e "\n# NETSHOOT_CLUSTER_A: $netshoot_pod_cluster_a"
     # netshoot-785ffd8c8-zv7td
@@ -3530,7 +3530,7 @@ function test_clusters_connected_overlapping_cidrs_globalnet_v1() {
   export KUBECONFIG="${KUBECONF_HUB}"
   # netshoot_pod_cluster_a=$(${OC} get pods -l run=${NETSHOOT_CLUSTER_A} ${TEST_NS:+-n $TEST_NS} \
   # --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')
-  netshoot_pod_cluster_a="`get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" `"
+  netshoot_pod_cluster_a="$(get_running_pod_by_label "run=${NETSHOOT_CLUSTER_A}" "$TEST_NS" )"
 
   # Should fail if netshoot_pod_cluster_a was not annotated with GlobalNet IP
   GLOBAL_IP=""
@@ -4218,7 +4218,7 @@ function create_all_test_results_in_polarion() {
 
   # Temp file to store Polarion output
   local polarion_testrun_import_log
-  polarion_testrun_import_log="`mktemp`_polarion_import_log"
+  polarion_testrun_import_log="$(mktemp)_polarion_import_log"
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
