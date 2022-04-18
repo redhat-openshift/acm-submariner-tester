@@ -329,7 +329,9 @@ EOF
   TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
 
   echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
-  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+  # ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+  ${OC} delete subs --all -n "${subscription_namespace}" --wait --ignore-not-found || :
+  ${OC} delete csv --all -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
   local install_plan_approval
