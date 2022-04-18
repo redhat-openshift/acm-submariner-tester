@@ -392,12 +392,15 @@ EOF
     subscription_status=FAILED
   fi
 
-  TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
+  TITLE "Display Subscription resources of '${subscription_namespace}' in cluster ${cluster_name}"
 
   ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
-  ${OC} get installplan -n "${subscription_namespace}" -o yaml --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
+
+  TITLE "Display Install Plans of '${subscription_namespace}' in cluster ${cluster_name}"
+
+  ${OC} get installplan -n "${subscription_namespace}" -o json --ignore-not-found | jq -r 'del(.items[].status.plan[].resource.manifest)' || :
 
   if [[ "$subscription_status" = FAILED ]] ; then
     cat ${subscription_data}
