@@ -2934,10 +2934,10 @@ function export_variable_name_of_active_gateway_pod() {
   TITLE "Show Submariner Gateway nodes, and get the active one"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  cat "$gateways_output" |& highlight "active"
+  highlight "active" "$gateways_output" 
 
   local active_gateway_node
-  active_gateway_node=$(cat "$gateways_output" | awk '/active/ {print $1}')
+  active_gateway_node="$(awk '/active/ {print $1}' "$gateways_output")"
 
   # Define label for the search of a gateway pod
   local gw_label='app=submariner-gateway'
@@ -2955,7 +2955,7 @@ function export_variable_name_of_active_gateway_pod() {
   gw_id="$(grep "$active_gateway_node" "$gateways_output" | cut -d ' ' -f 1)"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  cat "$gateways_output" | highlight "${gw_id}"
+  highlight "${gw_id}" "$gateways_output"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
   echo -e "\n# Eval and export the variable '${var_name}=${gw_id}'"
@@ -3081,14 +3081,14 @@ function test_ha_status() {
   local regex="Ha Status:\s*active"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for HA active
   watch_and_retry "$cmd ; grep -E '$regex' $TEMP_FILE" 3m || :
-  cat "$TEMP_FILE" |& highlight "$regex" || submariner_status=DOWN
+  highlight "$regex" "$TEMP_FILE" || submariner_status=DOWN
 
   TITLE "Checking 'Submariner' resource status"
   local regex="Status:\s*connect"
   # Attempt cmd for 3 minutes (grepping for 'Connections:' and print 30 lines afterwards), looking for Status connected
   watch_and_retry "$cmd ; grep -E '$regex' $TEMP_FILE" 3m || :
-  # cat $TEMP_FILE |& highlight "Status:\s*connected" || submariner_status=DOWN
-  cat "$TEMP_FILE" |& (! highlight "Status Failure\s*\w+") || submariner_status=DOWN
+  # ! highlight "Status:\s*connected" "$TEMP_FILE" || submariner_status=DOWN
+  ! highlight "Status Failure\s*\w+" "$TEMP_FILE" || submariner_status=DOWN
 
   if [[ "$submariner_status" = DOWN ]] ; then
     FATAL "Submariner HA failure occurred."
@@ -3784,7 +3784,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
   echo -e "\n# Store SubCtl version in $SUBMARINER_VERSIONS_FILE"
   subctl show versions > "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
 
-  cat "$SUBMARINER_VERSIONS_FILE" |& highlight "submariner.*${SUBM_VER_TAG}" || \
+  highlight "submariner.*${SUBM_VER_TAG}" "$SUBMARINER_VERSIONS_FILE" || \
   BUG "Subctl shows wrong Submariner version - it should have been v${SUBM_VER_TAG}" \
   "Please verify that all Submariner components (e.g. Gateway) have image version = ${SUBM_VER_TAG}" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"

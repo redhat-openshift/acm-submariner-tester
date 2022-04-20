@@ -35,9 +35,12 @@ set +e
 set +x
 
 # Temporary files to store the command stdout, stderr and exit code
-export outf=$(mktemp)_ju.out
-export errf=$(mktemp)_ju.err
-export returnf=$(mktemp)_eval_rc.log
+outf=$(mktemp)_ju.out
+export outf
+errf=$(mktemp)_ju.err
+export errf
+returnf=$(mktemp)_eval_rc.log
+export returnf
 
 # Temporary file to store Testcase tag content, that is added for each new testcase in the junit xml
 newTestCaseTag=$(mktemp)_tc_content

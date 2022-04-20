@@ -677,18 +677,18 @@ function download_file() {
   echo -e "\n# Downloading [$source_file] into $target_file"
   ls -ld
 
-  local_file_size=$([[ -f ${target_file} ]] && wc -c < "${target_file}" || echo "0")
+  local_file_size="$([[ -f ${target_file} ]] && wc -c < "${target_file}" || echo "0")"
   echo "local_file_size = $local_file_size"
-  remote_file_size=$(curl -sI "${source_file}" | awk '/Content-Length/ { print $2 }' | tr -d '\r' )
+  remote_file_size="$(curl -sI "${source_file}" | awk '/Content-Length/ { print $2 }' | tr -d '\r' )"
   echo "remote_file_size = $remote_file_size"
   [[ -n "$remote_file_size" ]] || remote_file_size=-1
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo -e "\n# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       rm -rf "$target_file"
       if [[ -x "$(command -v wget)" ]] ; then
-        target_dir=$(dirname -- "$target_file")
+        target_dir="$(dirname -- "$target_file")"
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
-        source_file=$(basename -- "$source_file")
+        source_file="$(basename -- "$source_file")"
         mv "$target_dir/$source_file" "$target_file" || :
       else
         echo -e "\n# Wget is not installed, using Curl instead."
@@ -870,7 +870,7 @@ function create_json_for_dns_delete() {
           {
               "Action": "DELETE",
               "ResourceRecordSet": {
-                  "Name": "$(echo "${Name/\\052/*}")",
+                  "Name": "${Name/\\052/*}",
                   "Type": "$Type",
                   "AliasTarget": {
                     "HostedZoneId": "$HostedZoneId",
@@ -970,7 +970,7 @@ function delete_crds_by_name() {
   local delete_crds=FALSE
 
   echo -e "\n# Searching for existing CRDs of previous ${crd_regex} installation on the cluster:"
-  ${OC} get crds |& highlight "${crd_regex}" && delete_crds=TRUE || :
+  if ${OC} get crds |& highlight "${crd_regex}" ; then delete_crds=TRUE ; fi
 
   # If there are existing CRDs on the cluster - remove them all:
   # if [[ $? = 0 ]]; then
@@ -1564,9 +1564,9 @@ function create_polarion_testcases_doc_from_junit() {
     # TODO: This should rather be defined on external properties file:
 
     local current_script
-    current_script="$(echo "$(hostname) : $(realpath -s "${BASH_SOURCE[$i+1]}")" )"
+    current_script="$(hostname) : $(realpath -s "${BASH_SOURCE[$i+1]}")"
 
-    while read full_testcase_name ; do
+    while read -r full_testcase_name ; do
 
       local class_name="${full_testcase_name%.*}" # text before the dot
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
@@ -1620,7 +1620,7 @@ function create_polarion_testcases_doc_from_junit() {
             &lt;ul&gt;
               " >> "$polarion_testcases_xml"
 
-      echo "$testcase_description" | while read line ; do
+      echo "$testcase_description" | while read -r line ; do
         echo "&lt;li&gt; $line &lt;/li&gt;" >> "$polarion_testcases_xml"
       done
 
@@ -1630,7 +1630,7 @@ function create_polarion_testcases_doc_from_junit() {
 
       echo -e "\n# Create testcase steps"
 
-      echo "$testcase_steps" | while read step ; do
+      echo "$testcase_steps" | while read -r step ; do
         # echo "<test-step>
         # <test-step-column id=\"expectedResult\">...</test-step-column>
         echo "<test-step>

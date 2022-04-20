@@ -482,7 +482,7 @@ EOF
   local regex="Manager:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
-  cat "$acm_resource" |& highlight "$regex" || acm_status=FAILED
+  highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
     # FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
@@ -506,7 +506,7 @@ EOF
   local regex="Cluster Set:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
-  cat "$acm_resource" |& highlight "$regex" || acm_status=FAILED
+  highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" = FAILED ]] ; then
     FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created in ${SUBM_NAMESPACE} after $duration"
@@ -791,7 +791,7 @@ function configure_submariner_addon_for_amazon() {
   echo -e "\n# Using '${cluster_secret_name}' for Submariner on Amazon"
 
   ( # subshell to hide commands
-    ( [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ) \
+    { [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ;} \
     || FATAL "AWS credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
     cat <<EOF | ${OC} apply -f -
@@ -854,7 +854,7 @@ function configure_submariner_addon_for_openstack() {
   if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
 
     ( # subshell to hide commands
-        ( [[ -n "$OS_PROJECT_DOMAIN_ID" ]] ) \
+        [[ -n "$OS_PROJECT_DOMAIN_ID" ]] \
         || FATAL "OSP credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
     cat <<EOF | ${OC} apply -f -

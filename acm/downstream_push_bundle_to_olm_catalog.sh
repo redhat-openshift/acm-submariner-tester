@@ -382,7 +382,7 @@ EOF
 
   watch_and_retry "$cmd ; grep -E '$regex' $subscription_data" "$duration" || :
 
-  if cat "$subscription_data" |& highlight "$regex" ; then
+  if highlight "$regex" "$subscription_data" ; then
 
     local install_plan_name
     install_plan_name="$(${OC} get subscriptions.operators.coreos.com "${subscription_display_name}" -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
