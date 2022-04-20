@@ -4545,7 +4545,7 @@ function print_resources_and_pod_logs() {
 
   TITLE "Unready Pods (if any) on ${cluster_name}"
 
-  ${OC} get pod -A |  grep -Ev '([1-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
+  ${OC} get pod -A |  grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
 
   TITLE "Submariner gather logs in cluster $cluster_name"
 
