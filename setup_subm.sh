@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2153,SC2031,SC2016,SC2120,SC2005,SC1091
 
 #######################################################################################################
 #                                                                                                     #
@@ -146,7 +147,7 @@ Examples with pre-defined options:
 
 # Set $SCRIPT_DIR as current absolute path where this script runs in (e.g. Jenkins build directory)
 # Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
-SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
 export SCRIPT_DIR
 
 ### Import Submariner setup variables ###
@@ -217,39 +218,39 @@ export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGIN
 # File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
 export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
 export EXIT_STATUS
-: > $TEST_STATUS_FILE
+: > "$TEST_STATUS_FILE"
 
 # File to store SubCtl version
 export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-: > $SUBCTL_VERSION_FILE
+: > "$SUBCTL_VERSION_FILE"
 
 # File to store Submariner installed versions
 export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
-: > $SUBMARINER_VERSIONS_FILE
+: > "$SUBMARINER_VERSIONS_FILE"
 
 # File to store SubCtl JOIN command for cluster A
 export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-: > $SUBCTL_JOIN_CLUSTER_A_FILE
+: > "$SUBCTL_JOIN_CLUSTER_A_FILE"
 
 # File to store SubCtl JOIN command for cluster B
 export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-: > $SUBCTL_JOIN_CLUSTER_B_FILE
+: > "$SUBCTL_JOIN_CLUSTER_B_FILE"
 
 # File to store SubCtl JOIN command for cluster C
 export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-: > $SUBCTL_JOIN_CLUSTER_C_FILE
+: > "$SUBCTL_JOIN_CLUSTER_C_FILE"
 
 # File to store Polarion auth
 export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-: > $POLARION_AUTH
+: > "$POLARION_AUTH"
 
 # File to store Polarion test-run report link
 export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-: > $POLARION_RESULTS
+: > "$POLARION_RESULTS"
 
 # File to store Submariner images version details
 export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
-: > $SUBMARINER_IMAGES
+: > "$SUBMARINER_IMAGES"
 
 
 ####################################################################################
@@ -618,7 +619,7 @@ else
   trap_to_debug_commands() { :; }
 fi
 
-cd ${SCRIPT_DIR}
+cd "${SCRIPT_DIR}"
 
 
 ### Set missing user variables ###
@@ -699,7 +700,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+      ${junit_cmd} download_ocp_installer "${OCP_VERSION}"
 
     fi
 
@@ -782,7 +783,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    echo 0 > $TEST_STATUS_FILE
+    echo 0 > "$TEST_STATUS_FILE"
 
   fi
   ### END of OCP Setup (Create or Destroy) ###
@@ -794,7 +795,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
 
     # Before starting tests, set the test exit status to 1 (instead of 0)
-    echo 1 > $TEST_STATUS_FILE
+    echo 1 > "$TEST_STATUS_FILE"
 
   ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
@@ -1009,7 +1010,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "OCP clusters and environment setup is ready.
     From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED ($TEST_STATUS_FILE with exit code 1)"
 
-    echo 1 > $TEST_STATUS_FILE
+    echo 1 > "$TEST_STATUS_FILE"
 
   fi
   ### END of OCP general preparations for ALL tests ###
@@ -1130,7 +1131,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "Once Submariner install is completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
-    echo 2 > $TEST_STATUS_FILE
+    echo 2 > "$TEST_STATUS_FILE"
 
   fi
   ### END of INSTALL_SUBMARINER ###
@@ -1282,7 +1283,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "Once System tests are completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
-    echo 2 > $TEST_STATUS_FILE
+    echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
 
@@ -1360,7 +1361,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 
   # If script got to here - all tests of Submariner has passed ;-)
-  echo 0 > $TEST_STATUS_FILE
+  echo 0 > "$TEST_STATUS_FILE"
 
 ) |& tee -a "$SYS_LOG"
 
@@ -1375,12 +1376,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  cd ${SCRIPT_DIR}
+  cd "${SCRIPT_DIR}"
 
   # ------------------------------------------
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
   echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
@@ -1410,7 +1411,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   if [[ -n "$REPORT_FILE" ]] ; then
     echo -e "\n# Remove path and replace all spaces from REPORT_FILE: '$REPORT_FILE'"
-    REPORT_FILE="$(basename ${REPORT_FILE// /_})"
+    REPORT_FILE="$(basename "${REPORT_FILE// /_}")"
   fi
 
 ) |& tee -a "$SYS_LOG"
@@ -1485,7 +1486,7 @@ if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   cp -f "${KUBECONF_HUB}" "kubconf_${CLUSTER_A_NAME}" || :
   cp -f "${KUBECONF_HUB}.bak" "kubconf_${CLUSTER_A_NAME}.bak" || :
 
-  find ${CLUSTER_A_DIR} -type f -name "*.log" -exec \
+  find "${CLUSTER_A_DIR}" -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
@@ -1495,7 +1496,7 @@ if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   cp -f "${KUBECONF_CLUSTER_B}" "kubconf_${CLUSTER_B_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_B}.bak" "kubconf_${CLUSTER_B_NAME}.bak" || :
 
-  find ${CLUSTER_B_DIR} -type f -name "*.log" -exec \
+  find "${CLUSTER_B_DIR}" -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
@@ -1505,18 +1506,18 @@ if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   cp -f "${KUBECONF_CLUSTER_C}" "kubconf_${CLUSTER_C_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_C}.bak" "kubconf_${CLUSTER_C_NAME}" || :
 
-  find ${CLUSTER_C_DIR} -type f -name "*.log" -exec \
+  find "${CLUSTER_C_DIR}" -type f -name "*.log" -exec \
   sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact ${OCP_USR}.sec file
-find ${WORKDIR} -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
 
 # Artifact broker.info file (if created with subctl deploy)
-find ${WORKDIR} -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
 
 # Artifact "submariner" directory (if created with subctl gather)
-find ${WORKDIR} -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
 
 # Compress the required artifacts (either files or directories)
 
@@ -1531,23 +1532,23 @@ find . -maxdepth 1 \( \
 -name "*.log" -o \
 -name "*.ver" \
 \) -print0 | \
-tar --dereference --hard-dereference -cvzf $ARCHIVE_FILE --null -T - || :
+tar --dereference --hard-dereference -cvzf "$ARCHIVE_FILE" --null -T - || :
 
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
-tar tvf $ARCHIVE_FILE
+tar tvf "$ARCHIVE_FILE"
 
 TITLE "To view in your Browser, run:\n tar -xvf ${ARCHIVE_FILE}; firefox ${REPORT_FILE}"
 
 # Get test exit status (from file $TEST_STATUS_FILE)
-EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat $TEST_STATUS_FILE)"
+EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
 TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$EXIT_STATUS]"
 
 if [[ -z "$EXIT_STATUS" ]] ; then
   exit 3
 else
-  exit $EXIT_STATUS
+  exit "$EXIT_STATUS"
 fi
 
 

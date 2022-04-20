@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2153,SC2031,SC2016,SC2120,SC2005,SC1091
 
 ############ OCP Operators functions ############
 
@@ -71,7 +72,7 @@ function export_LATEST_IIB() {
 
     TITLE "Getting the last index-image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
 
-    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'${ocp_version_x_y} ) || :
+    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
 
     if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
       FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
@@ -130,7 +131,7 @@ function deploy_ocp_bundle() {
   fi
 
   # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< ${WORKDIR}/${OCP_USR}.sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
@@ -144,7 +145,7 @@ function deploy_ocp_bundle() {
   export_LATEST_IIB "${operator_version}" "${bundle_name}"
 
   local source_image_path
-  source_image_path="${BREW_REGISTRY}/$(echo ${LATEST_IIB} | cut -d'/' -f2-)"
+  source_image_path="${BREW_REGISTRY}/$(echo "${LATEST_IIB}" | cut -d'/' -f2-)"
 
   local bundle_image_name="${bundle_name}-index"
 
@@ -173,7 +174,7 @@ function deploy_ocp_bundle() {
 
   local catalog_display_name="${bundle_name}-${operator_channel} Catalog Source"
 
-    cat <<EOF | ${OC} apply -n ${bundle_namespace} -f -
+    cat <<EOF | ${OC} apply -n "${bundle_namespace}" -f -
     apiVersion: operators.coreos.com/v1alpha1
     kind: CatalogSource
     metadata:
@@ -194,7 +195,7 @@ EOF
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
   watch_and_retry "$cmd" 5m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
-  ${OC} -n ${bundle_namespace} get catalogsource -o yaml --ignore-not-found
+  ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
   TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}':
   Catalog: ${catalog_display_name}
@@ -219,7 +220,7 @@ EOF
 
   TITLE "Display running pods in Bundle namespace ${bundle_namespace} in cluster ${cluster_name}"
 
-  ${OC} -n ${bundle_namespace} get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
+  ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
 
   if [[ "$packagemanifests_status" = FAILED ]] ; then
@@ -301,7 +302,7 @@ function create_subscription() {
 
     TITLE "Create one OperatorGroup '${operator_group_name}' in the specified namespace '${operator_namespace}' of cluster ${cluster_name}"
 
-    ${OC} delete operatorgroup --all -n ${operator_namespace} --wait || :
+    ${OC} delete operatorgroup --all -n "${operator_namespace}" --wait || :
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: operators.coreos.com/v1
@@ -315,7 +316,7 @@ function create_subscription() {
 EOF
 
     echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
-    ${OC} get operatorgroup -n ${operator_namespace} --ignore-not-found
+    ${OC} get operatorgroup -n "${operator_namespace}" --ignore-not-found
 
   else
     TITLE "Deploying as a global Operator in the Openshift marketplace of cluster ${cluster_name}"
@@ -381,10 +382,10 @@ EOF
 
   watch_and_retry "$cmd ; grep -E '$regex' $subscription_data" "$duration" || :
 
-  if cat $subscription_data |& highlight "$regex" ; then
+  if cat "$subscription_data" |& highlight "$regex" ; then
 
     local install_plan_name
-    install_plan_name="$(${OC} get subscriptions.operators.coreos.com ${subscription_display_name} -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
+    install_plan_name="$(${OC} get subscriptions.operators.coreos.com "${subscription_display_name}" -n "${subscription_namespace}" -o jsonpath='{.status.installPlanRef.name}')" || :
 
     if [[ -n "${install_plan_name}" ]] ; then
       ${OC} patch installplan -n "${subscription_namespace}" "${install_plan_name}" -p '{"spec":{"approved":true}}' --type merge || subscription_status=FAILED
@@ -402,12 +403,12 @@ EOF
 
   TITLE "Verify Install Plan created for '${subscription_namespace}' in cluster ${cluster_name}"
 
-  local cmd="${OC} get installplan -n "${subscription_namespace}" -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
+  local cmd="${OC} get installplan -n ${subscription_namespace} -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
 
   watch_and_retry "3m" "$duration" || subscription_status=FAILED
 
   if [[ "$subscription_status" = FAILED ]] ; then
-    cat ${subscription_data}
+    cat "${subscription_data}"
     FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi
 
