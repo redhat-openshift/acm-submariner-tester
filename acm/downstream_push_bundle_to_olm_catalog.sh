@@ -329,7 +329,9 @@ EOF
   TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
 
   echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
-  ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+  # ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
+  ${OC} delete subs --all -n "${subscription_namespace}" --wait --ignore-not-found || :
+  ${OC} delete csv --all -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
   local install_plan_approval
@@ -373,7 +375,7 @@ EOF
   # ${OC} wait --for condition=InstallPlanPending --timeout=${duration} -n ${subscription_namespace} subs/${subscription_display_name} || subscription_status=FAILED
 
   local subscription_data
-  subscription_data="`mktemp`_subscription_data"
+  subscription_data="$(mktemp)_subscription_data"
   local cmd="${OC} describe subs/${subscription_display_name} -n ${subscription_namespace} &> '$subscription_data'"
   local regex="State:\s*AtLatestKnown|UpgradePending"
 
@@ -392,12 +394,15 @@ EOF
     subscription_status=FAILED
   fi
 
-  TITLE "Display Subscription resources of namespace '${subscription_namespace}' in cluster ${cluster_name}"
+  TITLE "Display Subscription resources of '${subscription_namespace}' in cluster ${cluster_name}"
 
   ${OC} get sub -n "${subscription_namespace}" --ignore-not-found
-  ${OC} get installplan -n "${subscription_namespace}" -o yaml --ignore-not-found
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
+
+  TITLE "Display Install Plans of '${subscription_namespace}' in cluster ${cluster_name}"
+
+  ${OC} get installplan -n "${subscription_namespace}" -o json --ignore-not-found | jq -r 'del(.items[].status.plan[].resource.manifest)' || :
 
   if [[ "$subscription_status" = FAILED ]] ; then
     cat ${subscription_data}

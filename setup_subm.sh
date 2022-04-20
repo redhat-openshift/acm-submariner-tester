@@ -184,7 +184,7 @@ DATE_TIME="$(date +%d%m%Y_%H%M)"
 export DATE_TIME
 
 # Global temp file
-TEMP_FILE="`mktemp`_temp"
+TEMP_FILE="$(mktemp)_temp"
 export TEMP_FILE
 
 # JOB_NAME is a prefix for files, which is the name of current script directory
