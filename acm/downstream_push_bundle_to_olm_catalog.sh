@@ -400,9 +400,11 @@ EOF
   ${OC} get csv -n "${subscription_namespace}" --ignore-not-found
   ${OC} get pods -n "${subscription_namespace}" --ignore-not-found
 
-  TITLE "Display Install Plans of '${subscription_namespace}' in cluster ${cluster_name}"
+  TITLE "Verify Install Plan created for '${subscription_namespace}' in cluster ${cluster_name}"
 
-  ${OC} get installplan -n "${subscription_namespace}" -o json --ignore-not-found | jq -r 'del(.items[].status.plan[].resource.manifest)' || :
+  local cmd="${OC} get installplan -n "${subscription_namespace}" -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
+
+  watch_and_retry "3m" "$duration" || subscription_status=FAILED
 
   if [[ "$subscription_status" = FAILED ]] ; then
     cat ${subscription_data}
