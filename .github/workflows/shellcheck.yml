@@ -15,4 +15,7 @@ jobs:
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@1.1.0
         env:
-          SHELLCHECK_OPTS: -e SC1091 -e SC2005 -e SC2120 -e SC2016
+          SHELLCHECK_OPTS: -e SC2005 -e SC2120 -e SC2016
+        with:
+          severity: error
+          check_together: 'yes'
