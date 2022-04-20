@@ -306,8 +306,8 @@ function download_ocp_installer() {
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
   delete_old_files_or_dirs "openshift-*.tar.gz"
 
-  download_file "${oc_installer_url}""${ocp_install_gz}"
-  download_file "${oc_installer_url}""${oc_client_gz}"
+  download_file "${oc_installer_url}/${ocp_install_gz}"
+  download_file "${oc_installer_url}/${oc_client_gz}"
 
   TITLE "Extracting OCP installer and client into ${WORKDIR}: \n $ocp_install_gz \n $oc_client_gz"
 

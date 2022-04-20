@@ -669,12 +669,12 @@ function download_github_file_or_dir() {
 function download_file() {
   trap_to_debug_commands
   # $1 => $source_file (download link)
-  source_file="$1"
+  source_file="${1//[$'\t\r\n']}"
 
   # Optional: $2 => $target_file (where to save)
   target_file=${2:-$(basename "$1")}
 
-  echo -e "\n# Downloading [$source_file] into $target_file"
+  TITLE "Downloading [$source_file] into $target_file"
   ls -ld
 
   local_file_size="$([[ -f ${target_file} ]] && wc -c < "${target_file}" || echo "0")"
