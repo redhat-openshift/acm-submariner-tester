@@ -108,7 +108,7 @@ function juLog() {
 
   # Initialize testsuite attributes
   dateTime="$(which gdate 2>/dev/null || which date || :)"
-  asserts=00; failures=0; suiteDuration=0; content=""
+  asserts=00; failures=0; suiteDuration=0; # content=""
   export testIndex=$(( testIndex+1 ))
 
   # parse arguments
