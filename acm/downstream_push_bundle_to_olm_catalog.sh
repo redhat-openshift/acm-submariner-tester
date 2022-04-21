@@ -405,7 +405,7 @@ EOF
 
   local cmd="${OC} get installplan -n ${subscription_namespace} -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
 
-  watch_and_retry "3m" "$duration" || subscription_status=FAILED
+  watch_and_retry "$cmd" "3m" || subscription_status=FAILED
 
   if [[ "$subscription_status" = FAILED ]] ; then
     cat "${subscription_data}"
