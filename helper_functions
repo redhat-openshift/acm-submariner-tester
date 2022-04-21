@@ -225,7 +225,7 @@ function run_and_tail() {
   \n Tailing log file: $log_to_tail"
 
   # Running the process with timeout - in the background, and store its PID
-  timeout --foreground "$duration" "$cmd" &
+  timeout --foreground "$duration" $cmd &
   local pid=$!
   local process_rc=0
 
@@ -672,7 +672,7 @@ function download_file() {
   source_file="${1//[$'\t\r\n']}"
 
   # Optional: $2 => $target_file (where to save)
-  target_file=${2:-$(basename "$1")}
+  target_file="${2:-$(basename "$1")}"
 
   TITLE "Downloading [$source_file] into $target_file"
   ls -ld
@@ -689,7 +689,7 @@ function download_file() {
         target_dir="$(dirname -- "$target_file")"
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
         source_file="$(basename -- "$source_file")"
-        mv "$target_dir/$source_file" "$target_file" || :
+        mv -vn "$target_dir/$source_file" "$target_file"
       else
         echo -e "\n# Wget is not installed, using Curl instead."
         curl -L "$source_file" -o "$target_file" --create-dirs
@@ -2033,7 +2033,7 @@ EOF
   sed -r 's:\s+###</span.+$:<\/span><\/button><div class="content">:g' -i "$html_output"
 
   # Close all collapsible spans, when getting to lines of 🎩︎ (excluding first time)
-  sed -r 's:(.+🎩︎):<\/div><br><br>\1:g' -i" $html_outpu"t
+  sed -r 's:(.+🎩︎):<\/div><br><br>\1:g' -i "$html_output"
   sed '0,/<\/div><br><br>/s///' -i "$html_output"
 
   # Create HTML collapsible function (must be at the bottom)

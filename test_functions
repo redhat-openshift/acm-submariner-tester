@@ -295,10 +295,10 @@ function download_ocp_installer() {
   cd "${WORKDIR}" || exit
 
   local ocp_install_gz
-  ocp_install_gz=$(curl "$oc_installer_url" | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+  ocp_install_gz=$(curl "$oc_installer_url" | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1 | head -1)
 
   local oc_client_gz
-  oc_client_gz=$(curl "$oc_installer_url" | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1)
+  oc_client_gz=$(curl "$oc_installer_url" | grep -Eoh "openshift-client-linux-.+\.tar\.gz" | cut -d '"' -f 1 | head -1)
 
   [[ -n "$ocp_install_gz" && -n "$oc_client_gz" ]] || FATAL "Failed to retrieve OCP installer [${ocp_installer_version}] from $oc_installer_url"
 
@@ -306,8 +306,8 @@ function download_ocp_installer() {
   # find -type f -maxdepth 1 -name "openshift-*.tar.gz" -mtime +1 -exec rm -rf {} \;
   delete_old_files_or_dirs "openshift-*.tar.gz"
 
-  download_file "${oc_installer_url}/${ocp_install_gz}"
-  download_file "${oc_installer_url}/${oc_client_gz}"
+  download_file "${oc_installer_url}${ocp_install_gz}"
+  download_file "${oc_installer_url}${oc_client_gz}"
 
   TITLE "Extracting OCP installer and client into ${WORKDIR}: \n $ocp_install_gz \n $oc_client_gz"
 
