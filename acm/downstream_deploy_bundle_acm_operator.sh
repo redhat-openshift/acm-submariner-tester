@@ -652,7 +652,7 @@ function import_managed_cluster() {
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   TITLE "Install klusterlet (Addon) on the managed clusters"
   # Import the managed clusters
@@ -696,17 +696,17 @@ function install_submariner_operator_on_cluster() {
   local submariner_catalog
   submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   # Deploy Submariner operator as an OCP bundle
   deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:"${SUBM_NAMESPACE}":"${SUBM_GATEWAY}"
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:"${SUBM_NAMESPACE}":"${SUBM_ROUTE_AGENT}"
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:"${SUBM_NAMESPACE}":"${SUBM_GLOBALNET}"
-  ${OC} adm policy add-scc-to-user privileged system:serviceaccount:"${SUBM_NAMESPACE}":"${SUBM_LH_COREDNS}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}"
 
   # TODO: Wait for acm agent installation on the managed clusters
   local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
@@ -737,7 +737,7 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   ${OC} get managedcluster -o wide
 

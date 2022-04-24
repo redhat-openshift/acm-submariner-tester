@@ -131,7 +131,7 @@ function deploy_ocp_bundle() {
   fi
 
   # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
