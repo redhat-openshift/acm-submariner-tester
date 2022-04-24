@@ -471,7 +471,7 @@ function install_conda_package() {
   # conda config --add channels defaults
   conda config --add channels conda-forge
   source activate "$conda_env"
-  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}"${pkg_version:+=$pkg_version}
+  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
   conda list
 }
 
@@ -689,7 +689,7 @@ function download_file() {
         target_dir="$(dirname -- "$target_file")"
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
         source_file="$(basename -- "$source_file")"
-        mv -vn "$target_dir/$source_file" "$target_file"
+        [[ "$target_dir/$source_file" -ef "$target_file" ]] || mv -v "$target_dir/$source_file" "$target_file"
       else
         echo -e "\n# Wget is not installed, using Curl instead."
         curl -L "$source_file" -o "$target_file" --create-dirs
@@ -922,7 +922,7 @@ function delete_aws_dns_records() {
   cat "$tmp_file"
 
   echo -e "\n# Deleting the DNS record set:"
-  aws route53 change-resource-record-sets --hosted-zone-id "$hosted_zone_id" --change-batch file://"$tmp_file"
+  aws route53 change-resource-record-sets --hosted-zone-id "$hosted_zone_id" --change-batch "file://$tmp_file"
 
 }
 
@@ -983,7 +983,7 @@ function delete_crds_by_name() {
     for crd_name in $crd_list ; do
       echo -e "\n# Deleting CRD $crd_name"
       ${OC} delete --timeout=1m crd "$crd_name" --ignore-not-found || \
-      ${OC} patch crd/"${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+      ${OC} patch "crd/${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
 
   else
@@ -1021,7 +1021,7 @@ function force_delete_namespace() {
     echo -e "\n# Warning: Force delete of namespace via API"
     ${OC} proxy &
     ${OC} get namespace "${ns_name}" -o json | jq '.spec = {"finalizers":[]}' > temp.json
-    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/"${ns_name}"/finalize
+    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json "127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize"
     kill -9 %% || :
     ${OC} delete namespace "${ns_name}" --ignore-not-found --grace-period=0 --force --wait || :
   fi
@@ -1065,7 +1065,7 @@ function create_docker_registry_secret() {
     '{"data":{".dockerconfigjson":"'"$( \
     ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
     | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/"${secret_name}" -n "$namespace"    --output="jsonpath={.data.\.dockerconfigjson}" \
+    ${OC} get "secret/${secret_name}" -n "$namespace"    --output="jsonpath={.data.\.dockerconfigjson}" \
     | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
   )
 
@@ -1080,7 +1080,7 @@ function install_nginx_service() {
   trap_to_debug_commands;
 
   ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/bitnami/nginx:latest}"
+  nginx_image="${2:-quay.io/testing-farm/nginx:latest}"
 
   target_namespace="$3" # The Namespace for Ngnix
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
@@ -1905,7 +1905,7 @@ function watch_polarion_job_status() {
 
   local polarion_log
   polarion_log="$(mktemp)_polarion_log"
-  curl --config "$polarion_auth_file" -k -X POST -F file=@"${polarion_import_file}" "${polarion_url}"/import/"${polarion_import_type}" |& tee "$polarion_log"
+  curl --config "$polarion_auth_file" -k -X POST -F file=@"${polarion_import_file}" "${polarion_url}/import/${polarion_import_type}" |& tee "$polarion_log"
 
   local polarion_job_id
   polarion_job_id=$(awk '/job-ids/ { print $4 }' "$polarion_log")
@@ -1960,7 +1960,7 @@ function log_to_html() {
       git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
       make -C "$repo_dir" &> /dev/null
   fi
-  ./"$repo_dir"/aha --version
+  "./$repo_dir/aha" --version
 
   # Create HTML Header
   cat > "$html_output" <<EOF
@@ -2020,7 +2020,7 @@ EOF
   sed '/\S/,$!d' -i "$log_file"
 
   # Create HTML content with AHA
-  ./"$repo_dir"/aha -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
+  "./$repo_dir/aha" -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
 
   # Trim sh2ju debug lines starting with +++ from the html report
   sed -r '/^\s*\+\+\+/d' -i "$html_output"

@@ -896,7 +896,7 @@ function add_elevated_user() {
     ( # subshell to hide commands
       openssl rand -base64 12 > "${WORKDIR}/${OCP_USR}.sec"
       local ocp_pwd
-      ocp_pwd="$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+      ocp_pwd="$(< "${WORKDIR}/${OCP_USR}.sec")"
       printf "%s:%s\n" "${OCP_USR}" "$(openssl passwd -apr1 "${ocp_pwd}")" > "${WORKDIR}/${http_sec_name}"
     )
   fi
@@ -947,7 +947,7 @@ EOF
 
   ${OC} get clusterrolebindings
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}"/"${OCP_USR}".sec)"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -1370,7 +1370,7 @@ function test_clusters_disconnected_before_submariner() {
   msg="# Negative Test - Clusters should NOT be able to connect without Submariner."
 
   ${OC} exec "$netshoot_pod_cluster_a" ${TEST_NS:+-n $TEST_NS} -- \
-  curl --output /dev/null --max-time 20 --verbose "${nginx_IP_cluster_bc}":"${NGINX_PORT}" \
+  curl --output /dev/null --max-time 20 --verbose "${nginx_IP_cluster_bc}:${NGINX_PORT}" \
   |& (! highlight "command terminated with exit code" && FATAL "$msg") || echo -e "$msg"
     # command terminated with exit code 28
 }
@@ -2332,7 +2332,7 @@ function configure_cluster_custom_registry_secrets() {
   )
 
   TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
-  ${OC} adm prune images --registry-url=https://"${BREW_REGISTRY}" --force-insecure --confirm || :
+  ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --force-insecure --confirm || :
 
 }
 
@@ -2342,8 +2342,8 @@ function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
-  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver || :
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver || :
   ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver || :
 
   ${OC} get clusteroperators authentication kube-apiserver
@@ -2575,7 +2575,7 @@ EOF
   )
 
   TITLE "Enabling auto-reboot of ${node_type} when changing Machine Config Pool:"
-  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' machineconfigpool/"${node_type}"
+  ${OC} patch --type=merge --patch='{"spec":{"paused":false}}' "machineconfigpool/${node_type}"
 
   local ocp_version
   ocp_version=$(${OC} version | awk '/Server Version/ { print $3 }')
@@ -3547,7 +3547,7 @@ function test_clusters_connected_overlapping_cidrs_globalnet_v1() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
   ${OC} exec "${netshoot_pod_cluster_a}" ${TEST_NS:+-n $TEST_NS} \
-  -- curl --output /dev/null --max-time 30 --verbose "${nginx_global_ip}":"${NGINX_PORT}"
+  -- curl --output /dev/null --max-time 30 --verbose "${nginx_global_ip}:${NGINX_PORT}"
 
   echo -e "\n# TODO: validate annotation of globalIp in the node"
 }
