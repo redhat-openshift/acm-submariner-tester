@@ -35,9 +35,12 @@ set +e
 set +x
 
 # Temporary files to store the command stdout, stderr and exit code
-export outf=$(mktemp)_ju.out
-export errf=$(mktemp)_ju.err
-export returnf=$(mktemp)_eval_rc.log
+outf=$(mktemp)_ju.out
+export outf
+errf=$(mktemp)_ju.err
+export errf
+returnf=$(mktemp)_eval_rc.log
+export returnf
 
 # Temporary file to store Testcase tag content, that is added for each new testcase in the junit xml
 newTestCaseTag=$(mktemp)_tc_content
@@ -65,15 +68,15 @@ function eVal() {
         trap 'RC=$? ; echo $RC > "${returnf}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
         trap 'RC="$(< $returnf)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
         set -e; $1;
-      } | tee -a ${outf}
-    ) 3>&1 1>&2 2>&3 | tee ${errf}
+      } | tee -a "${outf}"
+    ) 3>&1 1>&2 2>&3 | tee "${errf}"
   ) 3>&1 1>&2 2>&3
 }
 
 # TODO: Use this function to clean old test results (xmls)
 function juLogClean() {
   echo "+++ sh2ju removing old junit reports from: ${juDIR} "
-  find ${juDIR} -maxdepth 1 -name "${juFILE}" -delete
+  find "${juDIR}" -maxdepth 1 -name "${juFILE}" -delete
 }
 
 # Function to remove special characters and ansi colors from a text file
@@ -105,7 +108,7 @@ function juLog() {
 
   # Initialize testsuite attributes
   dateTime="$(which gdate 2>/dev/null || which date || :)"
-  asserts=00; failures=0; suiteDuration=0; content=""
+  asserts=00; failures=0; suiteDuration=0; # content=""
   export testIndex=$(( testIndex+1 ))
 
   # parse arguments
@@ -171,9 +174,9 @@ EOF
   # To print +++ sh2ju debugs also into ${outf}, add:   | tee -a ${outf}
 
   # Clear content of the temporary files
-  : > ${outf}
-  : > ${errf}
-  : > ${returnf}
+  : > "${outf}"
+  : > "${errf}"
+  : > "${returnf}"
 
   # Save datetime before executing the command
   testStartTime="$(${dateTime} +%s.%N)"
@@ -224,7 +227,7 @@ EOF
   # Write the junit xml report
 
   # Update testcase tag content file (not saving data in variables due to "Argument list too long" potential error)
-  cat <<-EOF > ${newTestCaseTag}
+  cat <<-EOF > "${newTestCaseTag}"
       <testcase assertions="1" name="${testTitle}" time="${testDuration}" classname="${class//./-}">
 EOF
 
@@ -233,9 +236,9 @@ EOF
     # echo '    <system-out> <![CDATA[' >> ${newTestCaseTag}
     # cat ${outf} >> ${newTestCaseTag}
     # echo '    ]]> </system-out>' >> ${newTestCaseTag}
-    echo '    <system-out>' >> ${newTestCaseTag}
-    cat ${outf} >> ${newTestCaseTag}
-    echo '    </system-out>' >> ${newTestCaseTag}
+    echo '    <system-out>' >> "${newTestCaseTag}"
+    cat "${outf}" >> "${newTestCaseTag}"
+    echo '    </system-out>' >> "${newTestCaseTag}"
 
   # Or failure tag if testcase failed
   else
@@ -244,22 +247,22 @@ EOF
     failure_summary=$(grep "\S" "$errf" | tail -2)
 
     # echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\"> <![CDATA[" >> ${newTestCaseTag}
-    echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\">" >> ${newTestCaseTag}
-    cat ${outf} >> ${newTestCaseTag}
+    echo "    <failure type=\"ScriptError\" message=\"${failure_summary}\">" >> "${newTestCaseTag}"
+    cat "${outf}" >> "${newTestCaseTag}"
     # echo '    ]]> </failure>' >> ${newTestCaseTag}
-    echo '    </failure>' >> ${newTestCaseTag}
+    echo '    </failure>' >> "${newTestCaseTag}"
 
     ## system-err tag in addition to failure tag
     # echo '    <system-err> <![CDATA[' >> ${newTestCaseTag}
-    echo '    <system-err>' >> ${newTestCaseTag}
-    cat ${errf} >> ${newTestCaseTag}
+    echo '    <system-err>' >> "${newTestCaseTag}"
+    cat "${errf}" >> "${newTestCaseTag}"
     # echo '    ]]> </system-err>' >> ${newTestCaseTag}
-    echo '    </system-err>' >> ${newTestCaseTag}
+    echo '    </system-err>' >> "${newTestCaseTag}"
 
   fi
 
   ## testcase tag end
-  echo '      </testcase>' >> ${newTestCaseTag}
+  echo '      </testcase>' >> "${newTestCaseTag}"
 
   # Testsuite block
   if [[ -e "${juDIR}/${juFILE}" ]]; then

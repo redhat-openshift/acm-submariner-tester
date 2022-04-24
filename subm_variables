@@ -1,4 +1,5 @@
 #!/bin/bash
+
 ### Global variables for Submariner setup and tests ###
 #
 # To override variable with an existing environment variable from active session:
