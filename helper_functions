@@ -689,7 +689,7 @@ function download_file() {
         target_dir="$(dirname -- "$target_file")"
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
         source_file="$(basename -- "$source_file")"
-        mv -vn "$target_dir/$source_file" "$target_file"
+        [[ "$target_dir/$source_file" -ef "$target_file" ]] || mv -v "$target_dir/$source_file" "$target_file"
       else
         echo -e "\n# Wget is not installed, using Curl instead."
         curl -L "$source_file" -o "$target_file" --create-dirs
