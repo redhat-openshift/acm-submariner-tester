@@ -1080,7 +1080,7 @@ function install_nginx_service() {
   trap_to_debug_commands;
 
   ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/bitnami/nginx:latest}"
+  nginx_image="${2:-quay.io/testing-farm/nginx:latest}"
 
   target_namespace="$3" # The Namespace for Ngnix
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None

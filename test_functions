@@ -2342,8 +2342,8 @@ function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver
-  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver
+  ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver || :
+  ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver || :
   ${OC} wait --timeout=5m --for='condition=Degraded=False' clusteroperators authentication kube-apiserver || :
 
   ${OC} get clusteroperators authentication kube-apiserver
