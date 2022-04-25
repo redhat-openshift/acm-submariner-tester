@@ -65,9 +65,7 @@ function show_test_plan() {
   - label_gateway_on_broker_nodes_with_external_ip
   - open_firewall_ports_on_cluster_c
   - label_first_gateway_cluster_b / c
-  - configure_images_prune_cluster_b / c
-  - configure_custom_registry_cluster_a: $REGISTRY_IMAGES
-  - configure_custom_registry_cluster_b / c: $REGISTRY_IMAGES
+  - configure_custom_registry_in_cluster: $REGISTRY_IMAGES
   - upload_submariner_images_to_cluster_registry: $REGISTRY_IMAGES
   - configure_namespace_for_submariner_tests_on_cluster_a
   - configure_namespace_for_submariner_tests_on_managed_cluster
@@ -2269,42 +2267,21 @@ EOF
 
 # ------------------------------------------
 
-function configure_custom_registry_cluster_a() {
-  PROMPT "Using custom Registry for ACM and Submariner images on OCP cluster A"
+function configure_custom_registry_in_cluster() {
   trap_to_debug_commands;
 
-  export KUBECONFIG="${KUBECONF_HUB}"
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  PROMPT "Using custom Registry for ACM and Submariner images on cluster ${cluster_name}"
+
   configure_cluster_custom_registry_secrets
 
-  export KUBECONFIG="${KUBECONF_HUB}"
-  configure_cluster_custom_registry_mirror
+  prune_old_images_from_local_cluster_registry || :
 
-}
-
-# ------------------------------------------
-
-function configure_custom_registry_cluster_b() {
-  PROMPT "Using custom Registry for ACM and Submariner images on OSP cluster B"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  configure_cluster_custom_registry_secrets
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-  configure_cluster_custom_registry_mirror
-
-}
-
-# ------------------------------------------
-
-function configure_custom_registry_cluster_c() {
-  PROMPT "Using custom Registry for ACM and Submariner images on cluster C"
-  trap_to_debug_commands;
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-  configure_cluster_custom_registry_secrets
-
-  export KUBECONFIG="${KUBECONF_CLUSTER_C}"
   configure_cluster_custom_registry_mirror
 
 }
@@ -2331,8 +2308,16 @@ function configure_cluster_custom_registry_secrets() {
     # Do not ${OC} logout - it will cause authentication error pulling images during join command
   )
 
+}
+
+# ------------------------------------------
+
+function prune_old_images_from_local_cluster_registry() {
+
   TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
-  ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --force-insecure --confirm || :
+
+  ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --force-insecure --confirm \
+  --keep-tag-revisions=0 --keep-younger-than=0 --ignore-invalid-references
 
 }
 

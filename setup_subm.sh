@@ -941,13 +941,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
 
-      ${junit_cmd} configure_custom_registry_cluster_a
+      ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
 
       ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        ${junit_cmd} configure_custom_registry_cluster_b
+        ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
 
         ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
@@ -955,7 +955,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        ${junit_cmd} configure_custom_registry_cluster_c
+        ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 
         ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
