@@ -2317,7 +2317,7 @@ function prune_old_images_from_local_cluster_registry() {
   TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
 
   ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --force-insecure --confirm \
-  --keep-tag-revisions=0 --keep-younger-than=0 --ignore-invalid-references
+  --keep-tag-revisions=0 --keep-younger-than=0 --ignore-invalid-refs
 
 }
 
