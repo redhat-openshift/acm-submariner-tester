@@ -34,7 +34,7 @@ export CLUSTER_C_NAME="user-cloud-project-c" # Recommended cluster name: {user}-
 export CLUSTER_C_YAML="${CLUSTER_C_YAML:-${WORKDIR}/setup-cluster-c.yaml}"
 
 export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
-export NGINX_IMAGE="quay.io/testing-farm/nginx:latest" # "nginxinc/nginx-unprivileged:stable-alpine"
+export NGINX_IMAGE="quay.io/openshifttest/nginx-alpine:latest" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
 # Do not use the same IPSEC port numbers multiple times in one project

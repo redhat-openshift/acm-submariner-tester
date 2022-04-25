@@ -1080,7 +1080,7 @@ function install_nginx_service() {
   trap_to_debug_commands;
 
   ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/testing-farm/nginx:latest}"
+  nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
 
   target_namespace="$3" # The Namespace for Ngnix
   service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
@@ -1391,11 +1391,11 @@ function watch_pod_logs() {
 function print_pod_logs_in_namespace() {
   local cluster_name="$1"
   local namespace="$2"
-  local pods_label="${3:+ -l $3}"
+  local pods_label="$3"
 
-  TITLE "Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace"
+  TITLE "Pods descriptions and logs ${pods_label:+"by label: ${pods_label}," }in cluster: $cluster_name, namespace: $namespace"
 
-  for pod in $(${OC} get pods "$pods_label" -n "$namespace" -o jsonpath='{.items[*].metadata.name}') ; do
+  for pod in $(${OC} get pods ${pods_label:+ -l $pods_label} -n "$namespace" -o jsonpath='{.items[*].metadata.name}') ; do
     echo -e "\n### Pod $pod in cluster: $cluster_name, namespace: $namespace ###\n"
     ${OC} -n "$namespace" describe pod "$pod" || :
     ${OC} -n "$namespace" get pod "$pod" -o yaml || :
