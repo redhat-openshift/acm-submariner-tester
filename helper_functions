@@ -1114,6 +1114,9 @@ function create_namespace() {
   # Create the namespace with the API directly
   echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
 
+  # TODO: Consider 'oc new-project' command:
+  # ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
+
 }
 
 # ------------------------------------------
