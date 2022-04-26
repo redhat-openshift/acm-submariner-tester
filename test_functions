@@ -4468,26 +4468,13 @@ function gather_submariner_info() {
     df -h
     free -h
 
-    TITLE "Openshift information"
-
-    export KUBECONFIG="${KUBECONF_HUB}"
-
-    # oc version
-    BUG "OC client version 4.5.1 cannot use merged kubeconfig" \
-    "use an older OC client, or run oc commands for each cluster separately" \
-    "https://bugzilla.redhat.com/show_bug.cgi?id=1857202"
-    # Workaround:
-    OC="/usr/bin/oc"
-
-    ${OC} status || :
-    ${OC} version || :
-
     TITLE "Submariner information (using subctl show and diagnose)"
 
     # export_merged_kubeconfigs
-    BUG "subctl show and subctl diagnose does not support --kubecontexts"
+    BUG "Some OC/SubCtl versions cannot use merged kubeconfig" \
+    "Do not run export_merged_kubeconfigs before subctl show and subctl diagnose, and use old kubeconfig (.bak) with a single context"
     # Workaround:
-    # Do not run export_merged_kubeconfigs before subctl show and subctl diagnose
+    export KUBECONFIG="${KUBECONF_HUB}.bak"
 
     subctl show all || :
 
@@ -4522,6 +4509,9 @@ function print_resources_and_pod_logs() {
   cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Gather logs of OCP, ACM and Submariner in ${cluster_name}"
+
+  ${OC} status || :
+  ${OC} version || :
 
   ${OC} config get-contexts
 
