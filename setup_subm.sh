@@ -95,6 +95,9 @@ Running with pre-defined parameters (optional):
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
   * Install Submariner with SubCtl:                    --subctl-install
+  * Join managed cluster A:                            --join-cluster-a
+  * Join managed cluster B:                            --join-cluster-b
+  * Join managed cluster C:                            --join-cluster-c
 
 - Submariner test options:
 
@@ -344,6 +347,15 @@ while [[ $# -gt 0 ]]; do
   --subctl-install)
     INSTALL_WITH_SUBCTL=YES
     shift ;;
+  --join-cluster-a)
+    JOIN_CLUSTER_A=YES
+    shift ;;
+  --join-cluster-b)
+    JOIN_CLUSTER_B=YES
+    shift ;;
+  --join-cluster-c)
+    JOIN_CLUSTER_C=YES
+    shift ;;
   --globalnet)
     GLOBALNET=YES
     shift ;;
@@ -526,6 +538,30 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
+  # User input: $JOIN_CLUSTER_A - to join managed cluster A
+  while [[ ! "$JOIN_CLUSTER_A" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster A ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_A=${input:-no}
+  done
+
+  # User input: $JOIN_CLUSTER_B - to join managed cluster B
+  while [[ ! "$JOIN_CLUSTER_B" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster B ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_B=${input:-no}
+  done
+
+  # User input: $JOIN_CLUSTER_C - to join managed cluster C
+  while [[ ! "$JOIN_CLUSTER_C" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster C ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_C=${input:-no}
+  done
+
   # User input: $REGISTRY_IMAGES - to configure_cluster_custom_registry
   while [[ ! "$REGISTRY_IMAGES" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
@@ -647,6 +683,9 @@ export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
 export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
 export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
 export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
+export JOIN_CLUSTER_A=${JOIN_CLUSTER_A:-NO}
+export JOIN_CLUSTER_B=${JOIN_CLUSTER_B:-NO}
+export JOIN_CLUSTER_C=${JOIN_CLUSTER_C:-NO}
 export GLOBALNET=${GLOBALNET:-NO}
 # export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
 export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
@@ -892,7 +931,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
     # Cluster B custom configurations for OpenStack
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
       echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
@@ -916,7 +955,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
 
     # Cluster C configurations
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -1048,13 +1087,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -1109,7 +1148,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
 
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
 
@@ -1117,7 +1156,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
 
