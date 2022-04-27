@@ -640,68 +640,8 @@ fi
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
-### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
-if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
-  # Extra verbosity for oc commands:
-  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-  # export VERBOSE_FLAG="--v=2"
-  # export OC="$OC $VERBOSE_FLAG"
-
-  # Debug flag for ocpup and aws commands
-  export DEBUG_FLAG="--debug"
-
-else
-  # Clear trap_to_debug_commands function
-  trap_to_debug_commands() { :; }
-fi
-
-cd "${SCRIPT_DIR}"
-
-
-### Set missing user variables ###
-TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
-
-export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
-# export OCP_VERSION=${OCP_VERSION}
-export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
-# export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
-export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
-export INSTALL_ACM=${INSTALL_ACM:-NO}
-export INSTALL_MCE=${INSTALL_MCE:-NO}
-export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
-export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
-export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
-export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
-export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
-export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
-export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
-export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
-export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
-export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
-export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
-export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
-export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
-export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
-export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
-export JOIN_CLUSTER_A=${JOIN_CLUSTER_A:-NO}
-export JOIN_CLUSTER_B=${JOIN_CLUSTER_B:-NO}
-export JOIN_CLUSTER_C=${JOIN_CLUSTER_C:-NO}
-export GLOBALNET=${GLOBALNET:-NO}
-# export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
-export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
-export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
-export SKIP_TESTS=${SKIP_TESTS:-NO}
-export PRINT_LOGS=${PRINT_LOGS:-NO}
-export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
-export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
-export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
-
 # Exporting active clusters KUBECONFIGs
-export_active_clusters_kubeconfig
-
-# Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
-set_versions_variables
+export_all_env_variables
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
