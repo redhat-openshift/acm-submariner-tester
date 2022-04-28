@@ -153,9 +153,6 @@ Examples with pre-defined options:
 SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
 export SCRIPT_DIR
 
-### Import Submariner setup variables ###
-source "$SCRIPT_DIR/subm_variables"
-
 ### Import Test and Helper functions ###
 source "$SCRIPT_DIR/helper_functions"
 source "$SCRIPT_DIR/test_functions"
@@ -388,10 +385,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --import-vars)
     check_cli_args "$2"
-    export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file:
-    $GLOBAL_VARS"
-    source "$GLOBAL_VARS"
+    export GLOBAL_VARS="$2" # Import additional variables from local file
     shift 2 ;;
   -*)
     echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
@@ -640,13 +634,14 @@ fi
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
-# Exporting active clusters KUBECONFIGs
-export_all_env_variables
+# Set and export all global env variables
+# export_all_env_variables > >(tee -a "$SYS_LOG") 2>&1
+export_all_env_variables >> "$SYS_LOG" 2>&1
+cat "$SYS_LOG"
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
-
   ### Script debug calls (should be left as a comment) ###
 
     # ${junit_cmd} debug_test_polarion
@@ -662,9 +657,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   # Setup and verify environment
   setup_workspace
-
-  # Set script trap functions
-  set_trap_functions
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan

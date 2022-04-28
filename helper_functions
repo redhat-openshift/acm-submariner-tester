@@ -31,6 +31,30 @@ set -o allexport # To export each function when it is declared, to be used on ex
 
 # ------------------------------------------
 
+function print_all_env_variables() {
+### Helper function to print all environment variables (excluding key|sec|pas|pwd)###
+  trap_to_debug_commands;
+
+  TITLE "List all environment variables"
+
+    # List all variables
+    compgen -v | sort | \
+    while read var_name; do
+      # Get each variable value
+      var_value="${!var_name}"
+      # If variable is not null or contains "key" / "sec"ret / "pas"sword
+      if ! [[ -z "$var_value" || "$var_name" =~ (key|sec|pas|pwd) ]] ; then
+        # Trim value (string), if it is longer than 500 char
+        (( ${#var_value} < 500 )) || var_value="${var_value:0:500}..."
+        # Print the value without non-ascii chars
+        echo -e "$var_name = $var_value" | tr -dC '[:print:]\t\n'
+      fi
+    done
+
+}
+
+# ------------------------------------------
+
 # Function to search and highlight rexexp in file (or pipe content)
 function highlight()
 {
@@ -127,9 +151,6 @@ function trap_to_debug_commands() {
    fi
   ' DEBUG
 }
-
-# export -f trap_to_debug_commands
-# trap_to_debug_commands
 
 # ------------------------------------------
 
@@ -1323,8 +1344,13 @@ function wait_for_all_machines_ready() {
   cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
   watch_and_retry "$cmd" "$duration" || machines_status=DOWN
 
-  echo -e "\n# Status of Machine Config Pool and all Daemon-Sets:"
+  echo -e "\n# Status of Machine Config Pool:"
   ${OC} get machineconfigpool -o wide || machines_status=DOWN
+
+  echo -e "\n# Status of Machine Config Operators:"
+  ${OC} get all -n openshift-machine-config-operator -o wide || machines_status=DOWN
+
+  echo -e "\n# Status of Daemon-Sets:"
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
   if [[ "$machines_status" = DOWN ]] ; then
