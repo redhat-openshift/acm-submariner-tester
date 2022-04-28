@@ -4032,25 +4032,26 @@ function test_project_e2e_with_go() {
   TITLE "Set E2E context for the active clusters"
   export KUBECONFIG="${KUBECONF_HUB}"
   local e2e_dp_context
-  e2e_dp_context="--dp-context $(${OC} config current-context)"
+
+  e2e_dp_context=("--dp-context" "$(${OC} config current-context)")
 
   if [[ -s "$CLUSTER_B_YAML" ]] ; then
-    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context[*]})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
-    e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
+    e2e_dp_context+=("--dp-context" "$(${OC} config current-context)")
   fi
 
   if [[ -s "$CLUSTER_C_YAML" ]] ; then
-    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context})"
+    echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context[*]})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
-    e2e_dp_context="${e2e_dp_context} --dp-context $(${OC} config current-context)"
+    e2e_dp_context+=("--dp-context" "$(${OC} config current-context)")
   fi
 
-  echo "E2E context: ${e2e_dp_context}"
+  echo -e "\n# E2E context: ${e2e_dp_context[*]}"
 
   ### Set E2E $test_params and $junit_params" ###
 
-  test_params+=("$e2e_dp_context"
+  test_params+=("${e2e_dp_context[@]}"
   "--submariner-namespace" "${SUBM_NAMESPACE}"
   "--connection-timeout" 30 "--connection-attempts" 3)
 
