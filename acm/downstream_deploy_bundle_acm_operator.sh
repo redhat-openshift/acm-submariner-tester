@@ -467,7 +467,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
 
   TITLE "Creating 'ManagedClusterSet' resource for ${SUBM_OPERATOR}"
 
-  ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
+  create_namespace "${SUBM_OPERATOR}"
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
@@ -479,7 +479,7 @@ EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
   # local regex="Reason:\s*ClustersSelected" # Only later it includes "ManagedClusterSet"
-  local regex="Manager:\s*${SUBM_OPERATOR}"
+  local regex="Name:\s*${SUBM_OPERATOR}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
@@ -552,7 +552,6 @@ function create_new_managed_cluster_in_acm_hub() {
 
   TITLE "Create the namespace for the managed cluster: ${cluster_id}"
 
-  # ${OC} new-project "${cluster_id}" | ${OC} project "${cluster_id}" -q
   create_namespace "${cluster_id}"
 
   ${OC} label namespace "${cluster_id}" cluster.open-cluster-management.io/managedCluster="${cluster_id}" --overwrite
