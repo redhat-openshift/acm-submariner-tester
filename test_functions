@@ -800,8 +800,8 @@ function export_cluster_config_variables() {
     # Get cluster platform type from OCP installer yaml 
     cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
     
-    # Append platform type to the cluster name
-    cluster_name+="-${cluster_install_platform}"
+    echo -e "\n# Prefix platform type '${cluster_install_platform}' to the cluster name '${cluster_name}'"
+    cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
 
     echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
 

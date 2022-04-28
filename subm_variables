@@ -58,9 +58,6 @@ export AWS_REGION="aws-region"
 export AWS_ZONE_NAME="aws-zone-name"
 export AWS_ZONE_ID="aws-zone-id"
 
-export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
-export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
-
 
 ### OpenStack vars ###
 
