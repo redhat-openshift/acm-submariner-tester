@@ -41,7 +41,7 @@ function export_LATEST_IIB() {
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
 
-  if [[ "$index_images" = null ]]; then
+  if [[ "$index_images" == null ]]; then
     BUG "Failed to retrieve completed images during the last $num_of_days days, getting all images during delta of 3X${num_of_days} days"
     delta=$((delta * 3))
 
@@ -51,7 +51,7 @@ function export_LATEST_IIB() {
 
     index_images="$(cat $umb_output | jq -r "${iib_query}")"
 
-    if [[ "$index_images" = null ]]; then
+    if [[ "$index_images" == null ]]; then
       FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
     fi
   fi
@@ -223,7 +223,7 @@ EOF
   ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
 
-  if [[ "$packagemanifests_status" = FAILED ]] ; then
+  if [[ "$packagemanifests_status" == FAILED ]] ; then
     FAILURE "Bundle ${bundle_name} failed either due to Package Manifest '${operator_name}', Catalog '${catalog_display_name}', \
     Channel '${operator_channel}', Version '${operator_version}', or Images deployment"
   fi
@@ -261,7 +261,7 @@ function check_olm_in_current_cluster() {
   --all-containers --tail=15 --timestamps \
   |& (! highlight '^E0|"error"|level=error') || olm_status=FAILED
 
-  if [[ "$olm_status" = FAILED ]] ; then
+  if [[ "$olm_status" == FAILED ]] ; then
     FAILURE "OLM deployment logs have some failures/warnings, please investigate"
   fi
 
@@ -413,7 +413,7 @@ EOF
 
   watch_and_retry "$cmd" "3m" || subscription_status=FAILED
 
-  if [[ "$subscription_status" = FAILED ]] ; then
+  if [[ "$subscription_status" == FAILED ]] ; then
     cat "${subscription_data}"
     FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi

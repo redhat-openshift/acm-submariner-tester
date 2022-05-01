@@ -658,6 +658,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Setup and verify environment
   setup_workspace
 
+  # Set script trap functions
+  set_trap_functions
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
@@ -864,7 +867,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
       # Cluster B custom configurations for OpenStack
-      if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
         echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
@@ -888,7 +891,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
 
       # Cluster C configurations
-      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
         echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
         \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -1212,7 +1215,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export GN_VER=V1
     fi
 
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
       ${junit_cmd} test_new_netshoot_ip_cluster_a_globalnet_v1
 
@@ -1231,7 +1234,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
     # Test the new netshoot and headless Nginx service-discovery
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
       # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
       ${junit_cmd} test_clusters_connected_overlapping_cidrs_globalnet_v1
@@ -1324,7 +1327,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         fi
       fi
 
-      if [[ "$ginkgo_tests_status" = FAILED ]] ; then
+      if [[ "$ginkgo_tests_status" == FAILED ]] ; then
         FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
       fi
 
@@ -1354,10 +1357,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
-  if [[ -n "$EXIT_STATUS" ]] && [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
+  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
       create_all_test_results_in_polarion || :
   fi
 

@@ -170,7 +170,7 @@ function setup_workspace() {
   mkdir -p "$HOME"/.local/bin
 
   # Add local BIN dir to PATH
-  [[ ":$PATH:" = *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
+  [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
 
   # # CD to main working directory
   # cd ${WORKDIR}
@@ -805,7 +805,7 @@ function export_cluster_config_variables() {
 
     echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
 
-    if [[ "$cluster_install_platform" = openstack ]] ; then
+    if [[ "$cluster_install_platform" == openstack ]] ; then
       # TODO: This is just for Openstack (OCP install directory is defined by OCPUP yaml)
       cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
     else
@@ -914,7 +914,7 @@ function update_kubeconfig_default_context() {
   # Replace anything but letters and numbers with "-"
   local renamed_context="${cluster_name//[^a-zA-Z0-9]/-}"
 
-  if [[ ! "$cur_context" = "${renamed_context}" ]] ; then
+  if [[ "$cur_context" != "${renamed_context}" ]] ; then
 
     TITLE "Renaming kubeconfig current-context to '$renamed_context'"
 
@@ -1106,7 +1106,7 @@ function uninstall_submariner() {
   fi
 
 
-  if [[ "$cleanup_required" = YES ]] ; then
+  if [[ "$cleanup_required" == YES ]] ; then
 
     delete_submariner_namespace_and_crds
 
@@ -1673,7 +1673,7 @@ function download_subctl_by_tag() {
       # Workaround:
       curl https://get.submariner.io/ | VERSION="${repo_tag}" PATH="/usr/bin:$PATH" bash -x || getsubctl_status=FAILED
 
-      if [[ "$getsubctl_status" = FAILED ]] ; then
+      if [[ "$getsubctl_status" == FAILED ]] ; then
 
         TITLE "Download subctl directly, since 'getsubctl.sh' (https://get.submariner.io) failed"
         # For example, download: https://github.com/submariner-io/submariner-operator/releases/tag/subctl-release-0.8
@@ -2275,7 +2275,7 @@ function gateway_label_all_nodes_external_ip() {
 
   ${OC} get nodes -o wide
 
-  if [[ "$external_ips" = NONE ]] ; then
+  if [[ "$external_ips" == NONE ]] ; then
     failed_machines=$(${OC} get Machine -A -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}')
 
     FATAL "EXTERNAL-IP was not created yet. Please check if \"prep_for_subm.sh\" script had errors.
@@ -2412,13 +2412,13 @@ function configure_cluster_custom_registry_secrets() {
 ### Configure access to external docker registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
+  TITLE "Configure OCP registry local secret"
+
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
   ( # subshell to hide commands
     ocp_token=$(${OC} whoami -t)
-
-    TITLE "Configure OCP registry local secret"
 
     local ocp_registry_url
     ocp_registry_url=$(${OC} registry info --internal)
@@ -2446,6 +2446,8 @@ function prune_old_images_from_local_cluster_registry() {
 function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap '' DEBUG # DONT trap_to_debug_commands
+
+  TITLE "Wait for Cluster Operators, Authentication and Kube API Server readiness"
 
   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver || :
   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver || :
@@ -2898,7 +2900,7 @@ function test_submariner_resources_status() {
 
   echo -e "\n# TODO: consider FAILURE (not FATAL) for 'Terminating' pods or 'ImagePullBackOff'"
 
-  if [[ "$submariner_status" = DOWN ]] ; then
+  if [[ "$submariner_status" == DOWN ]] ; then
     echo "### Potential Bugs ###"
 
     BUG "Globalnet pod might have terminated after deployment" \
@@ -2980,7 +2982,7 @@ function test_disaster_recovery_of_gateway_nodes() {
 
   cat "$TEMP_FILE"
 
-  if [[ "$aws_reboot" = FAILED ]] ; then
+  if [[ "$aws_reboot" == FAILED ]] ; then
       FATAL "AWS-CLI reboot VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME has failed"
   fi
 
@@ -3195,7 +3197,7 @@ function test_ha_status() {
   # ! highlight "Status:\s*connected" "$TEMP_FILE" || submariner_status=DOWN
   ! highlight "Status Failure\s*\w+" "$TEMP_FILE" || submariner_status=DOWN
 
-  if [[ "$submariner_status" = DOWN ]] ; then
+  if [[ "$submariner_status" == DOWN ]] ; then
     FATAL "Submariner HA failure occurred."
   fi
 
@@ -3303,7 +3305,7 @@ function test_ipsec_status() {
   local active_con
   active_con="$(grep "Total IPsec connections:" "$TEMP_FILE" | grep -Po "active \K([0-9]+)" | tail -1)"
 
-  if [[ ! "$active_con" = "$loaded_con" ]] ; then
+  if [[ "$active_con" != "$loaded_con" ]] ; then
     FATAL "IPSec tunnel error: $loaded_con Loaded connections, but only $active_con Active"
   fi
 
@@ -3902,7 +3904,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   subctl show gateways || subctl_info=ERROR
 
-  if [[ "$subctl_info" = ERROR ]] ; then
+  if [[ "$subctl_info" == ERROR ]] ; then
     FAILURE "SubCtl show failed when using merged kubeconfig"
   fi
 
@@ -4124,7 +4126,7 @@ function test_subctl_diagnose_on_merged_kubeconfigs() {
 
     subctl diagnose firewall metrics --validation-timeout 120 --verbose || :
 
-    if [[ "$subctl_diagnose" = ERROR ]] ; then
+    if [[ "$subctl_diagnose" == ERROR ]] ; then
       FAILURE "SubCtl diagnose had some failed checks, please investigate"
     fi
 
@@ -4144,7 +4146,7 @@ function test_subctl_benchmarks() {
 
   subctl benchmark throughput "${KUBECONF_HUB}" "${KUBECONF_MANAGED}" --verbose || benchmark_status=ERROR
 
-  if [[ "$benchmark_status" = ERROR ]] ; then
+  if [[ "$benchmark_status" == ERROR ]] ; then
     FAILURE "Submariner benchmark tests have ended with failures. \n\
     Possible bug: https://bugzilla.redhat.com/show_bug.cgi?id=1971246"
   fi
