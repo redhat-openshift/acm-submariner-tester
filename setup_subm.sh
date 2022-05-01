@@ -95,6 +95,9 @@ Running with pre-defined parameters (optional):
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
   * Install Submariner with SubCtl:                    --subctl-install
+  * Join managed cluster A:                            --join-cluster-a
+  * Join managed cluster B:                            --join-cluster-b
+  * Join managed cluster C:                            --join-cluster-c
 
 - Submariner test options:
 
@@ -149,9 +152,6 @@ Examples with pre-defined options:
 # Note that files in $SCRIPT_DIR are not guaranteed to be permanently saved, as in $WORKDIR
 SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
 export SCRIPT_DIR
-
-### Import Submariner setup variables ###
-source "$SCRIPT_DIR/subm_variables"
 
 ### Import Test and Helper functions ###
 source "$SCRIPT_DIR/helper_functions"
@@ -344,6 +344,15 @@ while [[ $# -gt 0 ]]; do
   --subctl-install)
     INSTALL_WITH_SUBCTL=YES
     shift ;;
+  --join-cluster-a)
+    JOIN_CLUSTER_A=YES
+    shift ;;
+  --join-cluster-b)
+    JOIN_CLUSTER_B=YES
+    shift ;;
+  --join-cluster-c)
+    JOIN_CLUSTER_C=YES
+    shift ;;
   --globalnet)
     GLOBALNET=YES
     shift ;;
@@ -376,10 +385,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --import-vars)
     check_cli_args "$2"
-    export GLOBAL_VARS="$2"
-    TITLE "Importing additional variables from file:
-    $GLOBAL_VARS"
-    source "$GLOBAL_VARS"
+    export GLOBAL_VARS="$2" # Import additional variables from local file
     shift 2 ;;
   -*)
     echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
@@ -526,6 +532,30 @@ if [[ -z "$got_user_input" ]]; then
     done
   fi
 
+  # User input: $JOIN_CLUSTER_A - to join managed cluster A
+  while [[ ! "$JOIN_CLUSTER_A" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster A ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_A=${input:-no}
+  done
+
+  # User input: $JOIN_CLUSTER_B - to join managed cluster B
+  while [[ ! "$JOIN_CLUSTER_B" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster B ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_B=${input:-no}
+  done
+
+  # User input: $JOIN_CLUSTER_C - to join managed cluster C
+  while [[ ! "$JOIN_CLUSTER_C" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to join managed cluster C ? ${NO_COLOR}
+    Enter \"yes\", or nothing to skip: "
+    read -r input
+    JOIN_CLUSTER_C=${input:-no}
+  done
+
   # User input: $REGISTRY_IMAGES - to configure_cluster_custom_registry
   while [[ ! "$REGISTRY_IMAGES" =~ ^(yes|no)$ ]]; do
     echo -e "\n${YELLOW}Do you want to override Submariner images with those from custom registry (as configured in REGISTRY variables) ? ${NO_COLOR}
@@ -604,70 +634,14 @@ fi
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
-### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
-if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
-  # Extra verbosity for oc commands:
-  # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-  # export VERBOSE_FLAG="--v=2"
-  # export OC="$OC $VERBOSE_FLAG"
-
-  # Debug flag for ocpup and aws commands
-  export DEBUG_FLAG="--debug"
-
-else
-  # Clear trap_to_debug_commands function
-  trap_to_debug_commands() { :; }
-fi
-
-cd "${SCRIPT_DIR}"
-
-
-### Set missing user variables ###
-TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
-
-export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
-# export OCP_VERSION=${OCP_VERSION}
-export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
-# export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
-export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
-export INSTALL_ACM=${INSTALL_ACM:-NO}
-export INSTALL_MCE=${INSTALL_MCE:-NO}
-export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
-export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
-export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
-export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
-export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
-export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
-export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
-export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
-export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
-export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
-export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
-export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
-export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
-export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
-export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
-export GLOBALNET=${GLOBALNET:-NO}
-# export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
-export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
-export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
-export SKIP_TESTS=${SKIP_TESTS:-NO}
-export PRINT_LOGS=${PRINT_LOGS:-NO}
-export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
-export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
-export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
-
-# Exporting active clusters KUBECONFIGs
-export_active_clusters_kubeconfig
-
-# Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
-set_versions_variables
+# Set and export all global env variables
+# export_all_env_variables > >(tee -a "$SYS_LOG") 2>&1
+export_all_env_variables >> "$SYS_LOG" 2>&1
+cat "$SYS_LOG"
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
-
   ### Script debug calls (should be left as a comment) ###
 
     # ${junit_cmd} debug_test_polarion
@@ -683,9 +657,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   # Setup and verify environment
   setup_workspace
-
-  # Set script trap functions
-  set_trap_functions
 
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
@@ -892,7 +863,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
     # Cluster B custom configurations for OpenStack
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
       echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
@@ -916,7 +887,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
 
     # Cluster C configurations
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -1048,13 +1019,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
       ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -1109,7 +1080,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
 
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
 
@@ -1117,7 +1088,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
 
