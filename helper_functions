@@ -1100,11 +1100,11 @@ function create_docker_registry_secret() {
 function install_nginx_service() {
   trap_to_debug_commands;
 
-  ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
+  local ngnix_name="${1:-NginX}"
+  local nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
 
-  target_namespace="$3" # The Namespace for Ngnix
-  service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
+  local target_namespace="$3" # The Namespace for Ngnix
+  local service_params"$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
   if [[ -n "$target_namespace" ]] ; then
     echo -e "\n# Create Namespace for Nginx: $target_namespace"
@@ -1117,7 +1117,7 @@ function install_nginx_service() {
 
   echo -e "\n# Delete and expose Ngnix service:"
   ${OC} delete service "${ngnix_name}" ${target_namespace:+-n $target_namespace} --ignore-not-found
-  ${OC} expose deployment "${ngnix_name}" --name="${ngnix_name}" "${service_params}" ${target_namespace:+-n $target_namespace}
+  ${OC} expose deployment "${ngnix_name}" --name="${ngnix_name}" ${service_params:+ $service_params} ${target_namespace:+-n $target_namespace}
 
   echo -e "\n# Wait 5 minutes for Ngnix service to be ready:"
   ${OC} rollout status --timeout=5m deployment "${ngnix_name}" ${target_namespace:+-n $target_namespace}
