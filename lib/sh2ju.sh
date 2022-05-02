@@ -126,7 +126,7 @@ function juLog() {
     esac
   done
 
-  if [[ "${class}" = "" ]]; then
+  if [[ "${class}" == "" ]]; then
     class="default"
   fi
 
@@ -200,11 +200,11 @@ EOF
   # Set the appropriate error, based in the exit code and the regex
   [[ "${returnCode}" != 0 ]] && testStatus=FAILED || testStatus=PASSED
   # echo "+++ sh2ju exit code: ${returnCode} (testStatus=$testStatus)"
-  if [[ ${testStatus} = PASSED ]] && [[ -n "${ereg:-}" ]]; then
+  if [[ ${testStatus} == PASSED ]] && [[ -n "${ereg:-}" ]]; then
       if grep -q -E ${icase} "${ereg}" "${outf}" ; then
         testStatus=FAILED
       fi
-  elif [[ ${testStatus} = FAILED ]] ; then
+  elif [[ ${testStatus} == FAILED ]] ; then
     failures=$((failures+1))
   fi
 
@@ -232,7 +232,7 @@ EOF
 EOF
 
   # system-out tag if testcase passed
-  if [[ ${testStatus} = PASSED ]] ; then
+  if [[ ${testStatus} == PASSED ]] ; then
     # echo '    <system-out> <![CDATA[' >> ${newTestCaseTag}
     # cat ${outf} >> ${newTestCaseTag}
     # echo '    ]]> </system-out>' >> ${newTestCaseTag}
@@ -296,7 +296,7 @@ EOF
   fi
 
   # Set returnCode=0, if missing or equals 5
-  if [[ -z "$returnCode" ]] || [[ "$returnCode" = 5 ]] ; then
+  if [[ -z "$returnCode" ]] || [[ "$returnCode" == 5 ]] ; then
     echo "+++ sh2ju re-setting return code: [${returnCode}] => [0]"
     returnCode=0
   else

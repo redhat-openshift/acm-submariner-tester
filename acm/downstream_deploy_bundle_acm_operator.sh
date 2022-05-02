@@ -56,7 +56,7 @@ function remove_acm_managed_cluster() {
   if ${OC} get managedcluster "${cluster_id}" ; then
     ${OC} delete managedcluster "${cluster_id}" --timeout=30s || force_managedcluster_delete=TRUE
 
-    if [[ "$force_managedcluster_delete" = TRUE && $(${OC} get managedcluster "${cluster_id}") ]]; then
+    if [[ "$force_managedcluster_delete" == TRUE && $(${OC} get managedcluster "${cluster_id}") ]]; then
       TITLE "Resetting finalizers of managed cluster '${cluster_id}' and force deleting its namespace"
 
       ${OC} patch managedcluster "${cluster_id}" --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]' || :
@@ -367,7 +367,7 @@ EOF
   TITLE "All MultiClusterEngine resources status:"
   ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
 
-  if [[ "$acm_status" = FAILED ]] ; then
+  if [[ "$acm_status" == FAILED ]] ; then
     FATAL "MultiClusterEngine is not ready after $duration"
   fi
 
@@ -427,7 +427,7 @@ EOF
 
   ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
-  if [[ "$acm_status" = FAILED ]] ; then
+  if [[ "$acm_status" == FAILED ]] ; then
     TITLE "Checking for errors in MultiClusterHub deployment logs in cluster ${cluster_name}"
 
     ${OC} logs deploy/multiclusterhub-operator \
@@ -460,7 +460,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
   cmd="${OC} api-resources | grep ManagedClusterSet"
   watch_and_retry "$cmd" "$duration" || acm_status=FAILED
 
-  if [[ "$acm_status" = FAILED ]] ; then
+  if [[ "$acm_status" == FAILED ]] ; then
     ${OC} api-resources
     FATAL "ManagedClusterSet resource type is missing"
   fi
@@ -484,7 +484,7 @@ EOF
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
-  if [[ "$acm_status" = FAILED ]] ; then
+  if [[ "$acm_status" == FAILED ]] ; then
     # FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
     FATAL "'${SUBM_OPERATOR}' was not added to ManagedClusterSet after $duration"
   fi
@@ -508,7 +508,7 @@ EOF
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
-  if [[ "$acm_status" = FAILED ]] ; then
+  if [[ "$acm_status" == FAILED ]] ; then
     FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created in ${SUBM_NAMESPACE} after $duration"
   fi
 
@@ -747,13 +747,13 @@ function configure_submariner_addon_for_acm_managed_cluster() {
 
   local cluster_secret_name
 
-  if [[ "$managed_cluster_cloud" = "Amazon" ]] ; then
+  if [[ "$managed_cluster_cloud" == "Amazon" ]] ; then
     cluster_secret_name="${cluster_id}-aws-creds"
     configure_submariner_addon_for_amazon "$cluster_id" "$cluster_secret_name"
-  elif [[ "$managed_cluster_cloud" = "Google" ]] ; then
+  elif [[ "$managed_cluster_cloud" == "Google" ]] ; then
     cluster_secret_name="${cluster_id}-gcp-creds"
     configure_submariner_addon_for_google "$cluster_id" "$cluster_secret_name"
-  elif [[ "$managed_cluster_cloud" = "Openstack" ]] ; then
+  elif [[ "$managed_cluster_cloud" == "Openstack" ]] ; then
     cluster_secret_name="${cluster_id}-osp-creds"
     configure_submariner_addon_for_openstack "$cluster_id" "$cluster_secret_name"
   else
@@ -1038,7 +1038,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
 
   ${OC} describe managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" || managed_cluster_status=FAILED
 
-  if [[ "$managed_cluster_status" = FAILED ]] ; then
+  if [[ "$managed_cluster_status" == FAILED ]] ; then
     ${OC} logs deploy/submariner-addon \
     --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
 
@@ -1071,7 +1071,7 @@ function validate_submariner_config_in_acm_managed_cluster() {
 
   ${OC} describe submarinerconfig "${SUBM_OPERATOR}" -n "${cluster_id}" || config_status=FAILED
 
-  if [[ "$config_status" = FAILED ]] ; then
+  if [[ "$config_status" == FAILED ]] ; then
     FATAL "SubmarinerConfig resource has unhealthy conditions in ACM cluster id: $cluster_id"
   fi
 
@@ -1102,7 +1102,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
   if (( clusterset_count > 1 )) ; then
     ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerConnectionDegraded=false || managed_cluster_status=FAILED
 
-    if [[ "$managed_cluster_status" = FAILED ]] ; then
+    if [[ "$managed_cluster_status" == FAILED ]] ; then
       ${OC} describe managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}"
       FAILURE "Submariner connection could not be established in ACM cluster id: $cluster_id"
     fi

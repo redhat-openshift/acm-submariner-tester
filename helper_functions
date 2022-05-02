@@ -165,7 +165,7 @@ function trap_function_on_error() {
 
   trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
-  [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
+  [[ "$rc" == "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
   echo -e "\n# Trapping on script EXIT: \n${trap_cmd} \n"
@@ -258,9 +258,9 @@ function run_and_tail() {
   # Check the exit code of the command PID
   wait $pid || process_rc="$?"
 
-  if [[ "$process_rc" = 124 ]] ; then
+  if [[ "$process_rc" == 124 ]] ; then
     echo -e "\n# Timeout of $duration has exceeded while running [$cmd]"
-  elif [[ ! "$process_rc" = 0 ]] ; then
+  elif [[ "$process_rc" != 0 ]] ; then
     echo -e "\n# Command [$cmd] has failed (Error $process_rc)"
   fi
 
@@ -268,7 +268,7 @@ function run_and_tail() {
     # When searching for regex in log, it will ignore cmd exit code
     process_rc=0
     grep "$regex" "$log_to_tail" || process_rc="$?"
-    [[ "$process_rc" = 0 ]] || \
+    [[ "$process_rc" == 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
 
@@ -994,8 +994,8 @@ function delete_crds_by_name() {
   if ${OC} get crds |& highlight "${crd_regex}" ; then delete_crds=TRUE ; fi
 
   # If there are existing CRDs on the cluster - remove them all:
-  # if [[ $? = 0 ]]; then
-  if [[ "$delete_crds" = TRUE ]]; then
+  # if [[ $? == 0 ]]; then
+  if [[ "$delete_crds" == TRUE ]]; then
     echo -e "\n# Deleting ${crd_regex} CRDs in the cluster"
     crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
     # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
@@ -1025,7 +1025,7 @@ function force_delete_namespace() {
   # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
   local delete_timeout="${2:-30s}"
 
-  if [[ ${ns_name} = "default" ]] ; then
+  if [[ ${ns_name} == "default" ]] ; then
     echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
     return
   fi
@@ -1038,7 +1038,7 @@ function force_delete_namespace() {
 
   ${OC} delete --timeout="$delete_timeout" namespace "${ns_name}" --ignore-not-found || force_ns_delete=TRUE
 
-  if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace "${ns_name}") ]]; then
+  if [[ "$force_ns_delete" == TRUE && $(${OC} get namespace "${ns_name}") ]]; then
     echo -e "\n# Warning: Force delete of namespace via API"
     ${OC} proxy &
     ${OC} get namespace "${ns_name}" -o json | jq '.spec = {"finalizers":[]}' > temp.json
@@ -1100,11 +1100,11 @@ function create_docker_registry_secret() {
 function install_nginx_service() {
   trap_to_debug_commands;
 
-  ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
+  local ngnix_name="${1:-NginX}"
+  local nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
 
-  target_namespace="$3" # The Namespace for Ngnix
-  service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
+  local target_namespace="$3" # The Namespace for Ngnix
+  local service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
   if [[ -n "$target_namespace" ]] ; then
     echo -e "\n# Create Namespace for Nginx: $target_namespace"
@@ -1117,7 +1117,7 @@ function install_nginx_service() {
 
   echo -e "\n# Delete and expose Ngnix service:"
   ${OC} delete service "${ngnix_name}" ${target_namespace:+-n $target_namespace} --ignore-not-found
-  ${OC} expose deployment "${ngnix_name}" --name="${ngnix_name}" "${service_params}" ${target_namespace:+-n $target_namespace}
+  ${OC} expose deployment "${ngnix_name}" --name="${ngnix_name}" ${service_params:+ $service_params} ${target_namespace:+-n $target_namespace}
 
   echo -e "\n# Wait 5 minutes for Ngnix service to be ready:"
   ${OC} rollout status --timeout=5m deployment "${ngnix_name}" ${target_namespace:+-n $target_namespace}
@@ -1191,11 +1191,11 @@ function print_current_cluster_cloud() {
 
   cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
-  if [[ "$cluster_platform" = "AWS" ]] ; then
+  if [[ "$cluster_platform" == "AWS" ]] ; then
     echo "Amazon"
-  elif [[ "$cluster_platform" = "GCP" ]] ; then
+  elif [[ "$cluster_platform" == "GCP" ]] ; then
     echo "Google"
-  elif [[ "$cluster_platform" = "OpenStack" ]] ;
+  elif [[ "$cluster_platform" == "OpenStack" ]] ;
     then echo "Openstack"
   else
     echo "Unknown"
@@ -1322,7 +1322,7 @@ function wait_for_all_nodes_ready() {
   ${OC} wait --timeout="$duration" --for=condition=ready nodes --all || nodes_status=DOWN
   ${OC} get nodes -o wide
 
-  if [[ "$nodes_status" = DOWN ]] ; then
+  if [[ "$nodes_status" == DOWN ]] ; then
     FAILURE "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
   fi
 
@@ -1353,7 +1353,7 @@ function wait_for_all_machines_ready() {
   echo -e "\n# Status of Daemon-Sets:"
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
-  if [[ "$machines_status" = DOWN ]] ; then
+  if [[ "$machines_status" == DOWN ]] ; then
     FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
   fi
 
@@ -1939,7 +1939,7 @@ function watch_polarion_job_status() {
   local polarion_job_id
   polarion_job_id=$(awk '/job-ids/ { print $4 }' "$polarion_log")
 
-  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
+  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" == 0 ]] ; then
     echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
     exit 1
   fi

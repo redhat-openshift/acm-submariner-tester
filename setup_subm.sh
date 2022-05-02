@@ -658,10 +658,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Setup and verify environment
   setup_workspace
 
+  # Set script trap functions
+  set_trap_functions
+
   # Print planned steps according to CLI/User inputs
   ${junit_cmd} show_test_plan
 
-  ### OCP Clusters Setups and preparations (if not requested to --skip-ocp-setup) ###
+  ### OCP Clusters Setups and preparations (unless requested to --skip-ocp-setup) ###
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
@@ -849,60 +852,61 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
     # END of cluster C cleanup
 
+    ### Clusters configurations - firewall ports, gateway labels, and images prune on all clusters (unless requested to --skip-ocp-setup) ###
 
-    ### Clusters configurations (firewall ports, gateway labels, and images prune on all clusters) ###
-
-    echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-    \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-    # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-
-    # Cluster A configurations
-
-    ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
-
-    ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
-
-    # Cluster B custom configurations for OpenStack
-    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-      echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
-
-      # ${junit_cmd} open_firewall_ports_on_cluster_a
-
-      # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
-
-      # Since ACM 2.5 Openstack cloud prepare is supported
-      if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
-
-        ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
-
-        ${junit_cmd} label_first_gateway_cluster_b
-
-      fi
-
-      ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
-
-      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
-
-    fi
-
-    # Cluster C configurations
-    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-      #
-      # ${junit_cmd} open_firewall_ports_on_cluster_c
-      #
-      # ${junit_cmd} label_first_gateway_cluster_c
 
-      ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
+      # Cluster A configurations
 
-      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+      ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
 
+      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+
+      # Cluster B custom configurations for OpenStack
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+
+        # ${junit_cmd} open_firewall_ports_on_cluster_a
+
+        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+
+        # Since ACM 2.5 Openstack cloud prepare is supported
+        if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+
+          ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+
+          ${junit_cmd} label_first_gateway_cluster_b
+
+        fi
+
+        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+      fi
+
+      # Cluster C configurations
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+        #
+        # ${junit_cmd} open_firewall_ports_on_cluster_c
+        #
+        # ${junit_cmd} label_first_gateway_cluster_c
+
+        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
+
+        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+
+      fi
     fi
-
     ### END of all Clusters configurations
 
 
@@ -1211,7 +1215,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export GN_VER=V1
     fi
 
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
       ${junit_cmd} test_new_netshoot_ip_cluster_a_globalnet_v1
 
@@ -1230,7 +1234,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${junit_cmd} test_clusters_cannot_connect_short_service_name
 
     # Test the new netshoot and headless Nginx service-discovery
-    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" = "V1" ]] ; then
+    if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
       # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
       ${junit_cmd} test_clusters_connected_overlapping_cidrs_globalnet_v1
@@ -1323,7 +1327,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         fi
       fi
 
-      if [[ "$ginkgo_tests_status" = FAILED ]] ; then
+      if [[ "$ginkgo_tests_status" == FAILED ]] ; then
         FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
       fi
 
@@ -1353,10 +1357,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
-  if [[ -n "$EXIT_STATUS" ]] && [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
+  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
       create_all_test_results_in_polarion || :
   fi
 
