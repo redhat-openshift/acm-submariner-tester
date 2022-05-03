@@ -1790,7 +1790,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
-            <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
+            <property name=\"polarion-include-skipped\" value=\"false\" /> \n\
             <property name=\"polarion-create-defects\" value=\"true\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
