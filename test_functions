@@ -1306,9 +1306,9 @@ function delete_old_submariner_images_from_cluster() {
   PROMPT "Delete previous Submariner images in cluster $cluster_name"
 
   for node in $(${OC} get nodes -o name) ; do
-    TITLE "Delete Submariner images in $node ###"
-    ${OC} debug "$node" -n default -- chroot /host /bin/bash -c "\
-    crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi" || :
+    TITLE "Delete Submariner images in $node"
+    ${OC} debug "$node" -n default -- chroot /host /bin/bash -c \
+    "crictl images | awk '\$1 ~ /submariner|lighthouse/ {print \$3}' | xargs -n1 crictl rmi" || :
   done
 
   # # Delete images
@@ -1342,6 +1342,27 @@ function delete_old_submariner_images_from_cluster() {
     ${OC} delete imagestream "${img_stream}" -n "${SUBM_NAMESPACE}" --ignore-not-found || :
     # ${OC} tag -d submariner-operator/${img_stream}
   done
+
+  prune_all_mirror_images_from_current_cluster_registry || :
+
+}
+
+# ------------------------------------------
+
+function prune_all_mirror_images_from_current_cluster_registry() {
+# Use OC adm command to delete all local registry images that were imported from $BREW_REGISTRY
+  trap_to_debug_commands
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Prune all images associated with mirror registry (Brew): https://${BREW_REGISTRY} in the registry of cluster ${cluster_name}"
+
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+
+  ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --confirm \
+  --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
+  # --as="${OCP_USR}" --force-insecure --ignore-invalid-refs --keep-tag-revisions=0 --keep-younger-than=0 
 
 }
 
@@ -2317,6 +2338,8 @@ function configure_ocp_garbage_collection_and_images_prune() {
 
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
   cat <<EOF | ${OC} apply -f -
@@ -2400,8 +2423,6 @@ function configure_custom_registry_in_cluster() {
 
   configure_cluster_custom_registry_secrets
 
-  prune_old_images_from_local_cluster_registry || :
-
   configure_cluster_custom_registry_mirror
 
 }
@@ -2427,17 +2448,6 @@ function configure_cluster_custom_registry_secrets() {
 
     # Do not ${OC} logout - it will cause authentication error pulling images during join command
   )
-
-}
-
-# ------------------------------------------
-
-function prune_old_images_from_local_cluster_registry() {
-
-  TITLE "Prune old registry images associated with mirror registry (Brew): https://${BREW_REGISTRY}"
-
-  ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --force-insecure --confirm \
-  --keep-tag-revisions=0 --keep-younger-than=0 --ignore-invalid-refs
 
 }
 
@@ -4538,7 +4548,7 @@ function test_products_versions() {
   echo -e "\n# Current Kubeconfig contexts:"
   ${OC} config get-contexts
 
-  echo -e "\n### Cluster routes on ${cluster_name} ###"
+  TITLE "Cluster routes on ${cluster_name}"
   ${OC} get routes -A || :
 
 }

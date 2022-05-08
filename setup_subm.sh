@@ -795,6 +795,62 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
+    ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
+
+    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+
+      echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+      \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+      # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+
+      # Cluster A configurations
+      ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
+
+      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+
+      # Cluster B custom configurations for OpenStack
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+
+        # ${junit_cmd} open_firewall_ports_on_cluster_a
+
+        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+
+        # Since ACM 2.5 Openstack cloud prepare is supported
+        if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+
+          ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+
+          ${junit_cmd} label_first_gateway_cluster_b
+
+        fi
+
+        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
+
+        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+      fi
+
+      # Cluster C configurations
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+        #
+        # ${junit_cmd} open_firewall_ports_on_cluster_c
+        #
+        # ${junit_cmd} label_first_gateway_cluster_c
+
+        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
+
+        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+
+      fi
+    fi
+    ### END of all Clusters configurations
+
     ### Download subctl binary, even if not using subctl deploy and join (e.g. to uninstall Submariner) ###
 
     if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
@@ -851,63 +907,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
     fi
     # END of cluster C cleanup
-
-    ### Clusters configurations - firewall ports, gateway labels, and images prune on all clusters (unless requested to --skip-ocp-setup) ###
-
-    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-
-      echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-      \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-      # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-
-      # Cluster A configurations
-
-      ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
-
-      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
-
-      # Cluster B custom configurations for OpenStack
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
-
-        # ${junit_cmd} open_firewall_ports_on_cluster_a
-
-        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
-
-        # Since ACM 2.5 Openstack cloud prepare is supported
-        if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
-
-          ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
-
-          ${junit_cmd} label_first_gateway_cluster_b
-
-        fi
-
-        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
-
-        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
-
-      fi
-
-      # Cluster C configurations
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-        #
-        # ${junit_cmd} open_firewall_ports_on_cluster_c
-        #
-        # ${junit_cmd} label_first_gateway_cluster_c
-
-        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
-
-        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
-
-      fi
-    fi
-    ### END of all Clusters configurations
 
 
     ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
