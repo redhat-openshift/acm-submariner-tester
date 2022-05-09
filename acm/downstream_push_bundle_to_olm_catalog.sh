@@ -375,7 +375,7 @@ EOF
     ${starting_csv:+startingCSV: $starting_csv}
 EOF
 
-  local duration=5m
+  local duration=3m
   echo -e "\n# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
@@ -409,9 +409,11 @@ EOF
 
   TITLE "Verify Install Plan created for '${subscription_namespace}' in cluster ${cluster_name}"
 
+  ${OC} wait installplan --all -n "${subscription_namespace}" --for condition=Installed --timeout="$duration" || subscription_status=FAILED
+
   local cmd="${OC} get installplan -n ${subscription_namespace} -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
 
-  watch_and_retry "$cmd" "3m" || subscription_status=FAILED
+  watch_and_retry "$cmd" "$duration" || subscription_status=FAILED
 
   if [[ "$subscription_status" == FAILED ]] ; then
     cat "${subscription_data}"
