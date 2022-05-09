@@ -16,7 +16,7 @@ export OCPUP_DIR="${WORKDIR}/ocpup"
 
 ### Env and test vars ###
 
-export CLUSTER_SET_ID="${CLUSTER_SET_ID}" # To identify the cluster-set of all clusters (A, B and C)
+export CLUSTER_SET_ID="${CLUSTER_SET_ID}" # To identify the cluster-set of all clusters (will be appended to each cluster name)
 export CLUSTER_A_NAME="${CLUSTER_A_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_A_YAML="${CLUSTER_A_YAML:-${WORKDIR}/setup-cluster-a.yaml}"
 export NETSHOOT_CLUSTER_A="netshoot-cl-a"
