@@ -1001,13 +1001,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export INSTALL_MCE=YES
     fi
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
+    ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
 
     ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
 
     ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+    ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
@@ -1271,7 +1271,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
       verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-      ${junit_cmd} build_submariner_repos "$SUBM_VER_TAG"
+      BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
+      "Build Submariner repo from 'devel' branch instead" \
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
+      ${junit_cmd} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+      
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo
