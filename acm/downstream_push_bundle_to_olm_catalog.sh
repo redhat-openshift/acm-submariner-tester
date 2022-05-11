@@ -19,7 +19,6 @@ function export_LATEST_IIB() {
   local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
   local umb_output="latest_iib.txt"
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-  # local iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
   local num_of_latest_builds=5
   local rows=$((num_of_latest_builds * 5))
@@ -29,7 +28,7 @@ function export_LATEST_IIB() {
 
   curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-  index_images="$(cat $umb_output | jq -r "${iib_query}")"
+  index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
   # index-images example:
   # {
@@ -41,19 +40,30 @@ function export_LATEST_IIB() {
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
 
-  if [[ "$index_images" == null ]]; then
-    BUG "Failed to retrieve completed images during the last $num_of_days days, getting all images during delta of 3X${num_of_days} days"
+  # If no image was found - increase the delta
+  if [[ -z "$index_images" || "$index_images" == null ]]; then
+    BUG "Failed to retrieve images during the last $num_of_days days - Searching images during delta of 3X${num_of_days} days"
+    
     delta=$((delta * 3))
 
     curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
-    cat $umb_output | jq -r "${iib_query}"
+    index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
-    index_images="$(cat $umb_output | jq -r "${iib_query}")"
+    # If still no image found - ignore non-completed pipelines
+    if [[ -z "$index_images" || "$index_images" == null ]]; then
+      BUG "Failed to retrieve images during the last 3X${num_of_days} days - Searching images in non-completed pipelines"
 
-    if [[ "$index_images" == null ]]; then
-      FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
+      iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+
+      index_images="$(jq -r "${iib_query}" $umb_output)" || :
     fi
+  fi
+
+  if [[ -z "$index_images" || "$index_images" == null ]]; then
+    FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
+  else
+    echo "$index_images"
   fi
 
   local ocp_version_x_y
