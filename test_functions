@@ -3979,8 +3979,9 @@ function test_submariner_packages() {
   export GO111MODULE="on"
   # export CGO_ENABLED=1 # required for go test -race
   go env
-  ginkgo version
-  ginkgo help ginkgo
+  # TODO: Change execution to be run by Gingo binary (from GOBIN)
+  # ginkgo version
+  # ginkgo help ginkgo
 
   if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
     echo -e "# Junit report file will be created: \n# $PKG_JUNIT_XML \n"
@@ -4100,8 +4101,9 @@ function test_project_e2e_with_go() {
 
   export GO111MODULE="on"
   go env
-  ginkgo version
-  ginkgo help ginkgo
+  # TODO: Change execution to be run by Gingo binary (from GOBIN)
+  # ginkgo version
+  # ginkgo help ginkgo
 
   $go_cmd | tee -a '$E2E_LOG'
 
