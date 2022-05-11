@@ -1001,13 +1001,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export INSTALL_MCE=YES
     fi
 
-    ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
 
     ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
 
     ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 
