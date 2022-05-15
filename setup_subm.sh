@@ -763,41 +763,41 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   ### END of OCP Setup (Create or Destroy) ###
 
 
-  ### OCP general preparations for ALL tests ###
-  # Skipping if using "--skip-tests all", to run clusters create/destroy, without further tests ###
+  ### OCP general preparations required for ALL tests, except unit-tests (pkg) ###
+  # Skipping if using "--skip-tests all" : To run clusters create/destroy without further tests, or if just running unit-tests ###
 
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
 
     # Before starting tests, set the test exit status to 1 (instead of 0)
     echo 1 > "$TEST_STATUS_FILE"
 
-  ### Verify clusters status after OCP reset/create, and add elevated user and context ###
-
-    ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
-
-    ${junit_cmd} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
-
-    # Verify cluster B (if it is expected to be an active cluster)
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
-
-      ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
-
-    fi
-
-    # Verify cluster C (if it is expected to be an active cluster)
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-      ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-    fi
-
     ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
 
     if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+
+      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+
+      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+
+      ${junit_cmd} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+
+      # Verify cluster B (if it is expected to be an active cluster)
+      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+        ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+
+        ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+
+      fi
+
+      # Verify cluster C (if it is expected to be an active cluster)
+      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+        ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+        ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+      fi
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
@@ -1001,13 +1001,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export INSTALL_MCE=YES
     fi
 
-    ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
 
     ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
 
     ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
 
     ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
 

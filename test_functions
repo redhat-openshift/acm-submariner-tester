@@ -3979,9 +3979,12 @@ function test_submariner_packages() {
   export GO111MODULE="on"
   # export CGO_ENABLED=1 # required for go test -race
   go env
+  # TODO: Change execution to be run by Gingo binary (from GOBIN)
+  # ginkgo version
+  # ginkgo help ginkgo
 
   if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
-    echo -e "\n# Junit report to create: $PKG_JUNIT_XML \n"
+    echo -e "# Junit report file will be created: \n# $PKG_JUNIT_XML \n"
     junit_params=("-ginkgo.reportFile" "$PKG_JUNIT_XML")
   fi
 
@@ -4078,25 +4081,31 @@ function test_project_e2e_with_go() {
     msg="# Junit report file will be created: \n# $junit_output_file \n"
     echo -e "$msg"
     echo -e "$msg" >> "$E2E_LOG"
-    junit_params=("-ginkgo.reportFile" "$junit_output_file")
+    junit_params=("-ginkgo.reportFile" "$junit_output_file" "-ginkgo.junitReport" "$junit_output_file")
   fi
 
-  ### Run E2E with GO test ###
+  local go_cmd="go test -v ./test/e2e
+  -timeout 120m
+  -ginkgo.v -ginkgo.trace
+  -ginkgo.randomizeAllSpecs
+  -ginkgo.noColor
+  -ginkgo.reportPassed
+  ${junit_params[*]}
+  -ginkgo.skip \[redundancy\]
+  -args ${test_params[*]} 
+  "
+
+  TITLE "Running E2E tests with Ginkgo: \n$go_cmd"
 
   export_merged_kubeconfigs
 
   export GO111MODULE="on"
   go env
+  # TODO: Change execution to be run by Gingo binary (from GOBIN)
+  # ginkgo version
+  # ginkgo help ginkgo
 
-  go test -v ./test/e2e \
-  -timeout 120m \
-  -ginkgo.v -ginkgo.trace \
-  -ginkgo.randomizeAllSpecs \
-  -ginkgo.noColor \
-  -ginkgo.reportPassed \
-  "${junit_params[@]}" \
-  -ginkgo.skip "\[redundancy\]" \
-  -args "${test_params[@]}" | tee -a "$E2E_LOG"
+  $go_cmd | tee -a '$E2E_LOG'
 
 }
 

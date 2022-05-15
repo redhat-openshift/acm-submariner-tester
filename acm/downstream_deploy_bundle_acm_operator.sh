@@ -17,19 +17,24 @@ function remove_multicluster_engine() {
 
   PROMPT "Removing Multi Cluster Engine from cluster: $cluster_name"
 
-  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+  TITLE "Deleting Discovery CRDs"
 
-  TITLE "Deleting the multiclusterengine custom resource"
+  ${OC} delete crd discoveredclusters.discovery.open-cluster-management.io --ignore-not-found || :
+  ${OC} delete crd discoveryconfigs.discovery.open-cluster-management.io --ignore-not-found || :
 
-  ${OC} delete multiclusterengine --all --timeout=30s || :
-
-  TITLE "Deleting the MultiCluster Engine CSV, Subscription, and namespace"
+  TITLE "Deleting '${MCE_NAMESPACE}' CSVs, Subscription and Namespace"
 
   ${OC} delete csv --all -n "${MCE_NAMESPACE}" --timeout=30s || :
   ${OC} delete subs --all -n "${MCE_NAMESPACE}" --timeout=30s || :
+  force_delete_namespace "${MCE_NAMESPACE}"
 
-  force_delete_namespace "${MCE_NAMESPACE}"
-  force_delete_namespace "${MCE_NAMESPACE}"
+  TITLE "Deleting all 'multicluster-engine' resources and Namespace"
+  
+  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+
+  ${OC} delete multiclusterengine --all --timeout=30s || :
+
+  force_delete_namespace "multicluster-engine"
 
 }
 
