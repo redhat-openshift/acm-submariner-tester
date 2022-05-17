@@ -26,6 +26,14 @@ function export_LATEST_IIB() {
   local num_of_days=30
   local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
+  if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
+    BUG "'acm-operator-bundle' has unstable CVP tests" \
+    "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
+
+    # Workaround:
+    iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  fi
+
   curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
   index_images="$(jq -r "${iib_query}" $umb_output)" || :
