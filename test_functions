@@ -1327,23 +1327,51 @@ function delete_old_submariner_images_from_cluster() {
   #   ${OC} delete istag $img_tag -n ${SUBM_NAMESPACE} --ignore-not-found
   # done
 
-  # Delete image-stream
-  for img_stream in \
-    $SUBM_IMG_GATEWAY \
-    $SUBM_IMG_ROUTE \
-    $SUBM_IMG_NETWORK \
-    $SUBM_IMG_LIGHTHOUSE \
-    $SUBM_IMG_COREDNS \
-    $SUBM_IMG_GLOBALNET \
-    $SUBM_IMG_OPERATOR \
-    $SUBM_IMG_BUNDLE \
-    ; do
-    TITLE "Deleting image stream: $img_stream"
-    ${OC} delete imagestream "${img_stream}" -n "${SUBM_NAMESPACE}" --ignore-not-found || :
-    # ${OC} tag -d submariner-operator/${img_stream}
-  done
+  # # Delete image-stream
+  # for img_stream in \
+  #   $SUBM_IMG_GATEWAY \
+  #   $SUBM_IMG_ROUTE \
+  #   $SUBM_IMG_NETWORK \
+  #   $SUBM_IMG_LIGHTHOUSE \
+  #   $SUBM_IMG_COREDNS \
+  #   $SUBM_IMG_GLOBALNET \
+  #   $SUBM_IMG_OPERATOR \
+  #   $SUBM_IMG_BUNDLE \
+  #   ; do
+  #   TITLE "Deleting image stream: $img_stream"
+  #   ${OC} delete imagestream "${img_stream}" -n "${SUBM_NAMESPACE}" --ignore-not-found || :
+  #   # ${OC} tag -d submariner-operator/${img_stream}
+  # done
+
+  delete_image_streams_and_tags_from_current_cluster || :
 
   prune_all_mirror_images_from_current_cluster_registry || :
+
+}
+
+# ------------------------------------------
+
+function delete_image_streams_and_tags_from_current_cluster() {
+### Delete old image streams and tags of Submariner, ACM and MCE from the current cluster
+  trap_to_debug_commands
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Delete Submariner image streams and tags in cluster ${cluster_name}, namespace '${SUBM_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${SUBM_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${SUBM_NAMESPACE}" --wait || :
+
+  TITLE "Delete ACM image streams and tags in cluster ${cluster_name}, namespace '${ACM_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${ACM_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${ACM_NAMESPACE}" --wait || :
+
+  TITLE "Delete MCE image streams and tags in cluster ${cluster_name}, namespace '${MCE_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${MCE_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${MCE_NAMESPACE}" --wait || :
 
 }
 
