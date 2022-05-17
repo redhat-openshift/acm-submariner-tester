@@ -1228,7 +1228,7 @@ function print_image_info() {
   # Do not trap_to_debug_commands
 
   local img_id=$1
-  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+  local regex_container_info="\s+\K(name=|url=|version=|release=|build-date=).*"
 
   echo -e "\n### $(echo "$img_id" | sed -r 's|.*/([^@]+).*|\1|') Image ###"
   echo "id=${img_id}"
@@ -1250,7 +1250,7 @@ function print_image_tags_info() {
   # Do not trap_to_debug_commands
 
   local namespace=$1 # Default is current context namespace
-  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+  local regex_container_info="\s+\K(name=|url=|version=|release=|build-date=).*"
 
   TITLE "ImageStream Tags ${namespace:+(in namespace $namespace) }"
 

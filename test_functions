@@ -4615,9 +4615,11 @@ function save_cluster_info_to_file() {
   # Print all cluster routes into file "<cluster name>.info"
   ${OC} get routes -A | awk '$2 ~ /console/ {print $1 " : " $3}' >> "${cluster_info_output}" || :
 
-  # Just for the first managed cluster - print Submariner images url into $SUBMARINER_IMAGES file
-  [[ -s "$SUBMARINER_IMAGES" ]] || \
-  print_images_info_of_namespace_pods "${SUBM_NAMESPACE}" | grep -Po "url=\K.*" > "$SUBMARINER_IMAGES"
+  # Just for the first managed cluster - print Submariner images url into $PRODUCT_IMAGES file
+  if [[ ! -s "$PRODUCT_IMAGES" ]] ; then
+    print_images_info_of_namespace_pods "${SUBM_NAMESPACE}" | grep -Po "url=\K.*" >> "$PRODUCT_IMAGES"
+    print_images_info_of_namespace_pods "${ACM_NAMESPACE}" | grep -Po "url=\K.*" >> "$PRODUCT_IMAGES"
+  fi
 
 }
 

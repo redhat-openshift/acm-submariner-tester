@@ -249,8 +249,8 @@ export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 : > "$POLARION_RESULTS"
 
 # File to store Submariner images version details
-export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
-: > "$SUBMARINER_IMAGES"
+export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
+: > "$PRODUCT_IMAGES"
 
 
 ####################################################################################
@@ -1425,14 +1425,14 @@ for info in $info_files ; do
   fi
 done
 
-if [[ -s "$SUBMARINER_IMAGES" ]] ; then
+if [[ -s "$PRODUCT_IMAGES" ]] ; then
   headline="Submariner images:"
   echo -e "\n# ${headline}"
-  cat "$SUBMARINER_IMAGES"
+  cat "$PRODUCT_IMAGES"
 
   html_report_headlines+="
   <br> <b>${headline}</b>
-  $(< "$SUBMARINER_IMAGES")"
+  $(< "$PRODUCT_IMAGES")"
 fi
 
 
