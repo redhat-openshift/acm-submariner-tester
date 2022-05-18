@@ -869,6 +869,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
       ${junit_cmd} remove_multicluster_engine # Required only for the Hub cluster
 
+      ${junit_cmd} delete_acm_image_streams_and_tags # Required only for the Hub cluster
+
       ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
       ${junit_cmd} uninstall_submariner "${KUBECONF_HUB}"

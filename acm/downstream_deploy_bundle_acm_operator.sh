@@ -40,6 +40,30 @@ function remove_multicluster_engine() {
 
 # ------------------------------------------
 
+function delete_acm_image_streams_and_tags() {
+### Delete old image streams and tags of ACM and MCE from the HUB cluster
+  trap_to_debug_commands;
+
+  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Delete ACM image streams and tags in cluster ${cluster_name}, namespace '${ACM_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${ACM_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${ACM_NAMESPACE}" --wait || :
+
+  TITLE "Delete MCE image streams and tags in cluster ${cluster_name}, namespace '${MCE_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${MCE_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${MCE_NAMESPACE}" --wait || :
+
+}
+
+# ------------------------------------------
+
 function remove_acm_managed_cluster() {
 ### Removing Cluster-ID from ACM managed clusters (if exists) ###
   trap_to_debug_commands;
