@@ -4000,6 +4000,8 @@ function test_submariner_packages() {
   PROMPT "Testing Submariner Packages (Unit-Tests) with GO"
   trap_to_debug_commands;
 
+  local junit_output_file="$PKG_JUNIT_XML"
+
   local project_path="$GOPATH/src/github.com/submariner-io/submariner"
   cd "$project_path" || exit
   pwd
@@ -4011,17 +4013,29 @@ function test_submariner_packages() {
   # ginkgo version
   # ginkgo help ginkgo
 
-  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
-    echo -e "# Junit report file will be created: \n# $PKG_JUNIT_XML \n"
-    junit_params=("-ginkgo.reportFile" "$PKG_JUNIT_XML")
-  fi
+  local test_dir="./pkg/..."
+  local msg="# Running unit-tests with GO in project: \n# $project_path/$test_dir
+  \n# Ginkgo test parameters: ${test_params[*]}"
 
-  local msg="# Running unit-tests with GO in project: \n# $project_path"
-
-  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file."
+  echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file. \n"
   echo -e "$msg" >> "$E2E_LOG"
 
-  go test -v -cover ./pkg/... \
+  local junit_params
+  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]]; then
+    msg="# Junit report file will be created: \n# $junit_output_file \n"
+    echo -e "$msg"
+    echo -e "$msg" >> "$E2E_LOG"
+
+    if go test -v $test_dir -ginkgo.dryRun -ginkgo.help | highlight 'junit-report string' ; then
+      # For Ginkgo version 2
+      junit_params=("-junit-report" "$junit_output_file")
+    else
+      # For Ginkgo version 1
+      junit_params=("-ginkgo.reportFile" "$junit_output_file")
+    fi
+  fi
+
+  go test -v -cover $test_dir \
   -ginkgo.v -ginkgo.trace -ginkgo.reportPassed "${junit_params[@]}"  \
   | tee -a "$E2E_LOG"
 
@@ -4065,11 +4079,11 @@ function test_lighthouse_e2e_with_go() {
 function test_project_e2e_with_go() {
 # Helper function to run E2E Tests of Submariner repo with Ginkgo
   trap_to_debug_commands;
-  local e2e_project_path="$1"
+  local project_path="$1"
   local junit_output_file="$2"
   declare -a "test_params=($3)"
 
-  cd "$e2e_project_path" || exit
+  cd "$project_path" || exit
   pwd
 
   TITLE "Set E2E context for the active clusters"
@@ -4098,7 +4112,8 @@ function test_project_e2e_with_go() {
   "--submariner-namespace" "${SUBM_NAMESPACE}"
   "--connection-timeout" 30 "--connection-attempts" 3)
 
-  local msg="# Running End-to-End tests with GO in project: \n# $e2e_project_path
+  local test_dir="./test/e2e"
+  local msg="# Running End-to-End tests with GO in project: \n# $project_path/$test_dir
   \n# Ginkgo test parameters: ${test_params[*]}"
 
   echo -e "$msg \n# Output will be printed both to stdout and to $E2E_LOG file. \n"
@@ -4109,10 +4124,17 @@ function test_project_e2e_with_go() {
     msg="# Junit report file will be created: \n# $junit_output_file \n"
     echo -e "$msg"
     echo -e "$msg" >> "$E2E_LOG"
-    junit_params=("-ginkgo.reportFile" "$junit_output_file" "-ginkgo.junitReport" "$junit_output_file")
+
+    if go test -v $test_dir -ginkgo.dryRun -ginkgo.help | highlight 'junit-report string' ; then
+      # For Ginkgo version 2
+      junit_params=("-junit-report" "$junit_output_file")
+    else
+      # For Ginkgo version 1
+      junit_params=("-ginkgo.reportFile" "$junit_output_file")
+    fi
   fi
 
-  local go_cmd="go test -v ./test/e2e
+  local go_cmd="go test -v $test_dir
   -timeout 120m
   -ginkgo.v -ginkgo.trace
   -ginkgo.randomizeAllSpecs
