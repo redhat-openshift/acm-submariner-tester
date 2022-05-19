@@ -61,6 +61,8 @@ export AWS_ZONE_ID="aws-zone-id"
 
 ### OpenStack vars ###
 
+export OSP_CRED_YAML="${OSP_CRED_YAML:-osp-clouds.yaml}" # OSP clouds.yaml file path
+
 # Wrap credentials with single quotes:
 export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
 export OS_USERNAME='openstack-user'
@@ -73,7 +75,7 @@ export OS_REGION_NAME="openstack-region"
 
 ### Google vars ###
 
-GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}"
+GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}" # GCP cred.json file path
 
 
 ### OpenShift registry vars ###

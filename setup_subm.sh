@@ -249,8 +249,8 @@ export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
 : > "$POLARION_RESULTS"
 
 # File to store Submariner images version details
-export SUBMARINER_IMAGES="$SCRIPT_DIR/submariner_images.ver"
-: > "$SUBMARINER_IMAGES"
+export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
+: > "$PRODUCT_IMAGES"
 
 
 ####################################################################################
@@ -869,6 +869,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
       ${junit_cmd} remove_multicluster_engine # Required only for the Hub cluster
 
+      ${junit_cmd} delete_acm_image_streams_and_tags # Required only for the Hub cluster
+
       ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
       ${junit_cmd} uninstall_submariner "${KUBECONF_HUB}"
@@ -1425,14 +1427,14 @@ for info in $info_files ; do
   fi
 done
 
-if [[ -s "$SUBMARINER_IMAGES" ]] ; then
+if [[ -s "$PRODUCT_IMAGES" ]] ; then
   headline="Submariner images:"
   echo -e "\n# ${headline}"
-  cat "$SUBMARINER_IMAGES"
+  cat "$PRODUCT_IMAGES"
 
   html_report_headlines+="
   <br> <b>${headline}</b>
-  $(< "$SUBMARINER_IMAGES")"
+  $(< "$PRODUCT_IMAGES")"
 fi
 
 

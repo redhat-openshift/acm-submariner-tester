@@ -40,6 +40,30 @@ function remove_multicluster_engine() {
 
 # ------------------------------------------
 
+function delete_acm_image_streams_and_tags() {
+### Delete old image streams and tags of ACM and MCE from the HUB cluster
+  trap_to_debug_commands;
+
+  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  export KUBECONFIG="${KUBECONF_HUB}"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Delete ACM image streams and tags in cluster ${cluster_name}, namespace '${ACM_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${ACM_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${ACM_NAMESPACE}" --wait || :
+
+  TITLE "Delete MCE image streams and tags in cluster ${cluster_name}, namespace '${MCE_NAMESPACE}'"
+
+  ${OC} delete imagestream --all -n "${MCE_NAMESPACE}" --wait || :
+  ${OC} delete istag --all -n "${MCE_NAMESPACE}" --wait || :
+
+}
+
+# ------------------------------------------
+
 function remove_acm_managed_cluster() {
 ### Removing Cluster-ID from ACM managed clusters (if exists) ###
   trap_to_debug_commands;
@@ -792,7 +816,7 @@ function configure_submariner_addon_for_amazon() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Amazon"
+  TITLE "Using '${cluster_secret_name}' for Submariner on Amazon"
 
   ( # subshell to hide commands
     { [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ;} \
@@ -823,7 +847,7 @@ function configure_submariner_addon_for_google() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Google"
+  TITLE "Using '${cluster_secret_name}' for Submariner on Google"
 
   ( # subshell to hide commands
     [[ -s "$GCP_CRED_JSON" ]] || FATAL "GCP credentials file (json) is required to configure Submariner in the managed cluster '${cluster_id}'"
@@ -852,38 +876,56 @@ function configure_submariner_addon_for_openstack() {
   local cluster_id="${1}"
   local cluster_secret_name="${2}"
 
-  echo -e "\n# Using '${cluster_secret_name}' for Submariner on Openstack"
+  TITLE "Using '${cluster_secret_name}' for Submariner on Openstack"
 
   # Since ACM 2.5 Openstack cloud prepare is supported
   if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
 
     ( # subshell to hide commands
-        [[ -n "$OS_PROJECT_DOMAIN_ID" ]] \
-        || FATAL "OSP credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
-    cat <<EOF | ${OC} apply -f -
-    apiVersion: v1
-    kind: Secret
-    metadata:
-        name: ${cluster_secret_name}
-        namespace: ${cluster_id}
-    type: Opaque
-    data:
-        clouds.yaml: $(echo -n "
-        clouds:
-          openstack:
-            auth:
-              auth_url: ${OS_AUTH_URL}
-              username: '${OS_USERNAME}'
-              project_id: ${OS_PROJECT_DOMAIN_ID}
-              project_name: '${OS_PROJECT_NAME}'
-              user_domain_name: '${OS_USER_DOMAIN_NAME}'
-            region_name: '${OS_REGION_NAME}'
-            interface: 'public'
-            identity_api_version: 3
-         " | base64 -w0)
-        cloud: $(echo -n "openstack" | base64 -w0)
+      if [[ -s "$OSP_CRED_YAML" ]] ; then
+        echo -e "\n# Using \$OSP_CRED_YAML file"
+
+        cat <<EOF | ${OC} apply -f -
+            apiVersion: v1
+            kind: Secret
+            metadata:
+                name: ${cluster_secret_name}
+                namespace: ${cluster_id}
+            type: Opaque
+            data:
+                clouds.yaml: $(base64 -w0 "${OSP_CRED_YAML}")
+                cloud: $(echo -n "openstack" | base64 -w0)
 EOF
+      elif [[ -n "$OS_PROJECT_DOMAIN_ID" ]] ; then
+        echo -e "\n# Using direct credentials"
+
+        cat <<EOF | ${OC} apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+            name: ${cluster_secret_name}
+            namespace: ${cluster_id}
+        type: Opaque
+        data:
+            clouds.yaml: $(echo -n "
+            clouds:
+              openstack:
+                auth:
+                  auth_url: ${OS_AUTH_URL}
+                  username: '${OS_USERNAME}'
+                  project_id: ${OS_PROJECT_DOMAIN_ID}
+                  project_name: '${OS_PROJECT_NAME}'
+                  user_domain_name: '${OS_USER_DOMAIN_NAME}'
+                region_name: '${OS_REGION_NAME}'
+                interface: 'public'
+                identity_api_version: 3
+            " | base64 -w0)
+            cloud: $(echo -n "openstack" | base64 -w0)
+EOF
+      else
+        FATAL "OSP credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
+      fi
     )
 
   else

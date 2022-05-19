@@ -7,7 +7,7 @@
 
 ### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
-  trap_to_debug_commands;
+  # trap_to_debug_commands;
 
   local version="${1}"
   local bundle_name="${2}"
@@ -25,6 +25,14 @@ function export_LATEST_IIB() {
 
   local num_of_days=30
   local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
+
+  if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
+    BUG "'acm-operator-bundle' has unstable CVP tests" \
+    "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
+
+    # Workaround:
+    iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  fi
 
   curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
 
@@ -61,15 +69,16 @@ function export_LATEST_IIB() {
   fi
 
   if [[ -z "$index_images" || "$index_images" == null ]]; then
-    FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${version}': $index_images"
+    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${version}': $index_images"
   else
-    echo "$index_images"
+    TITLE "UMB index-image for bundle '${bundle_name}' version '${version}' includes:
+    $index_images"
   fi
 
   local ocp_version_x_y
   ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
 
-  TITLE "Getting index-image according to OCP version '${ocp_version_x_y}' \n $index_images"
+  TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
 
   LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
 
@@ -80,7 +89,7 @@ function export_LATEST_IIB() {
 
     ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
 
-    TITLE "Getting the last index-image for bundle '${bundle_name}' version '${ocp_version_x_y}'"
+    TITLE "Getting index-image for bundle '${bundle_name}', for the latest supported OCP version: '${ocp_version_x_y}'"
 
     LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
 
@@ -89,7 +98,22 @@ function export_LATEST_IIB() {
     fi
   fi
 
-  echo -e "\n# Exporting LATEST_IIB as: $LATEST_IIB"
+  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
+
+  local iib_number
+  iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')"
+  curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
+
+  # IIB information example:
+  #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+  #                                  Dload  Upload   Total   Spent    Left  Speed
+  # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
+  # "2022-05-17T03:52:40.797378Z"
+  # {
+  #   "advanced-cluster-management": [
+  #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
+  #   ]
+  # }
 
   export LATEST_IIB
 
