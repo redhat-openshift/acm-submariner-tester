@@ -371,27 +371,32 @@ function record_junit() {
   # WARNING: Variable changes in the command will NOT be effective after record_junit returns.
   #          This is because the command runs in subshell.
 
-  # $1 => $output_file and $output_dir for junit results
-  local output_file
-  output_file=$(basename "$1")
+  # $1 => $junit_output_file and $output_dir for junit results
+  local junit_output_file
+  junit_output_file=$(basename "$1")
+
   local output_dir
   output_dir=$(dirname "$1")
+
+  # $2 => $test_status_file - overall test run status, stored in a file
+  # Can include either 0 (OK to continue tests), 1 (Critical failure: Skip rest of tests), 2 (Failed but continue)
+  local test_status_file="${2}"
 
   # Set junit_suite as the base directory name of $output_dir
   local junit_suite
   junit_suite="$(basename "$output_dir")"
 
-  # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
-  shift
+  # Shift function arguments twice to the left ($1 and $2 get lost), to save rest of args as array $@
+  shift 2
 
   # Set junit test name as the called function and args (omitting special characters)
   local func_and_args="$*"
   local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
 
   echo "+++ Recording test as Junit: ${func_and_args}"
-  echo "+++ XML output of all Junit: ${output_dir}/${output_file}"
+  echo "+++ XML output of all Junit: ${output_dir}/${junit_output_file}"
 
-  juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
+  juLog -output="$output_dir" -file="$junit_output_file" -index -class="$junit_suite" -name="$test_name" -status="$test_status_file" "$func_and_args"
 }
 
 # ------------------------------------------
@@ -968,6 +973,11 @@ function ocp_login() {
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
 
+  if [[ -z "${ocp_server}" || -z "${ocp_usr}" ]] ; then
+    echo -e "\n# User '${ocp_usr}' or Server '${ocp_server}' is missing"
+    return 1
+  fi  
+    
   TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
 
@@ -1790,7 +1800,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
-            <property name=\"polarion-include-skipped\" value=\"false\" /> \n\
+            <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
             <property name=\"polarion-create-defects\" value=\"true\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
