@@ -378,7 +378,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --junit)
     CREATE_JUNIT_XML=YES
-    export junit_cmd="record_junit $SHELL_JUNIT_XML"
+    export junit_cmd="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
     shift ;;
   --polarion)
     UPLOAD_TO_POLARION=YES
@@ -757,7 +757,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    echo 0 > "$TEST_STATUS_FILE"
+    # # Get test exit status (from file $TEST_STATUS_FILE)
+    # EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    # [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
 
   fi
   ### END of OCP Setup (Create or Destroy) ###
@@ -767,9 +769,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Skipping if using "--skip-tests all" : To run clusters create/destroy without further tests, or if just running unit-tests ###
 
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
-
-    # Before starting tests, set the test exit status to 1 (instead of 0)
-    echo 1 > "$TEST_STATUS_FILE"
 
     ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
 
@@ -983,10 +982,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     fi
     ### END of prerequisites for Submariner system tests  ###
 
-    TITLE "OCP clusters and environment setup is ready.
-    From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED ($TEST_STATUS_FILE with exit code 1)"
+    TITLE "OCP clusters and environment setup is ready"
+    # From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED ($TEST_STATUS_FILE with exit code 1)"
 
-    echo 1 > "$TEST_STATUS_FILE"
+    # echo 1 > "$TEST_STATUS_FILE"
 
   fi
   ### END of OCP general preparations for ALL tests ###
@@ -1107,7 +1106,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "Once Submariner install is completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
-    echo 2 > "$TEST_STATUS_FILE"
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi
   ### END of INSTALL_SUBMARINER ###
@@ -1259,7 +1260,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "Once System tests are completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
-    echo 2 > "$TEST_STATUS_FILE"
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
 
@@ -1341,7 +1344,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 
   # If script got to here - all tests of Submariner has passed ;-)
-  echo 0 > "$TEST_STATUS_FILE"
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
 
 ) |& tee -a "$SYS_LOG"
 
