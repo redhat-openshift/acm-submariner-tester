@@ -700,7 +700,10 @@ function export_all_env_variables() {
     source "$GLOBAL_VARS"
   fi
 
-  # cd "${SCRIPT_DIR}"
+  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
+    export "JUNIT_CMD=record_junit '$SHELL_JUNIT_XML' '$TEST_STATUS_FILE'"
+    export "JUNIT_CMD_IGNORE_STATUS=record_junit '$SHELL_JUNIT_XML'" 
+  fi
 
   set_missing_cli_variables
 
@@ -1834,7 +1837,7 @@ function create_subctl_join_file() {
   TITLE "Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
 
   JOIN_CMD="subctl join \
-  ./${BROKER_INFO} ${subm_cable_driver:+--cable-driver $subm_cable_driver} \
+  ./${BROKER_INFO} ${SUBM_CABLE_DRIVER:+--cable-driver $SUBM_CABLE_DRIVER} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   TITLE "Adding '--health-check' to subctl join command (to enable Gateway health check)"
@@ -3156,7 +3159,7 @@ function test_submariner_cable_driver() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Testing Cable-Driver ${subm_cable_driver:+\"$subm_cable_driver\" }on ${cluster_name}"
+  PROMPT "Testing Cable-Driver ${SUBM_CABLE_DRIVER:+\"$SUBM_CABLE_DRIVER\" }on ${cluster_name}"
 
   export_variable_name_of_active_gateway_pod "active_gateway_pod"
 
@@ -3609,7 +3612,7 @@ function test_clusters_connected_by_service_ip() {
     PROMPT "Testing connection without GlobalNet: From Netshoot on OCP cluster A (public), to Nginx service IP on managed cluster"
 
     if ! ${OC} exec "${CURL_CMD}" ; then
-      FAILURE "Submariner connection failure${subm_cable_driver:+ (Cable-driver=$subm_cable_driver)}.
+      FAILURE "Submariner connection failure${SUBM_CABLE_DRIVER:+ (Cable-driver=$SUBM_CABLE_DRIVER)}.
       \n Did you install clusters with overlapping CIDRs ?"
     fi
 
@@ -4471,11 +4474,11 @@ function env_teardown() {
 
   TITLE "Showing product versions on script teardown"
 
-  ${junit_cmd} test_products_versions_cluster_a || :
+  ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
 
-  [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_products_versions_cluster_b || :
+  [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_b || :
 
-  [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_products_versions_cluster_c || :
+  [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_c || :
 
 }
 

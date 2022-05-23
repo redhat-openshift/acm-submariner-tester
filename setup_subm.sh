@@ -270,118 +270,117 @@ while [[ $# -gt 0 ]]; do
     echo -e "\n# ${disclosure}" && exit 0
     shift ;;
   -d|--debug)
-    SCRIPT_DEBUG_MODE=YES
+    export SCRIPT_DEBUG_MODE=YES
     shift ;;
   --get-ocp-installer)
     check_cli_args "$2"
     export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-    GET_OCP_INSTALLER=YES
+    export GET_OCP_INSTALLER=YES
     shift 2 ;;
   --get-ocpup-tool)
-    GET_OCPUP_TOOL=YES
+    export GET_OCPUP_TOOL=YES
     shift ;;
   --acm-version)
     check_cli_args "$2"
     export ACM_VER_TAG="$2"
-    INSTALL_ACM=YES
+    export INSTALL_ACM=YES
     shift 2 ;;
   --subctl-version)
     check_cli_args "$2"
     export SUBM_VER_TAG="$2"
-    INSTALL_SUBMARINER=YES
+    export INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
-    REGISTRY_IMAGES=YES
+    export REGISTRY_IMAGES=YES
     shift ;;
   --build-tests)
-    BUILD_GO_TESTS=YES
+    export BUILD_GO_TESTS=YES
     shift ;;
   --destroy-cluster-a)
-    ocp_installer_required=YES
-    DESTROY_CLUSTER_A=YES
+    export OCP_INSTALLER_REQUIRED=YES
+    export DESTROY_CLUSTER_A=YES
     shift ;;
   --create-cluster-a)
-    ocp_installer_required=YES
-    CREATE_CLUSTER_A=YES
+    export OCP_INSTALLER_REQUIRED=YES
+    export CREATE_CLUSTER_A=YES
     shift ;;
   --reset-cluster-a)
-    ocp_installer_required=YES
-    RESET_CLUSTER_A=YES
+    OCP_INSTALLER_REQUIRED=YES
+    export RESET_CLUSTER_A=YES
     shift ;;
   --clean-cluster-a)
-    CLEAN_CLUSTER_A=YES
+    export CLEAN_CLUSTER_A=YES
     shift ;;
   --destroy-cluster-b)
-    ocpup_tool_required=YES
-    DESTROY_CLUSTER_B=YES
+    export OCPUP_TOOL_REQUIRED=YES
+    export DESTROY_CLUSTER_B=YES
     shift ;;
   --create-cluster-b)
-    ocpup_tool_required=YES
-    CREATE_CLUSTER_B=YES
+    export OCPUP_TOOL_REQUIRED=YES
+    export CREATE_CLUSTER_B=YES
     shift ;;
   --reset-cluster-b)
-    ocpup_tool_required=YES
-    RESET_CLUSTER_B=YES
+    export OCPUP_TOOL_REQUIRED=YES
+    export RESET_CLUSTER_B=YES
     shift ;;
   --clean-cluster-b)
-    CLEAN_CLUSTER_B=YES
+    export CLEAN_CLUSTER_B=YES
     shift ;;
   --destroy-cluster-c)
-    ocp_installer_required=YES
-    DESTROY_CLUSTER_C=YES
+    export OCP_INSTALLER_REQUIRED=YES
+    export DESTROY_CLUSTER_C=YES
     shift ;;
   --create-cluster-c)
-    ocp_installer_required=YES
-    CREATE_CLUSTER_C=YES
+    export OCP_INSTALLER_REQUIRED=YES
+    export CREATE_CLUSTER_C=YES
     shift ;;
   --reset-cluster-c)
-    ocp_installer_required=YES
-    RESET_CLUSTER_C=YES
+    export OCP_INSTALLER_REQUIRED=YES
+    export RESET_CLUSTER_C=YES
     shift ;;
   --clean-cluster-c)
-    CLEAN_CLUSTER_C=YES
+    export CLEAN_CLUSTER_C=YES
     shift ;;
   --subctl-install)
-    INSTALL_WITH_SUBCTL=YES
+    export INSTALL_WITH_SUBCTL=YES
     shift ;;
   --join-cluster-a)
-    JOIN_CLUSTER_A=YES
+    export JOIN_CLUSTER_A=YES
     shift ;;
   --join-cluster-b)
-    JOIN_CLUSTER_B=YES
+    export JOIN_CLUSTER_B=YES
     shift ;;
   --join-cluster-c)
-    JOIN_CLUSTER_C=YES
+    export JOIN_CLUSTER_C=YES
     shift ;;
   --globalnet)
-    GLOBALNET=YES
+    export GLOBALNET=YES
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    subm_cable_driver="$2" # libreswan / strongswan [Deprecated]
+    export SUBM_CABLE_DRIVER="$2" # libreswan / strongswan [Deprecated]
     shift 2 ;;
   --skip-ocp-setup)
-    SKIP_OCP_SETUP=YES
+    export SKIP_OCP_SETUP=YES
     shift ;;
   --skip-tests)
     check_cli_args "$2"
-    SKIP_TESTS="$2" # sys,e2e,pkg,all
+    export SKIP_TESTS="$2" # sys,e2e,pkg,all
     shift 2 ;;
   --print-logs)
-    PRINT_LOGS=YES
+    export PRINT_LOGS=YES
     shift ;;
   --config-golang)
-    CONFIG_GOLANG=YES
+    export CONFIG_GOLANG=YES
     shift ;;
   --config-aws-cli)
-    CONFIG_AWS_CLI=YES
+    export CONFIG_AWS_CLI=YES
     shift ;;
   --junit)
-    CREATE_JUNIT_XML=YES
-    export junit_cmd="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
+    export CREATE_JUNIT_XML=YES
     shift ;;
   --polarion)
-    UPLOAD_TO_POLARION=YES
+    export UPLOAD_TO_POLARION=YES
     shift ;;
   --import-vars)
     check_cli_args "$2"
@@ -644,14 +643,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
   ### Script debug calls (should be left as a comment) ###
 
-    # ${junit_cmd} debug_test_polarion
-    # ${junit_cmd} debug_test_pass "junit" "junit"
-    # ${junit_cmd} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
+    # ${JUNIT_CMD} debug_test_polarion
+    # ${JUNIT_CMD} debug_test_pass "junit" "junit"
+    # ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
     # rc=$?
     # BUG "debug_test_fail - Exit code: $rc" \
-    # "If RC $rc = 5 - junit_cmd should continue execution"
-    # ${junit_cmd} debug_test_pass 100 200 300
-    # ${junit_cmd} debug_test_fatal
+    # "If RC $rc = 5 - JUNIT_CMD should continue execution"
+    # ${JUNIT_CMD} debug_test_pass 100 200 300
+    # ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
 
@@ -662,7 +661,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   set_trap_functions
 
   # Print planned steps according to CLI/User inputs
-  ${junit_cmd} show_test_plan
+  ${JUNIT_CMD} show_test_plan
 
   ### OCP Clusters Setups and preparations (unless requested to --skip-ocp-setup) ###
 
@@ -672,9 +671,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Running download_ocp_installer for cluster A
 
-    if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+    if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_ocp_installer "${OCP_VERSION}"
+      ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
 
     fi
 
@@ -683,15 +682,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running destroy or create or both (reset) for cluster A
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} prepare_install_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-      ${junit_cmd} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
@@ -701,9 +700,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # Running build_ocpup_tool_latest if requested, for cluster B
 
-      if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$ocpup_tool_required" =~ ^(y|yes)$ ]] ; then
+      if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} build_ocpup_tool_latest
+        ${JUNIT_CMD} build_ocpup_tool_latest
 
       fi
 
@@ -711,15 +710,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
-        ${junit_cmd} create_osp_cluster "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} create_osp_cluster "$CLUSTER_B_NAME"
 
       fi
 
@@ -731,11 +730,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       # Running download_ocp_installer if requested, for cluster C
 
-      if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$ocp_installer_required" =~ ^(y|yes)$ ]] ; then
+      if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
 
         echo -e "\n# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
 
-        # ${junit_cmd} download_ocp_installer ${OCP_VERSION}
+        # ${JUNIT_CMD} download_ocp_installer ${OCP_VERSION}
 
       fi
 
@@ -743,15 +742,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} destroy_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} prepare_install_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-        ${junit_cmd} create_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
@@ -776,25 +775,25 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ### Verify clusters status after OCP reset/create, and add elevated user and context ###
 
-      ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
-      ${junit_cmd} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
       # Verify cluster B (if it is expected to be an active cluster)
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
-        ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
       fi
 
       # Verify cluster C (if it is expected to be an active cluster)
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        ${junit_cmd} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
-        ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
       fi
 
@@ -803,31 +802,31 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
       # Cluster A configurations
-      ${junit_cmd} add_elevated_user "${KUBECONF_HUB}"
+      ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+      ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
       # Cluster B custom configurations for OpenStack
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
         echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
-        # ${junit_cmd} open_firewall_ports_on_cluster_a
+        # ${JUNIT_CMD} open_firewall_ports_on_cluster_a
 
-        # ${junit_cmd} label_gateway_on_broker_nodes_with_external_ip
+        # ${JUNIT_CMD} label_gateway_on_broker_nodes_with_external_ip
 
         # Since ACM 2.5 Openstack cloud prepare is supported
         if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
 
-          ${junit_cmd} open_firewall_ports_on_openstack_cluster_b
+          ${JUNIT_CMD} open_firewall_ports_on_openstack_cluster_b
 
-          ${junit_cmd} label_first_gateway_cluster_b
+          ${JUNIT_CMD} label_first_gateway_cluster_b
 
         fi
 
-        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
 
       fi
 
@@ -838,13 +837,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
         # https://submariner.io/operations/deployment/subctl/#cloud-prepare
         #
-        # ${junit_cmd} open_firewall_ports_on_cluster_c
+        # ${JUNIT_CMD} open_firewall_ports_on_cluster_c
         #
-        # ${junit_cmd} label_first_gateway_cluster_c
+        # ${JUNIT_CMD} label_first_gateway_cluster_c
 
-        ${junit_cmd} add_elevated_user "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
@@ -854,9 +853,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} download_and_install_subctl "$SUBM_VER_TAG"
+      ${JUNIT_CMD} download_and_install_subctl "$SUBM_VER_TAG"
 
-      ${junit_cmd} test_subctl_command
+      ${JUNIT_CMD} test_subctl_command
 
     fi
 
@@ -865,16 +864,16 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running cleanup on cluster A if requested
     if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      # ${junit_cmd} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
-      ${junit_cmd} remove_multicluster_engine # Required only for the Hub cluster
+      # ${JUNIT_CMD} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
+      ${JUNIT_CMD} remove_multicluster_engine # Required only for the Hub cluster
 
-      ${junit_cmd} delete_acm_image_streams_and_tags # Required only for the Hub cluster
+      ${JUNIT_CMD} delete_acm_image_streams_and_tags # Required only for the Hub cluster
 
-      ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} uninstall_submariner "${KUBECONF_HUB}"
+      ${JUNIT_CMD} uninstall_submariner "${KUBECONF_HUB}"
 
-      ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
 
     fi
     # END of cluster A cleanup
@@ -884,11 +883,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} uninstall_submariner "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
     fi
@@ -899,11 +898,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} uninstall_submariner "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
@@ -914,25 +913,25 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
 
-      # ${junit_cmd} remove_submariner_images_from_local_registry_with_podman
+      # ${JUNIT_CMD} remove_submariner_images_from_local_registry_with_podman
 
-      ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
+      ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-        ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
       fi
 
       if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        ${junit_cmd} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
       fi
 
@@ -947,9 +946,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ### Create namespace and services for submariner system tests ###
 
-      ${junit_cmd} configure_namespace_for_submariner_tests_on_cluster_a
+      ${JUNIT_CMD} configure_namespace_for_submariner_tests_on_cluster_a
 
-      ${junit_cmd} install_netshoot_app_on_cluster_a
+      ${JUNIT_CMD} install_netshoot_app_on_cluster_a
 
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
@@ -961,23 +960,23 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       fi
 
-      ${junit_cmd} configure_namespace_for_submariner_tests_on_managed_cluster
+      ${JUNIT_CMD} configure_namespace_for_submariner_tests_on_managed_cluster
 
-      ${junit_cmd} install_nginx_svc_on_managed_cluster
+      ${JUNIT_CMD} install_nginx_svc_on_managed_cluster
 
-      ${junit_cmd} test_basic_cluster_connectivity_before_submariner
+      ${JUNIT_CMD} test_basic_cluster_connectivity_before_submariner
 
-      ${junit_cmd} test_clusters_disconnected_before_submariner
+      ${JUNIT_CMD} test_clusters_disconnected_before_submariner
 
     else  # When using "--skip-tests sys" :
 
       # Verify clusters status even if system tests were skipped
 
-      ${junit_cmd} test_cluster_status "${KUBECONF_HUB}"
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}"
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_B}"
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}"
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_cluster_status "${KUBECONF_CLUSTER_C}"
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}"
 
     fi
     ### END of prerequisites for Submariner system tests  ###
@@ -1002,36 +1001,36 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       export INSTALL_MCE=YES
     fi
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} install_mce_operator_on_hub "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} install_mce_operator_on_hub "$MCE_VER_TAG"
 
-    ${junit_cmd} install_acm_operator_on_hub "$ACM_VER_TAG"
+    ${JUNIT_CMD} install_acm_operator_on_hub "$ACM_VER_TAG"
 
-    ${junit_cmd} check_olm_in_current_cluster "${KUBECONF_HUB}"
+    ${JUNIT_CMD} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_mce_subscription "$MCE_VER_TAG"
+    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_mce_subscription "$MCE_VER_TAG"
 
-    ${junit_cmd} create_acm_subscription "$ACM_VER_TAG"
+    ${JUNIT_CMD} create_acm_subscription "$ACM_VER_TAG"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${junit_cmd} create_multicluster_engine
+    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
 
-    ${junit_cmd} create_acm_multiclusterhub
+    ${JUNIT_CMD} create_acm_multiclusterhub
 
 
     # Setup ACM Managed Clusters
 
-    ${junit_cmd} create_clusterset_for_submariner_in_acm_hub
+    ${JUNIT_CMD} create_clusterset_for_submariner_in_acm_hub
 
-    ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_HUB}"
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
     if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
+      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
     fi
 
     if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
+      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
     fi
   fi
@@ -1046,57 +1045,57 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
 
       # Running build_operator_latest if requested  # [DEPRECATED]
-      # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${junit_cmd} build_operator_latest
+      # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${JUNIT_CMD} build_operator_latest
 
-      ${junit_cmd} set_join_parameters_for_cluster_a
+      ${JUNIT_CMD} set_join_parameters_for_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_b
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} set_join_parameters_for_cluster_b
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} set_join_parameters_for_cluster_c
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} set_join_parameters_for_cluster_c
 
       # Overriding Submariner images with custom images from registry
       if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]]; then
 
-        ${junit_cmd} append_custom_images_to_join_cmd_cluster_a
+        ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_a
 
-        [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_b
+        [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_b
 
-        [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} append_custom_images_to_join_cmd_cluster_c
+        [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_c
 
       fi
 
-      ${junit_cmd} install_broker_via_subctl_on_cluster_a
+      ${JUNIT_CMD} install_broker_via_subctl_on_cluster_a
 
-      ${junit_cmd} test_broker_before_join
+      ${JUNIT_CMD} test_broker_before_join
 
-      ${junit_cmd} run_subctl_join_on_cluster_a
+      ${JUNIT_CMD} run_subctl_join_on_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_b
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} run_subctl_join_on_cluster_b
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} run_subctl_join_on_cluster_c
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} run_subctl_join_on_cluster_c
 
     else
       ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters via API ###
 
-      ${junit_cmd} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} install_broker_via_api_on_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} install_submariner_operator_on_cluster "${KUBECONF_HUB}"
 
-      ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
 
       if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
 
-        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
 
       if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${junit_cmd} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
 
-        ${junit_cmd} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
 
       fi
 
@@ -1122,74 +1121,74 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Testing the Submariner gateway disaster recovery just on the Broker cluster (using $KUBECONF_HUB)
 
-    ${junit_cmd} test_public_ip_on_gateway_node
+    ${JUNIT_CMD} test_public_ip_on_gateway_node
 
-    ${junit_cmd} test_disaster_recovery_of_gateway_nodes
+    ${JUNIT_CMD} test_disaster_recovery_of_gateway_nodes
 
-    ${junit_cmd} test_renewal_of_gateway_and_public_ip
+    ${JUNIT_CMD} test_renewal_of_gateway_and_public_ip
 
-    ${junit_cmd} test_submariner_resources_cluster_a
+    ${JUNIT_CMD} test_submariner_resources_cluster_a
 
     # Testing Submariner resources on all clusters
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_resources_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_c
 
     # Testing Submariner cable-driver on all clusters
 
-    ${junit_cmd} test_cable_driver_cluster_a
+    ${JUNIT_CMD} test_cable_driver_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_cable_driver_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_cable_driver_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_cable_driver_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_cable_driver_cluster_c
 
     # Testing Submariner HA (High Availability) status on all clusters
 
-    ${junit_cmd} test_ha_status_cluster_a
+    ${JUNIT_CMD} test_ha_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ha_status_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_ha_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ha_status_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_ha_status_cluster_c
 
     # Testing Submariner connectivity status on all clusters
 
-    ${junit_cmd} test_submariner_connection_cluster_a
+    ${JUNIT_CMD} test_submariner_connection_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_submariner_connection_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_c
 
     # Testing SubCtl (Submariner CLI tool) info on all clusters
 
-    ${junit_cmd} test_subctl_show_on_merged_kubeconfigs
+    ${JUNIT_CMD} test_subctl_show_on_merged_kubeconfigs
 
     # Testing IPSec status on all clusters
 
-    ${junit_cmd} test_ipsec_status_cluster_a
+    ${JUNIT_CMD} test_ipsec_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_ipsec_status_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_c
 
     # Testing GlobalNet connectivity (if enabled) on all clusters
 
     if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
 
-      ${junit_cmd} test_globalnet_status_cluster_a
+      ${JUNIT_CMD} test_globalnet_status_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_globalnet_status_cluster_b
+      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_b
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_globalnet_status_cluster_c
+      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_c
     fi
 
     # Test service-discovery (lighthouse) on all clusters
 
-    ${junit_cmd} test_lighthouse_status_cluster_a
+    ${JUNIT_CMD} test_lighthouse_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${junit_cmd} test_lighthouse_status_cluster_b
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${junit_cmd} test_lighthouse_status_cluster_c
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_c
 
     ### Running connectivity tests between the clusters ###
     # (Validating that now Submariner made the connection possible)
@@ -1204,11 +1203,11 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    ${junit_cmd} test_clusters_connected_by_service_ip
+    ${JUNIT_CMD} test_clusters_connected_by_service_ip
 
-    ${junit_cmd} install_new_netshoot_cluster_a
+    ${JUNIT_CMD} install_new_netshoot_cluster_a
 
-    ${junit_cmd} install_nginx_headless_namespace_managed_cluster
+    ${JUNIT_CMD} install_nginx_headless_namespace_managed_cluster
 
     # Since Submariner 0.12, globalnet (v2) supports headless services, but not pod to pod connectivity
     if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
@@ -1219,9 +1218,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
-      ${junit_cmd} test_new_netshoot_ip_cluster_a_globalnet_v1
+      ${JUNIT_CMD} test_new_netshoot_ip_cluster_a_globalnet_v1
 
-      ${junit_cmd} test_nginx_headless_ip_globalnet_v1
+      ${JUNIT_CMD} test_nginx_headless_ip_globalnet_v1
 
     else
       echo -e "\n# TODO: Need new system tests for GlobalNet V2 (Pod to Pod connectivity is not supported since Submariner 0.12)"
@@ -1229,33 +1228,33 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Test the default (pre-installed) netshoot and nginx with service-discovery
 
-    ${junit_cmd} export_nginx_default_namespace_managed_cluster
+    ${JUNIT_CMD} export_nginx_default_namespace_managed_cluster
 
-    ${junit_cmd} test_clusters_connected_full_domain_name
+    ${JUNIT_CMD} test_clusters_connected_full_domain_name
 
-    ${junit_cmd} test_clusters_cannot_connect_short_service_name
+    ${JUNIT_CMD} test_clusters_cannot_connect_short_service_name
 
     # Test the new netshoot and headless Nginx service-discovery
     if [[ "$GLOBALNET" =~ ^(y|yes)$ ]] && [[ "$GN_VER" == "V1" ]] ; then
 
       # In Submariner < 0.12, globalnet (v1) supports pod to pod connectivity
-      ${junit_cmd} test_clusters_connected_overlapping_cidrs_globalnet_v1
+      ${JUNIT_CMD} test_clusters_connected_overlapping_cidrs_globalnet_v1
 
     else
 
-      ${junit_cmd} export_nginx_headless_namespace_managed_cluster
+      ${JUNIT_CMD} export_nginx_headless_namespace_managed_cluster
 
-      ${junit_cmd} test_clusters_connected_headless_service_on_new_namespace
+      ${JUNIT_CMD} test_clusters_connected_headless_service_on_new_namespace
 
-      ${junit_cmd} test_clusters_cannot_connect_headless_short_service_name
+      ${JUNIT_CMD} test_clusters_cannot_connect_headless_short_service_name
     fi
 
 
     ### Running diagnose and benchmark tests with subctl
 
-    ${junit_cmd} test_subctl_diagnose_on_merged_kubeconfigs
+    ${JUNIT_CMD} test_subctl_diagnose_on_merged_kubeconfigs
 
-    ${junit_cmd} test_subctl_benchmarks
+    ${JUNIT_CMD} test_subctl_benchmarks
 
     TITLE "Once System tests are completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
@@ -1279,14 +1278,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
       "Build Submariner repo from 'devel' branch instead" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
-      ${junit_cmd} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+      ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
       
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo
 
     if [[ ! "$SKIP_TESTS" =~ pkg ]] && [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]]; then
-      ${junit_cmd} test_submariner_packages
+      ${JUNIT_CMD} test_submariner_packages
 
       if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
         ginkgo_tests_status=FAILED
@@ -1303,7 +1302,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ### Running E2E tests in Submariner and Lighthouse projects with Ginkgo
 
-        ${junit_cmd} test_submariner_e2e_with_go
+        ${JUNIT_CMD} test_submariner_e2e_with_go
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
@@ -1312,7 +1311,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           echo "### Submariner End-to-End Ginkgo tests PASSED ###"
         fi
 
-        ${junit_cmd} test_lighthouse_e2e_with_go
+        ${JUNIT_CMD} test_lighthouse_e2e_with_go
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
@@ -1325,7 +1324,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ### Running E2E tests with subctl
 
-        ${junit_cmd} test_submariner_e2e_with_subctl
+        ${JUNIT_CMD} test_submariner_e2e_with_subctl
 
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
