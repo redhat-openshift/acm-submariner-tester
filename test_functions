@@ -701,8 +701,8 @@ function export_all_env_variables() {
   fi
 
   if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
-    export "JUNIT_CMD=record_junit '$SHELL_JUNIT_XML' '$TEST_STATUS_FILE'"
-    export "JUNIT_CMD_IGNORE_STATUS=record_junit '$SHELL_JUNIT_XML'" 
+    export JUNIT_CMD="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
+    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML" 
   fi
 
   set_missing_cli_variables
