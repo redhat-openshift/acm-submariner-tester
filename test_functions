@@ -513,17 +513,27 @@ function prepare_install_ocp_cluster() {
   mkdir -p "${ocp_install_dir}"
   local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
 
-  TITLE "Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
+  echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
   cp -f "${installer_yaml_source}" "$installer_yaml_new"
   chmod 777 "$installer_yaml_new"
 
-  echo -e "\n# Update OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
+  TITLE "Updating OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
+
+  # Update cluster name in the installer yaml
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
 
-  # Set the same region for ALL clusters (even on different clouds)
-  # [[ -z "$AWS_REGION" ]] || change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION"
+  # Get cluster platform type from OCP installer yaml, and update cluster region
+  local platform 
+  platform="$(print_ocp_install_platform "${installer_yaml_new}")"
+  
+  if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
+    echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
+    change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
 
-  echo -e "\n# TODO: change more {keys : values} in $installer_yaml_new, from the global variables file"
+  elif [[ -n "$GCP_REGION" && "$platform" == gcp ]] ; then
+    echo -e "\n# Set region for GCP cluster to: $GCP_REGION"
+    change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
+  fi
 
 }
 
