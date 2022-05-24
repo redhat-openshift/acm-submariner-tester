@@ -2990,16 +2990,20 @@ function test_disaster_recovery_of_gateway_nodes() {
 
   TITLE "Get all AWS running VMs, that were assigned as 'submariner-gw' in OCP cluster $CLUSTER_A_NAME (InfraID '${ocp_infra_id}')"
 
-  local gateway_aws_instance_ids
-  gateway_aws_instance_ids=$(aws ec2 describe-instances --filters \
-  Name=tag:Name,Values="${ocp_infra_id}"-submariner-gw-* \
+  local cmd="aws ec2 describe-instances --filters \
+  Name=tag:Name,Values=${ocp_infra_id}-submariner-gw-* \
   Name=instance-state-name,Values=running \
   --output text --query Reservations[*].Instances[*].InstanceId \
-   | tr '\r\n' ' ')
+  | tr '\r\n' ' '"
+
+  watch_and_retry "$cmd > '$TEMP_FILE'" 5m || aws_reboot=FAILED
+
+  local gateway_aws_instance_ids
+  gateway_aws_instance_ids="$(< "$TEMP_FILE")"
 
   [[ -n "$gateway_aws_instance_ids" ]] || \
   FATAL "No running VM instances of '${ocp_infra_id}-submariner-gw' in OCP cluster $CLUSTER_A_NAME. \n\
-  Did you skip OCP preparations with --skip-ocp-setup ?"
+  subctl cloud-prerpare (via Submariner Addon) might have failed labeling a Gateway node"
 
   echo -e "\n# Stopping all AWS VMs of 'submariner-gw' in OCP cluster $CLUSTER_A_NAME: [${gateway_aws_instance_ids}]"
   aws "${DEBUG_FLAG}" ec2 stop-instances --force --instance-ids "$gateway_aws_instance_ids" || :
