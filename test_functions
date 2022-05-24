@@ -249,7 +249,7 @@ function set_trap_functions() {
 
   if [[ "$PRINT_LOGS" =~ ^(y|yes)$ ]]; then
     TITLE "Will collect Submariner information on test failure (CLI option --print-logs)"
-    trap_function_on_error gather_submariner_info
+    trap_function_on_error "gather_submariner_info" "$TEST_STATUS_FILE"
   fi
 
 }
@@ -3004,12 +3004,12 @@ function test_disaster_recovery_of_gateway_nodes() {
   Name=tag:Name,Values=${ocp_infra_id}-submariner-gw-* \
   Name=instance-state-name,Values=running \
   --output text --query Reservations[*].Instances[*].InstanceId \
-  | tr '\r\n' ' '"
+  | sed -r 's/\s+//g'"
 
   watch_and_retry "$cmd > '$TEMP_FILE'" 5m || aws_reboot=FAILED
 
   local gateway_aws_instance_ids
-  gateway_aws_instance_ids="$(< "$TEMP_FILE")"
+  gateway_aws_instance_ids=$(< "$TEMP_FILE")
 
   [[ -n "$gateway_aws_instance_ids" ]] || \
   FATAL "No running VM instances of '${ocp_infra_id}-submariner-gw' in OCP cluster $CLUSTER_A_NAME. \n\

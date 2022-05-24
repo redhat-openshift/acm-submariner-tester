@@ -67,7 +67,7 @@ function eVal() {
   (
     (
       {
-        trap 'RC=$? ; echo $RC > "${returnf}" ; [[ "$RC" != 5 ]] || RC=0 ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+        trap 'RC=$? ; [[ "$RC" != 5 ]] || RC=0 ; echo $RC > "${returnf}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
         trap 'RC="$(< $returnf)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
         set -e; $1;
       } | tee -a "${outf}"
@@ -107,6 +107,8 @@ function juLog() {
   # In case of script error: Exit with the last return code of eVal()
   export returnCode=0
   trap 'echo "+++ sh2ju exit code: $returnCode" ; exit $returnCode' HUP INT TERM # ERR RETURN EXIT HUP INT TERM
+
+  local statusFile
 
   # Initialize testsuite attributes
   dateTime="$(which gdate 2>/dev/null || which date || :)"
@@ -178,7 +180,7 @@ EOF
   echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} "
   echo "+++ sh2ju working directory: $(pwd)"
   echo "+++ sh2ju command: ${cmd}"
-  echo "+++ sh2ju test suite status: ${testSuiteStatus}"
+  echo "+++ sh2ju test suite status: ${testSuiteStatus} [${statusFile}]"
   # To print +++ sh2ju (debuging lines) into ${outf}, you can add: | tee -a ${outf}
 
   # Clear content of the temporary files
