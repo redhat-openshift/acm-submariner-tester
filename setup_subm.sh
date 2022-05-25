@@ -756,10 +756,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
-    # # Get test exit status (from file $TEST_STATUS_FILE)
-    # EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-    # [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
-
   fi
   ### END of OCP Setup (Create or Destroy) ###
 
@@ -982,9 +978,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ### END of prerequisites for Submariner system tests  ###
 
     TITLE "OCP clusters and environment setup is ready"
-    # From this point, if script fails - \$TEST_STATUS_FILE is considered FAILED ($TEST_STATUS_FILE with exit code 1)"
-
-    # echo 1 > "$TEST_STATUS_FILE"
 
   fi
   ### END of OCP general preparations for ALL tests ###
@@ -1287,11 +1280,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     if [[ ! "$SKIP_TESTS" =~ pkg ]] && [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]]; then
       ${JUNIT_CMD} test_submariner_packages
 
+      tests_title="Submariner Unit-Tests"
+
       if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
         ginkgo_tests_status=FAILED
-        BUG "Submariner Unit-Tests FAILED"
+        BUG "$tests_title FAILED"
       else
-        echo "### Submariner Unit-Tests PASSED ###"
+        TITLE "$tests_title PASSED"
       fi
 
     fi
@@ -1304,20 +1299,24 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${JUNIT_CMD} test_submariner_e2e_with_go
 
+        tests_title="Submariner End-to-End Ginkgo tests"
+
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Submariner End-to-End Ginkgo tests FAILED"
+          BUG "$tests_title FAILED"
         else
-          echo "### Submariner End-to-End Ginkgo tests PASSED ###"
+          TITLE "$tests_title PASSED"
         fi
 
         ${JUNIT_CMD} test_lighthouse_e2e_with_go
 
+        tests_title="Lighthouse End-to-End Ginkgo tests"
+
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "Lighthouse End-to-End Ginkgo tests FAILED"
+          BUG "$tests_title FAILED"
         else
-          echo "### Lighthouse End-to-End Ginkgo tests PASSED ###"
+          TITLE "$tests_title PASSED"
         fi
 
       else
@@ -1326,26 +1325,26 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
         ${JUNIT_CMD} test_submariner_e2e_with_subctl
 
+        tests_title="SubCtl End-to-End tests"
+
         if tail -n 5 "$E2E_LOG" | grep 'FAIL' ; then
           ginkgo_tests_status=FAILED
-          BUG "SubCtl End-to-End tests FAILED"
+          BUG "$tests_title FAILED"
         else
-          echo "### SubCtl End-to-End tests PASSED ###"
+          TITLE "$tests_title PASSED"
         fi
       fi
 
-      if [[ "$ginkgo_tests_status" == FAILED ]] ; then
+      # Get test exit status (from file $TEST_STATUS_FILE)
+      EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+      if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
+        echo 0 > "$TEST_STATUS_FILE"
+      else
         FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
       fi
-
     fi
   fi
-
-
-  # If script got to here - all tests of Submariner has passed ;-)
-  # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-  [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
 
 ) |& tee -a "$SYS_LOG"
 
@@ -1366,6 +1365,13 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+  if [[ "$EXIT_STATUS" != @(1|2) ]] ; then
+    # If script got 0 EXIT_STATUS here - All tests of Submariner have passed ;-)
+    TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
+    echo 0 > "$TEST_STATUS_FILE"
+  fi
+
   echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
