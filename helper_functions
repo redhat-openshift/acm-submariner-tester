@@ -158,13 +158,17 @@ function trap_to_debug_commands() {
 function trap_function_on_error() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local func_on_script_error="$@"
+  local func_on_script_error="${1}"
+  local test_status_file="${2}" # Optional: exit code will be set by this file (instead of fuction RC)
 
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
+
+
   trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
+  [[ ! -s '$test_status_file' ]] || rc=$(< '$test_status_file') || : ;
   [[ "$rc" == "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
@@ -378,25 +382,36 @@ function record_junit() {
   local output_dir
   output_dir=$(dirname "$1")
 
-  # $2 => $test_status_file - overall test run status, stored in a file
-  # Can include either 0 (OK to continue tests), 1 (Critical failure: Skip rest of tests), 2 (Failed but continue)
-  local test_status_file="${2}"
+  # Shift input arguments counter
+  local shift_arg_counter=1
+
+  if [[ -f "${2}" ]] ; then
+    # $2 is a file representing the test suite status: Overall test run status, stored in a file.
+    # It can include either 0 (OK to continue tests), 1 (Critical failure: Skip rest of tests), 2 (Failed but continue)
+    local test_status_file="${2}"
+
+    # Shifting input arguments should be done twice
+    shift_arg_counter=2
+  fi
+  
+  # Shift input arguments to the left, in order to collect the rest of arguments as an array
+  shift $shift_arg_counter
+
+  # Save rest of input args as an array
+  local func_and_args="$*"
+
+  # Set junit test name as the called function and args (omitting special characters)
+  local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
 
   # Set junit_suite as the base directory name of $output_dir
   local junit_suite
   junit_suite="$(basename "$output_dir")"
 
-  # Shift function arguments twice to the left ($1 and $2 get lost), to save rest of args as array $@
-  shift 2
-
-  # Set junit test name as the called function and args (omitting special characters)
-  local func_and_args="$*"
-  local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
-
   echo "+++ Recording test as Junit: ${func_and_args}"
   echo "+++ XML output of all Junit: ${output_dir}/${junit_output_file}"
+  echo "+++ Using test status file:  ${test_status_file}"
 
-  juLog -output="$output_dir" -file="$junit_output_file" -index -class="$junit_suite" -name="$test_name" -status="$test_status_file" "$func_and_args"
+  juLog -output="$output_dir" -file="$junit_output_file" -index -class="$junit_suite" -name="$test_name" ${test_status_file:+-status="$test_status_file"} "$func_and_args"
 }
 
 # ------------------------------------------
