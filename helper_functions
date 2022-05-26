@@ -1626,9 +1626,10 @@ function create_polarion_testcases_doc_from_junit() {
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
       local test_name="${full_testcase_name#*.}" # text after the dot
 
-      TITLE "Setting Polarion schema from Junit file [$junit_xml]
-      Test class [${class_name}]
-      Test name [${test_name}]"
+      TITLE "Setting Polarion schema for a new Test Case:
+      Junit source file: $junit_xml
+      Test class name: ${class_name}
+      Test case name [${test_name}]"
 
       echo -e "\n# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
@@ -1757,12 +1758,12 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
-    local polarion_test_plan_id="$7" # Optional - To set test plan (instead of the test plan from the testrun template)
+    local polarion_test_plan_id="$7" # Optional: To set test plan (instead of the test plan from the testrun template)
+    local polarion_include_skipped="$8" # Optional: If "true" - Display Junit skipped test as "Waiting" in Polarion (i.e. test not run yet)
 
     local sed_expression
 
-    TITLE "Creating Polarion test-run (xml) for Junit results: $junit_xml
-    Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
+    TITLE "Creating Polarion test-run from Junit file: $junit_xml"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1788,12 +1789,13 @@ function create_polarion_testrun_result_from_junit() {
 
     TITLE "Generating Polarion Test-run file [${polarion_testrun_xml}] to import:
 
-    Test-run title: ${polarion_testrun_id}
-    Test-run title: ${testsuite_name}
-    Test-run title: ${polarion_testrun_template}
-    Test-run title: ${polarion_project_id}
-    Test-run title: ${polarion_team_name}
-    Test-run title: ${polarion_test_plan_id}
+    Polarion Test Run ID: ${polarion_testrun_id}
+    Polarion Project: ${polarion_project_id}
+    Polarion Team: ${polarion_team_name}
+    Polarion Test Suite: ${testsuite_name}
+    Polarion Test Plan ID: ${polarion_test_plan_id}
+    Polarion Test Run Template: ${polarion_testrun_template}
+    Include Skipped Tests: ${polarion_include_skipped}
     "
 
     cp "$junit_xml" "$polarion_testrun_xml"
@@ -1805,6 +1807,13 @@ function create_polarion_testrun_result_from_junit() {
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_xml"
     # sed -r "s:<testsuites>::" -i "$polarion_testrun_xml"
 
+    if [[ "$polarion_include_skipped" =~ ^(true|yes)$ ]]; then
+      echo -e "\n# Display Junit skipped test as 'Waiting' in Polarion (i.e. test not run yet)"
+      polarion_include_skipped="true"
+    else
+      polarion_include_skipped="false"
+    fi
+
     # Define Polarion <testsuites> properties (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
@@ -1815,7 +1824,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
-            <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
+            <property name=\"polarion-include-skipped\" value=\"${polarion_include_skipped}\" /> \n\
             <property name=\"polarion-create-defects\" value=\"true\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\

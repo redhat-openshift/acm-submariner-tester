@@ -4393,13 +4393,14 @@ function test_submariner_e2e_with_subctl() {
 function upload_junit_xml_to_polarion() {
   trap_to_debug_commands;
   local junit_file="$1"
+  local polarion_include_skipped="$2" # Optional: If "true" - Display Junit skipped test as "Waiting" in Polarion (i.e. test not run yet)
   echo -e "\n### Uploading test results to Polarion from Junit file: $junit_file ###\n"
 
   create_polarion_testcases_doc_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" "$junit_file" \
   "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_USR" "$POLARION_COMPONENT_ID" "$POLARION_TESTCASES_DOC" "$POLARION_TESTPLAN_ID"
 
   create_polarion_testrun_result_from_junit "https://$POLARION_SERVER/polarion" "$POLARION_AUTH" \
-  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE" "$POLARION_TESTPLAN_ID"
+  "$junit_file" "$POLARION_PROJECT_ID" "$POLARION_TEAM_NAME" "$POLARION_TESTRUN_TEMPLATE" "$POLARION_TESTPLAN_ID" "$polarion_include_skipped"
 
 }
 
@@ -4415,10 +4416,10 @@ function create_all_test_results_in_polarion() {
   local polarion_rc=0
 
   # Upload SYSTEM tests to Polarion
-  TITLE "Upload Junit results of SYSTEM (Shell) tests to Polarion:"
+  TITLE "Upload Junit results of SYSTEM (Shell) tests to Polarion (including skipped tests)"
 
   # Redirect output to stdout and to $polarion_testrun_import_log, in order to get polarion testrun url into report
-  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" |& tee "$polarion_testrun_import_log" || polarion_rc=1
+  upload_junit_xml_to_polarion "$SHELL_JUNIT_XML" "true" |& tee "$polarion_testrun_import_log" || polarion_rc=1
 
   # Add Polarion link to the HTML report
   add_polarion_testrun_url_to_report_headlines "$polarion_testrun_import_log" "$SHELL_JUNIT_XML"
