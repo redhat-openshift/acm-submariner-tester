@@ -1,8 +1,10 @@
 #!/bin/bash
+
 ### Global variables for Submariner setup and tests ###
 #
 # To override variable with an existing environment variable from active session:
-# Change variable assignment format from VAR="value" to VAR="${VAR:-value}"
+# Change variable assignment format from VAR="value" to VAR="${VAR:-value}".
+# Plain credentials should be wrapped with single quotes.
 
 ### Workspace vars ###
 
@@ -13,10 +15,11 @@ export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default g
 export OC="${GOBIN}/oc"
 export OCPUP_DIR="${WORKDIR}/ocpup"
 
-
 ### Env and test vars ###
 
-export CLUSTER_A_NAME="user-cloud-project-a" # Recommended cluster name: {user}-{cloud}-{project}-{index}
+export CLUSTER_SET_ID="${CLUSTER_SET_ID}" # To identify the cluster-set of all clusters (will be appended to each cluster name)
+
+export CLUSTER_A_NAME="${CLUSTER_A_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_A_YAML="${CLUSTER_A_YAML:-${WORKDIR}/setup-cluster-a.yaml}"
 export NETSHOOT_CLUSTER_A="netshoot-cl-a"
 
@@ -25,15 +28,15 @@ export BROKER_INFO="broker-info.subm"
 export BROKER_NAMESPACE="submariner-k8s-broker"
 export BROKER_NAMESPACE="submariner-broker"
 
-export CLUSTER_B_NAME="user-cloud-project-b" # Recommended cluster name: {user}-{cloud}-{project}-{index}
+export CLUSTER_B_NAME="${CLUSTER_B_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
 export NGINX_CLUSTER_BC="nginx-cl-bc"
 
-export CLUSTER_C_NAME="user-cloud-project-c" # Recommended cluster name: {user}-{cloud}-{project}-{index}
+export CLUSTER_C_NAME="${CLUSTER_C_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
 export CLUSTER_C_YAML="${CLUSTER_C_YAML:-${WORKDIR}/setup-cluster-c.yaml}"
 
 export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
-export NGINX_IMAGE="quay.io/bitnami/nginx" # "nginxinc/nginx-unprivileged:stable-alpine"
+export NGINX_IMAGE="quay.io/openshifttest/nginx-alpine:latest" # "nginxinc/nginx-unprivileged:stable-alpine"
 export NGINX_PORT="8080"
 
 # Do not use the same IPSEC port numbers multiple times in one project
@@ -48,22 +51,18 @@ export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 
 ### AWS vars ###
 
-# Wrap credentials with single quotes:
 export AWS_KEY='user-aws-access-key'
 export AWS_SECRET='user-aws-secret-access-key'
 export AWS_PROFILE_NAME="aws-profile"
 export AWS_PROFILE_ID="012345678910"
-export AWS_REGION="aws-region"
-export AWS_ZONE_NAME="aws-zone-name"
-export AWS_ZONE_ID="aws-zone-id"
-
-export AWS_DNS_ALIAS1="api.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
-export AWS_DNS_ALIAS2="\052.apps.${CLUSTER_A_NAME}.${AWS_ZONE_NAME}."
+export AWS_REGION=""
+export AWS_ZONE_NAME=""
+export AWS_ZONE_ID=""
 
 
 ### OpenStack vars ###
 
-# Wrap credentials with single quotes:
+export OSP_CRED_YAML="${OSP_CRED_YAML:-osp-clouds.yaml}" # OSP clouds.yaml file path
 export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
 export OS_USERNAME='openstack-user'
 export OS_PASSWORD='openstack-pass'
@@ -75,36 +74,56 @@ export OS_REGION_NAME="openstack-region"
 
 ### Google vars ###
 
-GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}"
+export GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}" # GCP cred.json file path
+export GCP_REGION=""
 
 
-### OpenShift registry vars ###
+### OpenShift Registry vars ###
+
+export OCP_USR='ocp_user' # Local registry user
 
 # The official and staging Redhat products registry, that is accessible on the internet (external)
 export OFFICIAL_REGISTRY="registry.redhat.io"
 export STAGING_REGISTRY="registry.stage.redhat.io"
-
-# Snapshot registry for Redhat product container images that can be accessed within Redhat's internal network (internal, vpn)
-export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
-
-# Snapshot registry for redhat product container images that is accessible on the internet (external)
-export BREW_REGISTRY="brew.registry.redhat.io"
-export REGISTRY_IMAGE_PREFIX="rhacm2"
-export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
-export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
 
 # Another official Redhat registry catalog (external)
 export CATALOG_REGISTRY="registry.access.redhat.com"
 export CATALOG_IMAGE_PREFIX="openshift4"
 export CATALOG_IMAGE_IMPORT_PATH="ose-oauth-proxy"
 
-# Wrap credentials with single quotes:
-export REGISTRY_USR='mirror-user'
-export REGISTRY_PWD='mirror-pass'
-export OCP_USR='ocp_user'
+# PROXY Snapshot registry for Redhat product container images that can be accessed within Redhat's network (interanl with VPN)
+export VPN_REGISTRY="registry-proxy.engineering.redhat.com"
+
+# BREW Snapshot registry for redhat product container images that is accessible on the internet with credentials (external)
+export BREW_REGISTRY="brew.registry.redhat.io"
+export REGISTRY_IMAGE_PREFIX="rhacm2"
+export REGISTRY_IMAGE_PREFIX_TECH_PREVIEW="rhacm2-tech-preview" # Supports digests only (ICSP)
+export REGISTRY_IMAGE_IMPORT_PATH="rh-osbs" # supports digests (hash) and floating tags
+export REGISTRY_USR='brew-user'
+export REGISTRY_PWD='brew-pass'
+
+# QUAY.IO registry - also accessible on the internet with credentials
+export QUAY_REGISTRY="quay.io:443"
+export QUAY_IMAGE_IMPORT_PATH="acm-d" # supports digests (hash) and floating tags
+export QUAY_IMAGE_MCE_PREFIX="multicluster-engine"
+export QUAY_USR='quay-user'
+export QUAY_PWD='quay-pass'
 
 
-### Submariner subscription vars ###
+### Polarion vars ###
+
+export POLARION_SERVER="polarion.server.name" # without " https:// "
+export POLARION_USR='polarion-user'
+export POLARION_PWD='polarion-pass'
+export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
+export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
+export POLARION_TESTRUN_TEMPLATE="${POLARION_TESTRUN_TEMPLATE:-}"
+export POLARION_COMPONENT_ID="${POLARION_COMPONENT_ID:-}"
+export POLARION_TESTPLAN_ID="${POLARION_TESTPLAN_ID:-}"
+export POLARION_TESTCASES_DOC="${POLARION_TESTCASES_DOC:-${POLARION_TESTPLAN_ID}_Testscases}"
+
+
+### Submariner resources vars ###
 
 export SUBM_OPERATOR="submariner"
 export SUBM_BUNDLE="submariner-operator-bundle"
@@ -124,35 +143,32 @@ export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
 export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
-export SUBM_VER_TAG=${SUBM_VER_TAG:-latest}
-export SUBM_SUBSCRIPTION="my-submariner-subscription"
-export SUBM_CATALOG="my-submariner-catalog"
-export SUBM_CHANNEL_PREFIX="alpha-"
+export SUBM_VER_TAG=${SUBM_VER_TAG}
+export SUBM_CHANNEL_PREFIX_TECH_PREVIEW="alpha-"
+export SUBM_CHANNEL_PREFIX="stable-"
 
 
-### ACM subscription vars ###
+### ACM resources vars ###
 
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
+
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+export ACM_INSTANCE="multiclusterhub"
 
-export ACM_VER_TAG=${ACM_VER_TAG:-latest}
-export ACM_SUBSCRIPTION="my-acm-subscription"
-export ACM_CATALOG="my-acm-catalog"
+export ACM_VER_TAG=${ACM_VER_TAG}
 export ACM_CHANNEL_PREFIX="release-"
 
 
-### Polarion vars ###
+### MCE resources vars ###
 
-export POLARION_SERVER="polarion.server.name" # without " https:// "
-# Wrap credentials with single quotes:
-export POLARION_USR='polarion-user'
-export POLARION_PWD='polarion-pass'
-export POLARION_PROJECT_ID="${POLARION_PROJECT_ID:-}"
-export POLARION_TEAM_NAME="${POLARION_TEAM_NAME:-}"
-export POLARION_TESTRUN_TEMPLATE="${POLARION_TESTRUN_TEMPLATE:-}"
-export POLARION_COMPONENT_ID="${POLARION_COMPONENT_ID:-}"
-export POLARION_TESTPLAN_ID="${POLARION_TESTPLAN_ID:-}"
-export POLARION_TESTCASES_DOC="${POLARION_TESTCASES_DOC:-${POLARION_TESTPLAN_ID}_Testscases}"
+export MCE_NAMESPACE="mce" # instead of "multicluster-engine"
+export MCE_OPERATOR="multicluster-engine"
+export MCE_BUNDLE="multicluster-engine-operator-bundle"
+export MCE_INSTANCE="multiclusterengine"
+
+export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
+export MCE_CHANNEL_PREFIX="stable-"
+

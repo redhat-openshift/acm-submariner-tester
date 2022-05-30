@@ -1,9 +1,11 @@
 #!/bin/bash
+# shellcheck disable=SC2153,SC2031,SC2016,SC2120,SC2005,SC1091
 
-### General Helpers Function ###
+### General Library of helper functions ###
 
-# Constants #
+### Constants ###
 
+# Console print colors 
 export RED='\x1b[0;31m'
 export GREEN='\x1b[38;5;22m'
 export CYAN='\x1b[36m'
@@ -11,10 +13,11 @@ export YELLOW='\x1b[33m'
 export NO_COLOR='\x1b[0m'
 export HAT="${RED}🎩︎${NO_COLOR}"
 
-export CONDA_ENV_NAME="conda-test"
+# Conda environment test directory
+export CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda-test}"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
-SCRIPT_DIR="$(dirname "$(realpath -s $0)")"
+SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
 export SCRIPT_DIR
 
 # include sh2ju library
@@ -25,6 +28,30 @@ shopt -s nocasematch # Case-insensitive match for string evaluations
 set -o allexport # To export each function when it is declared, to be used on external bash processes
 
 ### Functions ###
+
+# ------------------------------------------
+
+function print_all_env_variables() {
+### Helper function to print all environment variables (excluding key|sec|pas|pwd)###
+  trap_to_debug_commands;
+
+  TITLE "List all environment variables"
+
+    # List all variables
+    compgen -v | sort | \
+    while read var_name; do
+      # Get each variable value
+      var_value="${!var_name}"
+      # If variable is not null or contains "key" / "sec"ret / "pas"sword
+      if ! [[ -z "$var_value" || "$var_name" =~ (key|sec|pas|pwd) ]] ; then
+        # Trim value (string), if it is longer than 500 char
+        (( ${#var_value} < 500 )) || var_value="${var_value:0:500}..."
+        # Print the value without non-ascii chars
+        echo -e "$var_name = $var_value" | tr -dC '[:print:]\t\n'
+      fi
+    done
+
+}
 
 # ------------------------------------------
 
@@ -42,13 +69,13 @@ function highlight()
   # 4 = Empty string or file
 
   local tmp_file
-  tmp_file="`mktemp`_highlight"
+  tmp_file="$(mktemp)_highlight"
   # Save all output to temp file
   #grep -E "$pattern|$" "$@" > $tmp_file
-  grep -Ei "$pattern|$" ${file_input:+"$file_input"} > $tmp_file
+  grep -Ei "$pattern|$" ${file_input:+"$file_input"} > "$tmp_file"
 
   # Exit if file is empty or contains spaces only
-  grep -q '[^[:space:]]' $tmp_file || return 4
+  grep -q '[^[:space:]]' "$tmp_file" || return 4
 
   # Print with match colored
   # cat $tmp_file | grep --color -E "$pattern|$"
@@ -57,12 +84,12 @@ function highlight()
   search_line='/'"$pattern"'/I,${s//'$YELLOW'&'$NO_COLOR'/g;b};$q3'
 
   # SED with -r : Basic regex
-  sed -r "$search_line" $tmp_file || exit_code=$?
+  sed -r "$search_line" "$tmp_file" || exit_code=$?
 
   # If SED had an error, try to search with -e : Extended regex"
   if [[ "$exit_code" -eq 1 ]] ; then
     exit_code=0
-    sed -e "$search_line" $tmp_file || exit_code=$?
+    sed -e "$search_line" "$tmp_file" || exit_code=$?
   fi
 
   # Return if match found
@@ -99,7 +126,7 @@ function print_current_dir_and_cmd() {
 
   for variable in "${_var_list[@]}" ; do
      local _var_name
-     _var_name=$(echo ${variable%%[:/]*} | tr -d "\${}")
+     _var_name=$(echo "${variable%%[:/]*}" | tr -d "\${}")
      local _var_value="${!_var_name}"
      if [[ "$variable" =~ [:/] ]] ; then
        # For complex variables - add it to $_all_vars_output
@@ -125,23 +152,24 @@ function trap_to_debug_commands() {
   ' DEBUG
 }
 
-# export -f trap_to_debug_commands
-# trap_to_debug_commands
-
 # ------------------------------------------
 
 # Function to trap test exit failure - to print more info before exiting main flow
 function trap_function_on_error() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local func_on_script_error="$@"
+  local func_on_script_error="${1}"
+  local test_status_file="${2}" # Optional: exit code will be set by this file (instead of fuction RC)
 
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
+
+
   trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
-  [[ "$rc" = "0" ]] || ('${func_on_script_error}') || : ;
+  [[ ! -s '$test_status_file' ]] || rc=$(< '$test_status_file') || : ;
+  [[ "$rc" == "0" ]] || ('${func_on_script_error}') || : ;
   [[ -z "'${current_traps}'" ]] || ('${current_traps}') || : ;'
 
   echo -e "\n# Trapping on script EXIT: \n${trap_cmd} \n"
@@ -187,7 +215,7 @@ function watch_and_retry() {
   fi
 
   # To use timeout - must run command as an external script
-  timeout $TIMEOUT bash <<EOF \
+  timeout "$TIMEOUT" bash <<EOF \
   || ( [[ $? -eq 124 ]] && echo "Timeout of $TIMEOUT has exceeded." && return 1 )
     COUNT=0 ;
     until $CMD || [[ \$COUNT -eq $RETRY ]] ; do
@@ -222,21 +250,21 @@ function run_and_tail() {
   \n Tailing log file: $log_to_tail"
 
   # Running the process with timeout - in the background, and store its PID
-  timeout --foreground $duration $cmd &
+  timeout --foreground "$duration" $cmd &
   local pid=$!
   local process_rc=0
 
   # Tail the log, until command has ended or timed-out
   mkdir -p "$(dirname "$log_to_tail")"
   touch "$log_to_tail"
-  tail --pid=$pid -n0 -F "$log_to_tail"
+  tail --pid=$pid -n0 -F "$log_to_tail" | sed 's/\\n/\n/g'
 
   # Check the exit code of the command PID
   wait $pid || process_rc="$?"
 
-  if [[ "$process_rc" = 124 ]] ; then
+  if [[ "$process_rc" == 124 ]] ; then
     echo -e "\n# Timeout of $duration has exceeded while running [$cmd]"
-  elif [[ ! "$process_rc" = 0 ]] ; then
+  elif [[ "$process_rc" != 0 ]] ; then
     echo -e "\n# Command [$cmd] has failed (Error $process_rc)"
   fi
 
@@ -244,7 +272,7 @@ function run_and_tail() {
     # When searching for regex in log, it will ignore cmd exit code
     process_rc=0
     grep "$regex" "$log_to_tail" || process_rc="$?"
-    [[ "$process_rc" = 0 ]] || \
+    [[ "$process_rc" == 0 ]] || \
     echo -e "\n# The expected search pattern '$regex' was not written to the log file [$log_to_tail]"
   fi
 
@@ -281,12 +309,14 @@ function TITLE() {
   local color_char="${color}#${NO_COLOR}"
 
   # Print first line of message in color # box
+  echo
   echo -e "$color_line"
   echo -e "$color_char       $first_line      $color_char"
   echo -e "$color_line"
 
   # Print rest of message (from line 2), with # at the beginning
   echo -e "${message}" | tail -n +2 | sed 's/^/# /'
+  echo
 
 }
 
@@ -325,6 +355,13 @@ function BUG() {
   [[ -z "$bug_ref" ]] || echo -e "${RED} Reference:${NO_COLOR} $bug_ref"
 }
 
+# ------------------------------------------
+
+# Function to check if version (e.g. v2.5) is greater or equal to another version (e.g. v2.4.1)
+function check_version_greater_or_equal() {
+  # If version input $1 is lower than version input $2 (digits and dots only), then the returned exit code will be 1
+  printf '%s\n%s\n' "${2//[!0-9.]/}" "${1//[!0-9.]/}" | sort --check=quiet --version-sort
+}
 
 # ------------------------------------------
 
@@ -338,27 +375,43 @@ function record_junit() {
   # WARNING: Variable changes in the command will NOT be effective after record_junit returns.
   #          This is because the command runs in subshell.
 
-  # $1 => $output_file and $output_dir for junit results
-  local output_file
-  output_file=$(basename "$1")
+  # $1 => $junit_output_file and $output_dir for junit results
+  local junit_output_file
+  junit_output_file=$(basename "$1")
+
   local output_dir
   output_dir=$(dirname "$1")
+
+  # Shift input arguments counter
+  local shift_arg_counter=1
+
+  if [[ -f "${2}" ]] ; then
+    # $2 is a file representing the test suite status: Overall test run status, stored in a file.
+    # It can include either 0 (OK to continue tests), 1 (Critical failure: Skip rest of tests), 2 (Failed but continue)
+    local test_status_file="${2}"
+
+    # Shifting input arguments should be done twice
+    shift_arg_counter=2
+  fi
+  
+  # Shift input arguments to the left, in order to collect the rest of arguments as an array
+  shift $shift_arg_counter
+
+  # Save rest of input args as an array
+  local func_and_args="$*"
+
+  # Set junit test name as the called function and args (omitting special characters)
+  local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
 
   # Set junit_suite as the base directory name of $output_dir
   local junit_suite
   junit_suite="$(basename "$output_dir")"
 
-  # Shift arguments to the left ($1 gets lost), to save rest of args as array $@
-  shift
-
-  # Set junit test name as the called function and args (omitting special characters)
-  local func_and_args="$*"
-  local test_name="${func_and_args//[^a-zA-Z0-9 -\/]/_}"
-
   echo "+++ Recording test as Junit: ${func_and_args}"
-  echo "+++ XML output of all Junit: ${output_dir}/${output_file}"
+  echo "+++ XML output of all Junit: ${output_dir}/${junit_output_file}"
+  echo "+++ Using test status file:  ${test_status_file}"
 
-  juLog -output="$output_dir" -file="$output_file" -index -class="$junit_suite" -name="$test_name" "$func_and_args"
+  juLog -output="$output_dir" -file="$junit_output_file" -index -class="$junit_suite" -name="$test_name" ${test_status_file:+-status="$test_status_file"} "$func_and_args"
 }
 
 # ------------------------------------------
@@ -366,22 +419,27 @@ function record_junit() {
 # Function to installing Anaconda (https://github.com/conda-forge)
 function install_anaconda() {
   # trap_to_debug_commands
-  work_dir="$(echo "${1:-.}" | tr -s /)" # Remove redundant slashes
-  install_dir="${work_dir}/miniconda"
-  miniconda_bin_dir="${install_dir}/bin"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  miniconda_bin_dir="${conda_install_dir}/bin"
+  conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  if conda env list | grep -o "^$CONDA_ENV_NAME" | grep . ; then
-    echo -e "\n# Anaconda is already installed and has environment '$CONDA_ENV_NAME' configured"
+  if conda env list | grep -o "^$conda_env" | grep . ; then
+    echo -e "\n# Anaconda is already installed and has environment '$conda_env' configured"
     conda info
-    source activate $CONDA_ENV_NAME
+    conda update -n base -c defaults conda -y
+    source activate "$conda_env"
     return
   fi
 
   if conda info ; then
     # Clean previous conda packages
     conda clean -y --all
-    # rm -rf "${install_dir}" || :
+    # rm -rf "${conda_install_dir}" || :
   fi
 
   echo -e "\n# Installing Anaconda"
@@ -390,33 +448,39 @@ function install_anaconda() {
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
-  ${work_dir}/${miniconda_installer} -b -u -p ${install_dir}
+  "${work_dir}"/${miniconda_installer} -b -u -p "${conda_install_dir}"
   conda update -y -n base -c defaults conda
 
   # Remove old conda environment dir, if it is not configured
-  env_dir=$(conda env list | awk -v name="$CONDA_ENV_NAME" '$0 ~ name { print $2 }')
+  env_dir=$(conda env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
   env_base=$(conda env list | awk '/base/ { print $NF }')
 
   if [[ -z "$env_dir" ]] ; then
-    echo -e "\n# Removing old Conda environment \"$CONDA_ENV_NAME\" directory (since it is not configured):"
-    conda env remove -y -n $CONDA_ENV_NAME || :
-    conda env remove -y -p "$env_base/envs/$CONDA_ENV_NAME" || :
-    rm -rf "$env_base/envs/$CONDA_ENV_NAME" || :
+    echo -e "\n# Removing old Conda environment \"$conda_env\" directory (since it is not configured):"
+    conda env remove -y -n "$conda_env" || :
+    conda env remove -y -p "$env_base/envs/$conda_env" || :
+    rm -rf "$env_base/envs/$conda_env" || :
   fi
 
-  echo -e "\n# Creating Conda environment \"$CONDA_ENV_NAME\" (if it does not exist already)"
-  [[ -d "$env_base/envs/$CONDA_ENV_NAME" ]] || conda create -y -n $CONDA_ENV_NAME
+  echo -e "\n# Creating Conda environment \"$conda_env\" (if it does not exist already)"
+  [[ -d "$env_base/envs/$conda_env" ]] || conda create -y -n "$conda_env"
 }
 # ------------------------------------------
 
 # Function to verify Anaconda installation
 function verify_anaconda() {
-  # trap_to_debug_commands
-  install_dir="$(echo "${1:-.}/miniconda" | tr -s /)" # Remove redundant slashes
-  miniconda_bin_dir="${install_dir}/bin"
+  trap_to_debug_commands
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  miniconda_bin_dir="${conda_install_dir}/bin"
+  conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
+
   conda info
-  conda env list | grep "${install_dir}/envs/${CONDA_ENV_NAME}"
+  conda env list | grep "miniconda/envs/${conda_env}"
 }
 
 # ------------------------------------------
@@ -425,24 +489,30 @@ function verify_anaconda() {
 function install_conda_package() {
   # trap_to_debug_commands
 
-  local pkg_name="$1"
-  local install_dir="${2:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_name="$2"
   local pkg_version="$3"
   local pkg_label="$4"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
+  
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
-    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$CONDA_ENV_NAME'"
+    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$conda_env'"
     return
   fi
 
-  verify_anaconda "${install_dir}"
+  verify_anaconda "${conda_install_dir}"
 
   # conda config --add channels defaults
   conda config --add channels conda-forge
-  source activate $CONDA_ENV_NAME
-  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}
+  source activate "$conda_env"
+  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
   conda list
 }
 
@@ -452,10 +522,14 @@ function install_conda_package() {
 function install_local_golang() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "go-nocgo_linux-64" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "go-nocgo_linux-64" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -491,10 +565,14 @@ function verify_golang() {
 function install_local_terraform() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "terraform" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "terraform" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -509,10 +587,14 @@ function install_local_docker() {
   # SKIP_IPTABLES=1 curl -fsSL https://get.docker.com/rootless | sh -s -- --experimental
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+  
   local pkg_version="$2"
 
-  install_conda_package "docker" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "docker" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -521,10 +603,14 @@ function install_local_docker() {
 function install_local_podman() {
   trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "podman" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "podman" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -533,10 +619,14 @@ function install_local_podman() {
 function install_local_jq() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
   local pkg_version="$2"
 
-  install_conda_package "jq" "${install_dir}" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "jq" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -545,14 +635,20 @@ function install_local_jq() {
 function install_local_gcloud() {
   # trap_to_debug_commands
 
-  local install_dir="${1:-.}/"
-  local pkg_version="$2"
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+  
+  # local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  # install_conda_package "google-cloud-sdk" "${install_dir}" "${pkg_version}"
-  verify_anaconda "${install_dir}"
-  source activate $CONDA_ENV_NAME
+  # install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+  verify_anaconda "${conda_install_dir}"
+  source activate "$conda_env"
   conda install -y -c conda-forge google-cloud-sdk
   conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
   conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
@@ -603,7 +699,7 @@ function download_github_file_or_dir() {
   \n# Directory: ${dir_or_file:-Whole project tree} \n"
 
   # Use WGET with a random wait of 5 to 15 seconds between retrievals, and resume getting a partially-downloaded file
-  wget --wait 10 --random-wait --continue -O - ${archive_url} \
+  wget --wait 10 --random-wait --continue -O - "${archive_url}" \
   | tar xz --strip=1 "${git_project}-${commit_or_branch}/${dir_or_file}"
 
 }
@@ -614,27 +710,27 @@ function download_github_file_or_dir() {
 function download_file() {
   trap_to_debug_commands
   # $1 => $source_file (download link)
-  source_file="$1"
+  source_file="${1//[$'\t\r\n']}"
 
   # Optional: $2 => $target_file (where to save)
-  target_file=${2:-$(basename "$1")}
+  target_file="${2:-$(basename "$1")}"
 
-  echo -e "\n# Downloading [$source_file] into $target_file"
+  TITLE "Downloading [$source_file] into $target_file"
   ls -ld
 
-  local_file_size=$([[ -f ${target_file} ]] && wc -c < ${target_file} || echo "0")
+  local_file_size="$([[ -f ${target_file} ]] && wc -c < "${target_file}" || echo "0")"
   echo "local_file_size = $local_file_size"
-  remote_file_size=$(curl -sI ${source_file} | awk '/Content-Length/ { print $2 }' | tr -d '\r' )
+  remote_file_size="$(curl -sI "${source_file}" | awk '/Content-Length/ { print $2 }' | tr -d '\r' )"
   echo "remote_file_size = $remote_file_size"
   [[ -n "$remote_file_size" ]] || remote_file_size=-1
   if [[ "$local_file_size" -ne "$remote_file_size" ]]; then
       echo -e "\n# Requested file was not downloaded yet, or remote file size is different. Downloading..."
       rm -rf "$target_file"
       if [[ -x "$(command -v wget)" ]] ; then
-        target_dir=$(dirname -- "$target_file")
+        target_dir="$(dirname -- "$target_file")"
         wget "$source_file" --no-verbose --no-check-certificate --directory-prefix="$target_dir"
-        source_file=$(basename -- "$source_file")
-        mv "$target_dir/$source_file" "$target_file" || :
+        source_file="$(basename -- "$source_file")"
+        [[ "$target_dir/$source_file" -ef "$target_file" ]] || mv -v "$target_dir/$source_file" "$target_file"
       else
         echo -e "\n# Wget is not installed, using Curl instead."
         curl -L "$source_file" -o "$target_file" --create-dirs
@@ -665,7 +761,7 @@ function delete_old_files_or_dirs() {
   search_name=$(basename -- "$wildcard_name")
 
   # find "$search_path"/* -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} -print -delete
-  find "$search_path"/* -maxdepth 0 -type $dir_or_file -name "$search_name" -atime +${access_days} | xargs -n1 --verbose rm -rf
+  find "$search_path"/* -maxdepth 0 -type "$dir_or_file" -name "$search_name" -atime +"${access_days}" | xargs -n1 --verbose rm -rf
 }
 
 # ------------------------------------------
@@ -679,7 +775,7 @@ function backup_and_remove_dir() {
   # Input $2 (Optional) : $dest_dir
   dest_dir="${2:-_$1}"
 
-  if [[ ! -d ${src_dir} ]] || [[ -z `ls -A "$src_dir"` ]] ; then
+  if [[ ! -d ${src_dir} ]] || [[ -z $(ls -A "$src_dir") ]] ; then
     echo -e "\n# Source directory [${src_dir}] doesn't exist (or empty). Skipping backup"
   else
     echo -e "\n# Backup directory [${src_dir}] into [${dest_dir}]"
@@ -742,7 +838,9 @@ function change_yaml_key_value() {
 function configure_gcp_access() {
   local gcp_cred_json="$1"
 
-  install_local_gcloud
+  work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  install_local_gcloud "$work_dir"
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
@@ -752,7 +850,7 @@ function configure_gcp_access() {
   # local client_id
   # client_id=$(grep -Po 'client_id[^\d]*\K\d+' "${gcp_cred_json}")
 
-  gcloud auth activate-service-account $client_id --key-file="${gcp_cred_json}"
+  gcloud auth activate-service-account "$client_id" --key-file="${gcp_cred_json}"
   # gcloud config set project my-project
   # gcloud config set compute/zone us-east1
 
@@ -770,28 +868,28 @@ function configure_aws_access() {
   local aws_region="$2"
   local aws_key="$3"
   local aws_secret="$4"
-  local install_dir="${5:-./}"
+  local aws_install_dir="${5:-./}"
   local aws_bin_dir="${6:-$HOME/.local/bin}"
 
   # pip install awscli --upgrade --user
   aws_cli_installer="awscli-exe-linux-x86_64.zip"
-  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${install_dir}/${aws_cli_installer}"
-  unzip -n "${install_dir}/${aws_cli_installer}" -d "${install_dir}"
+  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${aws_install_dir}/${aws_cli_installer}"
+  unzip -n "${aws_install_dir}/${aws_cli_installer}" -d "${aws_install_dir}"
 
   # export PATH=$HOME/.local/bin:$PATH
-  # ${install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
+  # ${aws_install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
   [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
-  ${install_dir}/aws/install --update --install-dir "${install_dir}/aws" --bin-dir "${aws_bin_dir}"
+  "${aws_install_dir}"/aws/install --update --install-dir "${aws_install_dir}/aws" --bin-dir "${aws_bin_dir}"
 
   aws --version
 
   (
     # subshell to hide commands
-    aws configure set profile $aws_profile_name
-    aws configure set aws_access_key_id $aws_key
-    aws configure set aws_secret_access_key $aws_secret
+    aws configure set profile "$aws_profile_name"
+    aws configure set aws_access_key_id "$aws_key"
+    aws configure set aws_secret_access_key "$aws_secret"
 
-    aws configure set default.region $aws_region
+    aws configure set default.region "$aws_region"
     aws configure set output text
     aws configure set color on
   )
@@ -813,7 +911,7 @@ function create_json_for_dns_delete() {
           {
               "Action": "DELETE",
               "ResourceRecordSet": {
-                  "Name": "$(echo ${Name/\\052/*})",
+                  "Name": "${Name/\\052/*}",
                   "Type": "$Type",
                   "AliasTarget": {
                     "HostedZoneId": "$HostedZoneId",
@@ -823,7 +921,7 @@ function create_json_for_dns_delete() {
                 }]
     }
 EOF
-  ) > $1
+  ) > "$1"
 }
 
 # ------------------------------------------
@@ -833,7 +931,7 @@ function export_vars_from_json() {
   # Input $1 : Json file to read variables from
   for s in $(grep -E '": [^\{]' "$1" | sed -e 's/: /=/' -e 's/^\s*//' -e "s/\(\,\)$//"); do
     echo -e "\n# export $s"
-    eval export $s
+    eval export "$s"
   done
 }
 
@@ -845,14 +943,14 @@ function delete_aws_dns_records() {
   local hosted_zone_id="$1"
   local dns_record_set="$2"
   local tmp_file
-  tmp_file="`mktemp`_aws_records"
+  tmp_file="$(mktemp)_aws_records"
 
   echo -e "\n# Searching in Hosted Zone [$hosted_zone_id] - for a DNS record set: [$dns_record_set]"
-  aws route53 list-resource-record-sets --hosted-zone-id $hosted_zone_id --query "ResourceRecordSets[?Name == '$dns_record_set']" --out json > "$tmp_file"
+  aws route53 list-resource-record-sets --hosted-zone-id "$hosted_zone_id" --query "ResourceRecordSets[?Name == '$dns_record_set']" --out json > "$tmp_file"
 
-  cat $tmp_file
+  cat "$tmp_file"
 
-  if [[ $(< $tmp_file) == '[]' ]]; then
+  if [[ $(< "$tmp_file") == '[]' ]]; then
     echo -e "The DNS record set does not exist in AWS cluster [${CLUSTER_A_NAME}]"
     return
   fi
@@ -865,7 +963,7 @@ function delete_aws_dns_records() {
   cat "$tmp_file"
 
   echo -e "\n# Deleting the DNS record set:"
-  aws route53 change-resource-record-sets --hosted-zone-id $hosted_zone_id --change-batch file://$tmp_file
+  aws route53 change-resource-record-sets --hosted-zone-id "$hosted_zone_id" --change-batch "file://$tmp_file"
 
 }
 
@@ -890,6 +988,11 @@ function ocp_login() {
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
 
+  if [[ -z "${ocp_server}" || -z "${ocp_usr}" ]] ; then
+    echo -e "\n# User '${ocp_usr}' or Server '${ocp_server}' is missing"
+    return 1
+  fi  
+    
   TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
 
@@ -913,11 +1016,11 @@ function delete_crds_by_name() {
   local delete_crds=FALSE
 
   echo -e "\n# Searching for existing CRDs of previous ${crd_regex} installation on the cluster:"
-  ${OC} get crds |& highlight "${crd_regex}" && delete_crds=TRUE || :
+  if ${OC} get crds |& highlight "${crd_regex}" ; then delete_crds=TRUE ; fi
 
   # If there are existing CRDs on the cluster - remove them all:
-  # if [[ $? = 0 ]]; then
-  if [[ "$delete_crds" = TRUE ]]; then
+  # if [[ $? == 0 ]]; then
+  if [[ "$delete_crds" == TRUE ]]; then
     echo -e "\n# Deleting ${crd_regex} CRDs in the cluster"
     crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
     # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
@@ -925,8 +1028,8 @@ function delete_crds_by_name() {
 
     for crd_name in $crd_list ; do
       echo -e "\n# Deleting CRD $crd_name"
-      ${OC} delete --timeout=1m crd $crd_name --ignore-not-found || \
-      ${OC} patch crd/${crd_name} -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+      ${OC} delete --timeout=1m crd "$crd_name" --ignore-not-found || \
+      ${OC} patch "crd/${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
 
   else
@@ -947,26 +1050,26 @@ function force_delete_namespace() {
   # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
   local delete_timeout="${2:-30s}"
 
-  if [[ ${ns_name} = "default" ]] ; then
+  if [[ ${ns_name} == "default" ]] ; then
     echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
     return
   fi
 
   echo -e "\n# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
-  ${OC} get all,olm -n ${ns_name} |& highlight "No resources found" || :
+  ${OC} get all,olm -n "${ns_name}" |& highlight "No resources found" || :
 
   TITLE "Deleting whole namespace ${ns_name} from the cluster"
 
-  ${OC} delete --timeout=$delete_timeout namespace ${ns_name} --ignore-not-found || force_ns_delete=TRUE
+  ${OC} delete --timeout="$delete_timeout" namespace "${ns_name}" --ignore-not-found || force_ns_delete=TRUE
 
-  if [[ "$force_ns_delete" = TRUE && $(${OC} get namespace ${ns_name}) ]]; then
+  if [[ "$force_ns_delete" == TRUE && $(${OC} get namespace "${ns_name}") ]]; then
     echo -e "\n# Warning: Force delete of namespace via API"
     ${OC} proxy &
-    ${OC} get namespace ${ns_name} -o json | jq '.spec = {"finalizers":[]}' > temp.json
-    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize
+    ${OC} get namespace "${ns_name}" -o json | jq '.spec = {"finalizers":[]}' > temp.json
+    curl -k -H "Content-Type: application/json" -X PUT --data-binary @temp.json "127.0.0.1:8001/api/v1/namespaces/${ns_name}/finalize"
     kill -9 %% || :
-    ${OC} delete namespace ${ns_name} --ignore-not-found --grace-period=0 --force --wait || :
+    ${OC} delete namespace "${ns_name}" --ignore-not-found --grace-period=0 --force --wait || :
   fi
 
 }
@@ -984,7 +1087,8 @@ function create_docker_registry_secret() {
   local namespace="$4"
 
   local secret_name="${registry_server}-${registry_usr}"
-  local secret_name="${secret_name//[^a-zA-Z0-9]/-}" # Replace anything but letters and numbers with "-"
+  # Replace anything but letters and numbers with "-"
+  local secret_name="${secret_name//[^a-zA-Z0-9]/-}"
 
   TITLE "Creating new docker-registry in '$namespace' namespace
   Server: ${registry_server}
@@ -992,22 +1096,22 @@ function create_docker_registry_secret() {
 
   create_namespace "${namespace}"
 
-  ${OC} delete secret $secret_name -n $namespace --ignore-not-found || :
+  ${OC} delete secret "$secret_name" -n "$namespace" --ignore-not-found || :
 
   ( # subshell to hide commands
-    ${OC} create secret docker-registry -n ${namespace} $secret_name --docker-server=${registry_server} \
-    --docker-username=${registry_usr} --docker-password=${registry_pwd} # --docker-email=${registry_email}
+    ${OC} create secret docker-registry -n "${namespace}" "$secret_name" --docker-server="${registry_server}" \
+    --docker-username="${registry_usr}" --docker-password="${registry_pwd}" # --docker-email=${registry_email}
   )
 
   echo -e "\n# Adding '$secret_name' secret:"
-  ${OC} describe secret $secret_name -n $namespace || :
+  ${OC} describe secret "$secret_name" -n "$namespace" || :
 
   ( # update the cluster global pull-secret
     ${OC} patch secret/pull-secret -n openshift-config -p \
     '{"data":{".dockerconfigjson":"'"$( \
     ${OC} get secret/pull-secret -n openshift-config --output="jsonpath={.data.\.dockerconfigjson}" \
     | base64 --decode | jq -r -c '.auths |= . + '"$( \
-    ${OC} get secret/${secret_name} -n $namespace    --output="jsonpath={.data.\.dockerconfigjson}" \
+    ${OC} get "secret/${secret_name}" -n "$namespace"    --output="jsonpath={.data.\.dockerconfigjson}" \
     | base64 --decode | jq -r -c '.auths')"'' | base64 -w 0)"'"}}'
   )
 
@@ -1021,11 +1125,11 @@ function create_docker_registry_secret() {
 function install_nginx_service() {
   trap_to_debug_commands;
 
-  ngnix_name="${1:-NginX}"
-  nginx_image="${2:-quay.io/bitnami/nginx:latest}"
+  local ngnix_name="${1:-NginX}"
+  local nginx_image="${2:-quay.io/openshifttest/nginx-alpine:latest}"
 
-  target_namespace="$3" # The Namespace for Ngnix
-  service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
+  local target_namespace="$3" # The Namespace for Ngnix
+  local service_params="$4" # e.g. to expose Nginx as headless service on port 8080 pass: --port=8080 --cluster-ip=None
 
   if [[ -n "$target_namespace" ]] ; then
     echo -e "\n# Create Namespace for Nginx: $target_namespace"
@@ -1033,16 +1137,16 @@ function install_nginx_service() {
   fi
 
   echo -e "\n# Delete and create Nginx Deployment: $target_namespace (using Nginx image \"$nginx_image\")"
-  ${OC} delete deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
-  ${OC} create deployment ${ngnix_name} ${target_namespace:+-n $target_namespace} --image=$nginx_image
+  ${OC} delete deployment "${ngnix_name}" ${target_namespace:+-n $target_namespace} --ignore-not-found
+  ${OC} create deployment "${ngnix_name}" ${target_namespace:+-n $target_namespace} --image="$nginx_image"
 
   echo -e "\n# Delete and expose Ngnix service:"
-  ${OC} delete service ${ngnix_name} ${target_namespace:+-n $target_namespace} --ignore-not-found
-  ${OC} expose deployment ${ngnix_name} --name=${ngnix_name} ${service_params} ${target_namespace:+-n $target_namespace}
+  ${OC} delete service "${ngnix_name}" ${target_namespace:+-n $target_namespace} --ignore-not-found
+  ${OC} expose deployment "${ngnix_name}" --name="${ngnix_name}" ${service_params:+ $service_params} ${target_namespace:+-n $target_namespace}
 
   echo -e "\n# Wait 5 minutes for Ngnix service to be ready:"
-  ${OC} rollout status --timeout=5m deployment ${ngnix_name} ${target_namespace:+-n $target_namespace}
-  ${OC} describe pod ${ngnix_name} ${target_namespace:+-n $target_namespace}
+  ${OC} rollout status --timeout=5m deployment "${ngnix_name}" ${target_namespace:+-n $target_namespace}
+  ${OC} describe pod "${ngnix_name}" ${target_namespace:+-n $target_namespace}
 
 }
 
@@ -1055,6 +1159,9 @@ function create_namespace() {
   local ns=$1
   # Create the namespace with the API directly
   echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
+
+  # TODO: Consider 'oc new-project' command:
+  # ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
 
 }
 
@@ -1090,10 +1197,10 @@ function print_current_cluster_name() {
 
   # Remove the :<port number> if exists
   cluster_name="${cluster_name%%:*}"
-  # Replace special characters with underscore
+  # Replace anything but letters and numbers with "-"
   cluster_name="${cluster_name//[^a-zA-Z0-9]/-}"
 
-  echo $cluster_name
+  echo "$cluster_name"
 }
 
 # ------------------------------------------
@@ -1109,11 +1216,11 @@ function print_current_cluster_cloud() {
 
   cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
 
-  if [[ "$cluster_platform" = "AWS" ]] ; then
+  if [[ "$cluster_platform" == "AWS" ]] ; then
     echo "Amazon"
-  elif [[ "$cluster_platform" = "GCP" ]] ; then
+  elif [[ "$cluster_platform" == "GCP" ]] ; then
     echo "Google"
-  elif [[ "$cluster_platform" = "OpenStack" ]] ;
+  elif [[ "$cluster_platform" == "OpenStack" ]] ;
     then echo "Openstack"
   else
     echo "Unknown"
@@ -1129,7 +1236,7 @@ function print_images_info_of_namespace_pods() {
 
   local namespace=$1 # Default is current context namespace
 
-  TITLE "Images of Pods ${namespace:+(in namespace $namespace) }"
+  TITLE "Images of Pods ${namespace:+in namespace $namespace }"
 
   for img_id in $(${OC} get pods ${namespace:+-n $namespace} -o jsonpath="{..imageID}" \
   | tr -s '[[:space:]]' '\n' | sort | uniq -c | awk '{print $2}') ; do
@@ -1146,17 +1253,17 @@ function print_image_info() {
   # Do not trap_to_debug_commands
 
   local img_id=$1
-  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+  local regex_container_info="\s+\K(name=|url=|version=|release=|build-date=).*"
 
-  echo -e "\n### $(echo $img_id | sed -r 's|.*/([^@]+).*|\1|') Image ###"
+  echo -e "\n### $(echo "$img_id" | sed -r 's|.*/([^@]+).*|\1|') Image ###"
   echo "id=${img_id}"
 
   # Get info from image if the original image id is accessible by url
-  ${OC} image info $img_id 2>/dev/null | grep -Po "$regex_container_info" || \
+  ${OC} image info "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || \
   {
     # Otherwise, get the info from local copy of the image
-    img_id=$(echo $img_id | awk -F '@' '{print $2}')
-    ${OC} describe image $img_id 2>/dev/null | grep -Po "$regex_container_info"
+    img_id=$(echo "$img_id" | awk -F '@' '{print $2}')
+    ${OC} describe image "$img_id" 2>/dev/null | grep -Po "$regex_container_info"
   } || :
 
 }
@@ -1168,15 +1275,15 @@ function print_image_tags_info() {
   # Do not trap_to_debug_commands
 
   local namespace=$1 # Default is current context namespace
-  local regex_container_info="\s+\K(name=|url=|version=|release=).*"
+  local regex_container_info="\s+\K(name=|url=|version=|release=|build-date=).*"
 
   TITLE "ImageStream Tags ${namespace:+(in namespace $namespace) }"
 
   # Show image-stream tags
   ${OC} get istag ${namespace:+-n $namespace} | awk 'NR>1 {print $1}' | \
   while read -r img_tag ; do
-    echo -e "\n### $(echo $img_tag | sed -r 's|.*/([^@]+).*|\1|') Image-Stream tag ###"
-    ${OC} describe istag $img_tag ${namespace:+-n $namespace} 2>/dev/null \
+    echo -e "\n### $(echo "$img_tag" | sed -r 's|.*/([^@]+).*|\1|') Image-Stream tag ###"
+    ${OC} describe istag "$img_tag" ${namespace:+-n $namespace} 2>/dev/null \
     | grep -Po "$regex_container_info" || continue
   done
 
@@ -1195,7 +1302,7 @@ function print_csvs_in_namespace() {
   local csvs
   csvs="$(${OC} get csv ${namespace:+-n $namespace} -o name)"
 
-  ${OC} get ${namespace:+-n $namespace} $csvs -o json \
+  ${OC} get ${namespace:+-n $namespace} "$csvs" -o json \
   | jq -r '.spec.relatedImages[].image' | cut -d'/' -f2- | tr '/' '-'
 
 }
@@ -1208,11 +1315,11 @@ function get_running_pod_by_label() {
   local pod_label=$1
   local namespace=$2 # Optional: Namespace for the pod
   local tmp_file
-  tmp_file="`mktemp`_pod_status"
+  tmp_file="$(mktemp)_pod_status"
 
   # Wait up to 3 minutes for the pod to be ready
-  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l $pod_label > $tmp_file || :
-  pod_status="$(head -1 $tmp_file | awk -F '/| ' '{print $2}' | xargs)"
+  ${OC} wait --timeout=3m --for=condition=ready pod ${namespace:+-n $namespace} -l "$pod_label" > "$tmp_file" || :
+  pod_status="$(head -1 "$tmp_file" | awk -F '/| ' '{print $2}' | xargs)"
 
   # pod_id="$(${OC} get pod ${namespace:+-n $namespace} -l $pod_label --field-selector status.phase=Running | awk 'FNR == 2 {print $1}')"
   # Can also run with: -o jsonpath="{.items[0].metadata.name}"
@@ -1237,10 +1344,10 @@ function wait_for_all_nodes_ready() {
 
   local duration=${1:-3m} # Default is 3 minutes
 
-  ${OC} wait --timeout=$duration --for=condition=ready nodes --all || nodes_status=DOWN
+  ${OC} wait --timeout="$duration" --for=condition=ready nodes --all || nodes_status=DOWN
   ${OC} get nodes -o wide
 
-  if [[ "$nodes_status" = DOWN ]] ; then
+  if [[ "$nodes_status" == DOWN ]] ; then
     FAILURE "Timeout (${duration}) exceeded while waiting for all nodes to be ready"
   fi
 
@@ -1256,17 +1363,22 @@ function wait_for_all_machines_ready() {
 
   echo -e "\n# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   local cmd="${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon"
-  watch_and_retry "$cmd" $duration || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
 
   echo -e "\n# Wait up to $duration for all Machines Config Pool to be updated:"
   cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
-  watch_and_retry "$cmd" $duration || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
 
-  echo -e "\n# Status of Machine Config Pool and all Daemon-Sets:"
+  echo -e "\n# Status of Machine Config Pool:"
   ${OC} get machineconfigpool -o wide || machines_status=DOWN
+
+  echo -e "\n# Status of Machine Config Operators:"
+  ${OC} get all -n openshift-machine-config-operator -o wide || machines_status=DOWN
+
+  echo -e "\n# Status of Daemon-Sets:"
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
-  if [[ "$machines_status" = DOWN ]] ; then
+  if [[ "$machines_status" == DOWN ]] ; then
     FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
   fi
 
@@ -1302,7 +1414,7 @@ function watch_pod_logs() {
   local retries=${4:-5}
   local interval=${5:-20s} # time between each retry attempt
   local tmp_file
-  tmp_file="`mktemp`_pod_log"
+  tmp_file="$(mktemp)_pod_log"
   local search_exit_code=0
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
@@ -1333,21 +1445,21 @@ function watch_pod_logs() {
 function print_pod_logs_in_namespace() {
   local cluster_name="$1"
   local namespace="$2"
-  local pods_label="${3:+ -l $3}"
+  local pods_label="$3"
 
-  TITLE "Pods descriptions and logs${3:+ by label: "$3",} in cluster: $cluster_name, namespace: $namespace"
+  TITLE "Pods descriptions and logs ${pods_label:+"by label: ${pods_label}," }in cluster: $cluster_name, namespace: $namespace"
 
-  for pod in $(${OC} get pods $pods_label -n $namespace -o jsonpath='{.items[*].metadata.name}') ; do
+  for pod in $(${OC} get pods ${pods_label:+ -l $pods_label} -n "$namespace" -o jsonpath='{.items[*].metadata.name}') ; do
     echo -e "\n### Pod $pod in cluster: $cluster_name, namespace: $namespace ###\n"
-    ${OC} -n $namespace describe pod $pod || :
-    ${OC} -n $namespace get pod $pod -o yaml || :
+    ${OC} -n "$namespace" describe pod "$pod" || :
+    ${OC} -n "$namespace" get pod "$pod" -o yaml || :
 
-    if [[ "$(${OC} get pods -n $namespace $pod -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
+    if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
       echo -e "\n### Active pod $pod logs ###\n"
-      ${OC} -n $namespace logs $pod --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 || :
     else
       echo -e "\n### Terminated (previous) pod $pod logs ###\n"
-      ${OC} -n $namespace logs -p $pod --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 || :
     fi
   done
 }
@@ -1369,13 +1481,13 @@ function build_go_repo() {
 
   echo -e "\n# Downloading the repo [${go_repo_and_branch}] with GO: "
   # GO111MODULE="on" go get -v ${go_repo_and_branch} || echo -e "\n# 'go get ${go_repo_and_branch} might have had errors"
-  GO111MODULE="off" go get -v ${go_repo_and_branch} || echo -e "\n# GO get '${go_repo_and_branch}' might have had errors"
+  GO111MODULE="off" go get -v "${go_repo_and_branch}" || echo -e "\n# GO get '${go_repo_and_branch}' might have had errors"
 
   local repo_local_path="$GOPATH/src/$repo_url"
   echo -e "\n# Pull latest changes with Git into: $repo_local_path"
-  cd $repo_local_path || ( echo "$repo_local_path was not created, exiting." && exit 1 )
+  cd "$repo_local_path" || ( echo "$repo_local_path was not created, exiting." && exit 1 )
 
-  git_reset_local_repo ${branch_or_tag}
+  git_reset_local_repo "${branch_or_tag}"
 
   echo -e "\n# Build the project with GO: "
   # make build # May fail if Docker is not pre-installed
@@ -1402,8 +1514,8 @@ function git_reset_local_repo() {
   if [[ -n "$forked_repo" ]] ; then
     remote_name="upstream"
     echo -e "\n# Add the a new remote '${remote_name}' to pull from: $forked_repo"
-    git remote -v | grep -w ${remote_name} || git remote add ${remote_name} ${forked_repo}
-    git remote set-url ${remote_name} ${forked_repo}
+    git remote -v | grep -w ${remote_name} || git remote add ${remote_name} "${forked_repo}"
+    git remote set-url ${remote_name} "${forked_repo}"
   fi
 
   # Optional param 1: branch or tag to pull (default is latest branch)
@@ -1413,15 +1525,15 @@ function git_reset_local_repo() {
   git config user.email '<>'
   git config --get-all remote.${remote_name}.fetch
   git config --unset-all remote.${remote_name}.fetch
-  git fetch --prune --all
-  git branch -m ${branch_or_tag}
+  git fetch --prune --all --tags
+  git branch -m "${branch_or_tag}"
   # git branch -u ${remote_name} ${branch_or_tag}
-  git remote set-branches --add ${remote_name} ${branch_or_tag}
+  git remote set-branches --add ${remote_name} "${branch_or_tag}"
   # git fetch ${remote_name} ${branch_or_tag}
   # git reset --hard ${remote_name}/${branch_or_tag}
   # git checkout --theirs .
-  git reset --hard ${branch_or_tag}
-  git pull -f ${remote_name} ${branch_or_tag}
+  git reset --hard "${branch_or_tag}"
+  git pull -f ${remote_name} "${branch_or_tag}"
 
   echo -e "\n# Latest commits in the repository: \n"
   git log --date=short -10 --pretty="%C(Yellow)%h %x09 %C(reset)%ad %x09 %C(Cyan)%an: %x09 %C(reset)%s"
@@ -1442,11 +1554,11 @@ function get_latest_repository_version_by_tag() {
 
   local regex="tags/\K.*${tag_to_search}.*"
   local branch_tag
-  branch_tag="$(git ls-remote --tags $repo_url | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+  branch_tag="$(git ls-remote --tags "$repo_url" | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
 
   [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
 
-  echo $branch_tag
+  echo "$branch_tag"
 }
 
 # ------------------------------------------
@@ -1468,10 +1580,10 @@ function create_polarion_testcases_doc_from_junit() {
     local polarion_test_plan_id="$9"
 
     local tc_list
-    tc_list="`mktemp`_testcases"
+    tc_list="$(mktemp)_testcases"
 
     local temp_test_output
-    temp_test_output="`mktemp`_test_output"
+    temp_test_output="$(mktemp)_test_output"
 
     TITLE "Creating Polarion test-cases document for Junit results: $junit_xml
     Polarion project: ${polarion_project_id}
@@ -1486,7 +1598,7 @@ function create_polarion_testcases_doc_from_junit() {
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
     local polarion_testcases_xml="${testsuite_name}_polarion_testcases.xml" # Append "polarion_testcases.xml"
-    polarion_testcases_xml="$(dirname ${junit_xml})/${polarion_testcases_xml}" # Append full directory path of the original junit_xml file
+    polarion_testcases_xml="$(dirname "${junit_xml}")/${polarion_testcases_xml}" # Append full directory path of the original junit_xml file
 
     echo -e "\n# Getting list of Test-Cases in format 'class-name.test-name' (without sh2ju test index): "
     grep '<testcase ' "$junit_xml" | \
@@ -1506,17 +1618,18 @@ function create_polarion_testcases_doc_from_junit() {
     # TODO: This should rather be defined on external properties file:
 
     local current_script
-    current_script="$(echo "$(hostname) : $(realpath -s ${BASH_SOURCE[$i+1]})" )"
+    current_script="$(hostname) : $(realpath -s "${BASH_SOURCE[$i+1]}")"
 
-    while read full_testcase_name ; do
+    while read -r full_testcase_name ; do
 
       local class_name="${full_testcase_name%.*}" # text before the dot
       # local class_name="${testsuite_name}" # Making a common test suite across all imported junit files
       local test_name="${full_testcase_name#*.}" # text after the dot
 
-      TITLE "Setting Polarion schema from Junit file [$junit_xml]
-      Test class [${class_name}]
-      Test name [${test_name}]"
+      TITLE "Setting Polarion schema for a new Test Case:
+      Junit source file: $junit_xml
+      Test class name: ${class_name}
+      Test case name [${test_name}]"
 
       echo -e "\n# Save <system-output> of junit testcase '${test_name}' into $temp_test_output"
       grep -zoP -m 1 "(?<=${test_name}\")(?s)[^\n]*${class_name}.*?(?=\</system-out)" "$junit_xml" > "$temp_test_output"
@@ -1538,14 +1651,14 @@ function create_polarion_testcases_doc_from_junit() {
       local num_of_lines
       num_of_lines=$(wc -l < "$temp_test_output")
       if (( num_of_lines > 100 )) ; then
-        echo -e "$(head -n 50 $temp_test_output) \
+        echo -e "$(head -n 50 "$temp_test_output") \
         \n...\n \
-        $(tail -n 50 $temp_test_output)" > $temp_test_output
+        $(tail -n 50 "$temp_test_output")" > "$temp_test_output"
       fi
 
       echo -e "\n# Remove everything before the <system-out>, and save as testcase_output"
       local testcase_output
-      testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' ${temp_test_output} )"
+      testcase_output="$(grep -zoP '<system-out>\K[\s\S]*' "${temp_test_output}" )"
 
       echo -e "\n# Add pre-line and replace all end of lines with <br> in testcase output"
       testcase_output="<br> <span style=\"white-space: pre-line\"> ${testcase_output//$'\n'/ <br>} </span>"
@@ -1562,7 +1675,7 @@ function create_polarion_testcases_doc_from_junit() {
             &lt;ul&gt;
               " >> "$polarion_testcases_xml"
 
-      echo "$testcase_description" | while read line ; do
+      echo "$testcase_description" | while read -r line ; do
         echo "&lt;li&gt; $line &lt;/li&gt;" >> "$polarion_testcases_xml"
       done
 
@@ -1572,7 +1685,7 @@ function create_polarion_testcases_doc_from_junit() {
 
       echo -e "\n# Create testcase steps"
 
-      echo "$testcase_steps" | while read step ; do
+      echo "$testcase_steps" | while read -r step ; do
         # echo "<test-step>
         # <test-step-column id=\"expectedResult\">...</test-step-column>
         echo "<test-step>
@@ -1645,12 +1758,12 @@ function create_polarion_testrun_result_from_junit() {
     local polarion_project_id="$4"
     local polarion_team_name="$5"
     local polarion_testrun_template="$6"
-    local polarion_test_plan_id="$7" # Optional - To set test plan (instead of the test plan from the testrun template)
+    local polarion_test_plan_id="$7" # Optional: To set test plan (instead of the test plan from the testrun template)
+    local polarion_include_skipped="$8" # Optional: If "true" - Display Junit skipped test as "Waiting" in Polarion (i.e. test not run yet)
 
     local sed_expression
 
-    TITLE "Creating Polarion test-run (xml) for Junit results: $junit_xml
-    Polarion project: [${polarion_project_id}], team name: [${polarion_team_name}], test plan: [${polarion_test_plan_id}]"
+    TITLE "Creating Polarion test-run from Junit file: $junit_xml"
 
     # Verify junit file exists
     [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
@@ -1663,7 +1776,7 @@ function create_polarion_testrun_result_from_junit() {
     testsuite_name=$(generate_suite_title_from_junit_filename "$junit_xml")
 
     local polarion_testrun_xml="${testsuite_name}_polarion_testrun.xml" # Append "polarion_testrun.xml"
-    polarion_testrun_xml="$(dirname $junit_xml)/${polarion_testrun_xml}" # Append full directory path of the original junit_xml file
+    polarion_testrun_xml="$(dirname "$junit_xml")/${polarion_testrun_xml}" # Append full directory path of the original junit_xml file
 
     # testsuite_name="$polarion_team_name Test Run - $(basename ${polarion_testrun_xml%%.*})"
 
@@ -1676,12 +1789,13 @@ function create_polarion_testrun_result_from_junit() {
 
     TITLE "Generating Polarion Test-run file [${polarion_testrun_xml}] to import:
 
-    Test-run title: ${polarion_testrun_id}
-    Test-run title: ${testsuite_name}
-    Test-run title: ${polarion_testrun_template}
-    Test-run title: ${polarion_project_id}
-    Test-run title: ${polarion_team_name}
-    Test-run title: ${polarion_test_plan_id}
+    Polarion Test Run ID: ${polarion_testrun_id}
+    Polarion Project: ${polarion_project_id}
+    Polarion Team: ${polarion_team_name}
+    Polarion Test Suite: ${testsuite_name}
+    Polarion Test Plan ID: ${polarion_test_plan_id}
+    Polarion Test Run Template: ${polarion_testrun_template}
+    Include Skipped Tests: ${polarion_include_skipped}
     "
 
     cp "$junit_xml" "$polarion_testrun_xml"
@@ -1693,6 +1807,13 @@ function create_polarion_testrun_result_from_junit() {
     sed -e '0,/<testsuites>/s/<testsuites>//' -i "$polarion_testrun_xml"
     # sed -r "s:<testsuites>::" -i "$polarion_testrun_xml"
 
+    if [[ "$polarion_include_skipped" =~ ^(true|yes)$ ]]; then
+      echo -e "\n# Display Junit skipped test as 'Waiting' in Polarion (i.e. test not run yet)"
+      polarion_include_skipped="true"
+    else
+      polarion_include_skipped="false"
+    fi
+
     # Define Polarion <testsuites> properties (it is passed into SED, make sure new lines ends with " \n\ ")
     polarion_suite_content="<testsuites> \n\
         <properties> \n\
@@ -1703,7 +1824,7 @@ function create_polarion_testrun_result_from_junit() {
             <property name=\"polarion-response-myteamsname\" value=\"$polarion_team_name\" /> \n\
             <property name=\"polarion-lookup-method\" value=\"name\" /> \n\
             ${polarion_test_plan_id:+<property name=\"polarion-custom-plannedin\" value=\"$polarion_test_plan_id\" />} \n\
-            <property name=\"polarion-include-skipped\" value=\"true\" /> \n\
+            <property name=\"polarion-include-skipped\" value=\"${polarion_include_skipped}\" /> \n\
             <property name=\"polarion-create-defects\" value=\"true\" /> \n\
             <property name=\"polarion-testrun-status-id\" value=\"inprogress\" /> \n\
         </properties> \n\
@@ -1764,11 +1885,11 @@ function create_polarion_testrun_result_from_junit() {
     echo -e "\n# Add escaped HTML <br> tags at the end of all textual lines in $polarion_testrun_xml"
 
     local temp_testrun
-    temp_testrun="`mktemp`_testrun"
+    temp_testrun="$(mktemp)_testrun"
 
-    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_xml" > ${temp_testrun}
+    awk '!/<|>|^\s*$/{$0=$0"&#xD;&#xA;&#13;"}1' "$polarion_testrun_xml" > "${temp_testrun}"
 
-    mv ${temp_testrun} "$polarion_testrun_xml"
+    mv "${temp_testrun}" "$polarion_testrun_xml"
 
     # ------------------------------------------------------------------------ #
 
@@ -1790,7 +1911,7 @@ function create_polarion_testrun_result_from_junit() {
 
     local latest_job_url
     # Get the last non empty/whitespace row from $polarion_job_urls file
-    latest_job_url="$(awk 'NF{p=$0}END{print p}' $polarion_job_urls)"
+    latest_job_url="$(awk 'NF{p=$0}END{print p}' "$polarion_job_urls")"
 
     local cmd
     cmd="curl --config $polarion_auth_file -k ${latest_job_url}"
@@ -1821,7 +1942,7 @@ function generate_suite_title_from_junit_filename() {
 
     # Get file name without path and extension
     local testsuite_title
-    testsuite_title="$(basename ${1%.*})"
+    testsuite_title="$(basename "${1%.*}")"
 
     # Remove all 'junit' substring from testsuite title
     testsuite_title="${testsuite_title//junit/}"
@@ -1846,13 +1967,13 @@ function watch_polarion_job_status() {
   echo -e "\n# Import $polarion_import_type file [$polarion_import_file] into ${polarion_url}/import/${polarion_import_type} :\n"
 
   local polarion_log
-  polarion_log="`mktemp`_polarion_log"
-  curl --config "$polarion_auth_file" -k -X POST -F file=@${polarion_import_file} ${polarion_url}/import/${polarion_import_type} |& tee $polarion_log
+  polarion_log="$(mktemp)_polarion_log"
+  curl --config "$polarion_auth_file" -k -X POST -F file=@"${polarion_import_file}" "${polarion_url}/import/${polarion_import_type}" |& tee "$polarion_log"
 
   local polarion_job_id
-  polarion_job_id=$(awk '/job-ids/ { print $4 }' $polarion_log)
+  polarion_job_id=$(awk '/job-ids/ { print $4 }' "$polarion_log")
 
-  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" = 0 ]] ; then
+  if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" == 0 ]] ; then
     echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
     exit 1
   fi
@@ -1896,13 +2017,13 @@ function log_to_html() {
 
   # Get AHA binary
   if [[ ! -f ./$repo_dir/aha ]]; then
-      rm -rf $repo_dir
+      rm -rf "$repo_dir"
       # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
       git clone $repo_url --single-branch # --depth 1
-      git --work-tree=$repo_dir  --git-dir=$repo_dir/.git checkout tags/$repo_branch
-      make -C $repo_dir &> /dev/null
+      git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
+      make -C "$repo_dir" &> /dev/null
   fi
-  ./$repo_dir/aha --version
+  "./$repo_dir/aha" --version
 
   # Create HTML Header
   cat > "$html_output" <<EOF
@@ -1962,24 +2083,24 @@ EOF
   sed '/\S/,$!d' -i "$log_file"
 
   # Create HTML content with AHA
-  ./$repo_dir/aha -f $log_file --title "$title" --word-wrap --no-header >> $html_output
+  "./$repo_dir/aha" -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
 
   # Trim sh2ju debug lines starting with +++ from the html report
-  sed -r '/^\s*\+\+\+/d' -i $html_output
+  sed -r '/^\s*\+\+\+/d' -i "$html_output"
 
   # Make all http urls as Html <a> hyperlinks
-  sed -r "s#([^'\"])(https?://[^<> \t'\"]+)(\s|\n|$)# \1<a href='\2'>\2</a>\3 #g" -i $html_output
+  sed -r "s#([^'\"])(https?://[^<> \t'\"]+)(\s|\n|$)# \1<a href='\2'>\2</a>\3 #g" -i "$html_output"
 
   # Replace all lines of "<span...### {text...} ###</span>" - with a collapsible span ("###" was created with "PROMPT" function)
-  sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i $html_output
-  sed -r 's:\s+###</span.+$:<\/span><\/button><div class="content">:g' -i $html_output
+  sed -r 's:<span.+###\s+:<button type="button" class="collapsible"><span>:g' -i "$html_output"
+  sed -r 's:\s+###</span.+$:<\/span><\/button><div class="content">:g' -i "$html_output"
 
   # Close all collapsible spans, when getting to lines of 🎩︎ (excluding first time)
-  sed -r 's:(.+🎩︎):<\/div><br><br>\1:g' -i $html_output
-  sed '0,/<\/div><br><br>/s///' -i $html_output
+  sed -r 's:(.+🎩︎):<\/div><br><br>\1:g' -i "$html_output"
+  sed '0,/<\/div><br><br>/s///' -i "$html_output"
 
   # Create HTML collapsible function (must be at the bottom)
-  cat >> $html_output <<EOF
+  cat >> "$html_output" <<EOF
   </pre>
   <br><br><br>
   <script>
