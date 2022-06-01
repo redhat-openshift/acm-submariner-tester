@@ -4817,29 +4817,29 @@ function print_resources_and_pod_logs() {
 
   TITLE "All Submariner logs on ${cluster_name}"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
   # For SubCtl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" $gw_label
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "control-plane=submariner-operator"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "control-plane=submariner-operator"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-addon"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-globalnet"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-globalnet"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-agent"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-agent"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
-  print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
+  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
-  print_pod_logs_in_namespace "$cluster_name" "kube-system" "component=kube-controller-manager"
+  print_pod_logs_in_namespace "kube-system" "component=kube-controller-manager"
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 

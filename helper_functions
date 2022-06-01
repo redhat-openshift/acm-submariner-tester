@@ -1419,7 +1419,7 @@ function watch_pod_logs() {
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
-  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
+  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace --all-containers --ignore-errors \
   > $tmp_file && grep -Ei '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex" || search_exit_code=$?
@@ -1443,9 +1443,11 @@ function watch_pod_logs() {
 # ------------------------------------------
 
 function print_pod_logs_in_namespace() {
-  local cluster_name="$1"
-  local namespace="$2"
-  local pods_label="$3"
+  local namespace="$1"
+  local pods_label="$2" # Optional: Select pods with this label only
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Pods descriptions and logs ${pods_label:+"by label: ${pods_label}," }in cluster: $cluster_name, namespace: $namespace"
 
@@ -1456,10 +1458,10 @@ function print_pod_logs_in_namespace() {
 
     if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
       echo -e "\n### Active pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     else
       echo -e "\n### Terminated (previous) pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     fi
   done
 }
