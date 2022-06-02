@@ -253,7 +253,7 @@ EOF
 
   ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}':
+  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}' in cluster ${cluster_name}:
   Catalog: ${catalog_display_name}
   Operator: ${operator_name}
   Channel: ${operator_channel}
@@ -274,8 +274,10 @@ EOF
   regex="${operator_version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  TITLE "Display running pods in Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
+  TITLE "Verify all pods are running/completed in the Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${bundle_namespace}" --field-selector=status.phase!=succeeded || :
+   
   ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
 
