@@ -974,7 +974,7 @@ function create_submariner_config_in_acm_managed_cluster() {
   spec:
     IPSecIKEPort: ${IPSEC_IKE_PORT}
     IPSecNATTPort: ${IPSEC_NATT_PORT}
-    cableDriver: libreswan
+    cableDriver: ${SUBM_CABLE_DRIVER}
     credentialsSecret:
       name: ${cluster_secret_name}
     gatewayConfig:
