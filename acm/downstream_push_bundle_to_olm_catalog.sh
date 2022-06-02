@@ -5,26 +5,18 @@
 
 # ------------------------------------------
 
-### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
+### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
-  trap_to_debug_commands;
+  # trap_to_debug_commands;
 
-  local version="${1}"
-  local bundle_name="${2}"
+  local bundle_name="${1}"
+  local version="${2}"
 
-  TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat) for bundle '${bundle_name}' version '${version}'"
-
-  local index_images
-
-  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
   local umb_output="latest_iib.txt"
+
+  fetch_datagrapper "${bundle_name}" "${version}" "30" "${umb_output}"
+
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-
-  local num_of_latest_builds=5
-  local rows=$((num_of_latest_builds * 5))
-
-  local num_of_days=30
-  local delta=$((num_of_days * 86400)) # 1296000 = 15 days * 86400 seconds
 
   if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
     BUG "'acm-operator-bundle' has unstable CVP tests" \
@@ -34,8 +26,7 @@ function export_LATEST_IIB() {
     iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
   fi
 
-  curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
-
+  local index_images
   index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
   # index-images example:
@@ -48,21 +39,21 @@ function export_LATEST_IIB() {
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
 
-  # If no image was found - increase the delta
+  # If no image was found - increase the delta to 100 days
   if [[ -z "$index_images" || "$index_images" == null ]]; then
-    BUG "Failed to retrieve images during the last $num_of_days days - Searching images during delta of 3X${num_of_days} days"
+    BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
     
-    delta=$((delta * 3))
-
-    curl --retry 30 --retry-delay 5 -o $umb_output -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+    fetch_datagrapper "${bundle_name}" "${version}" "100" "${umb_output}"
 
     index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
-    # If still no image found - ignore non-completed pipelines
+    # If still no image found - increase the delta to 500 days (but filter completed pipelines only)
     if [[ -z "$index_images" || "$index_images" == null ]]; then
-      BUG "Failed to retrieve images during the last 3X${num_of_days} days - Searching images in non-completed pipelines"
+      BUG "Failed to retrieve images during the last 100 days - Searching images during the last 500 days (in completed pipelines only)"
 
-      iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+      fetch_datagrapper "${bundle_name}" "${version}" "500" "${umb_output}"
+
+      iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
       index_images="$(jq -r "${iib_query}" $umb_output)" || :
     fi
@@ -116,6 +107,37 @@ function export_LATEST_IIB() {
   # }
 
   export LATEST_IIB
+
+}
+
+# ------------------------------------------
+
+### Helper function to fetch datagrapper (UMB) for component images by version and days, into a file
+function fetch_datagrapper() {
+  # trap_to_debug_commands;
+
+  local bundle_name="${1}"
+  local version="${2}"
+  local num_of_days="${3}"
+  local umb_output_file="${4}"
+
+  TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat)
+  Bundle: ${bundle_name}
+  Version: ${version}
+  Delta by Days: ${num_of_days}
+  Output file: ${umb_output_file}
+  "
+
+  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+  local num_of_latest_builds=5
+  local rows=$((num_of_latest_builds * 5))
+  local delta=$((num_of_days * 86400)) # For example: 30 days * 86400 seconds = 2592000
+
+  local curl_cmd
+  curl_cmd=(curl --retry 30 --retry-delay 5 -o "${umb_output_file}" -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}")
+  
+  echo -e "\n# Running: ${curl_cmd[*]}"
+  "${curl_cmd[@]}"
 
 }
 
@@ -176,7 +198,7 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   # Set and export the variable ${LATEST_IIB}
-  export_LATEST_IIB "${operator_version}" "${bundle_name}"
+  export_LATEST_IIB "${bundle_name}" "${operator_version}"
 
   local source_image_path
   source_image_path="${BREW_REGISTRY}/$(echo "${LATEST_IIB}" | cut -d'/' -f2-)"
@@ -252,7 +274,7 @@ EOF
   regex="${operator_version//[a-zA-Z]}"
   watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  TITLE "Display running pods in Bundle namespace ${bundle_namespace} in cluster ${cluster_name}"
+  TITLE "Display running pods in Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 
   ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
