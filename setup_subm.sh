@@ -358,7 +358,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    export SUBM_CABLE_DRIVER="$2" # libreswan / strongswan [Deprecated]
+    export SUBM_CABLE_DRIVER="$2" # Default is libreswan
     shift 2 ;;
   --skip-ocp-setup)
     export SKIP_OCP_SETUP=YES
@@ -1366,10 +1366,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  if [[ "$EXIT_STATUS" != @(1|2) ]] ; then
+  if [[ "$EXIT_STATUS" == 0 ]] ; then
     # If script got 0 EXIT_STATUS here - All tests of Submariner have passed ;-)
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
-    echo 0 > "$TEST_STATUS_FILE"
   fi
 
   echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"

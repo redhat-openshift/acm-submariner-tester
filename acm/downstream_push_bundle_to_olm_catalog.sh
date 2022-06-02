@@ -7,7 +7,7 @@
 
 ### Function to find latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
-  # trap_to_debug_commands;
+  trap_to_debug_commands;
 
   local version="${1}"
   local bundle_name="${2}"

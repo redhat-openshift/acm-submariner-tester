@@ -30,7 +30,7 @@ function remove_multicluster_engine() {
 
   TITLE "Deleting all 'multicluster-engine' resources and Namespace"
   
-  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && return
 
   ${OC} delete multiclusterengine --all --timeout=30s || :
 
