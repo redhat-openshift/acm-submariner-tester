@@ -756,6 +756,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 0, unless it is already 1 or 2
+    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+
   fi
   ### END of OCP Setup (Create or Destroy) ###
 
@@ -1100,6 +1106,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi
@@ -1254,6 +1262,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
