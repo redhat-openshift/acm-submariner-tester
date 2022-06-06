@@ -249,7 +249,7 @@ EOF
   echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 5m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
+  watch_and_retry "$cmd" 10m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
   ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
@@ -276,7 +276,7 @@ EOF
 
   TITLE "Verify all pods are running/completed in the Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 
-  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${bundle_namespace}" --field-selector=status.phase!=succeeded || :
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${bundle_namespace}" --field-selector=status.phase!=Succeeded || :
    
   ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
