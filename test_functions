@@ -278,7 +278,7 @@ function download_ocp_installer() {
 
   local oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
 
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
 
   local ocp_install_gz
   ocp_install_gz=$(curl "$oc_installer_url" | grep -Eoh "openshift-install-linux-.+\.tar\.gz" | cut -d '"' -f 1 | head -1)
@@ -327,10 +327,10 @@ function build_ocpup_tool_latest() {
 
   echo -e "\n# TODO: Need to fix ocpup alias"
 
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
   git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
-  cd ocpup || exit
+  cd ocpup || return 1
 
   # To cleanup GOLANG mod files:
     # go clean -cache -modcache -i -r
@@ -379,7 +379,7 @@ function destroy_ocp_cluster() {
   trap_to_debug_commands;
 
   # Temp - CD to main working directory
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
 
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
@@ -452,7 +452,7 @@ function destroy_osp_cluster() {
 
   PROMPT "Destroying previous Openstack cluster: $cluster_name"
 
-  cd "${OCPUP_DIR}" || exit
+  cd "${OCPUP_DIR}" || return 1
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
@@ -492,7 +492,7 @@ function prepare_install_ocp_cluster() {
 
   PROMPT "Preparing installation files for OCP cluster $cluster_name"
 
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
   # To manually create new OCP install-config.yaml:
@@ -550,7 +550,7 @@ function create_ocp_cluster() {
   if [[ ! -d "$ocp_install_dir" ]] ; then
     FATAL "OCP install directory [$ocp_install_dir] does not exist"
   else
-    cd "${ocp_install_dir}" || exit
+    cd "${ocp_install_dir}" || return 1
   fi
 
   # Continue previous OCP installation
@@ -587,7 +587,7 @@ function prepare_install_osp_cluster() {
 
   PROMPT "Preparing installation files for OSP cluster $cluster_name"
 
-  cd "${OCPUP_DIR}" || exit
+  cd "${OCPUP_DIR}" || return 1
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
 
 #   local terraform_osp_provider="./tf/osp-sg/versions.tf"
@@ -635,7 +635,7 @@ function create_osp_cluster() {
 
   PROMPT "Creating Openstack cluster $cluster_name (on-prem) with OCP-UP tool"
 
-  cd "${OCPUP_DIR}" || exit
+  cd "${OCPUP_DIR}" || return 1
 
   local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
 
@@ -773,7 +773,7 @@ function set_missing_cli_variables() {
   export JOIN_CLUSTER_B=${JOIN_CLUSTER_B:-NO}
   export JOIN_CLUSTER_C=${JOIN_CLUSTER_C:-NO}
   export GLOBALNET=${GLOBALNET:-NO}
-  # export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-LIBRESWAN} [DEPRECATED]
+  export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-libreswan}
   export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
   export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
   export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
@@ -1645,7 +1645,7 @@ function download_subctl_by_tag() {
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
     local submariner_version_or_tag="${1:-v[0-9]}"
 
-    cd "${WORKDIR}" || exit
+    cd "${WORKDIR}" || return 1
 
     # Downloading SubCtl from VPN_REGISTRY (downstream)
     # if using --registry-images and if $submariner_version_or_tag is not devel
@@ -1979,7 +1979,7 @@ function install_broker_via_subctl_on_cluster_a() {
   export KUBECONFIG="${KUBECONF_HUB}"
   DEPLOY_CMD="${DEPLOY_CMD} --kubecontext $(${OC} config current-context)"
 
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
   TITLE "Remove previous ${BROKER_INFO} (if exists)"
@@ -2114,7 +2114,7 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   local terraform_script="prep_for_subm.sh"
 
   mkdir -p "${git_project}_scripts"
-  cd "${git_project}_scripts" || exit
+  cd "${git_project}_scripts" || return 1
 
   download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
 
@@ -2126,7 +2126,7 @@ function open_firewall_ports_on_aws_gateway_nodes() {
   TITLE "Copy '${github_dir}' directory (including '${terraform_script}') to ${target_path}"
   mkdir -p "${target_path}"
   cp -rf "${github_dir}"/* "${target_path}"
-  cd "${target_path}/" || exit
+  cd "${target_path}/" || return 1
 
   # Fix bug in terraform version
   sed -r 's/0\.12\.12/0\.12\.29/g' -i versions.tf || :
@@ -2199,7 +2199,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   local terraform_script="configure_osp.sh"
 
   mkdir -p "${git_project}_scripts"
-  cd "${git_project}_scripts" || exit
+  cd "${git_project}_scripts" || return 1
 
   # Temporary, until merged to upstream
   # download_github_file_or_dir "$git_user" "$git_project" "$commit_or_branch" "${github_dir}"
@@ -2213,7 +2213,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   TITLE "Copy '${git_project}_scripts' directory (including '${terraform_script}') to ${target_path}_scripts"
   mkdir -p "${target_path}_scripts"
   cp -rf * "${target_path}_scripts"
-  cd "${target_path}_scripts/" || exit
+  cd "${target_path}_scripts/" || return 1
   ### Temporary end
 
   # Fix bug in terraform version
@@ -2231,7 +2231,7 @@ function open_firewall_ports_on_osp_gateway_nodes() {
   # Use variables: -var region=”eu-west-2” -var region=”eu-west-1” or with: -var-file=newvariable.tf
   # bash -x ...
   ./${terraform_script} "${ocp_install_dir}" -auto-approve |& highlight "Apply complete| already exists" \
-  || FATAL "./${terraform_script} did not complete successfully"
+  || FAILURE "./${terraform_script} did not complete successfully"
 
   # Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
   # OR
@@ -2857,7 +2857,7 @@ function run_subctl_join_cmd_from_file() {
   local JOIN_CMD
   JOIN_CMD="$(< "$1")"
 
-  cd "${WORKDIR}" || exit
+  cd "${WORKDIR}" || return 1
 
   # Process:
   #
@@ -4018,7 +4018,7 @@ function test_submariner_packages() {
   local junit_output_file="$PKG_JUNIT_XML"
 
   local project_path="$GOPATH/src/github.com/submariner-io/submariner"
-  cd "$project_path" || exit
+  cd "$project_path" || return 1
   pwd
 
   export GO111MODULE="on"
@@ -4098,7 +4098,7 @@ function test_project_e2e_with_go() {
   local junit_output_file="$2"
   declare -a "test_params=($3)"
 
-  cd "$project_path" || exit
+  cd "$project_path" || return 1
   pwd
 
   TITLE "Set E2E context for the active clusters"
@@ -4289,7 +4289,7 @@ function build_operator_latest() {  # [DEPRECATED]
   GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo -e "\n# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
-  cd "$GOPATH"/src/github.com/submariner-io/submariner-operator || exit
+  cd "$GOPATH"/src/github.com/submariner-io/submariner-operator || return 1
   ls
 
   # go get -v -u -t ./...
@@ -4817,29 +4817,29 @@ function print_resources_and_pod_logs() {
 
   TITLE "All Submariner logs on ${cluster_name}"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "name=submariner-operator"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
   # For SubCtl <= 0.8 : 'app=submariner-engine' is expected as the Gateway pod label
   [[ $(subctl version | grep --invert-match "v0.8") ]] || gw_label="app=submariner-engine"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" $gw_label
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" $gw_label
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "control-plane=submariner-operator"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "control-plane=submariner-operator"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-addon"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-globalnet"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-globalnet"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-agent"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-agent"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
 
-  print_pod_logs_in_namespace "$cluster_name" "$SUBM_NAMESPACE" "app=submariner-routeagent"
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-routeagent"
 
-  print_pod_logs_in_namespace "$cluster_name" "kube-system" "k8s-app=kube-proxy"
+  print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
-  print_pod_logs_in_namespace "$cluster_name" "kube-system" "component=kube-controller-manager"
+  print_pod_logs_in_namespace "kube-system" "component=kube-controller-manager"
 
   echo -e "\n############################## End of Submariner logs collection on ${cluster_name} ##############################\n"
 

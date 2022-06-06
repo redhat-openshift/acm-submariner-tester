@@ -30,7 +30,7 @@ function remove_multicluster_engine() {
 
   TITLE "Deleting all 'multicluster-engine' resources and Namespace"
   
-  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && return
 
   ${OC} delete multiclusterengine --all --timeout=30s || :
 
@@ -974,7 +974,7 @@ function create_submariner_config_in_acm_managed_cluster() {
   spec:
     IPSecIKEPort: ${IPSEC_IKE_PORT}
     IPSecNATTPort: ${IPSEC_NATT_PORT}
-    cableDriver: libreswan
+    cableDriver: ${SUBM_CABLE_DRIVER}
     credentialsSecret:
       name: ${cluster_secret_name}
     gatewayConfig:

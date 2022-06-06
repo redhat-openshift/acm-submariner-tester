@@ -1419,7 +1419,7 @@ function watch_pod_logs() {
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
-  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
+  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace --all-containers --ignore-errors \
   > $tmp_file && grep -Ei '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex" || search_exit_code=$?
@@ -1443,9 +1443,11 @@ function watch_pod_logs() {
 # ------------------------------------------
 
 function print_pod_logs_in_namespace() {
-  local cluster_name="$1"
-  local namespace="$2"
-  local pods_label="$3"
+  local namespace="$1"
+  local pods_label="$2" # Optional: Select pods with this label only
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Pods descriptions and logs ${pods_label:+"by label: ${pods_label}," }in cluster: $cluster_name, namespace: $namespace"
 
@@ -1456,10 +1458,10 @@ function print_pod_logs_in_namespace() {
 
     if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
       echo -e "\n### Active pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     else
       echo -e "\n### Terminated (previous) pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     fi
   done
 }
@@ -1485,7 +1487,7 @@ function build_go_repo() {
 
   local repo_local_path="$GOPATH/src/$repo_url"
   echo -e "\n# Pull latest changes with Git into: $repo_local_path"
-  cd "$repo_local_path" || ( echo "$repo_local_path was not created, exiting." && exit 1 )
+  cd "$repo_local_path" || { echo "$repo_local_path was not created, exiting." ; return 1 ; }
 
   git_reset_local_repo "${branch_or_tag}"
 
@@ -1590,7 +1592,7 @@ function create_polarion_testcases_doc_from_junit() {
     Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; return 1 ; }
 
     echo -e "\n# Set output xml for Polarion test-cases"
 
@@ -1766,7 +1768,7 @@ function create_polarion_testrun_result_from_junit() {
     TITLE "Creating Polarion test-run from Junit file: $junit_xml"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
+    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; return 1 ; }
 
     # ------------------------------------------------------------------------ #
 
@@ -1975,7 +1977,7 @@ function watch_polarion_job_status() {
 
   if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" == 0 ]] ; then
     echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
-    exit 1
+    return 1
   fi
 
   local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
@@ -1988,7 +1990,7 @@ function watch_polarion_job_status() {
 
   if tail -n 10 "$polarion_log" | grep "failed" ; then
     echo "Importing ${polarion_import_type} to Polarion did not complete successfully" 1>&2
-    exit 1
+    return 1
   fi
 }
 
@@ -2005,7 +2007,7 @@ function log_to_html() {
   local description="$4"
 
   echo -e "\n# Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; exit 1 ; }
+  [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; return 1 ; }
 
   # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"

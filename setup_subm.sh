@@ -123,11 +123,11 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.5.0 --subctl-version 0.12.1 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.2 release
-  * Install Submariner 0.11.2 release
+  * Install ACM 2.5.0 release
+  * Install Submariner 0.12.1 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Run Submariner E2E tests (with subctl)
 
@@ -358,7 +358,7 @@ while [[ $# -gt 0 ]]; do
     shift ;;
   --cable-driver)
     check_cli_args "$2"
-    export SUBM_CABLE_DRIVER="$2" # libreswan / strongswan [Deprecated]
+    export SUBM_CABLE_DRIVER="$2" # Default is libreswan
     shift 2 ;;
   --skip-ocp-setup)
     export SKIP_OCP_SETUP=YES
@@ -756,6 +756,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 0, unless it is already 1 or 2
+    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+
   fi
   ### END of OCP Setup (Create or Destroy) ###
 
@@ -1100,6 +1106,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi
@@ -1254,6 +1262,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
@@ -1261,7 +1271,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Running Submariner tests with Ginkgo or with subctl commands
 
-  if [[ ! "$SKIP_TESTS" =~ all ]]; then
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+  if [[ ! "$SKIP_TESTS" =~ all && "$EXIT_STATUS" != 1 ]]; then
 
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
@@ -1335,9 +1348,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         fi
       fi
 
-      # Get test exit status (from file $TEST_STATUS_FILE)
-      EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-
       if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
         echo 0 > "$TEST_STATUS_FILE"
       else
@@ -1366,10 +1376,9 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  if [[ "$EXIT_STATUS" != @(1|2) ]] ; then
+  if [[ "$EXIT_STATUS" == 0 ]] ; then
     # If script got 0 EXIT_STATUS here - All tests of Submariner have passed ;-)
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
-    echo 0 > "$TEST_STATUS_FILE"
   fi
 
   echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
