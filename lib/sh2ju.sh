@@ -200,10 +200,13 @@ EOF
     if [[ "${returnCode}" != 0 ]] ; then
       # Command failed
       if [[ -f "$statusFile" ]] ; then
-        # If suite status is empty - set status file to: 1 (Critical failure)
-        [[ -n "$testSuiteStatus" ]] || echo 1 > "$statusFile"
-        # If suite status is 0 (Pass) - set status file to: 2 (Failed but continue)
-        [[ "$testSuiteStatus" != 0 ]] || echo 2 > "$statusFile"
+        # If suite status is empty, or return code is anything but 5 - change status file to: 1 (Critical failure)
+        if [[ -z "$testSuiteStatus" ]] || [[ "$returnCode" != 5 ]] ; then 
+          echo 1 > "$statusFile"
+        # Else if suite status was 0 (Pass until now) - change status file to: 2 (Failed but continue)
+        elif [[ "$testSuiteStatus" == 0 ]] ; then
+          echo 2 > "$statusFile"
+        fi
       fi
       testCaseStatus=FAILED 
     else
