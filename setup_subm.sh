@@ -643,14 +643,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
   ### Script debug calls (should be left as a comment) ###
 
-    # ${JUNIT_CMD} debug_test_polarion
-    # ${JUNIT_CMD} debug_test_pass "junit" "junit"
-    # ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
-    # rc=$?
-    # BUG "debug_test_fail - Exit code: $rc" \
-    # "If RC $rc = 5 - JUNIT_CMD should continue execution"
-    # ${JUNIT_CMD} debug_test_pass 100 200 300
-    # ${JUNIT_CMD} debug_test_fatal
+    ${JUNIT_CMD} debug_test_polarion
+    ${JUNIT_CMD} debug_test_pass "junit" "junit"
+    ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
+    rc=$?
+    BUG "debug_test_fail - Exit code: $rc" \
+    "If RC $rc = 5 - JUNIT_CMD should continue execution"
+    ${JUNIT_CMD} debug_test_pass 100 200 300
+    ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
 
@@ -1285,7 +1285,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       "Build Submariner repo from 'devel' branch instead" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
       ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
-      
+
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo

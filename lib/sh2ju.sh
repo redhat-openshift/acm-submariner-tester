@@ -191,7 +191,7 @@ EOF
   # Save datetime before executing the command
   testStartTime="$(${dateTime} +%s.%N)"
 
-  ### If testSuiteStatus is not 1: Call eVal() to execute the test, and set suite status result 
+  ### If testSuiteStatus is not 1: Call eVal() to execute the test, and set suite status result
   if [[ "$testSuiteStatus" != 1 ]] ; then
     # Run command and set the test return code, based on the command exit code
     eVal "${cmd}"
@@ -201,14 +201,14 @@ EOF
       # Command failed
       if [[ -f "$statusFile" ]] ; then
         # If suite status is empty, or return code is anything but 5 - change status file to: 1 (Critical failure)
-        if [[ -z "$testSuiteStatus" ]] || [[ "$returnCode" != 5 ]] ; then 
+        if [[ -z "$testSuiteStatus" ]] || [[ "$returnCode" != 5 ]] ; then
           echo 1 > "$statusFile"
         # Else if suite status was 0 (Pass until now) - change status file to: 2 (Failed but continue)
         elif [[ "$testSuiteStatus" == 0 ]] ; then
           echo 2 > "$statusFile"
         fi
       fi
-      testCaseStatus=FAILED 
+      testCaseStatus=FAILED
     else
       testCaseStatus=PASSED
     fi
@@ -231,7 +231,7 @@ EOF
   excapeXML "${outf}" || :
   excapeXML "${errf}" || :
 
-  
+
   if [[ ${testCaseStatus} == PASSED ]] && [[ -n "${ereg:-}" ]]; then
     # Change testCaseStatus to FAILED if output includes regex of potential error
     if grep -q -E ${icase} "${ereg}" "${outf}" ; then
@@ -245,7 +245,7 @@ EOF
     skipped=$((skipped+1))
   fi
 
-  
+
   # Calculate test duration and counter
   asserts=$((asserts+1))
   testDuration=$(echo "${testEndTime} ${testStartTime}" | awk '{print $1 - $2}')

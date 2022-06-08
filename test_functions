@@ -523,9 +523,9 @@ function prepare_install_ocp_cluster() {
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
 
   # Get cluster platform type from OCP installer yaml, and update cluster region
-  local platform 
+  local platform
   platform="$(print_ocp_install_platform "${installer_yaml_new}")"
-  
+
   if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
     echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
     change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
@@ -712,20 +712,20 @@ function export_all_env_variables() {
 
   if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
     export JUNIT_CMD="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
-    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML" 
+    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
   fi
 
   set_missing_cli_variables
 
   echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
 
-  # Exporting variables for Managed Cluster A  
+  # Exporting variables for Managed Cluster A
   export_cluster_config_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
 
   # Currently the Hub is also installed on Cluster A
   export KUBECONF_HUB="${KUBECONF_CLUSTER_A}"
 
-  # Exporting variables for Managed Cluster B  
+  # Exporting variables for Managed Cluster B
   export_cluster_config_variables "${CLUSTER_B_NAME}" "${CLUSTER_B_YAML}" "B"
 
   # Exporting variables for Managed Cluster C
@@ -810,9 +810,9 @@ function export_cluster_config_variables() {
   local cluster_install_dir
 
   if [[ -s "$cluster_install_yaml" ]] ; then
-    # Get cluster platform type from OCP installer yaml 
+    # Get cluster platform type from OCP installer yaml
     cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
-    
+
     echo -e "\n# Prefix platform type '${cluster_install_platform}' to the cluster name '${cluster_name}'"
     cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
 
@@ -831,7 +831,7 @@ function export_cluster_config_variables() {
     export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}"
     export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
     # export "KUBECONF_MANAGED=${cluster_install_dir}/auth/kubeconfig"
-  
+
   else
     echo -e "\n# Cluster $cluster_index installer yaml was not given - Unsetting \$KUBECONF_CLUSTER_${cluster_index}"
     unset "KUBECONF_CLUSTER_${cluster_index}"
@@ -843,7 +843,7 @@ function export_cluster_config_variables() {
 # ------------------------------------------
 
 function print_ocp_install_platform() {
-  # Print the platform type found in the OCP install yaml 
+  # Print the platform type found in the OCP install yaml
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local ocp_install_yaml="$1"
@@ -855,7 +855,7 @@ function print_ocp_install_platform() {
 # ------------------------------------------
 
 function check_if_cluster_is_running() {
-  # Check if cluster is already running (return exit code 1 if it's not) 
+  # Check if cluster is already running (return exit code 1 if it's not)
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -1393,7 +1393,7 @@ function prune_all_mirror_images_from_current_cluster_registry() {
 
   ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --confirm \
   --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
-  # --as="${OCP_USR}" --force-insecure --ignore-invalid-refs --keep-tag-revisions=0 --keep-younger-than=0 
+  # --as="${OCP_USR}" --force-insecure --ignore-invalid-refs --keep-tag-revisions=0 --keep-younger-than=0
 
 }
 
@@ -2370,7 +2370,7 @@ function configure_ocp_garbage_collection_and_images_prune() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
-  
+
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
   cat <<EOF | ${OC} apply -f -
@@ -3088,7 +3088,7 @@ function export_variable_name_of_active_gateway_pod() {
   TITLE "Show Submariner Gateway nodes, and get the active one"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  highlight "active" "$gateways_output" 
+  highlight "active" "$gateways_output"
 
   local active_gateway_node
   active_gateway_node="$(awk '/active/ {print $1}' "$gateways_output")"
@@ -3479,7 +3479,7 @@ function export_service_in_lighthouse() {
   "Delete the Service Export object corresponding to that Service, before creating it" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2066085"
   # Workaound:
-  ${OC} delete serviceexport "${svc_name}" ${namespace:+-n $namespace} --ignore-not-found 
+  ${OC} delete serviceexport "${svc_name}" ${namespace:+-n $namespace} --ignore-not-found
 
   subctl export service "${svc_name}" --kubeconfig "${KUBECONFIG}" ${namespace:+-n $namespace}
 
@@ -4157,7 +4157,7 @@ function test_project_e2e_with_go() {
   -ginkgo.reportPassed
   ${junit_params[*]}
   -ginkgo.skip \[redundancy\]
-  -args ${test_params[*]} 
+  -args ${test_params[*]}
   "
 
   TITLE "Running E2E tests with Ginkgo: \n$go_cmd"

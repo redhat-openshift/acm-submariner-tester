@@ -5,7 +5,7 @@
 
 ### Constants ###
 
-# Console print colors 
+# Console print colors
 export RED='\x1b[0;31m'
 export GREEN='\x1b[38;5;22m'
 export CYAN='\x1b[36m'
@@ -393,7 +393,7 @@ function record_junit() {
     # Shifting input arguments should be done twice
     shift_arg_counter=2
   fi
-  
+
   # Shift input arguments to the left, in order to collect the rest of arguments as an array
   shift $shift_arg_counter
 
@@ -499,7 +499,7 @@ function install_conda_package() {
   local pkg_label="$4"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
-  
+
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
@@ -591,7 +591,7 @@ function install_local_docker() {
   # TODO: Move $conda_install_dir to a common folder outside $work_dir
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
-  
+
   local pkg_version="$2"
 
   install_conda_package "${conda_install_dir}" "docker" "${pkg_version}"
@@ -639,7 +639,7 @@ function install_local_gcloud() {
   # TODO: Move $conda_install_dir to a common folder outside $work_dir
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
-  
+
   # local pkg_version="$2"
 
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
@@ -991,8 +991,8 @@ function ocp_login() {
   if [[ -z "${ocp_server}" || -z "${ocp_usr}" ]] ; then
     echo -e "\n# User '${ocp_usr}' or Server '${ocp_server}' is missing"
     return 1
-  fi  
-    
+  fi
+
   TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
 
