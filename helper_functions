@@ -15,6 +15,7 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 
 # Conda environment test directory
 export CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda-test}"
+export CONDA_CMD="conda"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
 SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
@@ -104,11 +105,12 @@ function print_current_dir_and_cmd() {
   # Important: Use _unique_ variables for safer evaluation
 
   local _bash_cmd
-  _bash_cmd="$(echo -e "$1" | xargs)"
+  # Trim leading and trailing spaces from command
+  _bash_cmd="$(echo $1)"
   # Skip printing if it's an empty command
   [[ -n "$_bash_cmd" ]] || return
 
-  # Print PS1 prompt with location (if it's new location), and trim trailing and leading spaces
+  # Print PS1 prompt with location (if it's new location)
   local _new_location="[$0] $PS1 [${PWD##*/}]" && \
   if [[ "$_new_location" != "$_current_location" ]]; then
     export _current_location="$_new_location"
@@ -164,8 +166,6 @@ function trap_function_on_error() {
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
-
-
   trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
   [[ ! -s '$test_status_file' ]] || rc=$(< '$test_status_file') || : ;
@@ -176,7 +176,6 @@ function trap_function_on_error() {
   trap '(exit 130)' INT # When SIGINT is received call $trap_cmd
   trap '(exit 143)' TERM # When SIGTERM is received call $trap_cmd
   trap "$trap_cmd" EXIT
-
 }
 
 # ------------------------------------------
@@ -428,42 +427,43 @@ function install_anaconda() {
   conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  if conda env list | grep -o "^$conda_env" | grep . ; then
+  if ${CONDA_CMD} env list | grep -o "^$conda_env" | grep . ; then
     echo -e "\n# Anaconda is already installed and has environment '$conda_env' configured"
-    conda info
-    conda update -n base -c defaults conda -y
+    ${CONDA_CMD} info
+    ${CONDA_CMD} update -n base -c defaults conda -y
     source activate "$conda_env"
     return
   fi
 
-  if conda info ; then
-    # Clean previous conda packages
-    conda clean -y --all
+  if ${CONDA_CMD} info ; then
+    # Clean previous ${CONDA_CMD} packages
+    ${CONDA_CMD} clean -y --all
     # rm -rf "${conda_install_dir}" || :
   fi
 
   echo -e "\n# Installing Anaconda"
-  # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-  # miniconda_installer="Miniconda3-py38_4.9.2-Linux-x86_64.sh"
+  # curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj ${miniconda_bin_dir}/micromamba
+  # conda install mamba -n base -c conda-forge
+
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
   "${work_dir}"/${miniconda_installer} -b -u -p "${conda_install_dir}"
   conda update -y -n base -c defaults conda
 
-  # Remove old conda environment dir, if it is not configured
-  env_dir=$(conda env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
-  env_base=$(conda env list | awk '/base/ { print $NF }')
+  # Remove old ${CONDA_CMD} environment dir, if it is not configured
+  env_dir=$(${CONDA_CMD} env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
+  env_base=$(${CONDA_CMD} env list | awk '/base/ { print $NF }')
 
   if [[ -z "$env_dir" ]] ; then
     echo -e "\n# Removing old Conda environment \"$conda_env\" directory (since it is not configured):"
-    conda env remove -y -n "$conda_env" || :
-    conda env remove -y -p "$env_base/envs/$conda_env" || :
+    ${CONDA_CMD} env remove -y -n "$conda_env" || :
+    ${CONDA_CMD} env remove -y -p "$env_base/envs/$conda_env" || :
     rm -rf "$env_base/envs/$conda_env" || :
   fi
 
   echo -e "\n# Creating Conda environment \"$conda_env\" (if it does not exist already)"
-  [[ -d "$env_base/envs/$conda_env" ]] || conda create -y -n "$conda_env"
+  [[ -d "$env_base/envs/$conda_env" ]] || ${CONDA_CMD} create -y -n "$conda_env"
 }
 # ------------------------------------------
 
@@ -479,8 +479,8 @@ function verify_anaconda() {
   conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  conda info
-  conda env list | grep "miniconda/envs/${conda_env}"
+  ${CONDA_CMD} info
+  ${CONDA_CMD} env list | grep "miniconda/envs/${conda_env}"
 }
 
 # ------------------------------------------
@@ -502,18 +502,18 @@ function install_conda_package() {
 
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
-  if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
-    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$conda_env'"
+  if ${CONDA_CMD} list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
+    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in ${CONDA_CMD} environment '$conda_env'"
     return
   fi
 
   verify_anaconda "${conda_install_dir}"
 
-  # conda config --add channels defaults
-  conda config --add channels conda-forge
+  # ${CONDA_CMD} config --add channels defaults
+  ${CONDA_CMD} config --add channels conda-forge
   source activate "$conda_env"
-  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
-  conda list
+  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
+  ${CONDA_CMD} list
 }
 
 # ------------------------------------------
@@ -649,9 +649,9 @@ function install_local_gcloud() {
   # install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
   verify_anaconda "${conda_install_dir}"
   source activate "$conda_env"
-  conda install -y -c conda-forge google-cloud-sdk
-  conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
-  conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
+  ${CONDA_CMD} install -y -c conda-forge google-cloud-sdk
+  ${CONDA_CMD} install -y -c conda-forge/label/cf201901 google-cloud-sdk
+  ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
 
   gcloud --version
 
@@ -710,7 +710,7 @@ function download_github_file_or_dir() {
 function download_file() {
   trap_to_debug_commands
   # $1 => $source_file (download link)
-  source_file="${1//[$'\t\r\n']}"
+  source_file="$(echo $1)" # Trim leading and trailing spaces
 
   # Optional: $2 => $target_file (where to save)
   target_file="${2:-$(basename "$1")}"
@@ -1996,36 +1996,61 @@ function watch_polarion_job_status() {
 
 # ------------------------------------------
 
+# Function to install "aha" - Ansi HTML Adapter - to convert text files to HTML
+function install_aha() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  if [[ ! -x "$(command -v aha)" ]] ; then
+
+    echo -e "\n# Installing Ansi HTML Adapter - to generate HTML report"
+    install_anaconda "${work_dir}"
+    install_conda_package "${conda_install_dir}" "aha" || CONDA_PKG=FAILED
+
+    # If Conda install failed, try to compile aha binary from Git
+    if [[ "$CONDA_PKG" == FAILED ]] ; then
+      local repo_url=https://github.com/theZiz/aha.git
+      local repo_branch=0.5.1
+      local repo_dir
+      repo_dir=$(basename $repo_url .git)
+
+      if [[ ! -x "$(command -v aha)" ]] ; then
+        rm -rf "$repo_dir"
+        # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
+        git clone $repo_url --single-branch # --depth 1
+        git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
+        # make -C "$repo_dir" &> /dev/null
+        make install PREFIX="$GOBIN"
+      fi
+    fi
+  fi
+
+  aha --version
+}
+
+# ------------------------------------------
+
 function log_to_html() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
   # Input params:
 
   local log_file="$1"
-  local title="${2:-"${log_file%%.*}"}" # html title (default is log filename)
+  local title="${2:-${log_file%%.*}}" # html title (default is log filename)
   local html_output="${3:-${title//[ \/]/_}.html}" # html filename to create (default is title with underscores)
   local description="$4"
 
-  echo -e "\n# Generating HTML report from: $log_file"
+  TITLE "Generating HTML report from: $log_file"
   [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; return 1 ; }
+
+  install_aha "${WORKDIR}" || { echo -e "\n# Error - Ansi HTML Adapter tool is required to generate the report" ; return 1 ; }
 
   # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
-
-  local repo_url=https://github.com/theZiz/aha.git
-  local repo_branch=0.5.1
-  local repo_dir
-  repo_dir=$(basename $repo_url .git)
-
-  # Get AHA binary
-  if [[ ! -f ./$repo_dir/aha ]]; then
-      rm -rf "$repo_dir"
-      # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
-      git clone $repo_url --single-branch # --depth 1
-      git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
-      make -C "$repo_dir" &> /dev/null
-  fi
-  "./$repo_dir/aha" --version
 
   # Create HTML Header
   cat > "$html_output" <<EOF
@@ -2084,8 +2109,8 @@ EOF
   #sed '/\S/,$!d; s/^ \+//; s/ \+$//' -i $log_file
   sed '/\S/,$!d' -i "$log_file"
 
-  # Create HTML content with AHA
-  "./$repo_dir/aha" -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
+  # Create HTML content with Ansi HTML Adapter
+  aha -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
 
   # Trim sh2ju debug lines starting with +++ from the html report
   sed -r '/^\s*\+\+\+/d' -i "$html_output"

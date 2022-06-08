@@ -641,6 +641,12 @@ cat "$SYS_LOG"
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+  # Setup and verify environment
+  setup_workspace
+
+  # Set script trap functions
+  set_trap_functions
+
   ### Script debug calls (should be left as a comment) ###
 
     ${JUNIT_CMD} debug_test_polarion
@@ -653,12 +659,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
-
-  # Setup and verify environment
-  setup_workspace
-
-  # Set script trap functions
-  set_trap_functions
 
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan

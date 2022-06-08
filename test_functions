@@ -234,7 +234,6 @@ function setup_workspace() {
       TITLE "Installing and configuring GCP-CLI"
       configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}"
     fi
-
   fi
 
 }
