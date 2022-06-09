@@ -641,6 +641,10 @@ cat "$SYS_LOG"
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+
+  configure_aws_access \
+  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
+
   # Setup and verify environment
   setup_workspace
 

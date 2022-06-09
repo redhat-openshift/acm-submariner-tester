@@ -104,6 +104,7 @@ function print_current_dir_and_cmd() {
   # Print called command and current directory
   # Important: Use _unique_ variables for safer evaluation
 
+  set +e
   local _bash_cmd
   # Trim leading and trailing spaces from command
   _bash_cmd="$(echo $1)"
@@ -117,6 +118,8 @@ function print_current_dir_and_cmd() {
     echo -e "\n${YELLOW}$_current_location${NO_COLOR}\n"
   fi
 
+  echo "# 1 #"
+
   # Save all command variables' values inside $_all_vars_output
   local _all_vars_output="\n"
 
@@ -126,21 +129,35 @@ function print_current_dir_and_cmd() {
   # List complex variables (with parameter expansion) next
   _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
+  echo "# 2 #"
+
+  echo "VAR LIST: ${_var_list[*]}"
+
   for variable in "${_var_list[@]}" ; do
      local _var_name
      _var_name=$(echo "${variable%%[:/]*}" | tr -d "\${}")
      local _var_value="${!_var_name}"
+
+     echo "# 3 #"
+
+     echo "variable: ${variable}"
+     echo "_var_name: ${_var_name}"
+     echo "_var_value: ${_var_value}"
+
      if [[ "$variable" =~ [:/] ]] ; then
        # For complex variables - add it to $_all_vars_output
-       _all_vars_output+="+ ${_var_name}=${_var_value} \n"
+       _all_vars_output+="+ ${_var_name}=${_var_value} \n" || echo "# 4 #"
      else
        # For simple variables - replace them with their values within $_bash_cmd
-       _bash_cmd="${_bash_cmd//$variable/$_var_value}"
+       _bash_cmd="${_bash_cmd//$variable/$_var_value}" || echo "# 5 #"
      fi
    done
 
+   echo "# 6 #"
+
   # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
   echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
+  set -e
 }
 
 # ------------------------------------------
@@ -149,7 +166,7 @@ function print_current_dir_and_cmd() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
-      print_current_dir_and_cmd "$BASH_COMMAND" 2>/dev/null || :
+      ( print_current_dir_and_cmd "$BASH_COMMAND" ) || :
    fi
   ' DEBUG
 }
