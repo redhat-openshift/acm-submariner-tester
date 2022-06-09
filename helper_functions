@@ -118,8 +118,6 @@ function print_current_dir_and_cmd() {
     echo -e "\n${YELLOW}$_current_location${NO_COLOR}\n"
   fi
 
-  echo "# 1 #"
-
   # Save all command variables' values inside $_all_vars_output
   local _all_vars_output="\n"
 
@@ -129,31 +127,19 @@ function print_current_dir_and_cmd() {
   # List complex variables (with parameter expansion) next
   _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
 
-  echo "# 2 #"
-
-  echo "VAR LIST: ${_var_list[*]}"
-
   for variable in "${_var_list[@]}" ; do
      local _var_name
-     _var_name=$(echo "${variable%%[:/]*}" | tr -d "\${}")
-     local _var_value="${!_var_name}"
-
-     echo "# 3 #"
-
-     echo "variable: ${variable}"
-     echo "_var_name: ${_var_name}"
-     echo "_var_value: ${_var_value}"
+     _var_name=$(echo "${variable%%[:/]*}" | tr -d '${}') # tr -dc '[a-zA-Z_0-9]'
+     local _var_value="${!_var_name}" 2>/dev/null || :
 
      if [[ "$variable" =~ [:/] ]] ; then
        # For complex variables - add it to $_all_vars_output
-       _all_vars_output+="+ ${_var_name}=${_var_value} \n" || echo "# 4 #"
+       _all_vars_output+="\$ ${_var_name}=${_var_value} \n" || continue
      else
        # For simple variables - replace them with their values within $_bash_cmd
-       _bash_cmd="${_bash_cmd//$variable/$_var_value}" || echo "# 5 #"
+       _bash_cmd="${_bash_cmd//$variable/$_var_value}" || continue
      fi
    done
-
-   echo "# 6 #"
 
   # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
   echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
@@ -888,17 +874,7 @@ function configure_aws_access() {
   local aws_install_dir="${5:-./}"
   local aws_bin_dir="${6:-$HOME/.local/bin}"
 
-  # pip install awscli --upgrade --user
-  aws_cli_installer="awscli-exe-linux-x86_64.zip"
-  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${aws_install_dir}/${aws_cli_installer}"
-  unzip -n "${aws_install_dir}/${aws_cli_installer}" -d "${aws_install_dir}"
-
-  # export PATH=$HOME/.local/bin:$PATH
-  # ${aws_install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
-  [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
-  "${aws_install_dir}"/aws/install --update --install-dir "${aws_install_dir}/aws" --bin-dir "${aws_bin_dir}"
-
-  aws --version
+  install_awscli "$aws_install_dir" "$aws_bin_dir"
 
   (
     # subshell to hide commands
@@ -913,6 +889,56 @@ function configure_aws_access() {
 
   # aws --profile "$aws_profile_name" configure  --region "$aws_region" --output text --color on
   aws sts get-caller-identity
+}
+
+# ------------------------------------------
+
+# Function to install aws-cli
+function install_awscli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  aws_bin_dir="${2:-$(dirname "$work_dir")/miniconda}"
+
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  if [[ ! -x "$(command -v aws)" ]] ; then
+    echo -e "\n# Installing AWS-CLI tool with Anaconda"
+
+    install_conda_package "${conda_install_dir}" "awscli" \
+    || {
+        # verify_anaconda "${conda_install_dir}"
+        # source activate "$conda_env"
+        ${CONDA_CMD} install -y -c conda-forge awscli
+        ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli
+        ${CONDA_CMD} install -y -c conda-forge/label/broken awscli
+        ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli
+        ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
+
+      } || CONDA_PKG=FAILED
+
+    if [[ "$CONDA_PKG" == FAILED ]] ; then
+      TITLE "Installing AWS-CLI with Anaconda failed - trying to download and install aws-cli from zip"
+
+      if [[ ! -x "$(command -v unzip)" ]] ; then
+        echo -e "\n# Installing unzip tool"
+        ${CONDA_CMD} install -y -c conda-forge unzip
+        ${CONDA_CMD} install -y -c conda-forge/label/cf201901 unzip
+        ${CONDA_CMD} install -y -c conda-forge/label/cf202003 unzip
+      fi
+
+      aws_cli_installer="awscli-exe-linux-x86_64.zip"
+      download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${work_dir}/${aws_cli_installer}"
+      unzip -n "${work_dir}/${aws_cli_installer}" -d "${work_dir}"
+
+      [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
+      "${work_dir}/aws/install" --update --install-dir "${work_dir}/aws" --bin-dir "${aws_bin_dir}"
+    fi
+  fi
+
+  aws --version
 }
 
 # ------------------------------------------
@@ -2023,13 +2049,14 @@ function install_aha() {
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   if [[ ! -x "$(command -v aha)" ]] ; then
-
-    echo -e "\n# Installing Ansi HTML Adapter - to generate HTML report"
+    echo -e "\n# Installing Ansi HTML Adapter with Anaconda"
     install_anaconda "${work_dir}"
     install_conda_package "${conda_install_dir}" "aha" || CONDA_PKG=FAILED
 
     # If Conda install failed, try to compile aha binary from Git
     if [[ "$CONDA_PKG" == FAILED ]] ; then
+      TITLE "Installing Ansi HTML Adapter with Anaconda failed - trying to compile aha binary from Git"
+
       local repo_url=https://github.com/theZiz/aha.git
       local repo_branch=0.5.1
       local repo_dir
