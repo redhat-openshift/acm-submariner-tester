@@ -51,7 +51,7 @@ export testIndex=0
 
 if LANG=C sed --help 2>&1 | grep -q GNU; then
   SED="sed"
-elif which gsed &>/dev/null; then
+elif type gsed &>/dev/null; then
   SED="gsed"
 else
   echo "Failed to find GNU sed as sed or gsed. If you are on Mac: brew install gnu-sed." >&2
@@ -111,7 +111,7 @@ function juLog() {
   local statusFile
 
   # Initialize testsuite attributes
-  dateTime="$(which gdate 2>/dev/null || which date || :)"
+  dateTime="$(type gdate 2>/dev/null || type date || :)"
   asserts=00; failures=0; skipped=0; suiteDuration=0; # content=""
   export testIndex=$(( testIndex+1 ))
 

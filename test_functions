@@ -344,7 +344,7 @@ function build_ocpup_tool_latest() {
 
   echo -e "\n# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
-  which ocpup
+  type ocpup
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -1715,7 +1715,7 @@ function download_subctl_by_tag() {
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
-      PATH="/usr/bin:$PATH" which install
+      PATH="/usr/bin:$PATH" type install
 
       #curl https://get.submariner.io/ | VERSION=${submariner_version_or_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
