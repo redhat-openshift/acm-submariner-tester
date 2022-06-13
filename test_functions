@@ -344,7 +344,7 @@ function build_ocpup_tool_latest() {
 
   echo -e "\n# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
-  type ocpup
+  type -P ocpup
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -807,8 +807,11 @@ function export_cluster_config_variables() {
 
   local cluster_install_platform
   local cluster_install_dir
+  local yaml_var_name="CLUSTER_${cluster_index}_YAML"
 
-  if [[ -s "$cluster_install_yaml" ]] ; then
+  if grep -q '[^[:space:]]' "$cluster_install_yaml" ; then
+    echo -e "\n# Reading Cluster Installer YAML: ${cluster_install_yaml}"
+
     # Get cluster platform type from OCP installer yaml
     cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
 
@@ -829,10 +832,18 @@ function export_cluster_config_variables() {
     export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+-${CLUSTER_SET_ID}}"
     export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}"
     export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
-    # export "KUBECONF_MANAGED=${cluster_install_dir}/auth/kubeconfig"
+    export "${yaml_var_name}=CLUSTER_${cluster_index}_YAML"
+
+    # Unset CLUSTER_A/B/C_YAML if the file does not include a kubeconfig context (e.g. bad file)
+    KUBECONFIG="KUBECONF_CLUSTER_${cluster_index}" ${OC} config current-context || unset "${yaml_var_name}"
 
   else
-    echo -e "\n# Cluster $cluster_index installer yaml was not given - Unsetting \$KUBECONF_CLUSTER_${cluster_index}"
+    # Unset CLUSTER_A/B/C_YAML if the file empty or missing
+    unset "${yaml_var_name}"
+  fi
+
+  if [[ -z "$(echo ${yaml_var_name})" ]] ; then
+    echo -e "\n# Cluster $cluster_index installer yaml is missing (or corrupted) - Unsetting \$KUBECONF_CLUSTER_${cluster_index}"
     unset "KUBECONF_CLUSTER_${cluster_index}"
     unset "CLUSTER_${cluster_index}_NAME"
   fi
@@ -1715,7 +1726,7 @@ function download_subctl_by_tag() {
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
-      PATH="/usr/bin:$PATH" type install
+      PATH="/usr/bin:$PATH" type -P install
 
       #curl https://get.submariner.io/ | VERSION=${submariner_version_or_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
