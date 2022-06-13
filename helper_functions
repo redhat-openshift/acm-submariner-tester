@@ -907,17 +907,16 @@ function install_awscli() {
   if [[ ! -x "$(command -v aws)" ]] ; then
     echo -e "\n# Installing AWS-CLI tool with Anaconda"
 
-    install_conda_package "${conda_install_dir}" "awscli" \
-    || {
-        # verify_anaconda "${conda_install_dir}"
-        # source activate "$conda_env"
-        ${CONDA_CMD} install -y -c conda-forge awscli
-        ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli
-        ${CONDA_CMD} install -y -c conda-forge/label/broken awscli
-        ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli
-        ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
+    {
+      verify_anaconda "${conda_install_dir}" && \
+      source activate "$conda_env" && \
+      ${CONDA_CMD} install -y -c conda-forge awscli && \
+      ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli && \
+      ${CONDA_CMD} install -y -c conda-forge/label/broken awscli && \
+      ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli && \
+      ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
 
-      } || CONDA_PKG=FAILED
+    } || CONDA_PKG=FAILED
 
     if [[ "$CONDA_PKG" == FAILED ]] ; then
       TITLE "Installing AWS-CLI with Anaconda failed - trying to download and install aws-cli from zip"
@@ -1302,12 +1301,13 @@ function print_image_info() {
   echo "id=${img_id}"
 
   # Get info from image if the original image id is accessible by url
-  ${OC} image info "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || \
-  {
-    # Otherwise, get the info from local copy of the image
-    img_id=$(echo "$img_id" | awk -F '@' '{print $2}')
-    ${OC} describe image "$img_id" 2>/dev/null | grep -Po "$regex_container_info"
-  } || :
+  ${OC} image info "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || IMG_INFO=FAILED
+
+  if [[ "${IMG_INFO}" == FAILED ]] ; then
+    # In there's no image info (e.g. no regestry access) - get the info from the local copy of the image
+    img_id=$(echo "$img_id" | awk -F '@' '{print $2}') || :
+    ${OC} describe image "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || :
+  fi
 
 }
 

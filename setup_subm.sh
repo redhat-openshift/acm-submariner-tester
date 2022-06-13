@@ -642,9 +642,6 @@ cat "$SYS_LOG"
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
 
-  configure_aws_access \
-  "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
-
   # Setup and verify environment
   setup_workspace
 
@@ -653,14 +650,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Script debug calls (should be left as a comment) ###
 
-    ${JUNIT_CMD} debug_test_polarion
-    ${JUNIT_CMD} debug_test_pass "junit" "junit"
-    ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
-    rc=$?
-    BUG "debug_test_fail - Exit code: $rc" \
-    "If RC $rc = 5 - JUNIT_CMD should continue execution"
-    ${JUNIT_CMD} debug_test_pass 100 200 300
-    ${JUNIT_CMD} debug_test_fatal
+    # ${JUNIT_CMD} debug_test_polarion
+    # ${JUNIT_CMD} debug_test_pass "junit" "junit"
+    # ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
+    # rc=$?
+    # BUG "debug_test_fail - Exit code: $rc" \
+    # "If RC $rc = 5 - JUNIT_CMD should continue execution"
+    # ${JUNIT_CMD} debug_test_pass 100 200 300
+    # ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
 
@@ -1462,13 +1459,10 @@ fi
 
 
 ### Create REPORT_FILE (html) from $SYS_LOG using log_to_html()
-{
-  log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+# If REPORT_FILE was not set externally, set it as the latest html file that was created
 
-  # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}"
-
-} || :
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines" && \
+REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 
 # ------------------------------------------
 
