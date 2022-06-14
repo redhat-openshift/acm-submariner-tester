@@ -842,8 +842,7 @@ function configure_gcp_access() {
   local gcp_cred_json="$1"
 
   if ! jq . "$gcp_cred_json" 1>/dev/null ; then
-    echo -e "\n# JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
-    return 1
+    FAILURE "JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
   fi
 
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
@@ -1036,8 +1035,7 @@ function ocp_login() {
   ocp_cloud="$(print_current_cluster_cloud || :)"
 
   if [[ -z "${ocp_server}" || -z "${ocp_usr}" ]] ; then
-    echo -e "\n# User '${ocp_usr}' or Server '${ocp_server}' is missing"
-    return 1
+    FAILURE "User '${ocp_usr}' or Server '${ocp_server}' is missing"
   fi
 
   TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
@@ -1535,7 +1533,7 @@ function build_go_repo() {
 
   local repo_local_path="$GOPATH/src/$repo_url"
   echo -e "\n# Pull latest changes with Git into: $repo_local_path"
-  cd "$repo_local_path" || { echo "$repo_local_path was not created, exiting." ; return 1 ; }
+  cd "$repo_local_path" || FAILURE "$repo_local_path was not created, exiting."
 
   git_reset_local_repo "${branch_or_tag}"
 
@@ -1640,7 +1638,7 @@ function create_polarion_testcases_doc_from_junit() {
     Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; return 1 ; }
+    [[ -s "$junit_xml" ]] || FAILURE "Failed to create Polarion test-cases file: '$junit_xml' is missing"
 
     echo -e "\n# Set output xml for Polarion test-cases"
 
@@ -1816,7 +1814,7 @@ function create_polarion_testrun_result_from_junit() {
     TITLE "Creating Polarion test-run from Junit file: $junit_xml"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; return 1 ; }
+    [[ -s "$junit_xml" ]] || FAILURE "Failed to create Polarion test-run file: '$junit_xml' is missing."
 
     # ------------------------------------------------------------------------ #
 
@@ -2024,8 +2022,7 @@ function watch_polarion_job_status() {
   polarion_job_id=$(awk '/job-ids/ { print $4 }' "$polarion_log")
 
   if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" == 0 ]] ; then
-    echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
-    return 1
+    FAILURE "Error in the file or data to import to Polarion: $polarion_import_file"
   fi
 
   local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
@@ -2037,8 +2034,7 @@ function watch_polarion_job_status() {
   watch_and_retry "$cmd" 1m "$regex"
 
   if tail -n 10 "$polarion_log" | grep "failed" ; then
-    echo "Importing ${polarion_import_type} to Polarion did not complete successfully" 1>&2
-    return 1
+    FAILURE "Importing ${polarion_import_type} to Polarion did not complete successfully"
   fi
 }
 
@@ -2094,9 +2090,9 @@ function log_to_html() {
   local description="$4"
 
   TITLE "Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; return 1 ; }
+  [[ -f $log_file ]] || FAILURE "The log file [${log_file}] does not exist or is inaccessible"
 
-  install_aha "${WORKDIR}" || { echo -e "\n# Error - Ansi HTML Adapter tool is required to generate the report" ; return 1 ; }
+  install_aha "${WORKDIR}" || FAILURE "Ansi HTML Adapter tool is required to generate the report"
 
   # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
