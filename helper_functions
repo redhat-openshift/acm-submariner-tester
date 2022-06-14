@@ -152,7 +152,7 @@ function print_current_dir_and_cmd() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
-      ( print_current_dir_and_cmd "$BASH_COMMAND" ) || :
+      print_current_dir_and_cmd "$BASH_COMMAND" || :
    fi
   ' DEBUG
 }
@@ -627,9 +627,8 @@ function install_local_jq() {
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
-  local pkg_version="$2"
+  install_conda_package "${conda_install_dir}" "jq"
 
-  install_conda_package "${conda_install_dir}" "jq" "${pkg_version}"
 }
 
 # ------------------------------------------
@@ -715,6 +714,8 @@ function download_file() {
   # $1 => $source_file (download link)
   source_file="$(echo $1)" # Trim leading and trailing spaces
 
+  set -x
+  
   # Optional: $2 => $target_file (where to save)
   target_file="${2:-$(basename "$1")}"
 

@@ -196,16 +196,15 @@ function setup_workspace() {
     fi
   fi
 
-  TITLE "Installing Terraform with Anaconda"
-  # # Installing Terraform
-  # install_local_terraform "${WORKDIR}"
-  BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-  "Use Terraform v0.12.29" \
-  "https://github.com/submariner-io/submariner/issues/847"
-  # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.29"
+  # Terraform preparations are not required since Submariner 0.12
+  # TITLE "Installing Terraform with Anaconda"
+  # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
+  # "Use Terraform v0.12.29" \
+  # "https://github.com/submariner-io/submariner/issues/847"
+  # # Workaround:
+  # install_local_terraform "${WORKDIR}" "0.12.29"
 
-  TITLE "Installing JQ (JSON processor) with Anaconda"
+  TITLE "Installing JQ and YQ (YAML, JSON and XML processors) with Anaconda"
   install_local_jq "${WORKDIR}"
 
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
@@ -793,7 +792,7 @@ function export_cluster_config_variables() {
   local cluster_install_yaml="$2"
   local cluster_index="$3" # A / B / C
 
-  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}' (or unset if missing install yaml)"
+  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}' (or unset if installer yaml is missing)"
 
   if [[ -z "${cluster_name}" ]] ||
      [[ -z "${cluster_install_yaml}" ]] ||
@@ -807,9 +806,9 @@ function export_cluster_config_variables() {
 
   local cluster_install_platform
   local cluster_install_dir
-  local yaml_var_name="CLUSTER_${cluster_index}_YAML"
 
-  if grep -q '[^[:space:]]' "$cluster_install_yaml" ; then
+  # Check if the given installer yaml contains cluster domain
+  if grep 'Domain:' "$cluster_install_yaml" ; then
     echo -e "\n# Reading Cluster Installer YAML: ${cluster_install_yaml}"
 
     # Get cluster platform type from OCP installer yaml
@@ -832,20 +831,15 @@ function export_cluster_config_variables() {
     export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+-${CLUSTER_SET_ID}}"
     export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}"
     export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
-    export "${yaml_var_name}=CLUSTER_${cluster_index}_YAML"
 
-    # Unset CLUSTER_A/B/C_YAML if the file does not include a kubeconfig context (e.g. bad file)
-    KUBECONFIG="KUBECONF_CLUSTER_${cluster_index}" ${OC} config current-context || unset "${yaml_var_name}"
+    # local yaml_var_name="CLUSTER_${cluster_index}_YAML"
+    # export "${yaml_var_name}=${cluster_install_yaml}"
 
   else
-    # Unset CLUSTER_A/B/C_YAML if the file empty or missing
-    unset "${yaml_var_name}"
-  fi
-
-  if [[ -z "$(echo ${yaml_var_name})" ]] ; then
-    echo -e "\n# Cluster $cluster_index installer yaml is missing (or corrupted) - Unsetting \$KUBECONF_CLUSTER_${cluster_index}"
-    unset "KUBECONF_CLUSTER_${cluster_index}"
+    echo -e "\n# Cluster $cluster_index installer yaml is missing (or corrupted) - Unset Cluster ${cluster_index} variables (name, kubeconfig and yaml)"
     unset "CLUSTER_${cluster_index}_NAME"
+    unset "KUBECONF_CLUSTER_${cluster_index}"
+    unset "CLUSTER_${cluster_index}_YAML"
   fi
 
 }

@@ -634,9 +634,7 @@ fi
 ####################################################################################
 
 # Set and export all global env variables
-# export_all_env_variables > >(tee -a "$SYS_LOG") 2>&1
-export_all_env_variables >> "$SYS_LOG" 2>&1
-cat "$SYS_LOG"
+export_all_env_variables |& tee "$SYS_LOG"
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
