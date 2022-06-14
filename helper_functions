@@ -841,6 +841,11 @@ function change_yaml_key_value() {
 function configure_gcp_access() {
   local gcp_cred_json="$1"
 
+  if ! jq . "$gcp_cred_json" 1>/dev/null ; then
+    echo -e "\n# JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
+    return 1
+  fi
+
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
 
   install_local_gcloud "$work_dir"
