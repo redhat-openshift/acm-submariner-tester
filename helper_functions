@@ -104,7 +104,6 @@ function print_current_dir_and_cmd() {
   # Print called command and current directory
   # Important: Use _unique_ variables for safer evaluation
 
-  set +e
   local _bash_cmd
   # Trim leading and trailing spaces from command
   _bash_cmd="$(echo $1)"
@@ -129,22 +128,25 @@ function print_current_dir_and_cmd() {
   _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u) ) || return
 
   for variable in "${_var_list[@]}" ; do
-     local _var_name
-     _var_name=$(echo "${variable%%[:/]*}" | tr -dc '[a-zA-Z_0-9]') || continue
-     local _var_value="${!_var_name}" 2>/dev/null || continue
+    local _var_name
+    _var_name="$(echo "${variable%%[:/]*}" | tr -dc '[a-zA-Z_0-9]' || : )"
+    [[ -n "$_var_name" ]] || continue
 
-     if [[ "$variable" =~ [:/] ]] ; then
-       # For complex variables - add it to $_all_vars_output
-       _all_vars_output+="\$ ${_var_name}=${_var_value} \n" || continue
-     else
-       # For simple variables - replace them with their values within $_bash_cmd
-       _bash_cmd="${_bash_cmd//$variable/$_var_value}" || continue
-     fi
-   done
+    local _var_value
+    _var_value="$(echo "${!_var_name}" 2>/dev/null || : )"
+    [[ -n "$_var_value" ]] || continue
+
+    if [[ "$variable" =~ [:/] ]] ; then
+     # For complex variables - add it to $_all_vars_output
+     _all_vars_output+="\$ ${_var_name}=${_var_value} \n" || continue
+    else
+     # For simple variables - replace them with their values within $_bash_cmd
+     _bash_cmd="${_bash_cmd//$variable/$_var_value}" || continue
+    fi
+  done
 
   # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
   echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
-  set -e
 }
 
 # ------------------------------------------
@@ -153,7 +155,9 @@ function print_current_dir_and_cmd() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
-      print_current_dir_and_cmd "$BASH_COMMAND" || :
+      set +e
+      print_current_dir_and_cmd "$BASH_COMMAND"
+      set -e
    fi
   ' DEBUG
 }
@@ -511,13 +515,20 @@ function install_conda_package() {
     return
   fi
 
+  local conda_pkg_status
   verify_anaconda "${conda_install_dir}"
 
   # ${CONDA_CMD} config --add channels defaults
   ${CONDA_CMD} config --add channels conda-forge
+  ${CONDA_CMD} deactivate
+  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}" || conda_pkg_status=FAILED
   source activate "$conda_env"
-  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
-  ${CONDA_CMD} list
+
+  if [[ "$conda_pkg_status" != FAILED ]] ; then
+    ${CONDA_CMD} list
+  else
+    return 1
+  fi
 }
 
 # ------------------------------------------
@@ -649,7 +660,7 @@ function install_local_gcloud() {
 
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
-  export CLOUDSDK_PYTHON=/usr/bin/python2
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
 
   install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
 

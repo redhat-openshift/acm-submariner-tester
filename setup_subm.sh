@@ -634,7 +634,15 @@ fi
 ####################################################################################
 
 # Set and export all global env variables
-export_all_env_variables |& tee "$SYS_LOG"
+# Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
+export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
+cat "$SYS_LOG"
+
+# Update test exit status to 0, unless it is already 1 or 2
+if [[ "$EXIT_STATUS" == 1 ]] ; then
+  echo 1 > "$TEST_STATUS_FILE"
+  FATAL "Exporting environment variables have failed, please check the global variable file"
+fi
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
