@@ -204,7 +204,7 @@ function setup_workspace() {
   # # Workaround:
   # install_local_terraform "${WORKDIR}" "0.12.29"
 
-  TITLE "Installing JQ and YQ (YAML, JSON and XML processors) with Anaconda"
+  TITLE "Installing JQ (JSON parser) with Anaconda"
   install_local_jq "${WORKDIR}"
 
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y

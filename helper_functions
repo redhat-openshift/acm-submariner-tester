@@ -628,7 +628,9 @@ function install_local_jq() {
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
-  install_conda_package "${conda_install_dir}" "jq"
+  local pkg_version="$2"
+
+  install_conda_package "${conda_install_dir}" "jq" "${pkg_version}"
 
 }
 
@@ -643,18 +645,19 @@ function install_local_gcloud() {
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
-  # local pkg_version="$2"
+  local pkg_version="$2"
 
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
   export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  # install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
-  verify_anaconda "${conda_install_dir}"
-  source activate "$conda_env"
-  ${CONDA_CMD} install -y -c conda-forge google-cloud-sdk
-  ${CONDA_CMD} install -y -c conda-forge/label/cf201901 google-cloud-sdk
-  ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
+  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+
+  # verify_anaconda "${conda_install_dir}"
+  # source activate "$conda_env"
+  # ${CONDA_CMD} install -y -c conda-forge google-cloud-sdk
+  # ${CONDA_CMD} install -y -c conda-forge/label/cf201901 google-cloud-sdk
+  # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
 
   gcloud --version
 
@@ -911,25 +914,28 @@ function install_awscli() {
   if [[ ! -x "$(command -v aws)" ]] ; then
     echo -e "\n# Installing AWS-CLI tool with Anaconda"
 
-    {
-      verify_anaconda "${conda_install_dir}" && \
-      source activate "$conda_env" && \
-      ${CONDA_CMD} install -y -c conda-forge awscli && \
-      ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli && \
-      ${CONDA_CMD} install -y -c conda-forge/label/broken awscli && \
-      ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli && \
-      ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
+    # {
+    #   verify_anaconda "${conda_install_dir}" && \
+    #   source activate "$conda_env" && \
+    #   ${CONDA_CMD} install -y -c conda-forge awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/broken awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
+    #
+    # } || CONDA_PKG=FAILED
 
-    } || CONDA_PKG=FAILED
+    install_conda_package "${conda_install_dir}" "awscli" || CONDA_PKG=FAILED
 
     if [[ "$CONDA_PKG" == FAILED ]] ; then
       TITLE "Installing AWS-CLI with Anaconda failed - trying to download and install aws-cli from zip"
 
       if [[ ! -x "$(command -v unzip)" ]] ; then
         echo -e "\n# Installing unzip tool"
-        ${CONDA_CMD} install -y -c conda-forge unzip
-        ${CONDA_CMD} install -y -c conda-forge/label/cf201901 unzip
-        ${CONDA_CMD} install -y -c conda-forge/label/cf202003 unzip
+        # ${CONDA_CMD} install -y -c conda-forge unzip
+        # ${CONDA_CMD} install -y -c conda-forge/label/cf201901 unzip
+        # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 unzip
+        install_conda_package "${conda_install_dir}" "unzip"
       fi
 
       aws_cli_installer="awscli-exe-linux-x86_64.zip"
