@@ -473,6 +473,7 @@ function install_anaconda() {
   echo -e "\n# Creating Conda environment \"$conda_env\" (if it does not exist already)"
   [[ -d "$env_base/envs/$conda_env" ]] || ${CONDA_CMD} create -y -n "$conda_env"
 }
+
 # ------------------------------------------
 
 # Function to verify Anaconda installation
@@ -521,7 +522,7 @@ function install_conda_package() {
   # ${CONDA_CMD} config --add channels defaults
   ${CONDA_CMD} config --add channels conda-forge
   ${CONDA_CMD} deactivate
-  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}" || conda_pkg_status=FAILED
+  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} -n "${conda_env}" "${pkg_name}${pkg_version:+=$pkg_version}" || conda_pkg_status=FAILED
   source activate "$conda_env"
 
   if [[ "$conda_pkg_status" != FAILED ]] ; then
