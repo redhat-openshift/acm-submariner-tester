@@ -196,16 +196,15 @@ function setup_workspace() {
     fi
   fi
 
-  TITLE "Installing Terraform with Anaconda"
-  # # Installing Terraform
-  # install_local_terraform "${WORKDIR}"
-  BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-  "Use Terraform v0.12.29" \
-  "https://github.com/submariner-io/submariner/issues/847"
-  # Workaround:
-  install_local_terraform "${WORKDIR}" "0.12.29"
+  # Terraform preparations are not required since Submariner 0.12
+  # TITLE "Installing Terraform with Anaconda"
+  # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
+  # "Use Terraform v0.12.29" \
+  # "https://github.com/submariner-io/submariner/issues/847"
+  # # Workaround:
+  # install_local_terraform "${WORKDIR}" "0.12.29"
 
-  TITLE "Installing JQ (JSON processor) with Anaconda"
+  TITLE "Installing JQ (JSON parser) with Anaconda"
   install_local_jq "${WORKDIR}"
 
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
@@ -232,9 +231,8 @@ function setup_workspace() {
     # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
     if [[ -s "$GCP_CRED_JSON" ]] ; then
       TITLE "Installing and configuring GCP-CLI"
-      configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}"
+      configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" || :
     fi
-
   fi
 
 }
@@ -345,7 +343,7 @@ function build_ocpup_tool_latest() {
 
   echo -e "\n# Check OCPUP command:"
   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
-  which ocpup
+  type -P ocpup
 
   ocpup -h
       # Create multiple OCP4 clusters and resources
@@ -523,9 +521,9 @@ function prepare_install_ocp_cluster() {
   [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
 
   # Get cluster platform type from OCP installer yaml, and update cluster region
-  local platform 
+  local platform
   platform="$(print_ocp_install_platform "${installer_yaml_new}")"
-  
+
   if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
     echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
     change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
@@ -712,20 +710,20 @@ function export_all_env_variables() {
 
   if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
     export JUNIT_CMD="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
-    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML" 
+    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
   fi
 
   set_missing_cli_variables
 
   echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
 
-  # Exporting variables for Managed Cluster A  
+  # Exporting variables for Managed Cluster A
   export_cluster_config_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
 
   # Currently the Hub is also installed on Cluster A
   export KUBECONF_HUB="${KUBECONF_CLUSTER_A}"
 
-  # Exporting variables for Managed Cluster B  
+  # Exporting variables for Managed Cluster B
   export_cluster_config_variables "${CLUSTER_B_NAME}" "${CLUSTER_B_YAML}" "B"
 
   # Exporting variables for Managed Cluster C
@@ -794,7 +792,7 @@ function export_cluster_config_variables() {
   local cluster_install_yaml="$2"
   local cluster_index="$3" # A / B / C
 
-  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}' (or unset if missing install yaml)"
+  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}' (or unset if installer yaml is missing)"
 
   if [[ -z "${cluster_name}" ]] ||
      [[ -z "${cluster_install_yaml}" ]] ||
@@ -809,10 +807,13 @@ function export_cluster_config_variables() {
   local cluster_install_platform
   local cluster_install_dir
 
-  if [[ -s "$cluster_install_yaml" ]] ; then
-    # Get cluster platform type from OCP installer yaml 
+  # Check if the given installer yaml contains cluster domain
+  if grep 'Domain:' "$cluster_install_yaml" ; then
+    echo -e "\n# Reading Cluster Installer YAML: ${cluster_install_yaml}"
+
+    # Get cluster platform type from OCP installer yaml
     cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
-    
+
     echo -e "\n# Prefix platform type '${cluster_install_platform}' to the cluster name '${cluster_name}'"
     cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
 
@@ -830,12 +831,15 @@ function export_cluster_config_variables() {
     export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+-${CLUSTER_SET_ID}}"
     export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}"
     export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
-    # export "KUBECONF_MANAGED=${cluster_install_dir}/auth/kubeconfig"
-  
+
+    # local yaml_var_name="CLUSTER_${cluster_index}_YAML"
+    # export "${yaml_var_name}=${cluster_install_yaml}"
+
   else
-    echo -e "\n# Cluster $cluster_index installer yaml was not given - Unsetting \$KUBECONF_CLUSTER_${cluster_index}"
-    unset "KUBECONF_CLUSTER_${cluster_index}"
+    echo -e "\n# Cluster $cluster_index installer yaml is missing (or corrupted) - Unset Cluster ${cluster_index} variables (name, kubeconfig and yaml)"
     unset "CLUSTER_${cluster_index}_NAME"
+    unset "KUBECONF_CLUSTER_${cluster_index}"
+    unset "CLUSTER_${cluster_index}_YAML"
   fi
 
 }
@@ -843,7 +847,7 @@ function export_cluster_config_variables() {
 # ------------------------------------------
 
 function print_ocp_install_platform() {
-  # Print the platform type found in the OCP install yaml 
+  # Print the platform type found in the OCP install yaml
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local ocp_install_yaml="$1"
@@ -855,7 +859,7 @@ function print_ocp_install_platform() {
 # ------------------------------------------
 
 function check_if_cluster_is_running() {
-  # Check if cluster is already running (return exit code 1 if it's not) 
+  # Check if cluster is already running (return exit code 1 if it's not)
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -1393,7 +1397,7 @@ function prune_all_mirror_images_from_current_cluster_registry() {
 
   ${OC} adm prune images --registry-url "https://${BREW_REGISTRY}" --confirm \
   --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
-  # --as="${OCP_USR}" --force-insecure --ignore-invalid-refs --keep-tag-revisions=0 --keep-younger-than=0 
+  # --as="${OCP_USR}" --force-insecure --ignore-invalid-refs --keep-tag-revisions=0 --keep-younger-than=0
 
 }
 
@@ -1716,7 +1720,7 @@ function download_subctl_by_tag() {
       "set 'PATH=/usr/bin:$PATH' for the execution of 'getsubctl.sh'" \
       "https://github.com/submariner-io/submariner-operator/issues/473"
       # Workaround:
-      PATH="/usr/bin:$PATH" which install
+      PATH="/usr/bin:$PATH" type -P install
 
       #curl https://get.submariner.io/ | VERSION=${submariner_version_or_tag} PATH="/usr/bin:$PATH" bash -x
       BUG "getsubctl.sh sometimes fails on error 403 (rate limit exceeded)" \
@@ -2370,7 +2374,7 @@ function configure_ocp_garbage_collection_and_images_prune() {
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
-  
+
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
   cat <<EOF | ${OC} apply -f -
@@ -3088,7 +3092,7 @@ function export_variable_name_of_active_gateway_pod() {
   TITLE "Show Submariner Gateway nodes, and get the active one"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
-  highlight "active" "$gateways_output" 
+  highlight "active" "$gateways_output"
 
   local active_gateway_node
   active_gateway_node="$(awk '/active/ {print $1}' "$gateways_output")"
@@ -3479,7 +3483,7 @@ function export_service_in_lighthouse() {
   "Delete the Service Export object corresponding to that Service, before creating it" \
   "https://bugzilla.redhat.com/show_bug.cgi?id=2066085"
   # Workaound:
-  ${OC} delete serviceexport "${svc_name}" ${namespace:+-n $namespace} --ignore-not-found 
+  ${OC} delete serviceexport "${svc_name}" ${namespace:+-n $namespace} --ignore-not-found
 
   subctl export service "${svc_name}" --kubeconfig "${KUBECONFIG}" ${namespace:+-n $namespace}
 
@@ -4157,7 +4161,7 @@ function test_project_e2e_with_go() {
   -ginkgo.reportPassed
   ${junit_params[*]}
   -ginkgo.skip \[redundancy\]
-  -args ${test_params[*]} 
+  -args ${test_params[*]}
   "
 
   TITLE "Running E2E tests with Ginkgo: \n$go_cmd"

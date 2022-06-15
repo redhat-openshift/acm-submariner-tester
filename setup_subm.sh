@@ -634,13 +634,26 @@ fi
 ####################################################################################
 
 # Set and export all global env variables
-# export_all_env_variables > >(tee -a "$SYS_LOG") 2>&1
-export_all_env_variables >> "$SYS_LOG" 2>&1
+# Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
+export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
 cat "$SYS_LOG"
+
+# Update test exit status to 0, unless it is already 1 or 2
+if [[ "$EXIT_STATUS" == 1 ]] ; then
+  echo 1 > "$TEST_STATUS_FILE"
+  FATAL "Exporting environment variables have failed, please check the global variable file"
+fi
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+
+  # Setup and verify environment
+  setup_workspace
+
+  # Set script trap functions
+  set_trap_functions
+
   ### Script debug calls (should be left as a comment) ###
 
     # ${JUNIT_CMD} debug_test_polarion
@@ -653,12 +666,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
-
-  # Setup and verify environment
-  setup_workspace
-
-  # Set script trap functions
-  set_trap_functions
 
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan
@@ -1285,7 +1292,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       "Build Submariner repo from 'devel' branch instead" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
       ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
-      
+
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo
@@ -1458,13 +1465,10 @@ fi
 
 
 ### Create REPORT_FILE (html) from $SYS_LOG using log_to_html()
-{
-  log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+# If REPORT_FILE was not set externally, set it as the latest html file that was created
 
-  # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}"
-
-} || :
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines" && \
+REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 
 # ------------------------------------------
 
