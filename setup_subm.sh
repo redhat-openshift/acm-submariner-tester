@@ -949,7 +949,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 
     ### Submariner system tests prerequisites ###
-    # It will be skipped if using "--skip-tests sys" (useful for deployment without system tests, or if just running pkg unit-tests)
+    # Following will NOT be executed if using "--skip-tests sys" (useful for deployment without system tests)
 
     if [[ ! "$SKIP_TESTS" =~ ((sys)(,|$))+ ]]; then
 
@@ -977,7 +977,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${JUNIT_CMD} test_clusters_disconnected_before_submariner
 
-    else  # When using "--skip-tests sys" :
+    # Following will NOT be executed if using "--skip-tests e2e" (useful for running pkg unit-tests only):
+    elif [[ ! "$SKIP_TESTS" =~ ((e2e)(,|$))+ ]]; then
 
       # Verify clusters status even if system tests were skipped
 
