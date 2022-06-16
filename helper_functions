@@ -517,17 +517,21 @@ function install_conda_package() {
   fi
 
   local conda_pkg_status
+  local conda_pkg_install
   verify_anaconda "${conda_install_dir}"
 
   # ${CONDA_CMD} config --add channels defaults
   ${CONDA_CMD} config --add channels conda-forge
   ${CONDA_CMD} deactivate
-  ${CONDA_CMD} install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} -n "${conda_env}" "${pkg_name}${pkg_version:+=$pkg_version}" || conda_pkg_status=FAILED
-  source activate "$conda_env"
 
-  if [[ "$conda_pkg_status" != FAILED ]] ; then
-    ${CONDA_CMD} list
-  else
+  conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
+  
+  ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
+
+  source activate "$conda_env" || :
+  ${CONDA_CMD} list || :
+
+  if [[ "$conda_pkg_status" == FAILED ]] ; then
     return 1
   fi
 }
