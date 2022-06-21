@@ -254,18 +254,33 @@ export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
 
 
 ####################################################################################
-#                             CLI Script arguments                                 #
+#                             CLI Script parameters                                #
 ####################################################################################
 
-check_cli_args() {
-  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
+export_param_value() {
+  if [[ -z "$1" || "$1" =~ ^- ]] ; then
+    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help" 
+    exit 1
+  fi
+  export "${2}=${1}"
 }
 
+# Get script parameters, and split by tabs instead of space 
+SCRIPT_PARAMS="$*"
+SCRIPT_PARAMS=${SCRIPT_PARAMS// -/$'\t'-}
+IFS=$'\t'
 POSITIONAL=()
-while [[ $# -gt 0 ]]; do
+
+for param in ${SCRIPT_PARAMS} ; do
   export got_user_input=TRUE
-  # Consume next (1st) argument
-  case $1 in
+  
+  # Get the next parameter (flag) name, without the value
+  param_name=${param%% *} 
+
+  # Get the parameter value after the flag, without surrounding quotes
+  param_value=$(echo "${param#*"$param_name" }" | xargs)
+  
+  case $param_name in
   -h|--help)
     echo -e "\n# ${disclosure}" && exit 0
     shift ;;
@@ -273,21 +288,19 @@ while [[ $# -gt 0 ]]; do
     export SCRIPT_DEBUG_MODE=YES
     shift ;;
   --get-ocp-installer)
-    check_cli_args "$2"
-    export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    export_param_value "${param_value}" "OCP_VERSION"
     export GET_OCP_INSTALLER=YES
     shift 2 ;;
   --get-ocpup-tool)
     export GET_OCPUP_TOOL=YES
     shift ;;
   --acm-version)
-    check_cli_args "$2"
-    export ACM_VER_TAG="$2"
+    export_param_value "${param_value}" "ACM_VER_TAG"
     export INSTALL_ACM=YES
     shift 2 ;;
   --subctl-version)
-    check_cli_args "$2"
-    export SUBM_VER_TAG="$2"
+    export_param_value "${param_value}" "SUBM_VER_TAG"
     export INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
@@ -357,15 +370,15 @@ while [[ $# -gt 0 ]]; do
     export GLOBALNET=YES
     shift ;;
   --cable-driver)
-    check_cli_args "$2"
-    export SUBM_CABLE_DRIVER="$2" # Default is libreswan
+    # Default is libreswan
+    export_param_value "${param_value}" "SUBM_CABLE_DRIVER"
     shift 2 ;;
   --skip-ocp-setup)
     export SKIP_OCP_SETUP=YES
     shift ;;
   --skip-tests)
-    check_cli_args "$2"
-    export SKIP_TESTS="$2" # sys,e2e,pkg,all
+    # sys,e2e,pkg,all
+    export_param_value "${param_value}" "SKIP_TESTS"
     shift 2 ;;
   --print-logs)
     export PRINT_LOGS=YES
@@ -383,21 +396,23 @@ while [[ $# -gt 0 ]]; do
     export UPLOAD_TO_POLARION=YES
     shift ;;
   --import-vars)
-    check_cli_args "$2"
-    export GLOBAL_VARS="$2" # Import additional variables from local file
+    # Import additional variables from local file
+    export_param_value "${param_value}" "GLOBAL_VARS"
     shift 2 ;;
   -*)
-    echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
+    echo -e "${disclosure} \n\n$0: Error - unrecognized option: ${param}" 1>&2
     exit 1 ;;
   *)
     break ;;
   esac
 done
-set -- "${POSITIONAL[@]}" # restore positional parameters
 
+# Restore positional parameters and IFS
+set -- "${POSITIONAL[@]}" 
+unset IFS
 
 ####################################################################################
-#               Get User input (only for missing CLI arguments)                    #
+#               Get User input (only for missing CLI parameters)                    #
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
@@ -627,7 +642,6 @@ if [[ -z "$got_user_input" ]]; then
   done
 
 fi
-
 
 ####################################################################################
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
@@ -1363,7 +1377,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       fi
     fi
 
-    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
+    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" != 1 ]] ; then
       echo 0 > "$TEST_STATUS_FILE"
     else
       FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
@@ -1396,7 +1410,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
   fi
 
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE is not empty or equal 1: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
