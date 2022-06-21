@@ -158,8 +158,8 @@ source "$SCRIPT_DIR/helper_functions"
 source "$SCRIPT_DIR/test_functions"
 
 ### Import ACM Functions ###
-source "$SCRIPT_DIR/acm/downstream_push_bundle_to_olm_catalog.sh"
-source "$SCRIPT_DIR/acm/downstream_deploy_bundle_acm_operator.sh"
+source "$SCRIPT_DIR/olm_functions"
+source "$SCRIPT_DIR/acm_functions"
 
 # To exit on errors and extended trap
 # set -Eeo pipefail
