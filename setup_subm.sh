@@ -1361,13 +1361,14 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           TITLE "$tests_title PASSED"
         fi
       fi
-
-      if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
-        echo 0 > "$TEST_STATUS_FILE"
-      else
-        FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
-      fi
     fi
+
+    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
+      echo 0 > "$TEST_STATUS_FILE"
+    else
+      FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
+    fi
+
   fi
 
 ) |& tee -a "$SYS_LOG"
