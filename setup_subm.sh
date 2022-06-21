@@ -638,7 +638,7 @@ fi
 export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
 cat "$SYS_LOG"
 
-# Update test exit status to 0, unless it is already 1 or 2
+# Check test exit status after export_all_env_variables()
 if [[ "$EXIT_STATUS" == 1 ]] ; then
   echo 1 > "$TEST_STATUS_FILE"
   FATAL "Exporting environment variables have failed, please check the global variable file"
@@ -777,6 +777,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Skipping if using "--skip-tests all" : To run clusters create/destroy without further tests, or if just running unit-tests ###
 
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
+
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to empty, unless it is already 1 or 2
+    [[ "$EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
 
     ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
 
