@@ -4579,9 +4579,7 @@ function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
-  || ( BUG "OCP cluster is inaccessible" && return )
+  ${OC} status || FAILURE "OCP cluster is inaccessible"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -4589,6 +4587,9 @@ function test_products_versions() {
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
+
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)"
 
   # Get ACM version if ACM hub is install on current cluster
   local acm_current_version
@@ -4671,15 +4672,16 @@ function save_cluster_info_to_file() {
 # Save important OCP cluster and Submariner information to local files
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local cluster_version
-  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)" \
-  || ( BUG "OCP cluster is inaccessible" && return )
+  ${OC} status || FAILURE "OCP cluster is inaccessible"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
+
+  local cluster_version
+  cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)"
 
   # Print OCP cluster info into file local file "<cluster name>.info"
   local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
@@ -4728,16 +4730,16 @@ function gather_submariner_info() {
     subctl diagnose all || :
 
     # Gather logs of cluster A
-    print_resources_and_pod_logs "${KUBECONF_HUB}"
+    print_resources_and_pod_logs "${KUBECONF_HUB}" || :
 
     # Gather logs of cluster B
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
-      print_resources_and_pod_logs "${KUBECONF_CLUSTER_B}"
+      print_resources_and_pod_logs "${KUBECONF_CLUSTER_B}" || :
     fi
 
     # Gather logs of cluster C
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
-      print_resources_and_pod_logs "${KUBECONF_CLUSTER_C}"
+      print_resources_and_pod_logs "${KUBECONF_CLUSTER_C}" || :
     fi
 
   ) |& tee -a "$log_file"
@@ -4757,7 +4759,8 @@ function print_resources_and_pod_logs() {
 
   PROMPT "Gather logs of OCP, ACM and Submariner in ${cluster_name}"
 
-  ${OC} status || :
+  ${OC} status || FAILURE "OCP cluster is inaccessible"
+
   ${OC} version || :
 
   ${OC} config get-contexts
