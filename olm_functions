@@ -278,8 +278,10 @@ EOF
 
   TITLE "Verify all pods are running/completed in the Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 
-  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${bundle_namespace}" --field-selector=status.phase!=Succeeded || :
-   
+  # Each pod wait for 3 minutes (simultaneously), but maximum of 5 minutes total
+  cmd="${OC} wait --timeout=3m --for=condition=ready pod --all -n ${bundle_namespace} --field-selector=status.phase!=Succeeded"
+  watch_and_retry "$cmd" 5m || :
+  
   ${OC} -n "${bundle_namespace}" get pods |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") \
   || packagemanifests_status=FAILED
 
