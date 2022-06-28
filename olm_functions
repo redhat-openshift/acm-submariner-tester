@@ -18,13 +18,13 @@ function export_LATEST_IIB() {
 
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
-  if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
-    BUG "'acm-operator-bundle' has unstable CVP tests" \
-    "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
+  # if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
+  #   BUG "'acm-operator-bundle' has unstable CVP tests" \
+  #   "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
 
-    # Workaround:
-    iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-  fi
+  #   # Workaround:
+  #   iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  # fi
 
   local index_images
   index_images="$(jq -r "${iib_query}" $umb_output)" || :
@@ -164,7 +164,7 @@ function deploy_ocp_bundle() {
   # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
   catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
-  TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name} in cluster ${cluster_name}'
+  TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name}' in cluster ${cluster_name}
   Bundle Name: ${bundle_name}
   Operator Version: ${operator_version}
   Operator Name: ${operator_name}
