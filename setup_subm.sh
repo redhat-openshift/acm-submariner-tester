@@ -1383,6 +1383,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
     fi
 
+  elif [[ -z "$EXIT_STATUS" ]]; then
+    TITLE "No tests were required to be executed, but \$TEST_STATUS_FILE was not yet set - Changing status to UNSTABLE"
+
+    # Update test exit status to 2
+    echo 2 > "$TEST_STATUS_FILE"
+
   fi
 
 ) |& tee -a "$SYS_LOG"
