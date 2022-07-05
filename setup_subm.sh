@@ -259,13 +259,13 @@ export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
 
 export_param_value() {
   if [[ -z "$1" || "$1" =~ ^- ]] ; then
-    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help" 
+    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help"
     exit 1
   fi
   export "${2}=${1}"
 }
 
-# Get script parameters, and split by tabs instead of space 
+# Get script parameters, and split by tabs instead of space
 SCRIPT_PARAMS="$*"
 SCRIPT_PARAMS=${SCRIPT_PARAMS// -/$'\t'-}
 IFS=$'\t'
@@ -273,13 +273,13 @@ POSITIONAL=()
 
 for param in ${SCRIPT_PARAMS} ; do
   export got_user_input=TRUE
-  
+
   # Get the next parameter (flag) name, without the value
-  param_name=${param%% *} 
+  param_name=${param%% *}
 
   # Get the parameter value after the flag, without surrounding quotes
   param_value=$(echo "${param#*"$param_name" }" | xargs)
-  
+
   case $param_name in
   -h|--help)
     echo -e "\n# ${disclosure}" && exit 0
@@ -408,7 +408,7 @@ for param in ${SCRIPT_PARAMS} ; do
 done
 
 # Restore positional parameters and IFS
-set -- "${POSITIONAL[@]}" 
+set -- "${POSITIONAL[@]}"
 unset IFS
 
 ####################################################################################
@@ -646,6 +646,8 @@ fi
 ####################################################################################
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
+
+exit 0
 
 # Set and export all global env variables
 # Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
