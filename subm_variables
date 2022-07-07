@@ -153,7 +153,7 @@ export SUBM_CHANNEL_PREFIX="stable-"
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export CVP_COMPONENT="cvp-teamredhatadvancedclustermanagement"
-export CVP_ISSUER="freshmaker" # "contra/pipeline"
+export CVP_ISSUER=${CVP_ISSUER:-"contra/pipeline"} # For CVE (security errata releases) use "freshmaker"
 
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"

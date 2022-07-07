@@ -7,10 +7,10 @@
 
 ### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat
 function export_LATEST_IIB() {
-  # trap_to_debug_commands;
+  trap_to_debug_commands;
 
   local bundle_name="${1}"
-  local version="${2}"
+  local operator_version="${2}"
   local cvp_component="${3}"
   local cvp_issuer="${4}"
 
@@ -22,7 +22,7 @@ function export_LATEST_IIB() {
 
   local umb_output="latest_iib.txt"
 
-  fetch_datagrapper "${bundle_name}" "${version}" "30" "${umb_output}"
+  fetch_datagrapper "${bundle_name}" "${operator_version}" "30" "${umb_output}"
 
   # local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
@@ -34,11 +34,19 @@ function export_LATEST_IIB() {
   #   iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
   # fi
 
-  if [[ "${bundle_name}" == "submariner-operator-bundle" && "$version" == "0.11"* ]] ; then
-    BUG "For Submariner 0.11.* the component name should be - 'cvp-teamsubmariner'"
+  if [[ "${bundle_name}" == "submariner-operator-bundle" ]] ; then
+    
+    if [[ "$operator_version" =~ 0\.11 ]] ; then
+      BUG "For Submariner 0.11.* the CVP component should be 'cvp-teamsubmariner'"
+      # Workaround:
+      cvp_component="cvp-teamsubmariner"
 
-    # Workaround:
-    cvp_component="cvp-teamsubmariner"
+    elif [[ "$operator_version" =~ 0\.12\.1 ]] ; then
+      BUG "For Submariner 0.12.1 the CVP issuer should be 'freshmaker' (CVE release)"
+      # Workaround:
+      cvp_issuer="freshmaker"
+
+    fi
   fi
 
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
@@ -62,7 +70,7 @@ function export_LATEST_IIB() {
   if [[ -z "$index_images" || "$index_images" == null ]]; then
     BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
     
-    fetch_datagrapper "${bundle_name}" "${version}" "100" "${umb_output}"
+    fetch_datagrapper "${bundle_name}" "${operator_version}" "100" "${umb_output}"
 
     index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
@@ -70,7 +78,7 @@ function export_LATEST_IIB() {
     if [[ -z "$index_images" || "$index_images" == null ]]; then
       BUG "Failed to retrieve images during the last 100 days - Searching images during the last 500 days (in completed pipelines only)"
 
-      fetch_datagrapper "${bundle_name}" "${version}" "500" "${umb_output}"
+      fetch_datagrapper "${bundle_name}" "${operator_version}" "500" "${umb_output}"
 
       iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
@@ -79,9 +87,9 @@ function export_LATEST_IIB() {
   fi
 
   if [[ -z "$index_images" || "$index_images" == null ]]; then
-    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${version}': $index_images"
+    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': $index_images"
   else
-    TITLE "UMB index-image for bundle '${bundle_name}' version '${version}' includes:
+    TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
     $index_images"
   fi
 
