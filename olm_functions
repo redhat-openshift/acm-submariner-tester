@@ -12,6 +12,7 @@ function export_LATEST_IIB() {
   local bundle_name="${1}"
   local version="${2}"
   local cvp_component="${3}"
+  local cvp_issuer="${4}"
 
   TITLE "Set and export the variable \$LATEST_IIB according to Bundle, version and component:
   Bundle Name: ${bundle_name}
@@ -41,7 +42,7 @@ function export_LATEST_IIB() {
   fi
 
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
-    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="contra/pipeline") 
+    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
     | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
   local index_images
@@ -176,6 +177,7 @@ function deploy_ocp_bundle() {
   local catalog_source="${5:-${operator_name}-${operator_channel}-catalog}"
   local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
   local cvp_component="${7:-$CVP_COMPONENT}"
+  local cvp_issuer="${8:-$CVP_ISSUER}" # e.g. "contra/pipeline" or "freshmaker"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -191,6 +193,7 @@ function deploy_ocp_bundle() {
   Catalog Source: ${catalog_source}
   Bundle Namespace: ${bundle_namespace}
   CVP Component: ${cvp_component}
+  CVP Component: ${cvp_issuer}
   "
 
   if [[ -z "${bundle_name}" ]] ||
@@ -218,7 +221,7 @@ function deploy_ocp_bundle() {
   ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo -e "\n# Set and export the variable \$LATEST_IIB"
-  export_LATEST_IIB "${bundle_name}" "${operator_version}" "${cvp_component}"
+  export_LATEST_IIB "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
 
   local source_image_path
   source_image_path="${BREW_REGISTRY}/$(echo "${LATEST_IIB}" | cut -d'/' -f2-)"
