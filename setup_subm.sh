@@ -91,6 +91,7 @@ Running with pre-defined parameters (optional):
 - Submariner installation options:
 
   * Install ACM operator version:                      --acm-version [x.y.z]
+  * Install MCE operator version:                      --mce-version [x.y.z]
   * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
@@ -289,18 +290,22 @@ for param in ${SCRIPT_PARAMS} ; do
     shift ;;
   --get-ocp-installer)
     # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-    export_param_value "${param_value}" "OCP_VERSION"
+    export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
     export GET_OCP_INSTALLER=YES
     shift 2 ;;
   --get-ocpup-tool)
     export GET_OCPUP_TOOL=YES
     shift ;;
   --acm-version)
-    export_param_value "${param_value}" "ACM_VER_TAG"
+    export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
     shift 2 ;;
+  --mce-version)
+    export_param_value "${param_value}" "MCE_VER_TAG" # $MCE_VER_TAG will get the value
+    export INSTALL_MCE=YES
+    shift 2 ;;
   --subctl-version)
-    export_param_value "${param_value}" "SUBM_VER_TAG"
+    export_param_value "${param_value}" "SUBM_VER_TAG" # $SUBM_VER_TAG will get the value
     export INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
@@ -371,14 +376,14 @@ for param in ${SCRIPT_PARAMS} ; do
     shift ;;
   --cable-driver)
     # Default is libreswan
-    export_param_value "${param_value}" "SUBM_CABLE_DRIVER"
+    export_param_value "${param_value}" "SUBM_CABLE_DRIVER" # $SUBM_CABLE_DRIVER will get the value
     shift 2 ;;
   --skip-ocp-setup)
     export SKIP_OCP_SETUP=YES
     shift ;;
   --skip-tests)
     # sys,e2e,pkg,all
-    export_param_value "${param_value}" "SKIP_TESTS"
+    export_param_value "${param_value}" "SKIP_TESTS" # $SKIP_TESTS will get the value
     shift 2 ;;
   --print-logs)
     export PRINT_LOGS=YES
@@ -397,7 +402,7 @@ for param in ${SCRIPT_PARAMS} ; do
     shift ;;
   --import-vars)
     # Import additional variables from local file
-    export_param_value "${param_value}" "GLOBAL_VARS"
+    export_param_value "${param_value}" "GLOBAL_VARS" # $GLOBAL_VARS will get the value
     shift 2 ;;
   -*)
     echo -e "${disclosure} \n\n$0: Error - unrecognized option: ${param}" 1>&2
