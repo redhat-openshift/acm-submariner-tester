@@ -1143,6 +1143,16 @@ function force_delete_namespace() {
 
 # ------------------------------------------
 
+# Function to delete all evicted (failed) pods from all namespaces
+function delete_all_evicted_pods_in_current_cluster() {
+  trap_to_debug_commands;
+
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | awk '{system("oc delete pod "$2" -n "$1)}'
+
+}
+
+# ------------------------------------------
+
 function create_docker_registry_secret() {
 ### Helper function to add new Docker registry
   trap '' DEBUG # DONT trap_to_debug_commands

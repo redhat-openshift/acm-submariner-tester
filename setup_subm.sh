@@ -909,6 +909,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
 
+      ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_HUB}"
+
     fi
     # END of cluster A cleanup
 
@@ -922,6 +924,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
+        
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
     fi
@@ -937,6 +941,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_C}"
 
       fi
     fi

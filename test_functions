@@ -1339,6 +1339,24 @@ function delete_e2e_namespaces() {
 #   done
 # }
 
+# ------------------------------------------
+
+function delete_all_evicted_pods_in_cluster() {
+### Delete all evicted (failed) pods from all namespaces in the given cluster
+  trap_to_debug_commands
+
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  PROMPT "Delete all evicted pods in cluster $cluster_name"
+
+  delete_all_evicted_pods_in_current_cluster || :
+
+}
 
 # ------------------------------------------
 
