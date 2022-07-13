@@ -1147,7 +1147,12 @@ function force_delete_namespace() {
 function delete_all_evicted_pods_in_current_cluster() {
   trap_to_debug_commands;
 
-  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | awk '{system("oc delete pod "$2" -n "$1)}'
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | awk '{system("oc delete pod "$2" -n "$1)}' || :
+
+  ${OC} get nodes --no-headers | awk '{print $1}' | \
+  xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=1 --disable-eviction || :
+
+  ${OC} get nodes --no-headers | awk '{print $1}' | xargs ${OC} adm uncordon || :
 
 }
 
