@@ -177,11 +177,11 @@ function setup_workspace() {
   # # CD to main working directory
   # cd ${WORKDIR}
 
-  TITLE "Installing Anaconda (virtual environment)"
-  install_anaconda "${WORKDIR}"
-
   # Installing GoLang with Anaconda, if $CONFIG_GOLANG = yes/y
   if [[ "$CONFIG_GOLANG" =~ ^(y|yes)$ ]] ; then
+    TITLE "Installing Anaconda (virtual environment)"
+    install_anaconda "${WORKDIR}"
+
     TITLE "Installing GoLang with Anaconda"
     install_local_golang "${WORKDIR}"
 
@@ -196,18 +196,29 @@ function setup_workspace() {
       echo -e "\n# Re-exporting global variables"
       export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
+
+    # Terraform preparations are not required since Submariner 0.12
+    # TITLE "Installing Terraform with Anaconda"
+    # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
+    # "Use Terraform v0.12.29" \
+    # "https://github.com/submariner-io/submariner/issues/847"
+    # # Workaround:
+    # install_local_terraform "${WORKDIR}" "0.12.29"
+
+    TITLE "Installing JQ (JSON parser) with Anaconda"
+    install_local_jq "${WORKDIR}"
+
+  else
+    # Set GOBIN to system's default golang
+    # export GOROOT="/usr/local/go"
+    # export PATH="${GOROOT}/bin:${PATH}"
+    # export GOBIN="${GOROOT}/bin"
+
+    # Verify GO installation
+    verify_golang
   fi
 
-  # Terraform preparations are not required since Submariner 0.12
-  # TITLE "Installing Terraform with Anaconda"
-  # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-  # "Use Terraform v0.12.29" \
-  # "https://github.com/submariner-io/submariner/issues/847"
-  # # Workaround:
-  # install_local_terraform "${WORKDIR}" "0.12.29"
 
-  TITLE "Installing JQ (JSON parser) with Anaconda"
-  install_local_jq "${WORKDIR}"
 
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
@@ -228,12 +239,13 @@ function setup_workspace() {
     ( # subshell to hide commands
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
-    )
+    ) || FATAL "Missing AWS access details. Did you set AWS variables in the 'subm_variables' file ?"
 
     # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
-    if [[ -s "$GCP_CRED_JSON" ]] ; then
+    if [[ -n "$GCP_CRED_JSON" ]] ; then
       TITLE "Installing and configuring GCP-CLI"
-      configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" || :
+      configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" \
+      || FATAL "Missing GCP access details. Did you set GCP_CRED_JSON path in the 'subm_variables' file ?"
     fi
   fi
 
@@ -300,12 +312,12 @@ function download_ocp_installer() {
   ocp_install_gz="${ocp_install_gz%%$'\n'*}"
   oc_client_gz="${oc_client_gz%%$'\n'*}"
 
-  tar -xvf "$ocp_install_gz" -C "${WORKDIR}"
-  tar -xvf "$oc_client_gz" -C "${WORKDIR}"
+  tar -xvf "$ocp_install_gz" # -C "${WORKDIR}"
+  tar -xvf "$oc_client_gz" # -C "${WORKDIR}"
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p "$GOBIN"
-  /usr/bin/install ./oc "$GOBIN"/oc
+  /usr/bin/install ./oc "$GOBIN"/oc || :
 
   echo -e "\n# Install OC into user HOME bin:"
   /usr/bin/install ./oc ~/.local/bin/oc
@@ -365,6 +377,29 @@ function build_ocpup_tool_latest() {
       #   -h, --help            help for ocpup
       #
       # Use "ocpup [command] --help" for more information about a command.
+}
+
+# ------------------------------------------
+
+function destroy_cluster() {
+### Destroy OCP cluster ###
+  trap_to_debug_commands;
+
+  local ocp_install_dir="$1"
+  local installer_yaml_source="$2"
+  local cluster_name="$3"
+
+  # Get cluster platform type from OCP installer yaml
+  local platform
+  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
+
+  if [[ "${platform}" == openstack ]] ; then
+    # Only for Openstack - Using OCPUP
+    destroy_openstack_cluster "$ocp_install_dir" "$cluster_name"
+  else
+    destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
+  fi
+
 }
 
 # ------------------------------------------
@@ -444,7 +479,7 @@ function destroy_ocp_cluster() {
 
 # ------------------------------------------
 
-function destroy_osp_cluster() {
+function destroy_openstack_cluster() {
 ### If Required - Destroy your previous Openstack cluster B (on-prem) ###
   trap_to_debug_commands;
   local ocp_install_dir="$1"
@@ -482,103 +517,30 @@ function destroy_osp_cluster() {
 
 # ------------------------------------------
 
-function prepare_install_ocp_cluster() {
-### Prepare installation files for OCP cluster (public) ###
+function prepare_ocp_install() {
+### Prepare OCP install-config file ###
   trap_to_debug_commands;
 
   local ocp_install_dir="$1"
   local installer_yaml_source="$2"
   local cluster_name="$3"
 
-  PROMPT "Preparing installation files for OCP cluster $cluster_name"
-
-  cd "${WORKDIR}" || return 1
-  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
-
-  # To manually create new OCP install-config.yaml:
-  # ./openshift-install create install-config --dir user-cluster-a
-  #
-  # $ cluster_name=user-cluster-a
-  # $ mkdir ${cluster_name}
-  # $ cd ${cluster_name}
-  # $ ../openshift-install create install-config
-
-    # ? SSH Public Key ~/.ssh/id_rsa.pub
-    # ? Platform aws
-    # ? Region us-east-1
-    # ? Base Domain devcluster.openshift.com
-    # ? cluster Name user-cluster-a
-    # ? Pull Secret
-
-  mkdir -p "${ocp_install_dir}"
-  local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
-
-  echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
-  cp -f "${installer_yaml_source}" "$installer_yaml_new"
-  chmod 777 "$installer_yaml_new"
-
-  TITLE "Updating OCP installer configuration (${installer_yaml_new}) of OCP cluster $cluster_name"
-
-  # Update cluster name in the installer yaml
-  [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
-
-  # Get cluster platform type from OCP installer yaml, and update cluster region
+  # Get cluster platform type from OCP installer yaml
   local platform
-  platform="$(print_ocp_install_platform "${installer_yaml_new}")"
+  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
 
-  if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
-    echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
-    change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
-
-  elif [[ -n "$GCP_REGION" && "$platform" == gcp ]] ; then
-    echo -e "\n# Set region for GCP cluster to: $GCP_REGION"
-    change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
+  if [[ "${platform}" == openstack ]] ; then
+    # Only for Openstack - Using OCPUP
+    prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
+  else
+    prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
   fi
 
 }
 
 # ------------------------------------------
 
-function create_ocp_cluster() {
-### Create OCP cluster A (public) with OCP installer ###
-  trap_to_debug_commands;
-  local ocp_install_dir="$1"
-  local cluster_name="$2"
-
-  PROMPT "Creating OCP cluster (public): $cluster_name"
-
-  if [[ ! -d "$ocp_install_dir" ]] ; then
-    FATAL "OCP install directory [$ocp_install_dir] does not exist"
-  else
-    cd "${ocp_install_dir}" || return 1
-  fi
-
-  # Continue previous OCP installation
-  if [[ -s "metadata.json" ]] ; then
-    TITLE "$ocp_install_dir directory contains previous OCP installer files. Will attempt to continue previous installation"
-
-    local ocp_cmd="../openshift-install wait-for install-complete --log-level=debug" # --dir="$CLUSTER_DIR"
-    local ocp_log=".openshift_install.log"
-
-    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
-    || FATAL "OCP installer failed to continue previous installation for $cluster_name"
-
-  # Start new OCP installation
-  else
-    TITLE "Run OCP installer from scratch using install-config.yaml"
-
-    local ocp_cmd="../openshift-install create cluster --log-level debug"
-    local ocp_log=".openshift_install.log"
-
-    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
-    || FATAL "OCP installer failed to create $cluster_name"
-  fi
-
-}
-
-# ------------------------------------------
-
-function prepare_install_osp_cluster() {
+function prepare_install_openstack_cluster() {
 ### Prepare installation files for OSP cluster (on-prem) ###
   trap_to_debug_commands;
 
@@ -627,7 +589,87 @@ function prepare_install_osp_cluster() {
 
 # ------------------------------------------
 
-function create_osp_cluster() {
+function prepare_install_ocp_cluster() {
+### Prepare installation files for OCP cluster (public) ###
+  trap_to_debug_commands;
+
+  local ocp_install_dir="$1"
+  local installer_yaml_source="$2"
+  local cluster_name="$3"
+
+  PROMPT "Preparing installation files for OCP cluster $cluster_name"
+
+  cd "${WORKDIR}" || return 1
+  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
+
+  # To manually create new OCP install-config.yaml:
+  # ./openshift-install create install-config --dir user-cluster-a
+  #
+  # $ cluster_name=user-cluster-a
+  # $ mkdir ${cluster_name}
+  # $ cd ${cluster_name}
+  # $ ../openshift-install create install-config
+
+    # ? SSH Public Key ~/.ssh/id_rsa.pub
+    # ? Platform aws
+    # ? Region us-east-1
+    # ? Base Domain devcluster.openshift.com
+    # ? cluster Name user-cluster-a
+    # ? Pull Secret
+
+  mkdir -p "${ocp_install_dir}"
+  local installer_yaml_new="${ocp_install_dir}/install-config.yaml"
+
+  echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
+  cp -f "${installer_yaml_source}" "$installer_yaml_new"
+  chmod 777 "$installer_yaml_new"
+
+  echo -e "\n# Update cluster name in the new installer yaml: ${installer_yaml_new}"
+  [[ -z "$cluster_name" ]] || change_yaml_key_value "$installer_yaml_new" "name" "$cluster_name" "metadata"
+
+  echo -e "\n# Get cluster platform type from OCP installer yaml, and update cluster region"
+  local platform
+  platform="$(print_ocp_install_platform "${installer_yaml_new}")"
+
+  if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
+    echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
+    change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
+
+  elif [[ -n "$GCP_REGION" && "$platform" == gcp ]] ; then
+    echo -e "\n# Set region for GCP cluster to: $GCP_REGION"
+    change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
+  fi
+
+  TITLE "OCP installer for platform '$platform' is ready to install $cluster_name"
+
+}
+
+# ------------------------------------------
+
+function create_cluster() {
+### Create OCP cluster ###
+  trap_to_debug_commands;
+
+  local ocp_install_dir="$1"
+  local installer_yaml_source="$2"
+  local cluster_name="$3"
+
+  # Get cluster platform type from OCP installer yaml
+  local platform
+  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
+
+  if [[ "${platform}" == openstack ]] ; then
+    # Only for Openstack - Using OCPUP
+    create_openstack_cluster "$cluster_name"
+  else
+    create_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
+  fi
+
+}
+
+# ------------------------------------------
+
+function create_openstack_cluster() {
 ### Create Openstack cluster B (on-prem) with OCPUP tool ###
   trap_to_debug_commands;
 
@@ -679,6 +721,45 @@ function create_osp_cluster() {
 
 # ------------------------------------------
 
+function create_ocp_cluster() {
+### Create OCP cluster A (public) with OCP installer ###
+  trap_to_debug_commands;
+  local ocp_install_dir="$1"
+  local cluster_name="$2"
+
+  PROMPT "Creating OCP cluster (public): $cluster_name"
+
+  if [[ ! -d "$ocp_install_dir" ]] ; then
+    FATAL "OCP install directory [$ocp_install_dir] does not exist"
+  else
+    cd "${ocp_install_dir}" || return 1
+  fi
+
+  # Continue previous OCP installation
+  if [[ -s "metadata.json" ]] ; then
+    TITLE "$ocp_install_dir directory contains previous OCP installer files. Will attempt to continue previous installation"
+
+    local ocp_cmd="../openshift-install wait-for install-complete --log-level=debug" # --dir="$CLUSTER_DIR"
+    local ocp_log=".openshift_install.log"
+
+    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
+    || FATAL "OCP installer failed to continue previous installation for $cluster_name"
+
+  # Start new OCP installation
+  else
+    TITLE "Run OCP installer from scratch using install-config.yaml"
+
+    local ocp_cmd="../openshift-install create cluster --log-level debug"
+    local ocp_log=".openshift_install.log"
+
+    run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
+    || FATAL "OCP installer failed to create $cluster_name"
+  fi
+
+}
+
+# ------------------------------------------
+
 function export_all_env_variables() {
 ### Helper function to export all environment and test variables ###
   PROMPT "Exporting environment and test variables"
@@ -715,12 +796,16 @@ function export_all_env_variables() {
     export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
   fi
 
+  # Set WORKDIR as an absolute path
+  WORKDIR="$(realpath -s "$WORKDIR")"
+  export SCRIPT_DIR
+
   set_missing_cli_variables
 
   echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
 
   # Exporting variables for Managed Cluster A
-  export_cluster_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A" 
+  export_cluster_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
 
   # Currently the Hub is also installed on Cluster A
   export KUBECONF_HUB="${KUBECONF_CLUSTER_A}"
@@ -799,14 +884,14 @@ function export_cluster_variables() {
   if [[ -z "${cluster_name}" ]] ||
      [[ -z "${cluster_install_yaml}" ]] ||
      [[ -z "${cluster_index}" ]] ; then
-       FATAL "Required parameters for cluster installation are missing:
+       BUG "Required parameters for cluster installation are missing:
        Cluster Name: ${cluster_name}
        Cluster Installer YAML: ${cluster_install_yaml}
        Cluster Index (A/B/C): ${cluster_index}
        "
   fi
 
-  # If deploying a new cluster, check that the given installer yaml is not corrupted 
+  # If deploying a new cluster, check that the given installer yaml is not corrupted
   verify_yaml_for_cluster_deploy "${cluster_index}"
 
   local cluster_install_platform
@@ -868,12 +953,12 @@ function verify_yaml_for_cluster_deploy() {
   declare -n cluster_yaml="CLUSTER_${cluster_index}_YAML"
 
   if echo "$req_reset $req_create $req_destroy $req_clean $req_join" | grep -w -iP "yes|y" ; then
-    echo -e "\n# Cluster '${cluster_name}' is required to be deployed, verifying installer yaml: 
+    echo -e "\n# Cluster '${cluster_name}' is required to be deployed, verifying installer yaml:
     ${cluster_yaml}"
 
     grep 'Domain:' "$cluster_yaml" || FATAL "Cluster $cluster_index installer yaml is missing or corrupted"
 
-  else 
+  else
     echo -e "\n# Cluster ${cluster_name}' was not required to be deployed"
   fi
 
@@ -916,6 +1001,9 @@ function update_kubeconfig_default_context() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
+
+  [[ -s "$kubeconfig_file" ]] || FATAL "Kubeconfig file '$kubeconfig_file' is missing or empty"
+
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_name
@@ -3188,8 +3276,11 @@ function export_variable_name_of_active_gateway_pod() {
   # Get variable name
   local var_name="${1}"
 
+  # Optional: Timeout to wait for active gateway pod (3 minutes by default)
+  local wait_for_gw="${2:-3m}"
+
   # Optional: Do not print detailed output (silent echo)
-  local silent="${2}"
+  local silent="${3:-no}"
 
   local gateways_output
   gateways_output="$(mktemp)_gateways"
@@ -3200,7 +3291,7 @@ function export_variable_name_of_active_gateway_pod() {
   [[ -x "$(command -v subctl)" ]] || FATAL "No SubCtl installation found. Try to run again with option '--subctl-version'"
 
   # Wait (silently) for an active gateway node
-  watch_and_retry "subctl show gateways &> $gateways_output ; grep 'active' $gateways_output" 3m || :
+  watch_and_retry "subctl show gateways &> $gateways_output ; grep 'active' $gateways_output" "$wait_for_gw" || :
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
   TITLE "Show Submariner Gateway nodes, and get the active one"
@@ -4688,7 +4779,7 @@ function test_products_versions() {
   if subctl show versions ; then
 
     # Show Libreswan (cable driver) version in the active gateway pod
-    export_variable_name_of_active_gateway_pod "active_gateway_pod" "yes" || :
+    export_variable_name_of_active_gateway_pod "active_gateway_pod" "10s" "yes" || :
 
     if [[ -n "$active_gateway_pod" ]] ; then
       echo -e "\n### Linux version on the running Gateway pod: $active_gateway_pod ###"

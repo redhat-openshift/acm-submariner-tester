@@ -525,7 +525,7 @@ function install_conda_package() {
   ${CONDA_CMD} deactivate
 
   conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
-  
+
   ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
 
   source activate "$conda_env" || :
@@ -569,6 +569,10 @@ function verify_golang() {
 
   # Optional: exporting $1 as GOBIN path
   # export GOBIN="${1:-$GOROOT/bin}"
+
+  if [[ ! -e ${GOBIN} ]] ; then
+    export GOBIN="${GOROOT}/bin"
+  fi
 
   # export PATH=$PATH:$GOROOT/bin
   [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH
@@ -667,7 +671,14 @@ function install_local_gcloud() {
 
   # export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}" || CONDA_PKG=FAILED
+
+  if [[ "$CONDA_PKG" == FAILED ]] ; then
+    TITLE "Installing Gcloud-CLI with Anaconda failed - trying to download and install from sdk.cloud.google.com"
+    curl https://sdk.cloud.google.com > gcloud-install.sh
+    bash gcloud-install.sh --disable-prompts
+    . ~/google-cloud-sdk/path.bash.inc
+  fi
 
   # verify_anaconda "${conda_install_dir}"
   # source activate "$conda_env"
@@ -866,7 +877,9 @@ function configure_gcp_access() {
 
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  install_local_gcloud "$work_dir"
+  if [[ ! -x "$(command -v aws)" ]] ; then
+    install_local_gcloud "$work_dir"
+  fi
 
   trap '' DEBUG # DONT trap_to_debug_commands
 

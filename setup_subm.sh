@@ -260,13 +260,13 @@ export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
 
 export_param_value() {
   if [[ -z "$1" || "$1" =~ ^- ]] ; then
-    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help" 
+    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help"
     exit 1
   fi
   export "${2}=${1}"
 }
 
-# Get script parameters, and split by tabs instead of space 
+# Get script parameters, and split by tabs instead of space
 SCRIPT_PARAMS="$*"
 SCRIPT_PARAMS=${SCRIPT_PARAMS// -/$'\t'-}
 IFS=$'\t'
@@ -274,13 +274,13 @@ POSITIONAL=()
 
 for param in ${SCRIPT_PARAMS} ; do
   export got_user_input=TRUE
-  
+
   # Get the next parameter (flag) name, without the value
-  param_name=${param%% *} 
+  param_name=${param%% *}
 
   # Get the parameter value after the flag, without surrounding quotes
   param_value=$(echo "${param#*"$param_name" }" | xargs)
-  
+
   case $param_name in
   -h|--help)
     echo -e "\n# ${disclosure}" && exit 0
@@ -413,7 +413,7 @@ for param in ${SCRIPT_PARAMS} ; do
 done
 
 # Restore positional parameters and IFS
-set -- "${POSITIONAL[@]}" 
+set -- "${POSITIONAL[@]}"
 unset IFS
 
 ####################################################################################
@@ -425,8 +425,8 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $SKIP_OCP_SETUP - to skip OCP clusters setup (destroy / create / clean)
   while [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
+    echo -e "\n${YELLOW}Do you want to deploy Submariner WITHOUT preparing OCP clusters (will not destroy / create / clean) ? ${NO_COLOR}
+    Enter \"yes\" to run without preparing OCP: "
     read -r input
     SKIP_OCP_SETUP=${input:-NO}
   done
@@ -443,7 +443,7 @@ if [[ -z "$got_user_input" ]]; then
 
     # User input: $OCP_VERSION - to download_ocp_installer with specific version
     if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-      while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+      while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
         echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
         Enter version number, or nothing to install latest version: "
         read -r input
@@ -477,7 +477,7 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $RESET_CLUSTER_B - to destroy_osp_cluster AND create_osp_cluster
+    # User input: $RESET_CLUSTER_B - to destroy_openstack_cluster AND create_openstack_cluster
     while [[ ! "$RESET_CLUSTER_B" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -601,8 +601,8 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $SKIP_TESTS - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
   while [[ ! "$SKIP_TESTS" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
-    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
+    echo -e "\n${YELLOW}Do you want to run WITHOUT executing Submariner Tests (will exclude System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
+    Enter either \"sys,e2e,pkg,all\" to exclude these tests: "
     read -r input
     SKIP_TESTS=${input:-NO}
   done
@@ -653,19 +653,12 @@ fi
 ####################################################################################
 
 # Set and export all global env variables
-# Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
-export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
-cat "$SYS_LOG"
+# Exporting vars must first be in parent shell process, but not in a sub-shell (e.g. do not run with tee)
+export_all_env_variables &>> "$SYS_LOG" || :
 
-# Check test exit status after export_all_env_variables()
-if [[ "$EXIT_STATUS" == 1 ]] ; then
-  echo 1 > "$TEST_STATUS_FILE"
-  FATAL "Exporting environment variables have failed, please check the global variable file"
-fi
-
-# Printing output both to stdout and to $SYS_LOG with tee
-echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
+# Subshell to print output both to stdout and to $SYS_LOG with tee
 (
+  export_all_env_variables
 
   # Setup and verify environment
   setup_workspace
@@ -695,11 +688,21 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ### Destroy / Create OCP Clusters ###
 
-    # Running download_ocp_installer for cluster A
+    # Running download_ocp_installer
+    # TODO: Download specific OCP version for each cluster
 
     if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
 
       ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
+
+    fi
+
+    # Running build_ocpup_tool_latest for Openstack cluster only
+    # TODO: replace OCUP with common OCP installer
+
+    if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} build_ocpup_tool_latest
 
     fi
 
@@ -708,15 +711,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running destroy or create or both (reset) for cluster A
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
     fi
 
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-      ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
     fi
 
@@ -724,27 +727,19 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # Running build_ocpup_tool_latest if requested, for cluster B
-
-      if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} build_ocpup_tool_latest
-
-      fi
-
       # Running destroy or create or both (reset) for cluster B
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
-        ${JUNIT_CMD} create_osp_cluster "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
       fi
 
@@ -768,15 +763,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-        ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
       fi
 
@@ -924,7 +919,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
-        
+
         ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
