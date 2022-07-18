@@ -10,6 +10,298 @@ source "$SCRIPT_DIR/subm_variables"
 
 # ------------------------------------------
 
+function export_all_env_variables() {
+### Helper function to export all environment and test variables ###
+  PROMPT "Exporting environment and test variables"
+
+  ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
+  if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
+
+    trap_to_debug_commands;
+
+    # Extra verbosity for oc commands:
+    # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
+    # export VERBOSE_FLAG="--v=2"
+    # export OC="$OC $VERBOSE_FLAG"
+
+    # Debug flag for ocpup and aws commands
+    export DEBUG_FLAG="--debug"
+
+  else
+    # Clear trap_to_debug_commands function
+    trap_to_debug_commands() { :; }
+  fi
+
+  export -f trap_to_debug_commands
+
+  if [[ -s "$GLOBAL_VARS" ]]; then
+    TITLE "Sourcing a local variables file (overrides global variables) from:
+    --import-vars $GLOBAL_VARS"
+
+    source "$GLOBAL_VARS"
+  fi
+
+  export_global_script_variable
+
+  set_missing_cli_variables
+
+  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
+    export JUNIT_CMD="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
+    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
+  fi
+
+  echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
+
+  # Exporting variables for Managed Cluster A
+  export_cluster_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
+
+  # Currently the Hub is also installed on Cluster A
+  export KUBECONF_HUB="${KUBECONF_CLUSTER_A}"
+
+  # Exporting variables for Managed Cluster B
+  export_cluster_variables "${CLUSTER_B_NAME}" "${CLUSTER_B_YAML}" "B"
+
+  # Exporting variables for Managed Cluster C
+  export_cluster_variables "${CLUSTER_C_NAME}" "${CLUSTER_C_YAML}" "C"
+
+  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+  set_versions_variables
+
+  # List all environment variables
+  print_all_env_variables
+
+}
+
+# ------------------------------------------
+
+function export_global_script_variable() {
+### Helper function to export global script variables ###
+  trap_to_debug_commands;
+
+  TITLE "Exporting global script variables"
+
+  #####################################################################################################
+  #         Constant variables and files (overrides previous variables from sourced files)            #
+  #####################################################################################################
+
+  # Set WORKDIR as an absolute path to the directory
+  mkdir -p "$WORKDIR"
+  export_absolute_path 'WORKDIR'
+
+  # Set OUTPUTDIR as an absolute path to the directory
+  mkdir -p "$OUTPUTDIR"
+  export_absolute_path 'OUTPUTDIR'
+
+  # Ecport cred files absolute paths
+  export_absolute_path 'GCP_CRED_JSON'
+  export_absolute_path 'OSP_CRED_YAML'
+
+  # Date-time signature for log and report files
+  DATE_TIME="$(date +%d%m%Y_%H%M)"
+  export DATE_TIME
+
+  # Global temp file
+  TEMP_FILE="$(mktemp)_temp"
+  export TEMP_FILE
+
+  # JOB_NAME is a prefix for files, which is the name of current script directory
+  JOB_NAME="$(basename "$SCRIPT_DIR")"
+  export JOB_NAME
+  export SHELL_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_sys_junit.xml"
+  export PKG_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_pkg_junit.xml"
+  export E2E_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_e2e_junit.xml"
+  export LIGHTHOUSE_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_lighthouse_junit.xml"
+
+  export E2E_LOG="$OUTPUTDIR/${JOB_NAME}_e2e_output.log"
+  : > "$E2E_LOG"
+
+  # Set SYS_LOG name according to REPORT_NAME (from subm_variables)
+  export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
+  # SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
+  # SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+  SYS_LOG="${OUTPUTDIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+  : > "$SYS_LOG"
+
+  # Common test variables
+  export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
+  export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
+
+
+  #################################################################################
+  #               Saving important test properties in local files                 #
+  #################################################################################
+
+  # File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
+  export TEST_STATUS_FILE="$OUTPUTDIR/test_status.rc"
+  export EXIT_STATUS
+  : > "$TEST_STATUS_FILE"
+
+  # File to store SubCtl version
+  export SUBCTL_VERSION_FILE="$OUTPUTDIR/subctl.ver"
+  : > "$SUBCTL_VERSION_FILE"
+
+  # File to store Submariner installed versions
+  export SUBMARINER_VERSIONS_FILE="$OUTPUTDIR/submariner.ver"
+  : > "$SUBMARINER_VERSIONS_FILE"
+
+  # File to store SubCtl JOIN command for cluster A
+  export SUBCTL_JOIN_CLUSTER_A_FILE="$OUTPUTDIR/subctl_join_cluster_a.cmd"
+  : > "$SUBCTL_JOIN_CLUSTER_A_FILE"
+
+  # File to store SubCtl JOIN command for cluster B
+  export SUBCTL_JOIN_CLUSTER_B_FILE="$OUTPUTDIR/subctl_join_cluster_b.cmd"
+  : > "$SUBCTL_JOIN_CLUSTER_B_FILE"
+
+  # File to store SubCtl JOIN command for cluster C
+  export SUBCTL_JOIN_CLUSTER_C_FILE="$OUTPUTDIR/subctl_join_cluster_c.cmd"
+  : > "$SUBCTL_JOIN_CLUSTER_C_FILE"
+
+  # File to store Polarion auth
+  export POLARION_AUTH="$OUTPUTDIR/polarion.auth"
+  : > "$POLARION_AUTH"
+
+  # File to store Polarion test-run report link
+  export POLARION_RESULTS="$OUTPUTDIR/polarion_${DATE_TIME}.results"
+  : > "$POLARION_RESULTS"
+
+  # File to store Submariner images version details
+  export PRODUCT_IMAGES="$OUTPUTDIR/product_images.ver"
+  : > "$PRODUCT_IMAGES"
+
+}
+
+# ------------------------------------------
+
+function export_absolute_path() {
+### Helper function to set and export absolute path of file/dir variable ###
+
+  local file_var_name="$1" # Make sure to pass the var name and not $var value
+
+  # Set original_path as the actual value of file_var_name
+  local original_path="${!file_var_name}" || :
+
+  # Get the absolute path
+  original_path="$(realpath -s "$original_path")"
+
+  # Export the variable
+  export "${file_var_name}=${original_path}"
+}
+
+# ------------------------------------------
+
+function set_missing_cli_variables() {
+### Helper function to set missing cli/user variable ###
+  trap_to_debug_commands;
+
+  TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
+
+  export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
+  # export OCP_VERSION=${OCP_VERSION}
+  export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
+  # export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
+  export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
+  export INSTALL_ACM=${INSTALL_ACM:-NO}
+  export INSTALL_MCE=${INSTALL_MCE:-NO}
+  export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
+  export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
+  export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
+  export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
+  export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
+  export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
+  export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
+  export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
+  export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
+  export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
+  export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
+  export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
+  export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
+  export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
+  export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
+  export JOIN_CLUSTER_A=${JOIN_CLUSTER_A:-NO}
+  export JOIN_CLUSTER_B=${JOIN_CLUSTER_B:-NO}
+  export JOIN_CLUSTER_C=${JOIN_CLUSTER_C:-NO}
+  export GLOBALNET=${GLOBALNET:-NO}
+  export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-libreswan}
+  export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
+  export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
+  export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
+  export SKIP_TESTS=${SKIP_TESTS:-NO}
+  export PRINT_LOGS=${PRINT_LOGS:-NO}
+  export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
+  export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
+  export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
+
+}
+
+# ------------------------------------------
+
+function export_cluster_variables() {
+### Helper function to set cluster name and install directory (based on defaults from global variables file)
+
+  local cluster_name="$1"
+  local cluster_install_yaml="$2"
+  local cluster_index="$3" # A / B / C
+
+  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}'"
+
+  if [[ -z "${cluster_name}" ]] ||
+     [[ -z "${cluster_install_yaml}" ]] ||
+     [[ -z "${cluster_index}" ]] ; then
+       BUG "Required parameters for cluster installation are missing:
+       Cluster Name: ${cluster_name}
+       Cluster Installer YAML: ${cluster_install_yaml}
+       Cluster Index (A/B/C): ${cluster_index}
+       "
+  fi
+
+  # If deploying a new cluster, check that the given installer yaml is not corrupted
+  verify_yaml_for_cluster_deploy "${cluster_index}"
+
+  local cluster_install_platform
+  local cluster_install_dir
+
+  # Set $cluster_install_yaml as an absolute path
+  cluster_install_yaml="$(realpath -s "$cluster_install_yaml")" 2>/dev/null || :
+
+  # Check if the given installer yaml contains cluster domain
+  if grep 'Domain:' "$cluster_install_yaml" ; then
+    echo -e "\n# Reading Cluster Installer YAML: ${cluster_install_yaml}"
+
+    # Get cluster platform type from OCP installer yaml
+    cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
+
+    echo -e "\n# Prefix platform type '${cluster_install_platform}' to the cluster name '${cluster_name}'"
+    cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
+
+    echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
+
+    if [[ "$cluster_install_platform" == openstack ]] ; then
+      # TODO: This is just for Openstack (OCP install directory is defined by OCPUP yaml)
+      cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
+    else
+      cluster_install_dir="${WORKDIR}/${cluster_name}"
+    fi
+
+    trap_to_debug_commands;
+
+    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
+    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
+    export "CLUSTER_${cluster_index}_YAML=${cluster_install_yaml}"
+    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
+
+  else
+    TITLE "Unset Cluster ${cluster_index} global variables (name, kubeconfig and yaml), since this cluster is not required for testing"
+
+    unset "CLUSTER_${cluster_index}_NAME"
+    unset "CLUSTER_${cluster_index}_DIR"
+    unset "CLUSTER_${cluster_index}_YAML"
+    unset "KUBECONF_CLUSTER_${cluster_index}"
+  fi
+
+}
+
+# ------------------------------------------
+
 function show_test_plan() {
   PROMPT "Input parameters and Test Plan steps"
 
@@ -174,8 +466,8 @@ function setup_workspace() {
   # Add local BIN dir to PATH
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
 
-  # # CD to main working directory
-  # cd ${WORKDIR}
+  # CD to main working directory
+  cd ${WORKDIR}
 
   # Installing GoLang with Anaconda, if $CONFIG_GOLANG = yes/y
   if [[ "$CONFIG_GOLANG" =~ ^(y|yes)$ ]] ; then
@@ -242,7 +534,7 @@ function setup_workspace() {
     ) || FATAL "Missing AWS access details. Did you set AWS variables in the 'subm_variables' file ?"
 
     # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
-    if [[ -n "$GCP_CRED_JSON" ]] ; then
+    if [[ -s "$GCP_CRED_JSON" ]] ; then
       TITLE "Installing and configuring GCP-CLI"
       configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" \
       || FATAL "Missing GCP access details. Did you set GCP_CRED_JSON path in the 'subm_variables' file ?"
@@ -529,9 +821,12 @@ function prepare_ocp_install() {
   local platform
   platform="$(print_ocp_install_platform "${installer_yaml_source}")"
 
-  if [[ "${platform}" == openstack ]] ; then
+  if [[ "${platform}" == osp ]] ; then
     # Only for Openstack - Using OCPUP
-    prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
+    # prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
+
+    # Without OCPUP:
+    prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name" "$OSP_CRED_YAML"
   else
     prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
   fi
@@ -596,6 +891,7 @@ function prepare_install_ocp_cluster() {
   local ocp_install_dir="$1"
   local installer_yaml_source="$2"
   local cluster_name="$3"
+  local opt_cred_file="$4"
 
   PROMPT "Preparing installation files for OCP cluster $cluster_name"
 
@@ -638,6 +934,13 @@ function prepare_install_ocp_cluster() {
   elif [[ -n "$GCP_REGION" && "$platform" == gcp ]] ; then
     echo -e "\n# Set region for GCP cluster to: $GCP_REGION"
     change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
+
+  elif [[ -s "$opt_cred_file" && "$platform" == osp ]] ; then
+    local cred_file_new="${ocp_install_dir}/clouds.yml"
+
+    echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
+    cp -f "$opt_cred_file" "$cred_file_new"
+    chmod 777 "$cred_file_new"
   fi
 
   TITLE "OCP installer for platform '$platform' is ready to install $cluster_name"
@@ -662,7 +965,7 @@ function create_cluster() {
     # Only for Openstack - Using OCPUP
     create_openstack_cluster "$cluster_name"
   else
-    create_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
+    create_ocp_cluster "$ocp_install_dir" "$cluster_name"
   fi
 
 }
@@ -726,6 +1029,7 @@ function create_ocp_cluster() {
   trap_to_debug_commands;
   local ocp_install_dir="$1"
   local cluster_name="$2"
+  local cred_file="$3"
 
   PROMPT "Creating OCP cluster (public): $cluster_name"
 
@@ -760,183 +1064,6 @@ function create_ocp_cluster() {
 
 # ------------------------------------------
 
-function export_all_env_variables() {
-### Helper function to export all environment and test variables ###
-  PROMPT "Exporting environment and test variables"
-
-  ### Set script in debug/verbose mode, if used CLI option: --debug / -d ###
-  if [[ "$SCRIPT_DEBUG_MODE" =~ ^(yes|y)$ ]]; then
-
-    trap_to_debug_commands;
-
-    # Extra verbosity for oc commands:
-    # https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-output-verbosity-and-debugging
-    # export VERBOSE_FLAG="--v=2"
-    # export OC="$OC $VERBOSE_FLAG"
-
-    # Debug flag for ocpup and aws commands
-    export DEBUG_FLAG="--debug"
-
-  else
-    # Clear trap_to_debug_commands function
-    trap_to_debug_commands() { :; }
-  fi
-
-  export -f trap_to_debug_commands
-
-  if [[ -s "$GLOBAL_VARS" ]]; then
-    TITLE "Sourcing a local variables file (overrides global variables) from:
-    --import-vars $GLOBAL_VARS"
-
-    source "$GLOBAL_VARS"
-  fi
-
-  if [[ "$CREATE_JUNIT_XML" =~ ^(y|yes)$ ]] ; then
-    export JUNIT_CMD="record_junit $SHELL_JUNIT_XML $TEST_STATUS_FILE"
-    export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
-  fi
-
-  # Set WORKDIR as an absolute path
-  WORKDIR="$(realpath -s "$WORKDIR")"
-  export SCRIPT_DIR
-
-  set_missing_cli_variables
-
-  echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
-
-  # Exporting variables for Managed Cluster A
-  export_cluster_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
-
-  # Currently the Hub is also installed on Cluster A
-  export KUBECONF_HUB="${KUBECONF_CLUSTER_A}"
-
-  # Exporting variables for Managed Cluster B
-  export_cluster_variables "${CLUSTER_B_NAME}" "${CLUSTER_B_YAML}" "B"
-
-  # Exporting variables for Managed Cluster C
-  export_cluster_variables "${CLUSTER_C_NAME}" "${CLUSTER_C_YAML}" "C"
-
-  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
-  set_versions_variables
-
-  # List all environment variables
-  print_all_env_variables
-
-}
-
-# ------------------------------------------
-
-function set_missing_cli_variables() {
-### Helper function to set missing cli/user variable ###
-  trap_to_debug_commands;
-
-  TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
-
-  export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
-  # export OCP_VERSION=${OCP_VERSION}
-  export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
-  # export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
-  export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
-  export INSTALL_ACM=${INSTALL_ACM:-NO}
-  export INSTALL_MCE=${INSTALL_MCE:-NO}
-  export INSTALL_SUBMARINER=${INSTALL_SUBMARINER:-NO}
-  export INSTALL_WITH_SUBCTL=${INSTALL_WITH_SUBCTL:-NO}
-  export REGISTRY_IMAGES=${REGISTRY_IMAGES:-NO}
-  export DESTROY_CLUSTER_A=${DESTROY_CLUSTER_A:-NO}
-  export CREATE_CLUSTER_A=${CREATE_CLUSTER_A:-NO}
-  export RESET_CLUSTER_A=${RESET_CLUSTER_A:-NO}
-  export CLEAN_CLUSTER_A=${CLEAN_CLUSTER_A:-NO}
-  export DESTROY_CLUSTER_B=${DESTROY_CLUSTER_B:-NO}
-  export CREATE_CLUSTER_B=${CREATE_CLUSTER_B:-NO}
-  export RESET_CLUSTER_B=${RESET_CLUSTER_B:-NO}
-  export CLEAN_CLUSTER_B=${CLEAN_CLUSTER_B:-NO}
-  export DESTROY_CLUSTER_C=${DESTROY_CLUSTER_C:-NO}
-  export CREATE_CLUSTER_C=${CREATE_CLUSTER_C:-NO}
-  export RESET_CLUSTER_C=${RESET_CLUSTER_C:-NO}
-  export CLEAN_CLUSTER_C=${CLEAN_CLUSTER_C:-NO}
-  export JOIN_CLUSTER_A=${JOIN_CLUSTER_A:-NO}
-  export JOIN_CLUSTER_B=${JOIN_CLUSTER_B:-NO}
-  export JOIN_CLUSTER_C=${JOIN_CLUSTER_C:-NO}
-  export GLOBALNET=${GLOBALNET:-NO}
-  export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-libreswan}
-  export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-  export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
-  export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
-  export SKIP_TESTS=${SKIP_TESTS:-NO}
-  export PRINT_LOGS=${PRINT_LOGS:-NO}
-  export CREATE_JUNIT_XML=${CREATE_JUNIT_XML:-NO}
-  export UPLOAD_TO_POLARION=${UPLOAD_TO_POLARION:-NO}
-  export SCRIPT_DEBUG_MODE=${SCRIPT_DEBUG_MODE:-NO}
-
-}
-
-# ------------------------------------------
-
-function export_cluster_variables() {
-### Helper function to set cluster name and install directory (based on defaults from global variables file)
-
-  local cluster_name="$1"
-  local cluster_install_yaml="$2"
-  local cluster_index="$3" # A / B / C
-
-  TITLE "Exporting Cluster ${cluster_index} variables and kubeconfig for Cluster-Set '${CLUSTER_SET_ID}'"
-
-  if [[ -z "${cluster_name}" ]] ||
-     [[ -z "${cluster_install_yaml}" ]] ||
-     [[ -z "${cluster_index}" ]] ; then
-       BUG "Required parameters for cluster installation are missing:
-       Cluster Name: ${cluster_name}
-       Cluster Installer YAML: ${cluster_install_yaml}
-       Cluster Index (A/B/C): ${cluster_index}
-       "
-  fi
-
-  # If deploying a new cluster, check that the given installer yaml is not corrupted
-  verify_yaml_for_cluster_deploy "${cluster_index}"
-
-  local cluster_install_platform
-  local cluster_install_dir
-
-  # Check if the given installer yaml contains cluster domain
-  if grep 'Domain:' "$cluster_install_yaml" ; then
-    echo -e "\n# Reading Cluster Installer YAML: ${cluster_install_yaml}"
-
-    # Get cluster platform type from OCP installer yaml
-    cluster_install_platform="$(print_ocp_install_platform "${cluster_install_yaml}")"
-
-    echo -e "\n# Prefix platform type '${cluster_install_platform}' to the cluster name '${cluster_name}'"
-    cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
-
-    echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
-
-    if [[ "$cluster_install_platform" == openstack ]] ; then
-      # TODO: This is just for Openstack (OCP install directory is defined by OCPUP yaml)
-      cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
-    else
-      cluster_install_dir="${WORKDIR}/${cluster_name}"
-    fi
-
-    trap_to_debug_commands;
-
-    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+-${CLUSTER_SET_ID}}"
-    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}"
-    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
-
-    # local yaml_var_name="CLUSTER_${cluster_index}_YAML"
-    # export "${yaml_var_name}=${cluster_install_yaml}"
-
-  else
-    TITLE "Unset Cluster ${cluster_index} global variables (name, kubeconfig and yaml), since this cluster is not required for testing"
-
-    unset "CLUSTER_${cluster_index}_NAME"
-    unset "KUBECONF_CLUSTER_${cluster_index}"
-    unset "CLUSTER_${cluster_index}_YAML"
-  fi
-
-}
-
-# ------------------------------------------
-
 function verify_yaml_for_cluster_deploy() {
 ### Helper function to check if cluster is required for testing
 
@@ -959,7 +1086,7 @@ function verify_yaml_for_cluster_deploy() {
     grep 'Domain:' "$cluster_yaml" || FATAL "Cluster $cluster_index installer yaml is missing or corrupted"
 
   else
-    echo -e "\n# Cluster ${cluster_name}' was not required to be deployed"
+    echo -e "\n# Cluster '${cluster_name}' was not required to be deployed"
   fi
 
 }
@@ -971,8 +1098,12 @@ function print_ocp_install_platform() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local ocp_install_yaml="$1"
+  local platform_name
 
-  grep -Poz 'platform:\s*(name:\s*)?\K\w+' "$ocp_install_yaml" | awk -F'\0' '{print $1; exit}' 2>/dev/null || :
+  platform_name="$(grep -Poz 'platform:\s*(name:\s*)?\K\w+' "$ocp_install_yaml" | awk -F'\0' '{print $1; exit}')" 2>/dev/null || :
+
+  # If it's "openstack", it will print "osp" instead
+  echo "${platform_name/openstack/osp}"
 
 }
 
@@ -1113,7 +1244,7 @@ function test_cluster_status() {
 
   TITLE "Backup Kubeconfig of OCP cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
 
-  local kubeconfig_copy="${SCRIPT_DIR}/kubconf_${cluster_name}"
+  local kubeconfig_copy="${OUTPUTDIR}/kubconf_${cluster_name}"
   echo -e "\n# Copy '${kubeconfig_file}' to current workspace: ${kubeconfig_copy}"
   cp -f "$kubeconfig_file" "${kubeconfig_copy}" || :
 
@@ -4702,13 +4833,20 @@ function add_polarion_testrun_url_to_report_headlines() {
 function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
-  TITLE "Showing product versions on script teardown"
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
+  TITLE "Showing product versions on script teardown (only if EXIT_STATUS [${EXIT_STATUS}] is already set)"
 
-  [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_b || :
+  if [[ -n "$EXIT_STATUS" ]] ; then
 
-  [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_c || :
+    ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
+
+    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_b || :
+
+    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_c || :
+
+  fi
 
 }
 
@@ -4755,7 +4893,7 @@ function test_products_versions() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
-  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
+  local cluster_info_output="${OUTPUTDIR}/${cluster_name}.info"
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
@@ -4856,7 +4994,7 @@ function save_cluster_info_to_file() {
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)"
 
   # Print OCP cluster info into file local file "<cluster name>.info"
-  local cluster_info_output="${SCRIPT_DIR}/${cluster_name}.info"
+  local cluster_info_output="${OUTPUTDIR}/${cluster_name}.info"
 
   local cluster_info="${ocp_cloud} cluster : OCP ${cluster_version}"
   echo "${cluster_info}" > "${cluster_info_output}" || :

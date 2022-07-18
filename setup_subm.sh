@@ -177,83 +177,6 @@ shopt -s nocasematch
 shopt -s expand_aliases
 
 
-#####################################################################################################
-#         Constant variables and files (overrides previous variables from sourced files)            #
-#####################################################################################################
-
-# Date-time signature for log and report files
-DATE_TIME="$(date +%d%m%Y_%H%M)"
-export DATE_TIME
-
-# Global temp file
-TEMP_FILE="$(mktemp)_temp"
-export TEMP_FILE
-
-# JOB_NAME is a prefix for files, which is the name of current script directory
-JOB_NAME="$(basename "$SCRIPT_DIR")"
-export JOB_NAME
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
-
-export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
-: > "$E2E_LOG"
-
-# Set SYS_LOG name according to REPORT_NAME (from subm_variables)
-export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-# SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
-# SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-: > "$SYS_LOG"
-
-# Common test variables
-export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
-export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
-
-
-#################################################################################
-#               Saving important test properties in local files                 #
-#################################################################################
-
-# File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
-export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
-export EXIT_STATUS
-: > "$TEST_STATUS_FILE"
-
-# File to store SubCtl version
-export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-: > "$SUBCTL_VERSION_FILE"
-
-# File to store Submariner installed versions
-export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
-: > "$SUBMARINER_VERSIONS_FILE"
-
-# File to store SubCtl JOIN command for cluster A
-export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_A_FILE"
-
-# File to store SubCtl JOIN command for cluster B
-export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_B_FILE"
-
-# File to store SubCtl JOIN command for cluster C
-export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_C_FILE"
-
-# File to store Polarion auth
-export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-: > "$POLARION_AUTH"
-
-# File to store Polarion test-run report link
-export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-: > "$POLARION_RESULTS"
-
-# File to store Submariner images version details
-export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
-: > "$PRODUCT_IMAGES"
-
-
 ####################################################################################
 #                             CLI Script parameters                                #
 ####################################################################################
@@ -652,13 +575,17 @@ fi
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
-# Set and export all global env variables
+# Set and export all global env variables, redirect output to temporary log, and save as $SYS_LOG
 # Exporting vars must first be in parent shell process, but not in a sub-shell (e.g. do not run with tee)
-export_all_env_variables &>> "$SYS_LOG" || :
+temp_script_log="$(mktemp)_script_log"
+
+export_all_env_variables &>> "$temp_script_log" || :
+cp "$temp_script_log" "$SYS_LOG"
+cat "$SYS_LOG"
 
 # Subshell to print output both to stdout and to $SYS_LOG with tee
 (
-  export_all_env_variables
+  # (export_all_env_variables) # Required to run again, to check exit code, but without exporting (now in sub-shell)
 
   # Setup and verify environment
   setup_workspace
@@ -1476,7 +1403,7 @@ if [[ -s "$POLARION_RESULTS" ]] ; then
 fi
 
 # Loop on all *.info files and add them to report description:
-info_files="${SCRIPT_DIR}/*.info"
+info_files="${OUTPUTDIR}/*.info"
 for info in $info_files ; do
   if [[ -s "$info" ]] ; then
     echo -e "$info :
@@ -1509,9 +1436,9 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 ### Collecting artifacts and compressing to tar.gz archive ###
 
 if [[ -n "${REPORT_FILE}" ]] ; then
-   ARCHIVE_FILE="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUTDIR}/${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 else
-   ARCHIVE_FILE="${PWD##*/}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUTDIR}/${PWD##*/}_${DATE_TIME}.tar.gz"
 fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
@@ -1520,56 +1447,56 @@ TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARC
 if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
-  cp -f "${KUBECONF_HUB}" "kubconf_${CLUSTER_A_NAME}" || :
-  cp -f "${KUBECONF_HUB}.bak" "kubconf_${CLUSTER_A_NAME}.bak" || :
+  cp -f "${KUBECONF_HUB}" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "${KUBECONF_HUB}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
 
-  find "${CLUSTER_A_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_A_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
-  cp -f "${KUBECONF_CLUSTER_B}" "kubconf_${CLUSTER_B_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_B}.bak" "kubconf_${CLUSTER_B_NAME}.bak" || :
+  cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
 
-  find "${CLUSTER_B_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_B_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
-  cp -f "${KUBECONF_CLUSTER_C}" "kubconf_${CLUSTER_C_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_C}.bak" "kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
 
-  find "${CLUSTER_C_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_C_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact ${OCP_USR}.sec file
-find "${WORKDIR}" -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -wholename "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUTDIR}/ \; || :
 
 # Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -wholename "$BROKER_INFO" -exec cp -f "{}" "${OUTPUTDIR}/submariner_{}" \; || :
 
 # Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type d -wholename "submariner*" -exec cp -R "{}" ${OUTPUTDIR}/ \; || :
 
 # Compress the required artifacts (either files or directories)
 
 find . -maxdepth 1 \( \
--name "$REPORT_FILE" -o \
--name "$SYS_LOG" -o \
--name "kubconf_*" -o \
--name "submariner*" -o \
--name "*.sec" -o \
--name "*.xml" -o \
--name "*.yaml" -o \
--name "*.log" -o \
--name "*.ver" \
+-wholename "$REPORT_FILE" -o \
+-wholename "$SYS_LOG" -o \
+-wholename "kubconf_*" -o \
+-wholename "submariner*" -o \
+-wholename "*.sec" -o \
+-wholename "*.xml" -o \
+-wholename "*.yaml" -o \
+-wholename "*.log" -o \
+-wholename "*.ver" \
 \) -print0 | \
-tar --dereference --hard-dereference -cvzf "$ARCHIVE_FILE" --null -T - || :
+tar --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
 
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
