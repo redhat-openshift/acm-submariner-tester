@@ -51,7 +51,7 @@ export testIndex=0
 
 if LANG=C sed --help 2>&1 | grep -q GNU; then
   SED="sed"
-elif which gsed &>/dev/null; then
+elif type -P gsed &>/dev/null; then
   SED="gsed"
 else
   echo "Failed to find GNU sed as sed or gsed. If you are on Mac: brew install gnu-sed." >&2
@@ -111,7 +111,7 @@ function juLog() {
   local statusFile
 
   # Initialize testsuite attributes
-  dateTime="$(which gdate 2>/dev/null || which date || :)"
+  dateTime="$(type -P gdate 2>/dev/null || type -P date || :)"
   asserts=00; failures=0; skipped=0; suiteDuration=0; # content=""
   export testIndex=$(( testIndex+1 ))
 
@@ -191,7 +191,7 @@ EOF
   # Save datetime before executing the command
   testStartTime="$(${dateTime} +%s.%N)"
 
-  ### If testSuiteStatus is not 1: Call eVal() to execute the test, and set suite status result 
+  ### If testSuiteStatus is not 1: Call eVal() to execute the test, and set suite status result
   if [[ "$testSuiteStatus" != 1 ]] ; then
     # Run command and set the test return code, based on the command exit code
     eVal "${cmd}"
@@ -200,12 +200,15 @@ EOF
     if [[ "${returnCode}" != 0 ]] ; then
       # Command failed
       if [[ -f "$statusFile" ]] ; then
-        # If suite status is empty - set status file to: 1 (Critical failure)
-        [[ -n "$testSuiteStatus" ]] || echo 1 > "$statusFile"
-        # If suite status is 0 (Pass) - set status file to: 2 (Failed but continue)
-        [[ "$testSuiteStatus" != 0 ]] || echo 2 > "$statusFile"
+        # If suite status is empty, or return code is anything but 5 - change status file to: 1 (Critical failure)
+        if [[ -z "$testSuiteStatus" ]] || [[ "$returnCode" != 5 ]] ; then
+          echo 1 > "$statusFile"
+        # Else if suite status was 0 (Pass until now) - change status file to: 2 (Failed but continue)
+        elif [[ "$testSuiteStatus" == 0 ]] ; then
+          echo 2 > "$statusFile"
+        fi
       fi
-      testCaseStatus=FAILED 
+      testCaseStatus=FAILED
     else
       testCaseStatus=PASSED
     fi
@@ -228,7 +231,7 @@ EOF
   excapeXML "${outf}" || :
   excapeXML "${errf}" || :
 
-  
+
   if [[ ${testCaseStatus} == PASSED ]] && [[ -n "${ereg:-}" ]]; then
     # Change testCaseStatus to FAILED if output includes regex of potential error
     if grep -q -E ${icase} "${ereg}" "${outf}" ; then
@@ -242,7 +245,7 @@ EOF
     skipped=$((skipped+1))
   fi
 
-  
+
   # Calculate test duration and counter
   asserts=$((asserts+1))
   testDuration=$(echo "${testEndTime} ${testStartTime}" | awk '{print $1 - $2}')

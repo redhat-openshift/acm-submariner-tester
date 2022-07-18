@@ -91,6 +91,7 @@ Running with pre-defined parameters (optional):
 - Submariner installation options:
 
   * Install ACM operator version:                      --acm-version [x.y.z]
+  * Install MCE operator version:                      --mce-version [x.y.z]
   * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
   * Configure and test GlobalNet:                      --globalnet
@@ -123,11 +124,11 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.5.0 --subctl-version 0.12.1 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.2 release
-  * Install Submariner 0.11.2 release
+  * Install ACM 2.5.0 release
+  * Install Submariner 0.12.1 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Run Submariner E2E tests (with subctl)
 
@@ -158,8 +159,8 @@ source "$SCRIPT_DIR/helper_functions"
 source "$SCRIPT_DIR/test_functions"
 
 ### Import ACM Functions ###
-source "$SCRIPT_DIR/acm/downstream_push_bundle_to_olm_catalog.sh"
-source "$SCRIPT_DIR/acm/downstream_deploy_bundle_acm_operator.sh"
+source "$SCRIPT_DIR/olm_functions"
+source "$SCRIPT_DIR/acm_functions"
 
 # To exit on errors and extended trap
 # set -Eeo pipefail
@@ -254,18 +255,33 @@ export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
 
 
 ####################################################################################
-#                             CLI Script arguments                                 #
+#                             CLI Script parameters                                #
 ####################################################################################
 
-check_cli_args() {
-  [[ -n "$1" ]] || ( echo -e "\n# Missing arguments. Please see Help with: -h" && exit 1 )
+export_param_value() {
+  if [[ -z "$1" || "$1" =~ ^- ]] ; then
+    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help" 
+    exit 1
+  fi
+  export "${2}=${1}"
 }
 
+# Get script parameters, and split by tabs instead of space 
+SCRIPT_PARAMS="$*"
+SCRIPT_PARAMS=${SCRIPT_PARAMS// -/$'\t'-}
+IFS=$'\t'
 POSITIONAL=()
-while [[ $# -gt 0 ]]; do
+
+for param in ${SCRIPT_PARAMS} ; do
   export got_user_input=TRUE
-  # Consume next (1st) argument
-  case $1 in
+  
+  # Get the next parameter (flag) name, without the value
+  param_name=${param%% *} 
+
+  # Get the parameter value after the flag, without surrounding quotes
+  param_value=$(echo "${param#*"$param_name" }" | xargs)
+  
+  case $param_name in
   -h|--help)
     echo -e "\n# ${disclosure}" && exit 0
     shift ;;
@@ -273,21 +289,23 @@ while [[ $# -gt 0 ]]; do
     export SCRIPT_DEBUG_MODE=YES
     shift ;;
   --get-ocp-installer)
-    check_cli_args "$2"
-    export OCP_VERSION="$2" # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+    export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
     export GET_OCP_INSTALLER=YES
     shift 2 ;;
   --get-ocpup-tool)
     export GET_OCPUP_TOOL=YES
     shift ;;
   --acm-version)
-    check_cli_args "$2"
-    export ACM_VER_TAG="$2"
+    export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
     shift 2 ;;
+  --mce-version)
+    export_param_value "${param_value}" "MCE_VER_TAG" # $MCE_VER_TAG will get the value
+    export INSTALL_MCE=YES
+    shift 2 ;;
   --subctl-version)
-    check_cli_args "$2"
-    export SUBM_VER_TAG="$2"
+    export_param_value "${param_value}" "SUBM_VER_TAG" # $SUBM_VER_TAG will get the value
     export INSTALL_SUBMARINER=YES
     shift 2 ;;
   --registry-images)
@@ -357,15 +375,15 @@ while [[ $# -gt 0 ]]; do
     export GLOBALNET=YES
     shift ;;
   --cable-driver)
-    check_cli_args "$2"
-    export SUBM_CABLE_DRIVER="$2" # libreswan / strongswan [Deprecated]
+    # Default is libreswan
+    export_param_value "${param_value}" "SUBM_CABLE_DRIVER" # $SUBM_CABLE_DRIVER will get the value
     shift 2 ;;
   --skip-ocp-setup)
     export SKIP_OCP_SETUP=YES
     shift ;;
   --skip-tests)
-    check_cli_args "$2"
-    export SKIP_TESTS="$2" # sys,e2e,pkg,all
+    # sys,e2e,pkg,all
+    export_param_value "${param_value}" "SKIP_TESTS" # $SKIP_TESTS will get the value
     shift 2 ;;
   --print-logs)
     export PRINT_LOGS=YES
@@ -383,21 +401,23 @@ while [[ $# -gt 0 ]]; do
     export UPLOAD_TO_POLARION=YES
     shift ;;
   --import-vars)
-    check_cli_args "$2"
-    export GLOBAL_VARS="$2" # Import additional variables from local file
+    # Import additional variables from local file
+    export_param_value "${param_value}" "GLOBAL_VARS" # $GLOBAL_VARS will get the value
     shift 2 ;;
   -*)
-    echo -e "${disclosure} \n\n$0: Error - unrecognized option: $1" 1>&2
+    echo -e "${disclosure} \n\n$0: Error - unrecognized option: ${param}" 1>&2
     exit 1 ;;
   *)
     break ;;
   esac
 done
-set -- "${POSITIONAL[@]}" # restore positional parameters
 
+# Restore positional parameters and IFS
+set -- "${POSITIONAL[@]}" 
+unset IFS
 
 ####################################################################################
-#               Get User input (only for missing CLI arguments)                    #
+#               Get User input (only for missing CLI parameters)                    #
 ####################################################################################
 
 if [[ -z "$got_user_input" ]]; then
@@ -628,19 +648,31 @@ if [[ -z "$got_user_input" ]]; then
 
 fi
 
-
 ####################################################################################
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
 # Set and export all global env variables
-# export_all_env_variables > >(tee -a "$SYS_LOG") 2>&1
-export_all_env_variables >> "$SYS_LOG" 2>&1
+# Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
+export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
 cat "$SYS_LOG"
+
+# Check test exit status after export_all_env_variables()
+if [[ "$EXIT_STATUS" == 1 ]] ; then
+  echo 1 > "$TEST_STATUS_FILE"
+  FATAL "Exporting environment variables have failed, please check the global variable file"
+fi
 
 # Printing output both to stdout and to $SYS_LOG with tee
 echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 (
+
+  # Setup and verify environment
+  setup_workspace
+
+  # Set script trap functions
+  set_trap_functions
+
   ### Script debug calls (should be left as a comment) ###
 
     # ${JUNIT_CMD} debug_test_polarion
@@ -653,12 +685,6 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # ${JUNIT_CMD} debug_test_fatal
 
   ### END Script debug ###
-
-  # Setup and verify environment
-  setup_workspace
-
-  # Set script trap functions
-  set_trap_functions
 
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan
@@ -756,6 +782,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     fi
 
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 0, unless it is already 1 or 2
+    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+
   fi
   ### END of OCP Setup (Create or Destroy) ###
 
@@ -764,6 +796,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Skipping if using "--skip-tests all" : To run clusters create/destroy without further tests, or if just running unit-tests ###
 
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
+
+    # Get test exit status (from file $TEST_STATUS_FILE)
+    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to empty, unless it is already 1 or 2
+    [[ "$EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
 
     ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
 
@@ -936,7 +974,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
 
     ### Submariner system tests prerequisites ###
-    # It will be skipped if using "--skip-tests sys" (useful for deployment without system tests, or if just running pkg unit-tests)
+    # Following will NOT be executed if using "--skip-tests sys" (useful for deployment without system tests)
 
     if [[ ! "$SKIP_TESTS" =~ ((sys)(,|$))+ ]]; then
 
@@ -964,7 +1002,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${JUNIT_CMD} test_clusters_disconnected_before_submariner
 
-    else  # When using "--skip-tests sys" :
+    # Following will NOT be executed if using "--skip-tests e2e" (useful for running pkg unit-tests only):
+    elif [[ ! "$SKIP_TESTS" =~ ((e2e)(,|$))+ ]]; then
 
       # Verify clusters status even if system tests were skipped
 
@@ -1100,6 +1139,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi
@@ -1254,6 +1295,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
     EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+    # Update test exit status to 2, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
@@ -1261,7 +1304,10 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
   ### Running Submariner tests with Ginkgo or with subctl commands
 
-  if [[ ! "$SKIP_TESTS" =~ all ]]; then
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+  if [[ ! "$SKIP_TESTS" =~ all && "$EXIT_STATUS" != 1 ]]; then
 
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
@@ -1272,7 +1318,7 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
       "Build Submariner repo from 'devel' branch instead" \
       "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
       ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
-      
+
     fi
 
     ### Running Unit-tests in Submariner project with Ginkgo
@@ -1334,16 +1380,20 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
           TITLE "$tests_title PASSED"
         fi
       fi
-
-      # Get test exit status (from file $TEST_STATUS_FILE)
-      EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-
-      if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" == @(0|2) ]] ; then
-        echo 0 > "$TEST_STATUS_FILE"
-      else
-        FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
-      fi
     fi
+
+    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" != 1 ]] ; then
+      echo 0 > "$TEST_STATUS_FILE"
+    else
+      FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
+    fi
+
+  elif [[ -z "$EXIT_STATUS" ]]; then
+    TITLE "No tests were required to be executed, but \$TEST_STATUS_FILE was not yet set - Changing status to UNSTABLE"
+
+    # Update test exit status to 2
+    echo 2 > "$TEST_STATUS_FILE"
+
   fi
 
 ) |& tee -a "$SYS_LOG"
@@ -1366,13 +1416,12 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
   # Get test exit status (from file $TEST_STATUS_FILE)
   EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  if [[ "$EXIT_STATUS" != @(1|2) ]] ; then
+  if [[ "$EXIT_STATUS" == 0 ]] ; then
     # If script got 0 EXIT_STATUS here - All tests of Submariner have passed ;-)
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
-    echo 0 > "$TEST_STATUS_FILE"
   fi
 
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE does not include empty value: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE is not empty or equal 1: [${EXIT_STATUS}] \n"
 
   ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
@@ -1449,13 +1498,10 @@ fi
 
 
 ### Create REPORT_FILE (html) from $SYS_LOG using log_to_html()
-{
-  log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines"
+# If REPORT_FILE was not set externally, set it as the latest html file that was created
 
-  # If REPORT_FILE was not passed externally, set it as the latest html file that was created
-  REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}"
-
-} || :
+log_to_html "$SYS_LOG" "$REPORT_NAME" "$REPORT_FILE" "$html_report_headlines" && \
+REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 
 # ------------------------------------------
 

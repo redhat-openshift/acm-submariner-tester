@@ -5,7 +5,7 @@
 
 ### Constants ###
 
-# Console print colors 
+# Console print colors
 export RED='\x1b[0;31m'
 export GREEN='\x1b[38;5;22m'
 export CYAN='\x1b[36m'
@@ -15,6 +15,7 @@ export HAT="${RED}🎩︎${NO_COLOR}"
 
 # Conda environment test directory
 export CONDA_ENV_NAME="${CONDA_ENV_NAME:-conda-test}"
+export CONDA_CMD="conda"
 
 # Set SCRIPT_DIR as current absolute path where this script runs in
 SCRIPT_DIR="$(dirname "$(realpath -s "$0")")"
@@ -104,11 +105,12 @@ function print_current_dir_and_cmd() {
   # Important: Use _unique_ variables for safer evaluation
 
   local _bash_cmd
-  _bash_cmd="$(echo -e "$1" | xargs)"
+  # Trim leading and trailing spaces from command
+  _bash_cmd="$(echo $1)"
   # Skip printing if it's an empty command
   [[ -n "$_bash_cmd" ]] || return
 
-  # Print PS1 prompt with location (if it's new location), and trim trailing and leading spaces
+  # Print PS1 prompt with location (if it's new location)
   local _new_location="[$0] $PS1 [${PWD##*/}]" && \
   if [[ "$_new_location" != "$_current_location" ]]; then
     export _current_location="$_new_location"
@@ -119,23 +121,29 @@ function print_current_dir_and_cmd() {
   local _all_vars_output="\n"
 
   # List simple variables ($v or ${v}) first
-  local _var_list=( $(echo "$_bash_cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u || :) )
+  local _var_list
+  _var_list=( $(echo "$_bash_cmd" | grep -ohP "\\\$\w+|\\\$\{\w+\}" | sort -u) ) || return
 
   # List complex variables (with parameter expansion) next
-  _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u || :) )
+  _var_list+=( $(echo "$_bash_cmd" | grep -ohP "\\\$\{\w+[:/][^\}]+\}" | sort -u) ) || return
 
   for variable in "${_var_list[@]}" ; do
-     local _var_name
-     _var_name=$(echo "${variable%%[:/]*}" | tr -d "\${}")
-     local _var_value="${!_var_name}"
-     if [[ "$variable" =~ [:/] ]] ; then
-       # For complex variables - add it to $_all_vars_output
-       _all_vars_output+="+ ${_var_name}=${_var_value} \n"
-     else
-       # For simple variables - replace them with their values within $_bash_cmd
-       _bash_cmd="${_bash_cmd//$variable/$_var_value}"
-     fi
-   done
+    local _var_name
+    _var_name="$(echo "${variable%%[:/]*}" | tr -dc '[a-zA-Z_0-9]' || : )"
+    [[ -n "$_var_name" ]] || continue
+
+    local _var_value
+    _var_value="$(echo "${!_var_name}" 2>/dev/null || : )"
+    [[ -n "$_var_value" ]] || continue
+
+    if [[ "$variable" =~ [:/] ]] ; then
+     # For complex variables - add it to $_all_vars_output
+     _all_vars_output+="\$ ${_var_name}=${_var_value} \n" || continue
+    else
+     # For simple variables - replace them with their values within $_bash_cmd
+     _bash_cmd="${_bash_cmd//$variable/$_var_value}" || continue
+    fi
+  done
 
   # Print $_all_vars_output (after # sign), and $_bash_cmd (after $ sign)
   echo -e "${CYAN}${_all_vars_output}\$ ${_bash_cmd}${NO_COLOR}"
@@ -147,7 +155,9 @@ function print_current_dir_and_cmd() {
 function trap_to_debug_commands() {
   trap '
    if [[ ! "$BASH_COMMAND" =~ ^(echo|read|PROMPT|TITLE|BUG|FATAL|FAILURE) ]] ; then
-      print_current_dir_and_cmd "$BASH_COMMAND" 2>/dev/null || :
+      set +e
+      print_current_dir_and_cmd "$BASH_COMMAND"
+      set -e
    fi
   ' DEBUG
 }
@@ -164,8 +174,6 @@ function trap_function_on_error() {
   # If other traps already set - make sure to execute it after $func_on_script_error
   current_traps="$(trap -p EXIT | tr '\n' ' :; ' | cut -f2 -d \')"
 
-
-
   trap_cmd='rc=$?; echo -e "\n# $FUNCNAME[$@] returned EXIT $rc:
   ${BASH_SOURCE[$i+1]}:$BASH_LINENO > ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}" ;
   [[ ! -s '$test_status_file' ]] || rc=$(< '$test_status_file') || : ;
@@ -176,7 +184,6 @@ function trap_function_on_error() {
   trap '(exit 130)' INT # When SIGINT is received call $trap_cmd
   trap '(exit 143)' TERM # When SIGTERM is received call $trap_cmd
   trap "$trap_cmd" EXIT
-
 }
 
 # ------------------------------------------
@@ -393,7 +400,7 @@ function record_junit() {
     # Shifting input arguments should be done twice
     shift_arg_counter=2
   fi
-  
+
   # Shift input arguments to the left, in order to collect the rest of arguments as an array
   shift $shift_arg_counter
 
@@ -428,43 +435,45 @@ function install_anaconda() {
   conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  if conda env list | grep -o "^$conda_env" | grep . ; then
+  if ${CONDA_CMD} env list | grep -o "^$conda_env" | grep . ; then
     echo -e "\n# Anaconda is already installed and has environment '$conda_env' configured"
-    conda info
-    conda update -n base -c defaults conda -y
+    ${CONDA_CMD} info
+    ${CONDA_CMD} update -n base -c defaults conda -y
     source activate "$conda_env"
     return
   fi
 
-  if conda info ; then
-    # Clean previous conda packages
-    conda clean -y --all
+  if ${CONDA_CMD} info ; then
+    # Clean previous ${CONDA_CMD} packages
+    ${CONDA_CMD} clean -y --all
     # rm -rf "${conda_install_dir}" || :
   fi
 
   echo -e "\n# Installing Anaconda"
-  # wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-  # miniconda_installer="Miniconda3-py38_4.9.2-Linux-x86_64.sh"
+  # curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj ${miniconda_bin_dir}/micromamba
+  # conda install mamba -n base -c conda-forge
+
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
   "${work_dir}"/${miniconda_installer} -b -u -p "${conda_install_dir}"
   conda update -y -n base -c defaults conda
 
-  # Remove old conda environment dir, if it is not configured
-  env_dir=$(conda env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
-  env_base=$(conda env list | awk '/base/ { print $NF }')
+  # Remove old ${CONDA_CMD} environment dir, if it is not configured
+  env_dir=$(${CONDA_CMD} env list | awk -v name="$conda_env" '$0 ~ name { print $2 }')
+  env_base=$(${CONDA_CMD} env list | awk '/base/ { print $NF }')
 
   if [[ -z "$env_dir" ]] ; then
     echo -e "\n# Removing old Conda environment \"$conda_env\" directory (since it is not configured):"
-    conda env remove -y -n "$conda_env" || :
-    conda env remove -y -p "$env_base/envs/$conda_env" || :
+    ${CONDA_CMD} env remove -y -n "$conda_env" || :
+    ${CONDA_CMD} env remove -y -p "$env_base/envs/$conda_env" || :
     rm -rf "$env_base/envs/$conda_env" || :
   fi
 
   echo -e "\n# Creating Conda environment \"$conda_env\" (if it does not exist already)"
-  [[ -d "$env_base/envs/$conda_env" ]] || conda create -y -n "$conda_env"
+  [[ -d "$env_base/envs/$conda_env" ]] || ${CONDA_CMD} create -y -n "$conda_env"
 }
+
 # ------------------------------------------
 
 # Function to verify Anaconda installation
@@ -479,8 +488,8 @@ function verify_anaconda() {
   conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
   [[ ":$PATH:" != *"/miniconda/bin:"* ]] && export PATH=${miniconda_bin_dir}:$PATH
 
-  conda info
-  conda env list | grep "miniconda/envs/${conda_env}"
+  ${CONDA_CMD} info
+  ${CONDA_CMD} env list | grep "miniconda/envs/${conda_env}"
 }
 
 # ------------------------------------------
@@ -499,21 +508,32 @@ function install_conda_package() {
   local pkg_label="$4"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
-  
+
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
-  if conda list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
-    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in conda environment '$conda_env'"
+  if ${CONDA_CMD} list | grep -Eo "${pkg_name}\s+${pkg_version//./\\.}\s+" ; then
+    echo -e "\n# Package '${pkg_name}' ${pkg_version:+=(version ${pkg_version})} is already installed in ${CONDA_CMD} environment '$conda_env'"
     return
   fi
 
+  local conda_pkg_status
+  local conda_pkg_install
   verify_anaconda "${conda_install_dir}"
 
-  # conda config --add channels defaults
-  conda config --add channels conda-forge
-  source activate "$conda_env"
-  conda install -y --update-deps -c conda-forge${pkg_label:+/label/$pkg_label} "${pkg_name}${pkg_version:+=$pkg_version}"
-  conda list
+  # ${CONDA_CMD} config --add channels defaults
+  ${CONDA_CMD} config --add channels conda-forge
+  ${CONDA_CMD} deactivate
+
+  conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
+  
+  ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
+
+  source activate "$conda_env" || :
+  ${CONDA_CMD} list || :
+
+  if [[ "$conda_pkg_status" == FAILED ]] ; then
+    return 1
+  fi
 }
 
 # ------------------------------------------
@@ -591,7 +611,7 @@ function install_local_docker() {
   # TODO: Move $conda_install_dir to a common folder outside $work_dir
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
-  
+
   local pkg_version="$2"
 
   install_conda_package "${conda_install_dir}" "docker" "${pkg_version}"
@@ -627,6 +647,7 @@ function install_local_jq() {
   local pkg_version="$2"
 
   install_conda_package "${conda_install_dir}" "jq" "${pkg_version}"
+
 }
 
 # ------------------------------------------
@@ -639,19 +660,20 @@ function install_local_gcloud() {
   # TODO: Move $conda_install_dir to a common folder outside $work_dir
   # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
-  
-  # local pkg_version="$2"
+
+  local pkg_version="$2"
 
   local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
 
-  export CLOUDSDK_PYTHON=/usr/bin/python2
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  # install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
-  verify_anaconda "${conda_install_dir}"
-  source activate "$conda_env"
-  conda install -y -c conda-forge google-cloud-sdk
-  conda install -y -c conda-forge/label/cf201901 google-cloud-sdk
-  conda install -y -c conda-forge/label/cf202003 google-cloud-sdk
+  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+
+  # verify_anaconda "${conda_install_dir}"
+  # source activate "$conda_env"
+  # ${CONDA_CMD} install -y -c conda-forge google-cloud-sdk
+  # ${CONDA_CMD} install -y -c conda-forge/label/cf201901 google-cloud-sdk
+  # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
 
   gcloud --version
 
@@ -710,7 +732,7 @@ function download_github_file_or_dir() {
 function download_file() {
   trap_to_debug_commands
   # $1 => $source_file (download link)
-  source_file="${1//[$'\t\r\n']}"
+  source_file="$(echo $1)" # Trim leading and trailing spaces
 
   # Optional: $2 => $target_file (where to save)
   target_file="${2:-$(basename "$1")}"
@@ -838,6 +860,10 @@ function change_yaml_key_value() {
 function configure_gcp_access() {
   local gcp_cred_json="$1"
 
+  if ! jq . "$gcp_cred_json" 1>/dev/null ; then
+    FAILURE "JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
+  fi
+
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
 
   install_local_gcloud "$work_dir"
@@ -871,17 +897,7 @@ function configure_aws_access() {
   local aws_install_dir="${5:-./}"
   local aws_bin_dir="${6:-$HOME/.local/bin}"
 
-  # pip install awscli --upgrade --user
-  aws_cli_installer="awscli-exe-linux-x86_64.zip"
-  download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${aws_install_dir}/${aws_cli_installer}"
-  unzip -n "${aws_install_dir}/${aws_cli_installer}" -d "${aws_install_dir}"
-
-  # export PATH=$HOME/.local/bin:$PATH
-  # ${aws_install_dir}/aws/install --update --install-dir ~/.local --bin-dir ~/.local/bin
-  [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
-  "${aws_install_dir}"/aws/install --update --install-dir "${aws_install_dir}/aws" --bin-dir "${aws_bin_dir}"
-
-  aws --version
+  install_awscli "$aws_install_dir" "$aws_bin_dir"
 
   (
     # subshell to hide commands
@@ -896,6 +912,58 @@ function configure_aws_access() {
 
   # aws --profile "$aws_profile_name" configure  --region "$aws_region" --output text --color on
   aws sts get-caller-identity
+}
+
+# ------------------------------------------
+
+# Function to install aws-cli
+function install_awscli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  aws_bin_dir="${2:-$(dirname "$work_dir")/miniconda}"
+
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  if [[ ! -x "$(command -v aws)" ]] ; then
+    echo -e "\n# Installing AWS-CLI tool with Anaconda"
+
+    # {
+    #   verify_anaconda "${conda_install_dir}" && \
+    #   source activate "$conda_env" && \
+    #   ${CONDA_CMD} install -y -c conda-forge awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/gcc7 awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/broken awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/cf201901 awscli && \
+    #   ${CONDA_CMD} install -y -c conda-forge/label/cf202003 awscli
+    #
+    # } || CONDA_PKG=FAILED
+
+    install_conda_package "${conda_install_dir}" "awscli" || CONDA_PKG=FAILED
+
+    if [[ "$CONDA_PKG" == FAILED ]] ; then
+      TITLE "Installing AWS-CLI with Anaconda failed - trying to download and install aws-cli from zip"
+
+      if [[ ! -x "$(command -v unzip)" ]] ; then
+        echo -e "\n# Installing unzip tool"
+        # ${CONDA_CMD} install -y -c conda-forge unzip
+        # ${CONDA_CMD} install -y -c conda-forge/label/cf201901 unzip
+        # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 unzip
+        install_conda_package "${conda_install_dir}" "unzip"
+      fi
+
+      aws_cli_installer="awscli-exe-linux-x86_64.zip"
+      download_file "https://awscli.amazonaws.com/${aws_cli_installer}" "${work_dir}/${aws_cli_installer}"
+      unzip -n "${work_dir}/${aws_cli_installer}" -d "${work_dir}"
+
+      [[ ":$PATH:" != *":${aws_bin_dir}:"* ]] && export PATH="${PATH}:${aws_bin_dir}"
+      "${work_dir}/aws/install" --update --install-dir "${work_dir}/aws" --bin-dir "${aws_bin_dir}"
+    fi
+  fi
+
+  aws --version
 }
 
 # ------------------------------------------
@@ -989,10 +1057,9 @@ function ocp_login() {
   ocp_cloud="$(print_current_cluster_cloud || :)"
 
   if [[ -z "${ocp_server}" || -z "${ocp_usr}" ]] ; then
-    echo -e "\n# User '${ocp_usr}' or Server '${ocp_server}' is missing"
-    return 1
-  fi  
-    
+    FAILURE "User '${ocp_usr}' or Server '${ocp_server}' is missing"
+  fi
+
   TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
 
@@ -1259,12 +1326,13 @@ function print_image_info() {
   echo "id=${img_id}"
 
   # Get info from image if the original image id is accessible by url
-  ${OC} image info "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || \
-  {
-    # Otherwise, get the info from local copy of the image
-    img_id=$(echo "$img_id" | awk -F '@' '{print $2}')
-    ${OC} describe image "$img_id" 2>/dev/null | grep -Po "$regex_container_info"
-  } || :
+  ${OC} image info "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || IMG_INFO=FAILED
+
+  if [[ "${IMG_INFO}" == FAILED ]] ; then
+    # In there's no image info (e.g. no regestry access) - get the info from the local copy of the image
+    img_id=$(echo "$img_id" | awk -F '@' '{print $2}') || :
+    ${OC} describe image "$img_id" 2>/dev/null | grep -Po "$regex_container_info" || :
+  fi
 
 }
 
@@ -1419,7 +1487,7 @@ function watch_pod_logs() {
 
   echo -e "# Tailing logs of Pod [$pod_to_watch] in Namespace [$namespace]: \n"
 
-  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace \
+  cmd="${OC} logs --tail -1 --timestamps $pod_to_watch -n $namespace --all-containers --ignore-errors \
   > $tmp_file && grep -Ei '$regex' -m 1 -C 5 $tmp_file || sleep $interval"
 
   watch_and_retry "$cmd" "$retries" "$regex" || search_exit_code=$?
@@ -1443,9 +1511,11 @@ function watch_pod_logs() {
 # ------------------------------------------
 
 function print_pod_logs_in_namespace() {
-  local cluster_name="$1"
-  local namespace="$2"
-  local pods_label="$3"
+  local namespace="$1"
+  local pods_label="$2" # Optional: Select pods with this label only
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
 
   TITLE "Pods descriptions and logs ${pods_label:+"by label: ${pods_label}," }in cluster: $cluster_name, namespace: $namespace"
 
@@ -1456,10 +1526,10 @@ function print_pod_logs_in_namespace() {
 
     if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
       echo -e "\n### Active pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     else
       echo -e "\n### Terminated (previous) pod $pod logs ###\n"
-      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 || :
+      ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     fi
   done
 }
@@ -1485,7 +1555,7 @@ function build_go_repo() {
 
   local repo_local_path="$GOPATH/src/$repo_url"
   echo -e "\n# Pull latest changes with Git into: $repo_local_path"
-  cd "$repo_local_path" || ( echo "$repo_local_path was not created, exiting." && exit 1 )
+  cd "$repo_local_path" || FAILURE "$repo_local_path was not created, exiting."
 
   git_reset_local_repo "${branch_or_tag}"
 
@@ -1590,7 +1660,7 @@ function create_polarion_testcases_doc_from_junit() {
     Document path: ${polarion_team_name}/${polarion_testcases_doc}"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-cases file: '$junit_xml' is missing." ; exit 1 ; }
+    [[ -s "$junit_xml" ]] || FAILURE "Failed to create Polarion test-cases file: '$junit_xml' is missing"
 
     echo -e "\n# Set output xml for Polarion test-cases"
 
@@ -1766,7 +1836,7 @@ function create_polarion_testrun_result_from_junit() {
     TITLE "Creating Polarion test-run from Junit file: $junit_xml"
 
     # Verify junit file exists
-    [[ -s "$junit_xml" ]] || { echo "Failed to create Polarion test-run file: '$junit_xml' is missing." ; exit 1 ; }
+    [[ -s "$junit_xml" ]] || FAILURE "Failed to create Polarion test-run file: '$junit_xml' is missing."
 
     # ------------------------------------------------------------------------ #
 
@@ -1974,8 +2044,7 @@ function watch_polarion_job_status() {
   polarion_job_id=$(awk '/job-ids/ { print $4 }' "$polarion_log")
 
   if [[ -z "$polarion_job_id" ]] || [[ "$polarion_job_id" == 0 ]] ; then
-    echo "Error in the file or data to import to Polarion: $polarion_import_file" 1>&2
-    exit 1
+    FAILURE "Error in the file or data to import to Polarion: $polarion_import_file"
   fi
 
   local polarion_job_url="${polarion_url}/import/${polarion_import_type}-log?jobId=${polarion_job_id}"
@@ -1987,9 +2056,47 @@ function watch_polarion_job_status() {
   watch_and_retry "$cmd" 1m "$regex"
 
   if tail -n 10 "$polarion_log" | grep "failed" ; then
-    echo "Importing ${polarion_import_type} to Polarion did not complete successfully" 1>&2
-    exit 1
+    FAILURE "Importing ${polarion_import_type} to Polarion did not complete successfully"
   fi
+}
+
+# ------------------------------------------
+
+# Function to install "aha" - Ansi HTML Adapter - to convert text files to HTML
+function install_aha() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+  # TODO: Move $conda_install_dir to a common folder outside $work_dir
+  # conda_install_dir="${work_dir}/miniconda"
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  if [[ ! -x "$(command -v aha)" ]] ; then
+    echo -e "\n# Installing Ansi HTML Adapter with Anaconda"
+    install_anaconda "${work_dir}"
+    install_conda_package "${conda_install_dir}" "aha" || CONDA_PKG=FAILED
+
+    # If Conda install failed, try to compile aha binary from Git
+    if [[ "$CONDA_PKG" == FAILED ]] ; then
+      TITLE "Installing Ansi HTML Adapter with Anaconda failed - trying to compile aha binary from Git"
+
+      local repo_url=https://github.com/theZiz/aha.git
+      local repo_branch=0.5.1
+      local repo_dir
+      repo_dir=$(basename $repo_url .git)
+
+      if [[ ! -x "$(command -v aha)" ]] ; then
+        rm -rf "$repo_dir"
+        # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
+        git clone $repo_url --single-branch # --depth 1
+        git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
+        # make -C "$repo_dir" &> /dev/null
+        make install PREFIX="$GOBIN"
+      fi
+    fi
+  fi
+
+  aha --version
 }
 
 # ------------------------------------------
@@ -2000,30 +2107,17 @@ function log_to_html() {
   # Input params:
 
   local log_file="$1"
-  local title="${2:-"${log_file%%.*}"}" # html title (default is log filename)
+  local title="${2:-${log_file%%.*}}" # html title (default is log filename)
   local html_output="${3:-${title//[ \/]/_}.html}" # html filename to create (default is title with underscores)
   local description="$4"
 
-  echo -e "\n# Generating HTML report from: $log_file"
-  [[ -f $log_file ]] || { echo -e "\n# Error - The file does not exists, or is not accessible" ; exit 1 ; }
+  TITLE "Generating HTML report from: $log_file"
+  [[ -f $log_file ]] || FAILURE "The log file [${log_file}] does not exist or is inaccessible"
+
+  install_aha "${WORKDIR}" || FAILURE "Ansi HTML Adapter tool is required to generate the report"
 
   # Set description as html headline, and replace end of lines with <br>
   [[ -z $description ]] || description="<h3> ${description//$'\n'/ <br>} </h3>"
-
-  local repo_url=https://github.com/theZiz/aha.git
-  local repo_branch=0.5.1
-  local repo_dir
-  repo_dir=$(basename $repo_url .git)
-
-  # Get AHA binary
-  if [[ ! -f ./$repo_dir/aha ]]; then
-      rm -rf "$repo_dir"
-      # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
-      git clone $repo_url --single-branch # --depth 1
-      git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
-      make -C "$repo_dir" &> /dev/null
-  fi
-  "./$repo_dir/aha" --version
 
   # Create HTML Header
   cat > "$html_output" <<EOF
@@ -2082,8 +2176,8 @@ EOF
   #sed '/\S/,$!d; s/^ \+//; s/ \+$//' -i $log_file
   sed '/\S/,$!d' -i "$log_file"
 
-  # Create HTML content with AHA
-  "./$repo_dir/aha" -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
+  # Create HTML content with Ansi HTML Adapter
+  aha -f "$log_file" --title "$title" --word-wrap --no-header >> "$html_output"
 
   # Trim sh2ju debug lines starting with +++ from the html report
   sed -r '/^\s*\+\+\+/d' -i "$html_output"

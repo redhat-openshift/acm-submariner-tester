@@ -29,8 +29,8 @@ function remove_multicluster_engine() {
   force_delete_namespace "${MCE_NAMESPACE}"
 
   TITLE "Deleting all 'multicluster-engine' resources and Namespace"
-  
-  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && exit
+
+  ${OC} get all -n multicluster-engine || echo -e "\n# MultiClusterEngine is not installed" && return
 
   ${OC} delete multiclusterengine --all --timeout=30s || :
 
@@ -385,13 +385,10 @@ function create_multicluster_engine() {
   spec: {}
 EOF
 
-  {
-    TITLE "Wait for MCE instance '${MCE_INSTANCE}' to be available"
-    local duration=15m
-    cmd="${OC} get MultiClusterEngine ${MCE_INSTANCE} -n ${MCE_NAMESPACE}"
-    watch_and_retry "$cmd" "$duration" "Available"
-
-  } || acm_status=FAILED
+  TITLE "Wait for MCE instance '${MCE_INSTANCE}' to be available"
+  local duration=15m
+  cmd="${OC} get MultiClusterEngine ${MCE_INSTANCE} -n ${MCE_NAMESPACE}"
+  watch_and_retry "$cmd" "$duration" "Available" || acm_status=FAILED
 
   TITLE "All MultiClusterEngine resources status:"
   ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
@@ -439,18 +436,17 @@ function create_acm_multiclusterhub() {
     disableHubSelfManagement: true
 EOF
 
-  {
-    TITLE "Wait for ACM console url to be available"
-    local duration=15m
-    cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
-    watch_and_retry "$cmd" "$duration"
+  TITLE "Wait for ACM console url to be available"
+  local duration=15m
+  cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
+  watch_and_retry "$cmd" "$duration" || acm_status=FAILED
 
+  if [[ "$acm_status" != FAILED ]] ; then
     TITLE "Wait for ACM Instance '${ACM_INSTANCE}' to be running"
     # cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -o jsonpath='{.status.phase}'"
     cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -n ${ACM_NAMESPACE}"
-    watch_and_retry "$cmd" "$duration" "Running"
-
-  } || acm_status=FAILED
+    watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
+  fi
 
   TITLE "All MultiClusterHub resources status:"
 
@@ -819,7 +815,7 @@ function configure_submariner_addon_for_amazon() {
   TITLE "Using '${cluster_secret_name}' for Submariner on Amazon"
 
   ( # subshell to hide commands
-    { [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ;} \
+    { [[ -n "$AWS_KEY" ]] && [[ -n "$AWS_SECRET" ]] ; } \
     || FATAL "AWS credentials are required to configure Submariner in the managed cluster '${cluster_id}'"
 
     cat <<EOF | ${OC} apply -f -
@@ -974,7 +970,7 @@ function create_submariner_config_in_acm_managed_cluster() {
   spec:
     IPSecIKEPort: ${IPSEC_IKE_PORT}
     IPSecNATTPort: ${IPSEC_NATT_PORT}
-    cableDriver: libreswan
+    cableDriver: ${SUBM_CABLE_DRIVER}
     credentialsSecret:
       name: ${cluster_secret_name}
     gatewayConfig:

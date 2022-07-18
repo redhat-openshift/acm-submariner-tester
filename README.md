@@ -1,5 +1,7 @@
 # acm-submariner-tester
-Interactive script to install Advanced Cluster Manager on private and public OpenShift clusters, and test inter-connectivity with Submariner.
+A framework for testing [Submariner](https://submariner.io) with [Red Hat Advanced Cluster Management for Kubernetes](https://www.redhat.com/en/technologies/management/advanced-cluster-management) (RHACM).
+
+It installs OpenShift clusters on private (on-premise) and public clouds, adds RHACM with Submariner, and tests inter-connectivity between the clusters.
 
 Running with pre-defined parameters (optional):
 
@@ -27,6 +29,7 @@ Running with pre-defined parameters (optional):
 - Submariner installation options:
 
   * Install ACM operator version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--acm-version [x.y.z]
+  * Install MCE operator version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--mce-version [x.y.z]
   * Install Submariner operator version: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry: &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--registry-images
   * Configure and test GlobalNet:&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;--globalnet
@@ -58,11 +61,11 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.4.2 --subctl-version 0.11.2 --registry-images`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.5.0 --subctl-version 0.12.1 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.4.2 release
-  * Install Submariner 0.11.2 release
+  * Install ACM 2.5.0 release
+  * Install Submariner 0.12.1 release
   * Override Submariner images from a custom repository (configured in REGISTRY variables)
   * Run Submariner E2E tests (with subctl)
 
