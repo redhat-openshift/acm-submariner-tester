@@ -514,7 +514,7 @@ EOF
     FATAL "'${SUBM_OPERATOR}' was not added to ManagedClusterSet after $duration"
   fi
 
-  TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner"
+  TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner in the ClusterSet '${TEST_NS}'"
 
   # Bind the namespace
   cat <<EOF | ${OC} apply -f -
@@ -524,7 +524,7 @@ EOF
     name: ${SUBM_OPERATOR}
     namespace: ${SUBM_NAMESPACE}
   spec:
-    clusterSet: ${SUBM_OPERATOR}
+    clusterSet: ${TEST_NS}
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding -n ${SUBM_NAMESPACE} &> '$acm_resource'"
@@ -586,7 +586,7 @@ function create_new_managed_cluster_in_acm_hub() {
 
   ${OC} label namespace "${cluster_id}" cluster.open-cluster-management.io/managedCluster="${cluster_id}" --overwrite
 
-  TITLE "Create ACM ManagedCluster by ID: $cluster_id, Type: $cluster_type"
+  TITLE "Create ACM ManagedCluster by ID: $cluster_id, Type: $cluster_type, ClusterSet: ${TEST_NS}"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
@@ -597,14 +597,14 @@ function create_new_managed_cluster_in_acm_hub() {
       cloud: ${cluster_type}
       name: ${cluster_id}
       vendor: OpenShift
-      cluster.open-cluster-management.io/clusterset: ${SUBM_OPERATOR}
+      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
   spec:
     hubAcceptsClient: true
     leaseDurationSeconds: 60
 EOF
 
 
-  TITLE "Create ACM klusterlet Addon config for cluster '$cluster_id'"
+  TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${TEST_NS}'"
 
   ### Create the klusterlet Addon config
   cat <<EOF | ${OC} apply -f -
@@ -620,7 +620,7 @@ EOF
     clusterNamespace: ${cluster_id}
     clusterLabels:
       cloud: auto-detect
-      cluster.open-cluster-management.io/clusterset: ${SUBM_OPERATOR}
+      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
       name: ${cluster_id}
       vendor: auto-detect
     applicationManager:
@@ -1019,7 +1019,7 @@ EOF
   TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
   # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${SUBM_OPERATOR}" --overwrite
+  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${TEST_NS}" --overwrite
 
 }
 
