@@ -88,17 +88,18 @@ function export_global_script_variable() {
   mkdir -p "$WORKDIR"
   export_absolute_path 'WORKDIR'
 
-  # Set OUTPUT_DIR as an absolute path to the directory
-  mkdir -p "$OUTPUT_DIR"
-  export_absolute_path 'OUTPUT_DIR'
-
-  # Ecport cred files absolute paths
-  export_absolute_path 'GCP_CRED_JSON'
-  export_absolute_path 'OSP_CRED_YAML'
-
   # Date-time signature for log and report files
   DATE_TIME="$(date +%d%m%Y_%H%M)"
   export DATE_TIME
+
+  # Create OUTPUT_DIR + DATE_TIME
+  OUTPUT_DIR+="_${DATE_TIME}"
+  mkdir -p "$OUTPUT_DIR"
+  export_absolute_path 'OUTPUT_DIR'
+
+  # Export cred files absolute paths
+  export_absolute_path 'GCP_CRED_JSON'
+  export_absolute_path 'OSP_CRED_YAML'
 
   # Global temp file
   TEMP_FILE="$(mktemp)_temp"
@@ -284,18 +285,18 @@ function export_cluster_variables() {
 
     trap_to_debug_commands;
 
-    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
-    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
+    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID}"
+    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID}"
+    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}${CLUSTER_SET_ID}/auth/kubeconfig"
     export "CLUSTER_${cluster_index}_YAML=${cluster_install_yaml}"
-    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
 
   else
     TITLE "Unset Cluster ${cluster_index} global variables (name, kubeconfig and yaml), since this cluster is not required for testing"
 
     unset "CLUSTER_${cluster_index}_NAME"
     unset "CLUSTER_${cluster_index}_DIR"
-    unset "CLUSTER_${cluster_index}_YAML"
     unset "KUBECONF_CLUSTER_${cluster_index}"
+    unset "CLUSTER_${cluster_index}_YAML"
   fi
 
 }
@@ -1576,11 +1577,11 @@ function delete_all_evicted_pods_in_cluster() {
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
-  
+
   delete_all_evicted_pods_in_current_cluster || :
 
   wait_for_all_machines_ready || :
-  
+
   wait_for_all_nodes_ready || :
 
 }
@@ -1983,11 +1984,11 @@ function download_subctl_by_tag() {
       echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p "$GOBIN"
       # cp -f ./subctl $GOBIN/
-      /usr/bin/install ./subctl "$GOBIN"/subctl
+      /usr/bin/install ./subctl "$GOBIN"/subctl || :
 
       echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
-      /usr/bin/install ./subctl ~/.local/bin/subctl
+      /usr/bin/install ./subctl ~/.local/bin/subctl || :
 
     else
       # Downloading SubCtl from Github (upstream)

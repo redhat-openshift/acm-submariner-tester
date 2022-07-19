@@ -8,7 +8,7 @@
 
 ### Workspace vars ###
 
-export WORKDIR=./submariner-install
+export WORKDIR=submariner-install
 # export GOROOT="/usr/local/go"
 # export PATH="${GOROOT}/bin:${PATH}"
 # export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang

@@ -1437,6 +1437,7 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 
 if [[ -n "${REPORT_FILE}" ]] ; then
    ARCHIVE_FILE="${OUTPUT_DIR}/${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+   cp -f "${REPORT_FILE}" "${OUTPUT_DIR}/$(basename "$REPORT_FILE")"
 else
    ARCHIVE_FILE="${OUTPUT_DIR}/${PWD##*/}_${DATE_TIME}.tar.gz"
 fi
@@ -1450,7 +1451,7 @@ if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   cp -f "${KUBECONF_HUB}" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}" || :
   cp -f "${KUBECONF_HUB}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
 
-  find "${CLUSTER_A_DIR}" -type f -name "*.log" -exec \
+  find "${CLUSTER_A_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
@@ -1460,7 +1461,7 @@ if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
 
-  find "${CLUSTER_B_DIR}" -type f -name "*.log" -exec \
+  find "${CLUSTER_B_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
@@ -1470,34 +1471,32 @@ if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
 
-  find "${CLUSTER_C_DIR}" -type f -name "*.log" -exec \
+  find "${CLUSTER_C_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact ${OCP_USR}.sec file
-find "${WORKDIR}" -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
 # Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" ${OUTPUT_DIR}/ \; || :
+find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner*" -exec cp -R "{}" ${OUTPUT_DIR}/ \; || :
 
 # Compress the required artifacts (either files or directories)
 
-find . -maxdepth 1 \( \
--name "$REPORT_FILE" -o \
--name "$SYS_LOG" -o \
--name "kubconf_*" -o \
--name "submariner*" -o \
--name "*.sec" -o \
--name "*.xml" -o \
--name "*.yaml" -o \
--name "*.log" -o \
--name "*.ver" \
+find "${OUTPUT_DIR}" -maxdepth 1 \( \
+-iname "kubconf_*" -o \
+-iname "submariner*" -o \
+-iname "*.sec" -o \
+-iname "*.xml" -o \
+-iname "*.yaml" -o \
+-iname "*.log" -o \
+-iname "*.ver" -o \
+-iname "*.html" \
 \) -print0 | \
-tar --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
-
+tar --transform 's/.*\///g' --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf "$ARCHIVE_FILE"
