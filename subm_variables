@@ -9,7 +9,6 @@
 ### Workspace vars ###
 
 export WORKDIR=./submariner-install
-export OUTPUTDIR=./output
 # export GOROOT="/usr/local/go"
 # export PATH="${GOROOT}/bin:${PATH}"
 # export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
@@ -49,7 +48,7 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 export TEST_NS="${TEST_NS:-test-submariner}"
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-
+export OUTPUT_DIR="${TEST_NS:-output}"
 
 ### AWS vars ###
 
