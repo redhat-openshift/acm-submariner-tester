@@ -525,7 +525,7 @@ function install_conda_package() {
   ${CONDA_CMD} deactivate
 
   conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
-  
+
   ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
 
   source activate "$conda_env" || :
@@ -569,6 +569,10 @@ function verify_golang() {
 
   # Optional: exporting $1 as GOBIN path
   # export GOBIN="${1:-$GOROOT/bin}"
+
+  if [[ ! -e ${GOBIN} ]] ; then
+    export GOBIN="${GOROOT}/bin"
+  fi
 
   # export PATH=$PATH:$GOROOT/bin
   [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH
@@ -667,7 +671,14 @@ function install_local_gcloud() {
 
   # export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}" || CONDA_PKG=FAILED
+
+  if [[ "$CONDA_PKG" == FAILED ]] ; then
+    TITLE "Installing Gcloud-CLI with Anaconda failed - trying to download and install from sdk.cloud.google.com"
+    curl https://sdk.cloud.google.com > gcloud-install.sh
+    bash gcloud-install.sh --disable-prompts
+    . ~/google-cloud-sdk/path.bash.inc
+  fi
 
   # verify_anaconda "${conda_install_dir}"
   # source activate "$conda_env"
@@ -866,7 +877,9 @@ function configure_gcp_access() {
 
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  install_local_gcloud "$work_dir"
+  if [[ ! -x "$(command -v aws)" ]] ; then
+    install_local_gcloud "$work_dir"
+  fi
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
@@ -1138,6 +1151,21 @@ function force_delete_namespace() {
     kill -9 %% || :
     ${OC} delete namespace "${ns_name}" --ignore-not-found --grace-period=0 --force --wait || :
   fi
+
+}
+
+# ------------------------------------------
+
+# Function to delete all evicted (failed) pods from all namespaces
+function delete_all_evicted_pods_in_current_cluster() {
+  trap_to_debug_commands;
+
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | awk '{system("oc delete pod "$2" -n "$1)}' || :
+
+  ${OC} get nodes --no-headers | awk '{print $1}' | \
+  xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=1 --disable-eviction || :
+
+  ${OC} get nodes --no-headers | awk '{print $1}' | xargs ${OC} adm uncordon || :
 
 }
 
@@ -1809,7 +1837,7 @@ function create_polarion_testcases_doc_from_junit() {
       echo "</testcases>" >> "$polarion_testcases_xml"
 
       echo -e "\n# Watch Polarion testcase-log status"
-      local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
+      local polarion_job_urls="$OUTPUTDIR/polarion_testcases.url"
       watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
 
@@ -1976,7 +2004,7 @@ function create_polarion_testrun_result_from_junit() {
     # ------------------------------------------------------------------------ #
 
     # Watch testcase-log web page
-    local polarion_job_urls="$SCRIPT_DIR/polarion_testruns.url"
+    local polarion_job_urls="$OUTPUTDIR/polarion_testruns.url"
     watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_xml" "$polarion_job_urls"
 
     local latest_job_url

@@ -177,96 +177,19 @@ shopt -s nocasematch
 shopt -s expand_aliases
 
 
-#####################################################################################################
-#         Constant variables and files (overrides previous variables from sourced files)            #
-#####################################################################################################
-
-# Date-time signature for log and report files
-DATE_TIME="$(date +%d%m%Y_%H%M)"
-export DATE_TIME
-
-# Global temp file
-TEMP_FILE="$(mktemp)_temp"
-export TEMP_FILE
-
-# JOB_NAME is a prefix for files, which is the name of current script directory
-JOB_NAME="$(basename "$SCRIPT_DIR")"
-export JOB_NAME
-export SHELL_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_sys_junit.xml"
-export PKG_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_pkg_junit.xml"
-export E2E_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_e2e_junit.xml"
-export LIGHTHOUSE_JUNIT_XML="$SCRIPT_DIR/${JOB_NAME}_lighthouse_junit.xml"
-
-export E2E_LOG="$SCRIPT_DIR/${JOB_NAME}_e2e_output.log"
-: > "$E2E_LOG"
-
-# Set SYS_LOG name according to REPORT_NAME (from subm_variables)
-export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-# SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
-# SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-SYS_LOG="${SCRIPT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-: > "$SYS_LOG"
-
-# Common test variables
-export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
-export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
-
-
-#################################################################################
-#               Saving important test properties in local files                 #
-#################################################################################
-
-# File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
-export TEST_STATUS_FILE="$SCRIPT_DIR/test_status.rc"
-export EXIT_STATUS
-: > "$TEST_STATUS_FILE"
-
-# File to store SubCtl version
-export SUBCTL_VERSION_FILE="$SCRIPT_DIR/subctl.ver"
-: > "$SUBCTL_VERSION_FILE"
-
-# File to store Submariner installed versions
-export SUBMARINER_VERSIONS_FILE="$SCRIPT_DIR/submariner.ver"
-: > "$SUBMARINER_VERSIONS_FILE"
-
-# File to store SubCtl JOIN command for cluster A
-export SUBCTL_JOIN_CLUSTER_A_FILE="$SCRIPT_DIR/subctl_join_cluster_a.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_A_FILE"
-
-# File to store SubCtl JOIN command for cluster B
-export SUBCTL_JOIN_CLUSTER_B_FILE="$SCRIPT_DIR/subctl_join_cluster_b.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_B_FILE"
-
-# File to store SubCtl JOIN command for cluster C
-export SUBCTL_JOIN_CLUSTER_C_FILE="$SCRIPT_DIR/subctl_join_cluster_c.cmd"
-: > "$SUBCTL_JOIN_CLUSTER_C_FILE"
-
-# File to store Polarion auth
-export POLARION_AUTH="$SCRIPT_DIR/polarion.auth"
-: > "$POLARION_AUTH"
-
-# File to store Polarion test-run report link
-export POLARION_RESULTS="$SCRIPT_DIR/polarion_${DATE_TIME}.results"
-: > "$POLARION_RESULTS"
-
-# File to store Submariner images version details
-export PRODUCT_IMAGES="$SCRIPT_DIR/product_images.ver"
-: > "$PRODUCT_IMAGES"
-
-
 ####################################################################################
 #                             CLI Script parameters                                #
 ####################################################################################
 
 export_param_value() {
   if [[ -z "$1" || "$1" =~ ^- ]] ; then
-    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help" 
+    echo -e "\n# Missing or bad input parameter '${1}' for '${2}'. Please see script Help with: --help"
     exit 1
   fi
   export "${2}=${1}"
 }
 
-# Get script parameters, and split by tabs instead of space 
+# Get script parameters, and split by tabs instead of space
 SCRIPT_PARAMS="$*"
 SCRIPT_PARAMS=${SCRIPT_PARAMS// -/$'\t'-}
 IFS=$'\t'
@@ -274,13 +197,13 @@ POSITIONAL=()
 
 for param in ${SCRIPT_PARAMS} ; do
   export got_user_input=TRUE
-  
+
   # Get the next parameter (flag) name, without the value
-  param_name=${param%% *} 
+  param_name=${param%% *}
 
   # Get the parameter value after the flag, without surrounding quotes
   param_value=$(echo "${param#*"$param_name" }" | xargs)
-  
+
   case $param_name in
   -h|--help)
     echo -e "\n# ${disclosure}" && exit 0
@@ -413,7 +336,7 @@ for param in ${SCRIPT_PARAMS} ; do
 done
 
 # Restore positional parameters and IFS
-set -- "${POSITIONAL[@]}" 
+set -- "${POSITIONAL[@]}"
 unset IFS
 
 ####################################################################################
@@ -425,8 +348,8 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $SKIP_OCP_SETUP - to skip OCP clusters setup (destroy / create / clean)
   while [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without setting-up (destroy / create / clean) OCP clusters ? ${NO_COLOR}
-    Enter \"yes\", or nothing to skip: "
+    echo -e "\n${YELLOW}Do you want to deploy Submariner WITHOUT preparing OCP clusters (will not destroy / create / clean) ? ${NO_COLOR}
+    Enter \"yes\" to run without preparing OCP: "
     read -r input
     SKIP_OCP_SETUP=${input:-NO}
   done
@@ -443,7 +366,7 @@ if [[ -z "$got_user_input" ]]; then
 
     # User input: $OCP_VERSION - to download_ocp_installer with specific version
     if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-      while [[ ! "$OCP_VERSION" =~ ^[0-9a-Z]+$ ]]; do
+      while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
         echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
         Enter version number, or nothing to install latest version: "
         read -r input
@@ -477,7 +400,7 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $RESET_CLUSTER_B - to destroy_osp_cluster AND create_osp_cluster
+    # User input: $RESET_CLUSTER_B - to destroy_openstack_cluster AND create_openstack_cluster
     while [[ ! "$RESET_CLUSTER_B" =~ ^(yes|no)$ ]]; do
       echo -e "\n${YELLOW}Do you want to destroy & create OSP cluster B ? ${NO_COLOR}
       Enter \"yes\", or nothing to skip: "
@@ -601,8 +524,8 @@ if [[ -z "$got_user_input" ]]; then
 
   # User input: $SKIP_TESTS - to skip tests: sys / e2e / pkg / all ^((sys|e2e|pkg)(,|$))+
   while [[ ! "$SKIP_TESTS" =~ ((sys|e2e|pkg|all)(,|$))+ ]]; do
-    echo -e "\n${YELLOW}Do you want to run without executing Submariner Tests (System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
-    Enter any \"sys,e2e,pkg,all\", or nothing to skip: "
+    echo -e "\n${YELLOW}Do you want to run WITHOUT executing Submariner Tests (will exclude System, E2E, Unit-Tests, or all) ? ${NO_COLOR}
+    Enter either \"sys,e2e,pkg,all\" to exclude these tests: "
     read -r input
     SKIP_TESTS=${input:-NO}
   done
@@ -652,20 +575,17 @@ fi
 #                    MAIN - ACM and Submariner Deploy and Tests                    #
 ####################################################################################
 
-# Set and export all global env variables
-# Must be run in parent shell process, but not in a sub-shell (e.g. do not run with tee)
-export_all_env_variables >> "$SYS_LOG" 2>&1 || EXIT_STATUS=1
+# Set and export all global env variables, redirect output to temporary log, and save as $SYS_LOG
+# Exporting vars must first be in parent shell process, but not in a sub-shell (e.g. do not run with tee)
+temp_script_log="$(mktemp)_script_log"
+
+export_all_env_variables &>> "$temp_script_log" || :
+cp "$temp_script_log" "$SYS_LOG"
 cat "$SYS_LOG"
 
-# Check test exit status after export_all_env_variables()
-if [[ "$EXIT_STATUS" == 1 ]] ; then
-  echo 1 > "$TEST_STATUS_FILE"
-  FATAL "Exporting environment variables have failed, please check the global variable file"
-fi
-
-# Printing output both to stdout and to $SYS_LOG with tee
-echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
+# Subshell to print output both to stdout and to $SYS_LOG with tee
 (
+  # (export_all_env_variables) # Required to run again, to check exit code, but without exporting (now in sub-shell)
 
   # Setup and verify environment
   setup_workspace
@@ -695,11 +615,21 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     ### Destroy / Create OCP Clusters ###
 
-    # Running download_ocp_installer for cluster A
+    # Running download_ocp_installer
+    # TODO: Download specific OCP version for each cluster
 
     if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
 
       ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
+
+    fi
+
+    # Running build_ocpup_tool_latest for Openstack cluster only
+    # TODO: replace OCUP with common OCP installer
+
+    if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} build_ocpup_tool_latest
 
     fi
 
@@ -708,15 +638,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
     # Running destroy or create or both (reset) for cluster A
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
     fi
 
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-      ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
     fi
 
@@ -724,27 +654,19 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
     if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
-      # Running build_ocpup_tool_latest if requested, for cluster B
-
-      if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} build_ocpup_tool_latest
-
-      fi
-
       # Running destroy or create or both (reset) for cluster B
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_osp_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} prepare_install_osp_cluster "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
-        ${JUNIT_CMD} create_osp_cluster "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
       fi
 
@@ -768,15 +690,15 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
       fi
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} prepare_install_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-        ${JUNIT_CMD} create_ocp_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
       fi
 
@@ -909,6 +831,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
 
       ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
 
+      ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_HUB}"
+
     fi
     # END of cluster A cleanup
 
@@ -922,6 +846,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
 
       fi
     fi
@@ -937,6 +863,8 @@ echo -e "\n# TODO: consider adding timestamps with: ts '%H:%M:%.S' -s"
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
@@ -1475,7 +1403,7 @@ if [[ -s "$POLARION_RESULTS" ]] ; then
 fi
 
 # Loop on all *.info files and add them to report description:
-info_files="${SCRIPT_DIR}/*.info"
+info_files="${OUTPUTDIR}/*.info"
 for info in $info_files ; do
   if [[ -s "$info" ]] ; then
     echo -e "$info :
@@ -1508,9 +1436,9 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 ### Collecting artifacts and compressing to tar.gz archive ###
 
 if [[ -n "${REPORT_FILE}" ]] ; then
-   ARCHIVE_FILE="${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUTDIR}/${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
 else
-   ARCHIVE_FILE="${PWD##*/}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUTDIR}/${PWD##*/}_${DATE_TIME}.tar.gz"
 fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
@@ -1519,56 +1447,56 @@ TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARC
 if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
-  cp -f "${KUBECONF_HUB}" "kubconf_${CLUSTER_A_NAME}" || :
-  cp -f "${KUBECONF_HUB}.bak" "kubconf_${CLUSTER_A_NAME}.bak" || :
+  cp -f "${KUBECONF_HUB}" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "${KUBECONF_HUB}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
 
-  find "${CLUSTER_A_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_A_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
-  cp -f "${KUBECONF_CLUSTER_B}" "kubconf_${CLUSTER_B_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_B}.bak" "kubconf_${CLUSTER_B_NAME}.bak" || :
+  cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
 
-  find "${CLUSTER_B_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_B_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
-  cp -f "${KUBECONF_CLUSTER_C}" "kubconf_${CLUSTER_C_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_C}.bak" "kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
 
-  find "${CLUSTER_C_DIR}" -type f -name "*.log" -exec \
-  sh -c 'cp "{}" "cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_C_DIR}" -type f -wholename "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact ${OCP_USR}.sec file
-find "${WORKDIR}" -maxdepth 1 -type f -name "${OCP_USR}.sec" -exec cp -f "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -wholename "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUTDIR}/ \; || :
 
 # Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -name "$BROKER_INFO" -exec cp -f "{}" "submariner_{}" \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -wholename "$BROKER_INFO" -exec cp -f "{}" "${OUTPUTDIR}/submariner_{}" \; || :
 
 # Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -name "submariner*" -exec cp -R "{}" . \; || :
+find "${WORKDIR}" -maxdepth 1 -type d -wholename "submariner*" -exec cp -R "{}" ${OUTPUTDIR}/ \; || :
 
 # Compress the required artifacts (either files or directories)
 
 find . -maxdepth 1 \( \
--name "$REPORT_FILE" -o \
--name "$SYS_LOG" -o \
--name "kubconf_*" -o \
--name "submariner*" -o \
--name "*.sec" -o \
--name "*.xml" -o \
--name "*.yaml" -o \
--name "*.log" -o \
--name "*.ver" \
+-wholename "$REPORT_FILE" -o \
+-wholename "$SYS_LOG" -o \
+-wholename "kubconf_*" -o \
+-wholename "submariner*" -o \
+-wholename "*.sec" -o \
+-wholename "*.xml" -o \
+-wholename "*.yaml" -o \
+-wholename "*.log" -o \
+-wholename "*.ver" \
 \) -print0 | \
-tar --dereference --hard-dereference -cvzf "$ARCHIVE_FILE" --null -T - || :
+tar --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
 
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
