@@ -1575,7 +1575,13 @@ function delete_all_evicted_pods_in_cluster() {
 
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  
   delete_all_evicted_pods_in_current_cluster || :
+
+  wait_for_all_machines_ready || :
+  
+  wait_for_all_nodes_ready || :
 
 }
 
