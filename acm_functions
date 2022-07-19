@@ -567,6 +567,11 @@ function create_and_import_managed_cluster() {
 
 function create_new_managed_cluster_in_acm_hub() {
   ### Create ACM managed cluster by cluster ID ###
+  # References: 
+  # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.5/html-single/clusters/index#adding-clusters-to-a-managedclusterset-cli
+  # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.5/html-single/clusters/index#modifying-the-klusterlet-add-ons-settings-of-your-cluster
+  # https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.5/html-single/add-ons/index#deploying-submariner-mcaddon-api
+
   trap_to_debug_commands;
 
   local cluster_id="${1}"
@@ -611,18 +616,17 @@ EOF
     labels:
       cluster.open-cluster-management.io/${SUBM_AGENT}: "true"
   spec:
-    applicationManager:
-      argocdCluster: false
-      enabled: true
-    certPolicyController:
-      enabled: true
+    clusterName: ${cluster_id}
+    clusterNamespace: ${cluster_id}
     clusterLabels:
       cloud: auto-detect
       cluster.open-cluster-management.io/clusterset: ${SUBM_OPERATOR}
       name: ${cluster_id}
       vendor: auto-detect
-    clusterName: ${cluster_id}
-    clusterNamespace: ${cluster_id}
+    applicationManager:
+      enabled: true
+    certPolicyController:
+      enabled: true
     iamPolicyController:
       enabled: true
     policyController:
@@ -1078,6 +1082,10 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=Available && \
   ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
   ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
+
+  # if ! check_version_greater_or_equal "$SUBM_VER_TAG" "0.13" ; then
+  #   ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false
+  # fi
 
   ${OC} describe managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" || managed_cluster_status=FAILED
 
