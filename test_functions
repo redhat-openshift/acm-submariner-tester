@@ -1250,14 +1250,15 @@ function test_cluster_status() {
   cp -f "$kubeconfig_file" "${kubeconfig_copy}" || :
 
   ${OC} config view
+  
+  verify_all_nodes_ready_current_cluster
+
   ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${kubeconfig_file}"
   ${OC} version
   ${OC} get all -n default
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
-
-  verify_all_nodes_ready_current_cluster
   
 }
 
@@ -2797,6 +2798,8 @@ function configure_custom_registry_in_cluster() {
 
   [[ -n "${cluster_name}" ]] || FATAL "Cluster is inaccessible"
 
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  
   configure_cluster_custom_registry_secrets
 
   configure_cluster_custom_registry_mirror
