@@ -760,7 +760,7 @@ cat "$SYS_LOG"
       # Cluster A configurations
       ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+      # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
       # Cluster B custom configurations for OpenStack
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -782,7 +782,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
-        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
 
       fi
 
@@ -799,7 +799,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
-        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
