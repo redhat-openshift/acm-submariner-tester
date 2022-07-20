@@ -2304,7 +2304,7 @@ function install_broker_via_api_on_cluster() {
   if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
     local clusterset_broker_namespace
-    clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner \
+    clusterset_broker_namespace=$(${OC} get ManagedClusterSet ${TEST_NS} \
     -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
 
     local enable_globalnet="true"

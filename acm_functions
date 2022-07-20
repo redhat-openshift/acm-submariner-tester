@@ -1139,7 +1139,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
 
   local managed_cluster_status
 
-  TITLE "Verify Submariner connection established in the '${SUBM_OPERATOR}' cluster-set of ACM namespace ${cluster_id}"
+  TITLE "Verify Submariner connection established in the '${TEST_NS}' cluster-set of ACM namespace ${cluster_id}"
 
   ${OC} get managedcluster -o wide
 
@@ -1148,7 +1148,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
   # i.e. To establish actual inter-cluster data-plane connections between ManagedClusters (which are part of the same ManagedClusterSet).
 
   local clusterset_count
-  clusterset_count="$(${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${SUBM_OPERATOR}')].metadata.name}" | wc -w)"
+  clusterset_count="$(${OC} get managedclusteraddons -A -o jsonpath="{.items[?(@.metadata.name=='${TEST_NS}')].metadata.name}" | wc -w)"
 
   if (( clusterset_count > 1 )) ; then
     ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerConnectionDegraded=false || managed_cluster_status=FAILED
@@ -1159,7 +1159,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
     fi
 
   else
-    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${SUBM_OPERATOR}' ManagedClusterSet"
+    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${TEST_NS}' ManagedClusterSet"
   fi
 
 }
