@@ -1257,7 +1257,8 @@ function test_cluster_status() {
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
 
-  wait_for_all_nodes_ready
+  verify_all_nodes_ready_current_cluster
+  
 }
 
 # ------------------------------------------
@@ -1580,9 +1581,7 @@ function delete_all_evicted_pods_in_cluster() {
 
   delete_all_evicted_pods_in_current_cluster || :
 
-  wait_for_all_machines_ready || :
-
-  wait_for_all_nodes_ready || :
+  verify_all_nodes_ready_current_cluster
 
 }
 

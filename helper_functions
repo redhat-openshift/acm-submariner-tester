@@ -1165,7 +1165,20 @@ function delete_all_evicted_pods_in_current_cluster() {
   ${OC} get nodes --no-headers | awk '{print $1}' | \
   xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=1 --disable-eviction || :
 
+  # Make sure to run verify_all_nodes_ready_current_cluster() afterwards
+}
+
+# ------------------------------------------
+
+# Function to verify all nodes and machines are ready in current cluster
+function verify_all_nodes_ready_current_cluster() {
+  trap_to_debug_commands;
+
   ${OC} get nodes --no-headers | awk '{print $1}' | xargs ${OC} adm uncordon || :
+
+  wait_for_all_machines_ready
+
+  wait_for_all_nodes_ready
 
 }
 
