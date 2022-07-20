@@ -490,28 +490,28 @@ function create_clusterset_for_submariner_in_acm_hub() {
     FATAL "ManagedClusterSet resource type is missing"
   fi
 
-  TITLE "Creating 'ManagedClusterSet' resource for ${SUBM_OPERATOR}"
+  TITLE "Creating 'ManagedClusterSet' resource for ${TEST_NS}"
 
-  create_namespace "${SUBM_OPERATOR}"
+  create_namespace "${TEST_NS}"
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSet
   metadata:
-    name: ${SUBM_OPERATOR}
+    name: ${TEST_NS}
 EOF
 
   local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
   # local regex="Reason:\s*ClustersSelected" # Only later it includes "ManagedClusterSet"
-  local regex="Name:\s*${SUBM_OPERATOR}"
+  local regex="Name:\s*${TEST_NS}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" == FAILED ]] ; then
-    # FATAL "ManagedClusterSet for '${SUBM_OPERATOR}' is still empty after $duration"
-    FATAL "'${SUBM_OPERATOR}' was not added to ManagedClusterSet after $duration"
+    # FATAL "ManagedClusterSet for '${TEST_NS}' is still empty after $duration"
+    FATAL "'${TEST_NS}' was not added to ManagedClusterSet after $duration"
   fi
 
   TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner in the ClusterSet '${TEST_NS}'"
@@ -521,20 +521,20 @@ EOF
   apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSetBinding
   metadata:
-    name: ${SUBM_OPERATOR}
+    name: ${TEST_NS}
     namespace: ${SUBM_NAMESPACE}
   spec:
     clusterSet: ${TEST_NS}
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding -n ${SUBM_NAMESPACE} &> '$acm_resource'"
-  local regex="Cluster Set:\s*${SUBM_OPERATOR}"
+  local regex="Cluster Set:\s*${TEST_NS}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" == FAILED ]] ; then
-    FATAL "ManagedClusterSetBinding for '${SUBM_OPERATOR}' was not created in ${SUBM_NAMESPACE} after $duration"
+    FATAL "ManagedClusterSetBinding for '${TEST_NS}' was not created in ${SUBM_NAMESPACE} after $duration"
   fi
 
 }
