@@ -1165,7 +1165,20 @@ function delete_all_evicted_pods_in_current_cluster() {
   ${OC} get nodes --no-headers | awk '{print $1}' | \
   xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=1 --disable-eviction || :
 
+  # Make sure to run verify_all_nodes_ready_current_cluster() afterwards
+}
+
+# ------------------------------------------
+
+# Function to verify all nodes and machines are ready in current cluster
+function verify_all_nodes_ready_current_cluster() {
+  trap_to_debug_commands;
+
   ${OC} get nodes --no-headers | awk '{print $1}' | xargs ${OC} adm uncordon || :
+
+  wait_for_all_machines_ready
+
+  wait_for_all_nodes_ready
 
 }
 
@@ -1837,7 +1850,7 @@ function create_polarion_testcases_doc_from_junit() {
       echo "</testcases>" >> "$polarion_testcases_xml"
 
       echo -e "\n# Watch Polarion testcase-log status"
-      local polarion_job_urls="$OUTPUTDIR/polarion_testcases.url"
+      local polarion_job_urls="$OUTPUT_DIR/polarion_testcases.url"
       watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
 
@@ -2004,7 +2017,7 @@ function create_polarion_testrun_result_from_junit() {
     # ------------------------------------------------------------------------ #
 
     # Watch testcase-log web page
-    local polarion_job_urls="$OUTPUTDIR/polarion_testruns.url"
+    local polarion_job_urls="$OUTPUT_DIR/polarion_testruns.url"
     watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_xml" "$polarion_job_urls"
 
     local latest_job_url

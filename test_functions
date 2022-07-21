@@ -88,17 +88,18 @@ function export_global_script_variable() {
   mkdir -p "$WORKDIR"
   export_absolute_path 'WORKDIR'
 
-  # Set OUTPUTDIR as an absolute path to the directory
-  mkdir -p "$OUTPUTDIR"
-  export_absolute_path 'OUTPUTDIR'
-
-  # Ecport cred files absolute paths
-  export_absolute_path 'GCP_CRED_JSON'
-  export_absolute_path 'OSP_CRED_YAML'
-
   # Date-time signature for log and report files
   DATE_TIME="$(date +%d%m%Y_%H%M)"
   export DATE_TIME
+
+  # Create OUTPUT_DIR + DATE_TIME
+  OUTPUT_DIR+="_${DATE_TIME}"
+  mkdir -p "$OUTPUT_DIR"
+  export_absolute_path 'OUTPUT_DIR'
+
+  # Export cred files absolute paths
+  export_absolute_path 'GCP_CRED_JSON'
+  export_absolute_path 'OSP_CRED_YAML'
 
   # Global temp file
   TEMP_FILE="$(mktemp)_temp"
@@ -107,19 +108,19 @@ function export_global_script_variable() {
   # JOB_NAME is a prefix for files, which is the name of current script directory
   JOB_NAME="$(basename "$SCRIPT_DIR")"
   export JOB_NAME
-  export SHELL_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_sys_junit.xml"
-  export PKG_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_pkg_junit.xml"
-  export E2E_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_e2e_junit.xml"
-  export LIGHTHOUSE_JUNIT_XML="$OUTPUTDIR/${JOB_NAME}_lighthouse_junit.xml"
+  export SHELL_JUNIT_XML="$OUTPUT_DIR/${JOB_NAME}_sys_junit.xml"
+  export PKG_JUNIT_XML="$OUTPUT_DIR/${JOB_NAME}_pkg_junit.xml"
+  export E2E_JUNIT_XML="$OUTPUT_DIR/${JOB_NAME}_e2e_junit.xml"
+  export LIGHTHOUSE_JUNIT_XML="$OUTPUT_DIR/${JOB_NAME}_lighthouse_junit.xml"
 
-  export E2E_LOG="$OUTPUTDIR/${JOB_NAME}_e2e_output.log"
+  export E2E_LOG="$OUTPUT_DIR/${JOB_NAME}_e2e_output.log"
   : > "$E2E_LOG"
 
   # Set SYS_LOG name according to REPORT_NAME (from subm_variables)
   export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
   # SYS_LOG="${REPORT_NAME// /_}" # replace all spaces with _
   # SYS_LOG="${SYS_LOG}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
-  SYS_LOG="${OUTPUTDIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
+  SYS_LOG="${OUTPUT_DIR}/${JOB_NAME}_${DATE_TIME}.log" # can also consider adding timestamps with: ts '%H:%M:%.S' -s
   : > "$SYS_LOG"
 
   # Common test variables
@@ -132,40 +133,40 @@ function export_global_script_variable() {
   #################################################################################
 
   # File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
-  export TEST_STATUS_FILE="$OUTPUTDIR/test_status.rc"
+  export TEST_STATUS_FILE="$OUTPUT_DIR/test_status.rc"
   export EXIT_STATUS
   : > "$TEST_STATUS_FILE"
 
   # File to store SubCtl version
-  export SUBCTL_VERSION_FILE="$OUTPUTDIR/subctl.ver"
+  export SUBCTL_VERSION_FILE="$OUTPUT_DIR/subctl.ver"
   : > "$SUBCTL_VERSION_FILE"
 
   # File to store Submariner installed versions
-  export SUBMARINER_VERSIONS_FILE="$OUTPUTDIR/submariner.ver"
+  export SUBMARINER_VERSIONS_FILE="$OUTPUT_DIR/submariner.ver"
   : > "$SUBMARINER_VERSIONS_FILE"
 
   # File to store SubCtl JOIN command for cluster A
-  export SUBCTL_JOIN_CLUSTER_A_FILE="$OUTPUTDIR/subctl_join_cluster_a.cmd"
+  export SUBCTL_JOIN_CLUSTER_A_FILE="$OUTPUT_DIR/subctl_join_cluster_a.cmd"
   : > "$SUBCTL_JOIN_CLUSTER_A_FILE"
 
   # File to store SubCtl JOIN command for cluster B
-  export SUBCTL_JOIN_CLUSTER_B_FILE="$OUTPUTDIR/subctl_join_cluster_b.cmd"
+  export SUBCTL_JOIN_CLUSTER_B_FILE="$OUTPUT_DIR/subctl_join_cluster_b.cmd"
   : > "$SUBCTL_JOIN_CLUSTER_B_FILE"
 
   # File to store SubCtl JOIN command for cluster C
-  export SUBCTL_JOIN_CLUSTER_C_FILE="$OUTPUTDIR/subctl_join_cluster_c.cmd"
+  export SUBCTL_JOIN_CLUSTER_C_FILE="$OUTPUT_DIR/subctl_join_cluster_c.cmd"
   : > "$SUBCTL_JOIN_CLUSTER_C_FILE"
 
   # File to store Polarion auth
-  export POLARION_AUTH="$OUTPUTDIR/polarion.auth"
+  export POLARION_AUTH="$OUTPUT_DIR/polarion.auth"
   : > "$POLARION_AUTH"
 
   # File to store Polarion test-run report link
-  export POLARION_RESULTS="$OUTPUTDIR/polarion_${DATE_TIME}.results"
+  export POLARION_RESULTS="$OUTPUT_DIR/polarion_${DATE_TIME}.results"
   : > "$POLARION_RESULTS"
 
   # File to store Submariner images version details
-  export PRODUCT_IMAGES="$OUTPUTDIR/product_images.ver"
+  export PRODUCT_IMAGES="$OUTPUT_DIR/product_images.ver"
   : > "$PRODUCT_IMAGES"
 
 }
@@ -284,18 +285,18 @@ function export_cluster_variables() {
 
     trap_to_debug_commands;
 
-    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
-    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID:+${CLUSTER_SET_ID}}"
+    export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID}"
+    export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID}"
+    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}${CLUSTER_SET_ID}/auth/kubeconfig"
     export "CLUSTER_${cluster_index}_YAML=${cluster_install_yaml}"
-    export "KUBECONF_CLUSTER_${cluster_index}=${cluster_install_dir}/auth/kubeconfig"
 
   else
     TITLE "Unset Cluster ${cluster_index} global variables (name, kubeconfig and yaml), since this cluster is not required for testing"
 
     unset "CLUSTER_${cluster_index}_NAME"
     unset "CLUSTER_${cluster_index}_DIR"
-    unset "CLUSTER_${cluster_index}_YAML"
     unset "KUBECONF_CLUSTER_${cluster_index}"
+    unset "CLUSTER_${cluster_index}_YAML"
   fi
 
 }
@@ -1244,19 +1245,21 @@ function test_cluster_status() {
 
   TITLE "Backup Kubeconfig of OCP cluster $cluster_name ${cluster_version:+(OCP Version $cluster_version)}"
 
-  local kubeconfig_copy="${OUTPUTDIR}/kubconf_${cluster_name}"
+  local kubeconfig_copy="${OUTPUT_DIR}/kubconf_${cluster_name}"
   echo -e "\n# Copy '${kubeconfig_file}' to current workspace: ${kubeconfig_copy}"
   cp -f "$kubeconfig_file" "${kubeconfig_copy}" || :
 
   ${OC} config view
+  
+  verify_all_nodes_ready_current_cluster
+
   ${OC} status -n default || FATAL "Openshift cluster is not installed, or using wrong context for '$cluster_name' in kubeconfig: ${kubeconfig_file}"
   ${OC} version
   ${OC} get all -n default
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
-
-  wait_for_all_nodes_ready
+  
 }
 
 # ------------------------------------------
@@ -1576,12 +1579,10 @@ function delete_all_evicted_pods_in_cluster() {
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
-  
+
   delete_all_evicted_pods_in_current_cluster || :
 
-  wait_for_all_machines_ready || :
-  
-  wait_for_all_nodes_ready || :
+  verify_all_nodes_ready_current_cluster
 
 }
 
@@ -1983,11 +1984,11 @@ function download_subctl_by_tag() {
       echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p "$GOBIN"
       # cp -f ./subctl $GOBIN/
-      /usr/bin/install ./subctl "$GOBIN"/subctl
+      /usr/bin/install ./subctl "$GOBIN"/subctl || :
 
       echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
-      /usr/bin/install ./subctl ~/.local/bin/subctl
+      /usr/bin/install ./subctl ~/.local/bin/subctl || :
 
     else
       # Downloading SubCtl from Github (upstream)
@@ -2303,7 +2304,7 @@ function install_broker_via_api_on_cluster() {
   if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
     local clusterset_broker_namespace
-    clusterset_broker_namespace=$(${OC} get ManagedClusterSet submariner \
+    clusterset_broker_namespace=$(${OC} get ManagedClusterSet ${TEST_NS} \
     -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
 
     local enable_globalnet="true"
@@ -2797,6 +2798,8 @@ function configure_custom_registry_in_cluster() {
 
   [[ -n "${cluster_name}" ]] || FATAL "Cluster is inaccessible"
 
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  
   configure_cluster_custom_registry_secrets
 
   configure_cluster_custom_registry_mirror
@@ -4899,7 +4902,7 @@ function test_products_versions() {
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
-  local cluster_info_output="${OUTPUTDIR}/${cluster_name}.info"
+  local cluster_info_output="${OUTPUT_DIR}/${cluster_name}.info"
 
   local ocp_cloud
   ocp_cloud="$(print_current_cluster_cloud || :)"
@@ -5000,7 +5003,7 @@ function save_cluster_info_to_file() {
   cluster_version="$(${OC} version | awk '/Server Version/ { print $3 }' | grep .)"
 
   # Print OCP cluster info into file local file "<cluster name>.info"
-  local cluster_info_output="${OUTPUTDIR}/${cluster_name}.info"
+  local cluster_info_output="${OUTPUT_DIR}/${cluster_name}.info"
 
   local cluster_info="${ocp_cloud} cluster : OCP ${cluster_version}"
   echo "${cluster_info}" > "${cluster_info_output}" || :

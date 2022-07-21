@@ -8,8 +8,7 @@
 
 ### Workspace vars ###
 
-export WORKDIR=./submariner-install
-export OUTPUTDIR=./output
+export WORKDIR=submariner-install
 # export GOROOT="/usr/local/go"
 # export PATH="${GOROOT}/bin:${PATH}"
 # export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
@@ -27,7 +26,7 @@ export NETSHOOT_CLUSTER_A="netshoot-cl-a"
 
 export SUBM_NAMESPACE="submariner-operator"
 export BROKER_INFO="broker-info.subm"
-export BROKER_NAMESPACE="submariner-k8s-broker"
+# export BROKER_NAMESPACE="submariner-k8s-broker"
 export BROKER_NAMESPACE="submariner-broker"
 
 export CLUSTER_B_NAME="${CLUSTER_B_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
@@ -49,7 +48,7 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 export TEST_NS="${TEST_NS:-test-submariner}"
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-
+export OUTPUT_DIR="${TEST_NS:-output}"
 
 ### AWS vars ###
 

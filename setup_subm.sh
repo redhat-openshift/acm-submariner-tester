@@ -760,7 +760,7 @@ cat "$SYS_LOG"
       # Cluster A configurations
       ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+      # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
       # Cluster B custom configurations for OpenStack
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
@@ -782,7 +782,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
-        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
 
       fi
 
@@ -799,7 +799,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
-        ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
@@ -1403,7 +1403,7 @@ if [[ -s "$POLARION_RESULTS" ]] ; then
 fi
 
 # Loop on all *.info files and add them to report description:
-info_files="${OUTPUTDIR}/*.info"
+info_files="${OUTPUT_DIR}/*.info"
 for info in $info_files ; do
   if [[ -s "$info" ]] ; then
     echo -e "$info :
@@ -1436,9 +1436,10 @@ REPORT_FILE="${REPORT_FILE:-$(ls -1 -tc *.html | head -1)}" || :
 ### Collecting artifacts and compressing to tar.gz archive ###
 
 if [[ -n "${REPORT_FILE}" ]] ; then
-   ARCHIVE_FILE="${OUTPUTDIR}/${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUT_DIR}/${REPORT_FILE%.*}_${DATE_TIME}.tar.gz"
+   cp -f "${REPORT_FILE}" "${OUTPUT_DIR}/$(basename "$REPORT_FILE")"
 else
-   ARCHIVE_FILE="${OUTPUTDIR}/${PWD##*/}_${DATE_TIME}.tar.gz"
+   ARCHIVE_FILE="${OUTPUT_DIR}/${PWD##*/}_${DATE_TIME}.tar.gz"
 fi
 
 TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARCHIVE_FILE}"
@@ -1447,57 +1448,55 @@ TITLE "Compressing Report, Log, Kubeconfigs and other test artifacts into: ${ARC
 if [[ -s "${CLUSTER_A_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster A"
 
-  cp -f "${KUBECONF_HUB}" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}" || :
-  cp -f "${KUBECONF_HUB}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
+  cp -f "${KUBECONF_HUB}" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}" || :
+  cp -f "${KUBECONF_HUB}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
 
-  find "${CLUSTER_A_DIR}" -type f -wholename "*.log" -exec \
-  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_A_DIR}" -type f -iname "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_B_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster B"
 
-  cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
+  cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
 
-  find "${CLUSTER_B_DIR}" -type f -wholename "*.log" -exec \
-  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_B_DIR}" -type f -iname "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
-  cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUTDIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
 
-  find "${CLUSTER_C_DIR}" -type f -wholename "*.log" -exec \
-  sh -c 'cp "{}" "'${OUTPUTDIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
+  find "${CLUSTER_C_DIR}" -type f -iname "*.log" -exec \
+  sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
 fi
 
 # Artifact ${OCP_USR}.sec file
-find "${WORKDIR}" -maxdepth 1 -type f -wholename "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUTDIR}/ \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
 # Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -wholename "$BROKER_INFO" -exec cp -f "{}" "${OUTPUTDIR}/submariner_{}" \; || :
+find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -wholename "submariner*" -exec cp -R "{}" ${OUTPUTDIR}/ \; || :
+find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner*" -exec cp -R "{}" ${OUTPUT_DIR}/ \; || :
 
 # Compress the required artifacts (either files or directories)
 
-find . -maxdepth 1 \( \
--wholename "$REPORT_FILE" -o \
--wholename "$SYS_LOG" -o \
--wholename "kubconf_*" -o \
--wholename "submariner*" -o \
--wholename "*.sec" -o \
--wholename "*.xml" -o \
--wholename "*.yaml" -o \
--wholename "*.log" -o \
--wholename "*.ver" \
+find "${OUTPUT_DIR}" -maxdepth 1 \( \
+-iname "kubconf_*" -o \
+-iname "submariner*" -o \
+-iname "*.sec" -o \
+-iname "*.xml" -o \
+-iname "*.yaml" -o \
+-iname "*.log" -o \
+-iname "*.ver" -o \
+-iname "*.html" \
 \) -print0 | \
-tar --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
-
+tar --transform 's/.*\///g' --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf "$ARCHIVE_FILE"
