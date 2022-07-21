@@ -4519,7 +4519,7 @@ function test_project_e2e_with_go() {
   # ginkgo version
   # ginkgo help ginkgo
 
-  $go_cmd | tee -a '$E2E_LOG'
+  $go_cmd | tee -a "$E2E_LOG"
 
 }
 
