@@ -606,8 +606,10 @@ EOF
 
   TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${TEST_NS}'"
 
+  local Klusterlet_conf="Klusterlet_${cluster_id}.yaml"
+
   ### Create the klusterlet Addon config
-  cat <<EOF | ${OC} apply -f -
+  cat <<-EOF > "$Klusterlet_conf"
   apiVersion: agent.open-cluster-management.io/v1
   kind: KlusterletAddonConfig
   metadata:
@@ -635,6 +637,11 @@ EOF
       enabled: true
     version: ${ACM_VER_TAG}
 EOF
+
+  echo -e "\n# Apply Klusterlet (if failed once - apply again)"
+
+  ${OC} apply --dry-run='server' -f "$Klusterlet_conf" | highlight "unchanged" \
+  || ${OC} apply -f "$Klusterlet_conf" --wait || ${OC} apply -f "$Klusterlet_conf" || :
 
   TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
 
