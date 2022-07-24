@@ -3975,12 +3975,16 @@ function test_clusters_connected_by_service_ip() {
     # nginx_IP_cluster_bc: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
+  local curl_cmd
+  curl_cmd=("${OC}" exec "${netshoot_pod_cluster_a}" ${TEST_NS:+-n $TEST_NS} -- curl --output /dev/null --max-time 30 --verbose "${nginx_IP_cluster_bc}:${NGINX_PORT}")
+  
   if [[ ! "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on OCP cluster A (public), to Nginx service IP on managed cluster"
 
-    if ! ${OC} exec "${CURL_CMD}" ; then
+    echo -e "\n# Running: ${curl_cmd[*]}"
+
+    if ! "${curl_cmd[@]}" ; then
       FAILURE "Submariner connection failure${SUBM_CABLE_DRIVER:+ (Cable-driver=$SUBM_CABLE_DRIVER)}.
       \n Did you install clusters with overlapping CIDRs ?"
     fi
@@ -4012,7 +4016,7 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec "${CURL_CMD}" |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
+    "${curl_cmd[@]}" |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
