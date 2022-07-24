@@ -638,14 +638,21 @@ EOF
     version: ${ACM_VER_TAG}
 EOF
 
-  echo -e "\n# Apply Klusterlet (if failed once - apply again)"
+  echo -e "\n# Apply Klusterlet (and wait until created)"
 
-  ${OC} apply --dry-run='server' -f "$Klusterlet_conf" | highlight "unchanged" \
-  || ${OC} apply -f "$Klusterlet_conf" --wait || ${OC} apply -f "$Klusterlet_conf" || :
-
-  TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
+  # ${OC} apply --dry-run='server' -f "$Klusterlet_conf" | highlight "unchanged" \
+  # || ${OC} apply -f "$Klusterlet_conf" --wait || ${OC} apply -f "$Klusterlet_conf" || :
 
   local duration=5m
+  local klusterlet_output
+  klusterlet_output="$(mktemp)_klusterlet_output"
+
+  local cmd="${OC} apply -f '$Klusterlet_conf' --wait &> '$klusterlet_output'"
+  local regex="${cluster_id} (created|unchanged)"
+
+  watch_and_retry "$cmd ; grep -E '$regex' $klusterlet_output" "$duration" || :
+
+  TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
 
   # Wait for the new ManagedCluster $cluster_id
   ${OC} wait --timeout=$duration managedcluster "${cluster_id}" -n "${cluster_id}" --for=condition=HubAcceptedManagedCluster || :
