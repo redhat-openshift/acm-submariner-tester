@@ -1349,11 +1349,14 @@ cat "$SYS_LOG"
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
   fi
 
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE is not empty or equal 1: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing test results to Polarion = $UPLOAD_TO_POLARION"
+  echo -e "\n# $TEST_STATUS_FILE includes: [${EXIT_STATUS}]\n"
 
-  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
+  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is either 0 (pass) or 2 (unstable) ###
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
-      create_all_test_results_in_polarion || :
+    create_all_test_results_in_polarion || :
+  else
+    echo -e "\n# Skip publishing test results to Polarion \n"
   fi
 
   # ------------------------------------------
