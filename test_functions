@@ -723,7 +723,7 @@ function destroy_ocp_cluster() {
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
         "Force exist OCP destroy process" \
         "Please submit a new bug for OCP installer (in Bugzilla)"
-      )
+      ) || :
     fi
     # cd ..
 
@@ -937,7 +937,7 @@ function prepare_install_ocp_cluster() {
     change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
 
   elif [[ -s "$opt_cred_file" && "$platform" == osp ]] ; then
-    local cred_file_new="${ocp_install_dir}/clouds.yml"
+    local cred_file_new="${ocp_install_dir}/clouds.yaml"
 
     echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
     cp -f "$opt_cred_file" "$cred_file_new"
