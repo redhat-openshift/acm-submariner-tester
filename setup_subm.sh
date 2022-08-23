@@ -1242,10 +1242,12 @@ cat "$SYS_LOG"
     if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
       verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-      BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
-      "Build Submariner repo from 'devel' branch instead" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
-      ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+      # BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
+      # "Build Submariner repo from 'devel' branch instead" \
+      # "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
+      # ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+
+      ${JUNIT_CMD} build_submariner_repos "$SUBM_VER_TAG"
 
     fi
 
