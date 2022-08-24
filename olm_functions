@@ -468,7 +468,7 @@ EOF
     ${starting_csv:+startingCSV: $starting_csv}
 EOF
 
-  local duration=3m
+  local duration=5m
   echo -e "\n# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
@@ -510,6 +510,11 @@ EOF
 
   if [[ "$subscription_status" == FAILED ]] ; then
     cat "${subscription_data}"
+
+    ${OC} describe installplan -n "${subscription_namespace}"
+
+    ${OC} describe pods -n "${subscription_namespace}"
+
     FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi
 
