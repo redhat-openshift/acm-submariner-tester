@@ -997,7 +997,7 @@ function create_json_for_dns_delete() {
                   "AliasTarget": {
                     "HostedZoneId": "$HostedZoneId",
                     "DNSName": "$DNSName",
-                    "EvaluateTargetHealth": $EvaluateTargetHealth
+                    "EvaluateTargetHealth": false
                     }}
                 }]
     }
