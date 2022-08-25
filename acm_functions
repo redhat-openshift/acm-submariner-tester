@@ -1094,7 +1094,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=RegistrationApplied && \
   ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=ManifestApplied && \
   ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=Available && \
-  ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
+  ${OC} wait --timeout=10m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
   ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
 
   # if ! check_version_greater_or_equal "$SUBM_VER_TAG" "0.13" ; then
