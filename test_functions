@@ -3838,14 +3838,7 @@ function export_service_in_lighthouse() {
 
   TITLE "Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
-  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+-n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+-n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
-  BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status with rollout command" \
-  "https://github.com/submariner-io/submariner/issues/640"
-  # Workaround:
-  # Do not run this rollout status, but watch serviceexport description
+  ${OC} wait --timeout=3m --for=condition=Valid serviceexport "${svc_name}" ${namespace:+-n $namespace}
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use 'describe serviceexport' instead" \
