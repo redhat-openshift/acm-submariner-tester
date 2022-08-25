@@ -462,7 +462,7 @@ function setup_workspace() {
 
   # Create WORKDIR and local BIN dir (if not yet exists)
   mkdir -p "${WORKDIR}"
-  mkdir -p "$HOME"/.local/bin
+  mkdir -p "$HOME/.local/bin"
 
   # Add local BIN dir to PATH
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
@@ -610,7 +610,7 @@ function download_ocp_installer() {
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p "$GOBIN"
-  /usr/bin/install ./oc "$GOBIN"/oc || :
+  /usr/bin/install ./oc "$GOBIN/oc" || :
 
   echo -e "\n# Install OC into user HOME bin:"
   /usr/bin/install ./oc ~/.local/bin/oc
@@ -1297,7 +1297,7 @@ function add_elevated_user() {
 
   ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
-  ${OC} create secret generic ${http_sec_name} --from-file=htpasswd="${WORKDIR}"/${http_sec_name} -n openshift-config
+  ${OC} create secret generic ${http_sec_name} --from-file=htpasswd="${WORKDIR}/${http_sec_name}" -n openshift-config
 
   TITLE "Add the HTPasswd identity provider to the registry"
 
@@ -1984,7 +1984,7 @@ function download_subctl_by_tag() {
       echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p "$GOBIN"
       # cp -f ./subctl $GOBIN/
-      /usr/bin/install ./subctl "$GOBIN"/subctl || :
+      /usr/bin/install ./subctl "$GOBIN/subctl" || :
 
       echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
@@ -2039,7 +2039,7 @@ function download_subctl_by_tag() {
         echo -e "\n# Install subctl into ${GOBIN}:"
         mkdir -p "$GOBIN"
         # cp -f ./subctl $GOBIN/
-        /usr/bin/install ./subctl "$GOBIN"/subctl
+        /usr/bin/install ./subctl "$GOBIN/subctl"
 
         echo -e "\n# Install subctl into user HOME bin:"
         # cp -f ./subctl ~/.local/bin/
@@ -2051,7 +2051,7 @@ function download_subctl_by_tag() {
     echo -e "\n# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p "$GOBIN"
     # cp -f ./subctl $GOBIN/
-    /usr/bin/install "$HOME/.local/bin/subctl" "$GOBIN"/subctl
+    /usr/bin/install "$HOME/.local/bin/subctl" "$GOBIN/subctl"
 
     echo -e "\n# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
@@ -4642,7 +4642,7 @@ function build_operator_latest() {  # [DEPRECATED]
   GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo -e "\n# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
-  cd "$GOPATH"/src/github.com/submariner-io/submariner-operator || return 1
+  cd "$GOPATH/src/github.com/submariner-io/submariner-operator" || return 1
   ls
 
   # go get -v -u -t ./...
@@ -4687,7 +4687,7 @@ function build_operator_latest() {  # [DEPRECATED]
   ls -l ./bin/subctl
   mkdir -p "$GOBIN"
   # cp -f ./bin/subctl $GOBIN/
-  /usr/bin/install ./bin/subctl "$GOBIN"/subctl
+  /usr/bin/install ./bin/subctl "$GOBIN/subctl"
 
   # Create symbolic link /usr/local/bin/subctl :
   #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl

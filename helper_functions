@@ -456,7 +456,7 @@ function install_anaconda() {
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
-  "${work_dir}"/${miniconda_installer} -b -u -p "${conda_install_dir}"
+  "${work_dir}/${miniconda_installer}" -b -u -p "${conda_install_dir}"
   conda update -y -n base -c defaults conda
 
   # Remove old ${CONDA_CMD} environment dir, if it is not configured
@@ -2130,7 +2130,7 @@ function install_aha() {
         rm -rf "$repo_dir"
         # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
         git clone $repo_url --single-branch # --depth 1
-        git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
+        git --work-tree="$repo_dir"  --git-dir="$repo_dir/.git" checkout tags/$repo_branch
         # make -C "$repo_dir" &> /dev/null
         make install PREFIX="$GOBIN"
       fi
