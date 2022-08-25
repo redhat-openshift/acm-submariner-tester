@@ -1078,7 +1078,11 @@ function ocp_login() {
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p ${ocp_pwd}"
+    crt_file='/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
+    [[ -s "$crt_file" ]] || crt_file=''
+
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+    
     # Attempt to login up to 10 minutes
     watch_and_retry "$cmd" 10m
   )
