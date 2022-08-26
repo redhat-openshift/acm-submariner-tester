@@ -1583,6 +1583,8 @@ function delete_all_evicted_pods_in_cluster() {
   delete_all_evicted_pods_in_current_cluster || :
 
   export KUBECONFIG="$kubeconfig_file"
+
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
   
   verify_all_nodes_ready_current_cluster
 

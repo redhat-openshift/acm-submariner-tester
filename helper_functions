@@ -1169,7 +1169,7 @@ function delete_all_evicted_pods_in_current_cluster() {
   ${OC} get nodes --no-headers | awk '{print $1}' | \
   xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=1 --disable-eviction || :
 
-  # Make sure to run verify_all_nodes_ready_current_cluster() afterwards
+  # Make sure to run ocp_login() and verify_all_nodes_ready_current_cluster() after oc adm drain
 }
 
 # ------------------------------------------
