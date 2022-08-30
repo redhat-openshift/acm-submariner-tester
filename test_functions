@@ -1327,7 +1327,7 @@ EOF
   TITLE "Adding the new user '${OCP_USR}' to OCP cluster roles"
 
   ### Give user admin privileges
-  # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${OCP_USR}
+  ${OC} create clusterrolebinding master-cluster-admin-binding --clusterrole=cluster-admin --user=${OCP_USR} || :
   ${OC} adm policy add-cluster-role-to-user cluster-admin "${OCP_USR}" --rolebinding-name cluster-admin
 
   ${OC} describe clusterrolebindings system:"${OCP_USR}"
@@ -1379,28 +1379,29 @@ function uninstall_submariner() {
     cleanup_required=YES
   fi
 
+  export KUBECONFIG="$kubeconfig_file"
 
   if [[ "$cleanup_required" == YES ]] ; then
 
-    delete_submariner_namespace_and_crds
+    delete_submariner_namespace_and_crds || :
 
-    delete_submariner_cluster_roles
+    delete_submariner_cluster_roles || :
 
-    delete_lighthouse_dns_list
+    delete_lighthouse_dns_list || :
 
-    remove_submariner_gateway_labels
+    remove_submariner_gateway_labels || :
 
-    remove_submariner_machine_sets
+    remove_submariner_machine_sets || :
   fi
 
-  delete_submariner_test_namespaces
+  delete_submariner_test_namespaces || :
 
   BUG "Low disk-space on OCP cluster that was running for few weeks" \
   "Delete old E2E namespaces" \
   "https://github.com/submariner-io/submariner-website/issues/341
   https://github.com/submariner-io/shipyard/issues/355"
 
-  delete_e2e_namespaces
+  delete_e2e_namespaces || :
 
 }
 
