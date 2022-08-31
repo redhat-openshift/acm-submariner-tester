@@ -1058,10 +1058,11 @@ function ocp_login() {
   local ocp_usr
   ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
 
-  local ocp_pwd
+  local ocp_pwd # stored later in ${2}
+  local crt_file # stored later in ${3}
 
   local ocp_server
-  ocp_server="${3:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
+  ocp_server="${4:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -1078,7 +1079,7 @@ function ocp_login() {
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    crt_file='/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
+    crt_file="${3}"   
     [[ -s "$crt_file" ]] || crt_file=''
 
     cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
