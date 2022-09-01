@@ -1643,13 +1643,13 @@ function delete_all_evicted_pods_in_cluster() {
 
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   delete_all_evicted_pods_in_current_cluster || :
 
-  export KUBECONFIG="$kubeconfig_file"
+  # export KUBECONFIG="$kubeconfig_file"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
   
   verify_all_nodes_ready_current_cluster
 
