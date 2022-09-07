@@ -412,7 +412,7 @@ function record_junit() {
 
   # Set junit_suite as the base directory name of $output_dir
   local junit_suite
-  junit_suite="$(basename "$output_dir")"
+  junit_suite="$(basename "${junit_output_file//_junit.xml/}")" 
 
   echo "+++ Recording test as Junit: ${func_and_args}"
   echo "+++ XML output of all Junit: ${output_dir}/${junit_output_file}"

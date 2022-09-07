@@ -67,7 +67,8 @@ function eVal() {
   (
     (
       {
-        trap 'RC=$? ; [[ "$RC" != 5 ]] || RC=0 ; echo $RC > "${returnf}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
+        trap 'RC=$? ; echo "$RC > ${returnf}" ; echo $RC > "${returnf}" ; 
+        echo "+++ sh2ju command exit code: $RC" ; if [[ "$RC" == 5 ]] ; then RC=0 ; fi ; exit $RC' ERR;
         trap 'RC="$(< $returnf)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
         set -e; $1;
       } | tee -a "${outf}"
@@ -196,6 +197,7 @@ EOF
     # Run command and set the test return code, based on the command exit code
     eVal "${cmd}"
     returnCode="$([[ -s "$returnf" ]] && cat "$returnf" || echo "0")"
+    echo "+++ sh2ju test result: ${returnCode}"
 
     if [[ "${returnCode}" != 0 ]] ; then
       # Command failed
@@ -340,12 +342,13 @@ EOF
 
   # Set returnCode=0: if using flag -status="StatusFile", or if returnCode was either not set or equals 5
   if [[ -f "$statusFile" || -z "$returnCode" || "$returnCode" == 5 ]] ; then
-    echo "+++ sh2ju re-setting return code: [${returnCode}] => [0]"
+    echo "+++ sh2ju re-setting return code: [${returnCode}] => [0] (non-critical test failure)"
     returnCode=0
   else
-    echo -e "+++ sh2ju return code: ${returnCode}\n"
+    echo "+++ sh2ju return code: ${returnCode}"
   fi
 
+  echo -e "+++ sh2ju test ${testTitle} END\n\n"
   set -e # (aka as set -o errexit) to fail script on error
   return ${returnCode}
 

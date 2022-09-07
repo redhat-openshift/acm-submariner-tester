@@ -587,15 +587,13 @@ cat "$SYS_LOG"
 (
   # (export_all_env_variables) # Required to run again, to check exit code, but without exporting (now in sub-shell)
 
-  # Setup and verify environment
-  setup_workspace
-
   # Set script trap functions
   set_trap_functions
 
   ### Script debug calls (should be left as a comment) ###
 
     # ${JUNIT_CMD} debug_test_polarion
+    # echo 0 > "$TEST_STATUS_FILE"
     # ${JUNIT_CMD} debug_test_pass "junit" "junit"
     # ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
     # rc=$?
@@ -603,8 +601,14 @@ cat "$SYS_LOG"
     # "If RC $rc = 5 - JUNIT_CMD should continue execution"
     # ${JUNIT_CMD} debug_test_pass 100 200 300
     # ${JUNIT_CMD} debug_test_fatal
+    # ${JUNIT_CMD} debug_test_pass "1" "2" "3"
+    # ${JUNIT_CMD} debug_test_fail "should be skipped"
+    # ${JUNIT_CMD} debug_test_pass "should be skipped too"
 
   ### END Script debug ###
+
+  # Setup and verify environment
+  setup_workspace
 
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan
