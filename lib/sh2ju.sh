@@ -59,20 +59,27 @@ else
 fi
 
 # Function to execute command (like bash eval method), which allows catching seg-faults and use tee
-# It saves output to temporary files: stdout > ${outf}, stderr > ${errf}, exit code > ${returnf}
+# It saves output to temporary files: stdout > ${outf}, stderr > ${errf}, Return code > ${returnf}
 function eVal() {
   # Execute the command, temporarily swapping stderr and stdout so they can be tee'd to separate files,
-  # then swapping them back again so that the streams are written correctly for the invoking process
+  # then swapping them back again so that the streams are written correctly for the invoking process.
+  # If Return code equals 5, then Junit test will fail but continue, by setting Return code => 0. 
   echo 0 > "${returnf}"
   (
     (
       {
-        trap 'RC=$? ; [[ "$RC" != 5 ]] || RC=0 ; echo $RC > "${returnf}" ; echo "+++ sh2ju command exit code: $RC" ; exit $RC' ERR;
-        trap 'RC="$(< $returnf)" ; echo +++ sh2ju command termination code: $RC" ; exit $RC' HUP INT TERM;
+        trap 'RC=$? ; echo "${RC} > ${returnf}" ; echo ${RC} > "${returnf}" ; 
+        echo "+++ sh2ju command exit code: [${RC}]" ; if [[ "${RC}" == 5 ]] ; then RC=0 ; fi ; exit ${RC}' ERR;
+        trap 'RC="$(lastRC)" ; echo +++ sh2ju command termination code: [${RC}]" ; exit ${RC}' HUP INT TERM;
         set -e; $1;
       } | tee -a "${outf}"
     ) 3>&1 1>&2 2>&3 | tee "${errf}"
   ) 3>&1 1>&2 2>&3
+}
+
+# Function to fetch the return code of the last executed test, stored in ${returnf} file (0 if empty)
+function lastRC() {
+  [[ -s "$returnf" ]] && cat "$returnf" || echo "0"
 }
 
 # TODO: Use this function to clean old test results (xmls)
@@ -180,13 +187,12 @@ EOF
   echo "+++ sh2ju running case${testIndex:+ ${testIndex}}: ${class}.${name} "
   echo "+++ sh2ju working directory: $(pwd)"
   echo "+++ sh2ju command: ${cmd}"
-  echo "+++ sh2ju test suite status: ${testSuiteStatus} [${statusFile}]"
+  echo "+++ sh2ju test suite status: ${testSuiteStatus}"
   # To print +++ sh2ju (debuging lines) into ${outf}, you can add: | tee -a ${outf}
 
   # Clear content of the temporary files
   : > "${outf}"
   : > "${errf}"
-  : > "${returnf}"
 
   # Save datetime before executing the command
   testStartTime="$(${dateTime} +%s.%N)"
@@ -195,22 +201,28 @@ EOF
   if [[ "$testSuiteStatus" != 1 ]] ; then
     # Run command and set the test return code, based on the command exit code
     eVal "${cmd}"
-    returnCode="$([[ -s "$returnf" ]] && cat "$returnf" || echo "0")"
+    returnCode="$(lastRC)"
+    echo "+++ sh2ju test result: ${returnCode}"
 
-    if [[ "${returnCode}" != 0 ]] ; then
-      # Command failed
+    # Change testCaseStatus according to command return code: 0 for "PASSED", else "FAILED":
+    if [[ "${returnCode}" == 0 ]] ; then
+      testCaseStatus=PASSED
+    else
+      testCaseStatus=FAILED
+
+      # When using flag -status=<Test Status File> :
       if [[ -f "$statusFile" ]] ; then
-        # If suite status is empty, or return code is anything but 5 - change status file to: 1 (Critical failure)
-        if [[ -z "$testSuiteStatus" ]] || [[ "$returnCode" != 5 ]] ; then
+
+        # If return code is NOT 5, then change status file to: 1 (Critical failure)
+        if [[ "$returnCode" != 5 ]] ; then
           echo 1 > "$statusFile"
-        # Else if suite status was 0 (Pass until now) - change status file to: 2 (Failed but continue)
-        elif [[ "$testSuiteStatus" == 0 ]] ; then
+        fi
+
+        # If suite status was 0 (Pass until now) - update status file to: 2 (Failed but continue)
+        if [[ "$testSuiteStatus" == 0 ]] ; then
           echo 2 > "$statusFile"
         fi
       fi
-      testCaseStatus=FAILED
-    else
-      testCaseStatus=PASSED
     fi
 
   else
@@ -338,14 +350,15 @@ EOF
 
   fi
 
-  # Set returnCode=0: if using flag -status="StatusFile", or if returnCode was either not set or equals 5
+  # Set returnCode=0: if using flag -status=<Test Status File>, or if returnCode was either not set or equals 5
   if [[ -f "$statusFile" || -z "$returnCode" || "$returnCode" == 5 ]] ; then
-    echo "+++ sh2ju re-setting return code: [${returnCode}] => [0]"
+    echo "+++ sh2ju re-setting return code: [${returnCode}] => [0] (non-critical test failure)"
     returnCode=0
   else
-    echo -e "+++ sh2ju return code: ${returnCode}\n"
+    echo "+++ sh2ju return code: ${returnCode}"
   fi
 
+  echo -e "+++ sh2ju test ${testTitle} END\n\n"
   set -e # (aka as set -o errexit) to fail script on error
   return ${returnCode}
 

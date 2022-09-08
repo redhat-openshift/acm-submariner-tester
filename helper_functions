@@ -412,7 +412,7 @@ function record_junit() {
 
   # Set junit_suite as the base directory name of $output_dir
   local junit_suite
-  junit_suite="$(basename "$output_dir")"
+  junit_suite="$(basename "${junit_output_file//_junit.xml/}")" 
 
   echo "+++ Recording test as Junit: ${func_and_args}"
   echo "+++ XML output of all Junit: ${output_dir}/${junit_output_file}"
@@ -456,7 +456,7 @@ function install_anaconda() {
   miniconda_installer="Miniconda3-latest-Linux-x86_64.sh"
   download_file "https://repo.anaconda.com/miniconda/${miniconda_installer}" "${work_dir}/${miniconda_installer}"
   chmod +x "${work_dir}/${miniconda_installer}"
-  "${work_dir}"/${miniconda_installer} -b -u -p "${conda_install_dir}"
+  "${work_dir}/${miniconda_installer}" -b -u -p "${conda_install_dir}"
   conda update -y -n base -c defaults conda
 
   # Remove old ${CONDA_CMD} environment dir, if it is not configured
@@ -525,7 +525,7 @@ function install_conda_package() {
   ${CONDA_CMD} deactivate
 
   conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
-  
+
   ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
 
   source activate "$conda_env" || :
@@ -569,6 +569,10 @@ function verify_golang() {
 
   # Optional: exporting $1 as GOBIN path
   # export GOBIN="${1:-$GOROOT/bin}"
+
+  if [[ ! -e ${GOBIN} ]] ; then
+    export GOBIN="${GOROOT}/bin"
+  fi
 
   # export PATH=$PATH:$GOROOT/bin
   [[ ":$PATH:" != *":$GOBIN:"* ]] && export PATH=$GOBIN:$PATH
@@ -667,7 +671,14 @@ function install_local_gcloud() {
 
   # export CLOUDSDK_PYTHON=/usr/bin/python2
 
-  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}"
+  install_conda_package "${conda_install_dir}" "google-cloud-sdk" "${pkg_version}" || CONDA_PKG=FAILED
+
+  if [[ "$CONDA_PKG" == FAILED ]] ; then
+    TITLE "Installing Gcloud-CLI with Anaconda failed - trying to download and install from sdk.cloud.google.com"
+    curl https://sdk.cloud.google.com > gcloud-install.sh
+    bash gcloud-install.sh --disable-prompts
+    . ~/google-cloud-sdk/path.bash.inc
+  fi
 
   # verify_anaconda "${conda_install_dir}"
   # source activate "$conda_env"
@@ -866,7 +877,9 @@ function configure_gcp_access() {
 
   work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  install_local_gcloud "$work_dir"
+  if [[ ! -x "$(command -v aws)" ]] ; then
+    install_local_gcloud "$work_dir"
+  fi
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
@@ -984,7 +997,7 @@ function create_json_for_dns_delete() {
                   "AliasTarget": {
                     "HostedZoneId": "$HostedZoneId",
                     "DNSName": "$DNSName",
-                    "EvaluateTargetHealth": $EvaluateTargetHealth
+                    "EvaluateTargetHealth": false
                     }}
                 }]
     }
@@ -1045,10 +1058,11 @@ function ocp_login() {
   local ocp_usr
   ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
 
-  local ocp_pwd
+  local ocp_pwd # stored later in ${2}
+  local crt_file # stored later in ${3}
 
   local ocp_server
-  ocp_server="${3:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
+  ocp_server="${4:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -1065,7 +1079,11 @@ function ocp_login() {
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p ${ocp_pwd}"
+    crt_file="${3}"   
+    [[ -s "$crt_file" ]] || crt_file=''
+
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+    
     # Attempt to login up to 10 minutes
     watch_and_retry "$cmd" 10m
   )
@@ -1138,6 +1156,72 @@ function force_delete_namespace() {
     kill -9 %% || :
     ${OC} delete namespace "${ns_name}" --ignore-not-found --grace-period=0 --force --wait || :
   fi
+
+}
+
+# ------------------------------------------
+
+# Function to delete all evicted (failed) pods from all namespaces
+# Ref: 
+# https://medium.com/@tamber/solution-avoid-kubernetes-openshift-node-drain-failure-due-to-active-poddisruptionbudget-df68efed2c4f
+#
+function delete_all_evicted_pods_in_current_cluster() {
+  trap_to_debug_commands;
+
+  echo -e "\n# Delete all regular pods from all namespaces"
+
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' | awk '{system("oc delete pod "$2" -n "$1)}' || :
+ 
+  # echo -e "\n# Generate list of PDBs (Pod Disruption Budget) to be deleted"
+
+  # local pdb_list
+  # pdb_list="$(mktemp)_pdb_ns_originalMinimalAvailable_list"
+
+  # ${OC} get pdb -A -o json | jq -r \
+  # '.items[] | select(.spec.minAvailable >= 1) | [.metadata.name , .metadata.namespace, .spec.minAvailable] | @tsv' \
+  # >> "${pdb_list}"
+
+  # echo -e "\n# Patch the existing PDBs to have minAvailable=0"
+
+  # while read -r p ; do
+  #   PDB=$(echo "$p" | awk '{print $1}')
+  #   echo PDB: "${PDB}"
+  #   NS=$(echo "$p" | awk '{print $2}')
+  #   echo NS: "${NS}"
+  #   ${OC} patch pdb "$PDB" -n "$NS" --type=merge -p '{"spec":{"minAvailable":0}}'
+  # done < "${pdb_list}"
+
+  # echo -e "\n# Drain OCP nodes from all evicted pods"
+
+  # ${OC} get nodes --no-headers | awk '{print $1}' | \
+  # xargs ${OC} adm drain --ignore-daemonsets --delete-emptydir-data --force --grace-period=10 --disable-eviction || :
+
+  # echo -e "\n# Return every PDB found to its original state"
+
+  # while read -r p ; do
+  #   PDB=$(echo "$p" | awk '{print $1}')
+  #   echo PDB: "${PDB}"
+  #   NS=$(echo "$p" | awk '{print $2}')
+  #   echo NS: "${NS}"
+  #   Original_Min_Available=$(echo "$p" | awk '{print $3}')
+  #   echo Original_Min_Available: "${Original_Min_Available}"
+  #   ${OC} patch pdb "${PDB}" -n "${NS}" --type=merge -p "{\"spec\":{\"minAvailable\":${Original_Min_Available}}}"
+  # done < "${pdb_list}"
+
+  # # Make sure to run ocp_login() and verify_all_nodes_ready_current_cluster() after oc adm drain
+}
+
+# ------------------------------------------
+
+# Function to verify all nodes and machines are ready in current cluster
+function verify_all_nodes_ready_current_cluster() {
+  trap_to_debug_commands;
+
+  ${OC} get nodes --no-headers | awk '{print $1}' | xargs ${OC} adm uncordon || :
+
+  wait_for_all_machines_ready
+
+  wait_for_all_nodes_ready
 
 }
 
@@ -1809,7 +1893,7 @@ function create_polarion_testcases_doc_from_junit() {
       echo "</testcases>" >> "$polarion_testcases_xml"
 
       echo -e "\n# Watch Polarion testcase-log status"
-      local polarion_job_urls="$SCRIPT_DIR/polarion_testcases.url"
+      local polarion_job_urls="$OUTPUT_DIR/polarion_testcases.url"
       watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "testcase" "$polarion_testcases_xml" "$polarion_job_urls"
 }
 
@@ -1976,7 +2060,7 @@ function create_polarion_testrun_result_from_junit() {
     # ------------------------------------------------------------------------ #
 
     # Watch testcase-log web page
-    local polarion_job_urls="$SCRIPT_DIR/polarion_testruns.url"
+    local polarion_job_urls="$OUTPUT_DIR/polarion_testruns.url"
     watch_polarion_job_status "$polarion_url" "$polarion_auth_file" "xunit" "$polarion_testrun_xml" "$polarion_job_urls"
 
     local latest_job_url
@@ -2089,7 +2173,7 @@ function install_aha() {
         rm -rf "$repo_dir"
         # git clone --quiet --branch "$repo_branch" $repo_url > /dev/null
         git clone $repo_url --single-branch # --depth 1
-        git --work-tree="$repo_dir"  --git-dir="$repo_dir"/.git checkout tags/$repo_branch
+        git --work-tree="$repo_dir"  --git-dir="$repo_dir/.git" checkout tags/$repo_branch
         # make -C "$repo_dir" &> /dev/null
         make install PREFIX="$GOBIN"
       fi

@@ -218,7 +218,7 @@ function deploy_ocp_bundle() {
   fi
 
   # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
@@ -282,7 +282,7 @@ EOF
   echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
   cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 10m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
+  watch_and_retry "$cmd" 15m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
   ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
@@ -468,7 +468,7 @@ EOF
     ${starting_csv:+startingCSV: $starting_csv}
 EOF
 
-  local duration=3m
+  local duration=5m
   echo -e "\n# Wait $duration for Subscription '${subscription_display_name}' status to be 'AtLatestKnown' or 'UpgradePending'"
 
   local subscription_status
@@ -510,6 +510,11 @@ EOF
 
   if [[ "$subscription_status" == FAILED ]] ; then
     cat "${subscription_data}"
+
+    ${OC} describe installplan -n "${subscription_namespace}"
+
+    ${OC} describe pods -n "${subscription_namespace}"
+
     FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi
 

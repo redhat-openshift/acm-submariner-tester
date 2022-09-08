@@ -8,32 +8,33 @@
 
 ### Workspace vars ###
 
-export WORKDIR=~/submariner-install
-export GOROOT="/usr/local/go"
-export PATH="${GOROOT}/bin:${PATH}"
-export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
-export OC="${GOBIN}/oc"
-export OCPUP_DIR="${WORKDIR}/ocpup"
+export WORKDIR=submariner-install
+# export GOROOT="/usr/local/go"
+# export PATH="${GOROOT}/bin:${PATH}"
+# export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
+# export OC="${GOBIN}/oc"
+export OC="oc"
+export OCPUP_DIR="ocpup"
 
 ### Env and test vars ###
 
 export CLUSTER_SET_ID="${CLUSTER_SET_ID}" # To identify the cluster-set of all clusters (will be appended to each cluster name)
 
-export CLUSTER_A_NAME="${CLUSTER_A_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
-export CLUSTER_A_YAML="${CLUSTER_A_YAML:-${WORKDIR}/setup-cluster-a.yaml}"
+export CLUSTER_A_NAME="${CLUSTER_A_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
+export CLUSTER_A_YAML="${CLUSTER_A_YAML}" # e.g. install-config-cluster-a.yaml
 export NETSHOOT_CLUSTER_A="netshoot-cl-a"
 
 export SUBM_NAMESPACE="submariner-operator"
 export BROKER_INFO="broker-info.subm"
-export BROKER_NAMESPACE="submariner-k8s-broker"
+# export BROKER_NAMESPACE="submariner-k8s-broker"
 export BROKER_NAMESPACE="submariner-broker"
 
-export CLUSTER_B_NAME="${CLUSTER_B_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
-export CLUSTER_B_YAML="${CLUSTER_B_YAML:-${WORKDIR}/setup-cluster-b.yaml}"
+export CLUSTER_B_NAME="${CLUSTER_B_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
+export CLUSTER_B_YAML="${CLUSTER_B_YAML}" # e.g. install-config-cluster-b.yaml
 export NGINX_CLUSTER_BC="nginx-cl-bc"
 
-export CLUSTER_C_NAME="${CLUSTER_C_NAME}" # Recommended cluster name: {user}-{cloud}-{project}-{index}
-export CLUSTER_C_YAML="${CLUSTER_C_YAML:-${WORKDIR}/setup-cluster-c.yaml}"
+export CLUSTER_C_NAME="${CLUSTER_C_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
+export CLUSTER_C_YAML="${CLUSTER_C_YAML}" # e.g. install-config-cluster-c.yaml
 
 export NETSHOOT_IMAGE="quay.io/submariner/nettest" # "nicolaka/netshoot"
 export NGINX_IMAGE="quay.io/openshifttest/nginx-alpine:latest" # "nginxinc/nginx-unprivileged:stable-alpine"
@@ -47,7 +48,7 @@ export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 export TEST_NS="${TEST_NS:-test-submariner}"
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
-
+export OUTPUT_DIR="${TEST_NS:-output}"
 
 ### AWS vars ###
 
@@ -70,7 +71,7 @@ export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
-
+export OS_VOLUME_API_VERSION=3
 
 ### Google vars ###
 
@@ -173,4 +174,3 @@ export MCE_INSTANCE="multiclusterengine"
 
 export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
 export MCE_CHANNEL_PREFIX="stable-"
-
