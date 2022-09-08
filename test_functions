@@ -4039,7 +4039,7 @@ function test_clusters_connected_by_service_ip() {
   export KUBECONFIG="${KUBECONF_HUB}"
 
   local curl_cmd
-  curl_cmd=("${OC}" exec "${netshoot_pod_cluster_a}" ${TEST_NS:+-n $TEST_NS} -- curl --output /dev/null --max-time 30 --verbose "${nginx_IP_cluster_bc}:${NGINX_PORT}")
+  curl_cmd=(${OC:+$OC} exec "${netshoot_pod_cluster_a}" ${TEST_NS:+-n $TEST_NS} -- curl --output /dev/null --max-time 30 --verbose "${nginx_IP_cluster_bc}:${NGINX_PORT}")
   
   if [[ ! "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on OCP cluster A (public), to Nginx service IP on managed cluster"
@@ -4359,10 +4359,7 @@ function test_subctl_show_on_merged_kubeconfigs() {
   echo -e "\n# Store SubCtl version in $SUBMARINER_VERSIONS_FILE"
   subctl show versions > "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
 
-  highlight "submariner.*${SUBM_VER_TAG}" "$SUBMARINER_VERSIONS_FILE" || \
-  BUG "Subctl shows wrong Submariner version - it should have been v${SUBM_VER_TAG}" \
-  "Please verify that all Submariner components (e.g. Gateway) have image version = ${SUBM_VER_TAG}" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=2048741"
+  highlight "submariner.*${SUBM_VER_TAG}" "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
 
@@ -4373,6 +4370,10 @@ function test_subctl_show_on_merged_kubeconfigs() {
   subctl show gateways || subctl_info=ERROR
 
   if [[ "$subctl_info" == ERROR ]] ; then
+    BUG "subctl diagnose firewall metrics does not work on merged kubeconfig" \
+    "Ignore 'subctl diagnose firewall metrics' output" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=2013711"
+    
     FAILURE "SubCtl show failed when using merged kubeconfig"
   fi
 
