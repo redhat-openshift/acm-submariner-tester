@@ -462,7 +462,7 @@ function setup_workspace() {
 
   # Create WORKDIR and local BIN dir (if not yet exists)
   mkdir -p "${WORKDIR}"
-  mkdir -p "$HOME"/.local/bin
+  mkdir -p "$HOME/.local/bin"
 
   # Add local BIN dir to PATH
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
@@ -610,7 +610,7 @@ function download_ocp_installer() {
 
   TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
   mkdir -p "$GOBIN"
-  /usr/bin/install ./oc "$GOBIN"/oc || :
+  /usr/bin/install ./oc "$GOBIN/oc" || :
 
   echo -e "\n# Install OC into user HOME bin:"
   /usr/bin/install ./oc ~/.local/bin/oc
@@ -723,7 +723,7 @@ function destroy_ocp_cluster() {
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
         "Force exist OCP destroy process" \
         "Please submit a new bug for OCP installer (in Bugzilla)"
-      )
+      ) || :
     fi
     # cd ..
 
@@ -937,7 +937,7 @@ function prepare_install_ocp_cluster() {
     change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
 
   elif [[ -s "$opt_cred_file" && "$platform" == osp ]] ; then
-    local cred_file_new="${ocp_install_dir}/clouds.yml"
+    local cred_file_new="${ocp_install_dir}/clouds.yaml"
 
     echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
     cp -f "$opt_cred_file" "$cred_file_new"
@@ -1266,7 +1266,9 @@ function test_cluster_status() {
 
 function add_elevated_user() {
   # Add new elevated user to OCP cluster
-  # Ref: https://docs.openshift.com/container-platform/latest/authentication/identity_providers/configuring-htpasswd-identity-provider.html
+  # Refs: 
+  # https://docs.openshift.com/container-platform/latest/authentication/identity_providers/configuring-htpasswd-identity-provider.html
+  # https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/
 
   trap_to_debug_commands;
 
@@ -1277,6 +1279,71 @@ function add_elevated_user() {
   cluster_name="${2:-$(print_current_cluster_name || :)}"
 
   PROMPT "Adding elevated user to cluster ${cluster_name}"
+
+  ${OC} create user ${OCP_USR} || :
+
+  TITLE "Adding certificate for OCP user '$OCP_USR'"
+
+  local crt_file="${WORKDIR}/${OCP_USR}.crt"
+  #crt_file='/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
+  crt_file="${WORKDIR}/${OCP_USR}.crt"
+  
+  cat > csr.conf <<EOF
+  [req]
+  req_extensions = v3_req
+  distinguished_name = req_distinguished_name
+  prompt = no
+  [req_distinguished_name]
+  CN = system:node:${OCP_USR}
+  O = system:nodes
+  [ v3_req ]
+  basicConstraints = CA:FALSE
+  keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+  extendedKeyUsage = clientAuth, serverAuth
+  subjectAltName = @alt_names
+  [alt_names]
+  IP = 127.0.0.1
+  DNS = localhost
+EOF
+
+  openssl req -new -newkey rsa:4096 -nodes -keyout "${cluster_name}.key" -config csr.conf \
+  -out "${cluster_name}.csr" -subj "/CN=system:node:${OCP_USR};/O=system:nodes"
+
+  ${OC} delete csr "${cluster_name}-access" --ignore-not-found
+  
+  cat <<EOF | ${OC} create -f -
+  apiVersion: certificates.k8s.io/v1
+  kind: CertificateSigningRequest
+  metadata:
+    name: ${cluster_name}-access
+  spec:
+    groups:
+    - system:authenticated
+    request: $(base64 "${cluster_name}.csr" | tr -d '\n')
+    signerName: kubernetes.io/kubelet-serving
+    usages:
+    - digital signature
+    - key encipherment
+    - server auth
+EOF
+
+  ${OC} get csr
+
+  ${OC} adm certificate approve "${cluster_name}-access"
+
+  ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
+
+  TITLE "Adding '${OCP_USR}' user credentials and context into the kubeconfig"
+
+  ${OC} config set-credentials "${OCP_USR}" --client-certificate="${crt_file}" \
+  --client-key="${cluster_name}.key" --embed-certs --kubeconfig="${kubeconfig_file}"
+
+  # ${OC} config set-context "${OCP_USR}" --cluster="${cluster_name}" \
+  # --namespace=default --user="${OCP_USR}" --kubeconfig="${kubeconfig_file}"
+
+  # ${OC} config use-context "${OCP_USR}" --kubeconfig="${kubeconfig_file}"
+
+  TITLE "Create HTPasswd for OCP user '$OCP_USR'"
 
   local http_sec_name="http.sec"
 
@@ -1293,13 +1360,11 @@ function add_elevated_user() {
     )
   fi
 
-  TITLE "Create an HTPasswd from file for OCP user '$OCP_USR'"
+  TITLE "Add the HTPasswd identity provider to cluster ${cluster_name}"
 
   ${OC} delete secret $http_sec_name -n openshift-config --ignore-not-found || :
 
-  ${OC} create secret generic ${http_sec_name} --from-file=htpasswd="${WORKDIR}"/${http_sec_name} -n openshift-config
-
-  TITLE "Add the HTPasswd identity provider to the registry"
+  ${OC} create secret generic ${http_sec_name} --from-file=htpasswd="${WORKDIR}/${http_sec_name}" -n openshift-config
 
   local cluster_auth="${WORKDIR}/cluster_auth.yaml"
 
@@ -1324,10 +1389,9 @@ EOF
 
   ${OC} describe oauth.config.openshift.io/cluster
 
-  TITLE "Adding the new user '${OCP_USR}' to OCP cluster roles"
+  TITLE "Adding admin roles to user '${OCP_USR}'"
 
-  ### Give user admin privileges
-  # ${OC} create clusterrolebinding registry-controller --clusterrole=cluster-admin --user=${OCP_USR}
+  ${OC} create clusterrolebinding master-cluster-admin-binding --clusterrole=cluster-admin --user="${OCP_USR}" || :
   ${OC} adm policy add-cluster-role-to-user cluster-admin "${OCP_USR}" --rolebinding-name cluster-admin
 
   ${OC} describe clusterrolebindings system:"${OCP_USR}"
@@ -1339,7 +1403,7 @@ EOF
 
   ${OC} get clusterrolebindings
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   local cur_context
   cur_context="$(${OC} config current-context)"
@@ -1379,28 +1443,29 @@ function uninstall_submariner() {
     cleanup_required=YES
   fi
 
+  export KUBECONFIG="$kubeconfig_file"
 
   if [[ "$cleanup_required" == YES ]] ; then
 
-    delete_submariner_namespace_and_crds
+    delete_submariner_namespace_and_crds || :
 
-    delete_submariner_cluster_roles
+    delete_submariner_cluster_roles || :
 
-    delete_lighthouse_dns_list
+    delete_lighthouse_dns_list || :
 
-    remove_submariner_gateway_labels
+    remove_submariner_gateway_labels || :
 
-    remove_submariner_machine_sets
+    remove_submariner_machine_sets || :
   fi
 
-  delete_submariner_test_namespaces
+  delete_submariner_test_namespaces || :
 
   BUG "Low disk-space on OCP cluster that was running for few weeks" \
   "Delete old E2E namespaces" \
   "https://github.com/submariner-io/submariner-website/issues/341
   https://github.com/submariner-io/shipyard/issues/355"
 
-  delete_e2e_namespaces
+  delete_e2e_namespaces || :
 
 }
 
@@ -1578,10 +1643,14 @@ function delete_all_evicted_pods_in_cluster() {
 
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   delete_all_evicted_pods_in_current_cluster || :
 
+  # export KUBECONFIG="$kubeconfig_file"
+
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  
   verify_all_nodes_ready_current_cluster
 
 }
@@ -1674,7 +1743,7 @@ function prune_all_mirror_images_from_current_cluster_registry() {
 
   TITLE "Prune all images associated with mirror registry (Brew): ${registry_url} in the registry of cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ${OC} adm prune images --registry-url "${registry_url}" --confirm \
   --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
@@ -1984,7 +2053,7 @@ function download_subctl_by_tag() {
       echo -e "\n# Install subctl into ${GOBIN}:"
       mkdir -p "$GOBIN"
       # cp -f ./subctl $GOBIN/
-      /usr/bin/install ./subctl "$GOBIN"/subctl || :
+      /usr/bin/install ./subctl "$GOBIN/subctl" || :
 
       echo -e "\n# Install subctl into user HOME bin:"
       # cp -f ./subctl ~/.local/bin/
@@ -2039,7 +2108,7 @@ function download_subctl_by_tag() {
         echo -e "\n# Install subctl into ${GOBIN}:"
         mkdir -p "$GOBIN"
         # cp -f ./subctl $GOBIN/
-        /usr/bin/install ./subctl "$GOBIN"/subctl
+        /usr/bin/install ./subctl "$GOBIN/subctl"
 
         echo -e "\n# Install subctl into user HOME bin:"
         # cp -f ./subctl ~/.local/bin/
@@ -2051,7 +2120,7 @@ function download_subctl_by_tag() {
     echo -e "\n# Copy subctl from user HOME bin into ${GOBIN}:"
     mkdir -p "$GOBIN"
     # cp -f ./subctl $GOBIN/
-    /usr/bin/install "$HOME/.local/bin/subctl" "$GOBIN"/subctl
+    /usr/bin/install "$HOME/.local/bin/subctl" "$GOBIN/subctl"
 
     echo -e "\n# Add user HOME bin to system PATH:"
     export PATH="$HOME/.local/bin:$PATH"
@@ -2312,7 +2381,7 @@ function install_broker_via_api_on_cluster() {
 
     TITLE "Creating the Submariner Broker resource in namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
 
-    cat <<EOF | oc apply -f -
+    cat <<EOF | ${OC} apply -f -
     apiVersion: submariner.io/v1alpha1
     kind: Broker
     metadata:
@@ -2656,7 +2725,7 @@ function configure_ocp_garbage_collection_and_images_prune() {
 
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
@@ -2798,7 +2867,7 @@ function configure_custom_registry_in_cluster() {
 
   [[ -n "${cluster_name}" ]] || FATAL "Cluster is inaccessible"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
   
   configure_cluster_custom_registry_secrets
 
@@ -3836,14 +3905,7 @@ function export_service_in_lighthouse() {
 
   TITLE "Wait up to 3 minutes for $svc_name to successfully sync to the broker:"
 
-  # ${OC} rollout status --timeout=3m serviceexport "${svc_name}" ${namespace:+-n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=ready serviceexport "${svc_name}" ${namespace:+-n $namespace}
-  # ${OC} wait --timeout=3m --for=condition=Valid serviceexports.multicluster.x-k8s.io/${svc_name} ${namespace:+-n $namespace}
-  BUG "Rollout status failed: ServiceExport is not a registered version" \
-  "Skip checking for ServiceExport creation status with rollout command" \
-  "https://github.com/submariner-io/submariner/issues/640"
-  # Workaround:
-  # Do not run this rollout status, but watch serviceexport description
+  ${OC} wait --timeout=3m --for=condition=Valid serviceexport "${svc_name}" ${namespace:+-n $namespace}
 
   BUG "kubectl get serviceexport with '-o wide' does not show more info" \
   "Use 'describe serviceexport' instead" \
@@ -3975,12 +4037,16 @@ function test_clusters_connected_by_service_ip() {
     # nginx_IP_cluster_bc: 100.96.43.129
 
   export KUBECONFIG="${KUBECONF_HUB}"
-  CURL_CMD="${TEST_NS:+-n $TEST_NS} ${netshoot_pod_cluster_a} -- curl --output /dev/null --max-time 30 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
+  local curl_cmd
+  curl_cmd=("${OC}" exec "${netshoot_pod_cluster_a}" ${TEST_NS:+-n $TEST_NS} -- curl --output /dev/null --max-time 30 --verbose "${nginx_IP_cluster_bc}:${NGINX_PORT}")
+  
   if [[ ! "$GLOBALNET" =~ ^(y|yes)$ ]] ; then
     PROMPT "Testing connection without GlobalNet: From Netshoot on OCP cluster A (public), to Nginx service IP on managed cluster"
 
-    if ! ${OC} exec "${CURL_CMD}" ; then
+    echo -e "\n# Running: ${curl_cmd[*]}"
+
+    if ! "${curl_cmd[@]}" ; then
       FAILURE "Submariner connection failure${SUBM_CABLE_DRIVER:+ (Cable-driver=$SUBM_CABLE_DRIVER)}.
       \n Did you install clusters with overlapping CIDRs ?"
     fi
@@ -4012,7 +4078,7 @@ function test_clusters_connected_by_service_ip() {
     msg="# Negative Test - Clusters have Overlapping CIDRs:
     \n# Nginx internal IP (${nginx_IP_cluster_bc}:${NGINX_PORT}) on cluster B/C, should NOT be reachable outside cluster, if using GlobalNet."
 
-    ${OC} exec "${CURL_CMD}" |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
+    "${curl_cmd[@]}" |& (! highlight "Failed to connect|Connection timed out" && FAILURE "$msg") || echo -e "$msg"
   fi
 }
 
@@ -4638,7 +4704,7 @@ function build_operator_latest() {  # [DEPRECATED]
   GO111MODULE="off" go get -v github.com/submariner-io/submariner-operator/... || echo -e "\n# GO Get Submariner Operator finished"
 
   # Pull latest changes and build:
-  cd "$GOPATH"/src/github.com/submariner-io/submariner-operator || return 1
+  cd "$GOPATH/src/github.com/submariner-io/submariner-operator" || return 1
   ls
 
   # go get -v -u -t ./...
@@ -4683,7 +4749,7 @@ function build_operator_latest() {  # [DEPRECATED]
   ls -l ./bin/subctl
   mkdir -p "$GOBIN"
   # cp -f ./bin/subctl $GOBIN/
-  /usr/bin/install ./bin/subctl "$GOBIN"/subctl
+  /usr/bin/install ./bin/subctl "$GOBIN/subctl"
 
   # Create symbolic link /usr/local/bin/subctl :
   #sudo ln -sf $GOPATH/src/github.com/submariner-io/submariner-operator/bin/subctl /usr/local/bin/subctl
@@ -4918,6 +4984,8 @@ function test_products_versions() {
   echo -e "\n# Cloud platform: ${ocp_cloud}"
   echo -e "\n# OCP version: ${cluster_version}"
   [[ -z "$acm_current_version" ]] || echo -e "\n# ACM version: ${acm_current_version}"
+
+  ${OC} adm release info
 
   echo -e "\n### Submariner components ###\n"
 

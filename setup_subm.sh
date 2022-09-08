@@ -587,15 +587,13 @@ cat "$SYS_LOG"
 (
   # (export_all_env_variables) # Required to run again, to check exit code, but without exporting (now in sub-shell)
 
-  # Setup and verify environment
-  setup_workspace
-
   # Set script trap functions
   set_trap_functions
 
   ### Script debug calls (should be left as a comment) ###
 
     # ${JUNIT_CMD} debug_test_polarion
+    # echo 0 > "$TEST_STATUS_FILE"
     # ${JUNIT_CMD} debug_test_pass "junit" "junit"
     # ${JUNIT_CMD} debug_test_fail "path/with  double  spaces  /  and even back\\slashes"
     # rc=$?
@@ -603,8 +601,14 @@ cat "$SYS_LOG"
     # "If RC $rc = 5 - JUNIT_CMD should continue execution"
     # ${JUNIT_CMD} debug_test_pass 100 200 300
     # ${JUNIT_CMD} debug_test_fatal
+    # ${JUNIT_CMD} debug_test_pass "1" "2" "3"
+    # ${JUNIT_CMD} debug_test_fail "should be skipped"
+    # ${JUNIT_CMD} debug_test_pass "should be skipped too"
 
   ### END Script debug ###
+
+  # Setup and verify environment
+  setup_workspace
 
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan
@@ -1242,10 +1246,12 @@ cat "$SYS_LOG"
     if [[ "$BUILD_GO_TESTS" =~ ^(y|yes)$ ]] ; then
       verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
 
-      BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
-      "Build Submariner repo from 'devel' branch instead" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
-      ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+      # BUG "Non-rootless Nginx in Submariner 0.12.0 brakes E2E tests" \
+      # "Build Submariner repo from 'devel' branch instead" \
+      # "https://bugzilla.redhat.com/show_bug.cgi?id=2083134"
+      # ${JUNIT_CMD} build_submariner_repos "devel" # "$SUBM_VER_TAG"
+
+      ${JUNIT_CMD} build_submariner_repos "$SUBM_VER_TAG"
 
     fi
 
@@ -1349,11 +1355,14 @@ cat "$SYS_LOG"
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
   fi
 
-  echo -e "\n# Publishing to Polarion should be run only If $TEST_STATUS_FILE is not empty or equal 1: [${EXIT_STATUS}] \n"
+  echo -e "\n# Publishing test results to Polarion = $UPLOAD_TO_POLARION"
+  echo -e "\n# $TEST_STATUS_FILE includes: [${EXIT_STATUS}]\n"
 
-  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is set ###
+  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is either 0 (pass) or 2 (unstable) ###
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
-      create_all_test_results_in_polarion || :
+    create_all_test_results_in_polarion || :
+  else
+    echo -e "\n# Skip publishing test results to Polarion \n"
   fi
 
   # ------------------------------------------

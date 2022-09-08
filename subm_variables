@@ -71,7 +71,7 @@ export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
 export OS_PROJECT_DOMAIN_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
-
+export OS_VOLUME_API_VERSION=3
 
 ### Google vars ###
 

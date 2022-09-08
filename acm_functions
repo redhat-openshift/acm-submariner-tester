@@ -638,14 +638,21 @@ EOF
     version: ${ACM_VER_TAG}
 EOF
 
-  echo -e "\n# Apply Klusterlet (if failed once - apply again)"
+  echo -e "\n# Apply Klusterlet (and wait until created)"
 
-  ${OC} apply --dry-run='server' -f "$Klusterlet_conf" | highlight "unchanged" \
-  || ${OC} apply -f "$Klusterlet_conf" --wait || ${OC} apply -f "$Klusterlet_conf" || :
-
-  TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
+  # ${OC} apply --dry-run='server' -f "$Klusterlet_conf" | highlight "unchanged" \
+  # || ${OC} apply -f "$Klusterlet_conf" --wait || ${OC} apply -f "$Klusterlet_conf" || :
 
   local duration=5m
+  local klusterlet_output
+  klusterlet_output="$(mktemp)_klusterlet_output"
+
+  local cmd="${OC} apply -f '$Klusterlet_conf' --wait &> '$klusterlet_output'"
+  local regex="${cluster_id} (created|unchanged)"
+
+  watch_and_retry "$cmd ; grep -E '$regex' $klusterlet_output" "$duration" || :
+
+  TITLE "Wait for KlusterletAddonConfig '${cluster_id}' to be created in the namespace '${cluster_id}'"
 
   # Wait for the new ManagedCluster $cluster_id
   ${OC} wait --timeout=$duration managedcluster "${cluster_id}" -n "${cluster_id}" --for=condition=HubAcceptedManagedCluster || :
@@ -687,7 +694,7 @@ function import_managed_cluster() {
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   TITLE "Install klusterlet (Addon) on the managed clusters"
   # Import the managed clusters
@@ -731,7 +738,7 @@ function install_submariner_operator_on_cluster() {
   local submariner_catalog
   submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   # Deploy Submariner operator as an OCP bundle
   deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
@@ -772,7 +779,7 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ${OC} get managedcluster -o wide
 
@@ -1084,11 +1091,11 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   # All checks should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
   # "Degraded" conditions should be false
 
-  ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=RegistrationApplied && \
-  ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=ManifestApplied && \
-  ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=Available && \
-  ${OC} wait --timeout=5m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
-  ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=RegistrationApplied && \
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=ManifestApplied && \
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=Available && \
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
 
   # if ! check_version_greater_or_equal "$SUBM_VER_TAG" "0.13" ; then
   #   ${OC} wait --timeout=15m managedclusteraddons "${SUBM_OPERATOR}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false
