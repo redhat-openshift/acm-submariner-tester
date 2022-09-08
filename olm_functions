@@ -225,8 +225,8 @@ function deploy_ocp_bundle() {
   echo -e "\n# Create/switch project"
   ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
 
-  echo -e "\n# Disable the default remote OperatorHub sources for OLM"
-  ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
+  # echo -e "\n# Disable the default remote OperatorHub sources for OLM"
+  # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo -e "\n# Set and export the variable \$LATEST_IIB"
   export_LATEST_IIB "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
