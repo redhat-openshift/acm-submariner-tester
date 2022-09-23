@@ -50,7 +50,7 @@ function export_all_env_variables() {
     export JUNIT_CMD_IGNORE_STATUS="record_junit $SHELL_JUNIT_XML"
   fi
 
-  echo -e "\n# Exporting Clusters variables based on \$WORKDIR, \$OCPUP_DIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
+  echo -e "\n# Exporting Clusters variables based on \$WORKDIR and \$CLUSTER_X_NAMEs from 'subm_variables' or the sourced file (imported with '--import-vars)"
 
   # Exporting variables for Managed Cluster A
   export_cluster_variables "${CLUSTER_A_NAME}" "${CLUSTER_A_YAML}" "A"
@@ -198,7 +198,7 @@ function set_missing_cli_variables() {
 
   export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
   # export OCP_VERSION=${OCP_VERSION}
-  export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO}
+  # export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO} # [DEPRECATED]
   # export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
   export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
   export INSTALL_ACM=${INSTALL_ACM:-NO}
@@ -238,6 +238,7 @@ function set_missing_cli_variables() {
 
 function export_cluster_variables() {
 ### Helper function to set cluster name and install directory (based on defaults from global variables file)
+  trap_to_debug_commands;
 
   local cluster_name="$1"
   local cluster_install_yaml="$2"
@@ -276,14 +277,14 @@ function export_cluster_variables() {
 
     echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
 
-    if [[ "$cluster_install_platform" == openstack ]] ; then
-      # TODO: This is just for Openstack (OCP install directory is defined by OCPUP yaml)
-      cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
-    else
-      cluster_install_dir="${WORKDIR}/${cluster_name}"
-    fi
+    # DEPRECATED: This was just for OCPUP (OCP install directory is defined by OCPUP yaml)
+    # if [[ "$cluster_install_platform" == openstack ]] ; then
+    #   cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
+    # else
+    #   cluster_install_dir="${WORKDIR}/${cluster_name}"
+    # fi
 
-    trap_to_debug_commands;
+    cluster_install_dir="${WORKDIR}/${cluster_name}"
 
     export "CLUSTER_${cluster_index}_NAME=${cluster_name}${CLUSTER_SET_ID}"
     export "CLUSTER_${cluster_index}_DIR=${cluster_install_dir}${CLUSTER_SET_ID}"
@@ -338,7 +339,7 @@ function show_test_plan() {
   echo -e "\n# OCP and Submariner setup and test tools:
   - CONFIG_GOLANG: $CONFIG_GOLANG
   - CONFIG_AWS_CLI: $CONFIG_AWS_CLI
-  - build_ocpup_tool_latest: $GET_OCPUP_TOOL
+  - build_ocpup_tool_latest: \$GET_OCPUP_TOOL # [DEPRECATED]
   - build_operator_latest: \$build_operator # [DEPRECATED]
   - build_submariner_repos: $BUILD_GO_TESTS
   "
@@ -623,82 +624,91 @@ function download_ocp_installer() {
 
 # ------------------------------------------
 
-function build_ocpup_tool_latest() {
-### Download OCPUP tool ###
-  PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
-  trap_to_debug_commands;
+# DEPRECATED - Not using OCPUP 
+#
+# function build_ocpup_tool_latest() {
+# ### Download OCPUP tool ###
+#   PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
+#   trap_to_debug_commands;
+#
+#   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
+#
+#   echo -e "\n# TODO: Need to fix ocpup alias"
+#
+#   cd "${WORKDIR}" || return 1
+#   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
+#   git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
+#   cd ocpup || return 1
+#
+#   # To cleanup GOLANG mod files:
+#     # go clean -cache -modcache -i -r
+#
+#   git_reset_local_repo "master" "https://github.com/redhat-openshift/ocpup.git"
+#
+#   echo -e "\n# Build OCPUP and install it to $GOBIN/"
+#   export GO111MODULE=on
+#   go mod vendor
+#   go install -mod vendor # Compile binary and moves it to $GOBIN
+#   # go build -mod vendor # Saves binary in current directory
+#
+#   echo -e "\n# Check OCPUP command:"
+#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
+#   type -P ocpup
+#
+#   ocpup -h
+#       # Create multiple OCP4 clusters and resources
+#       #
+#       # Usage:
+#       #   ocpup [command]
+#       #
+#       # Available Commands:
+#       #   create      Create resources
+#       #   deploy      deploy resources
+#       #   destroy     Destroy resources
+#       #   help        Help about any command
+#       #
+#       # Flags:
+#       #       --config string   config file location(default is ocpup.yaml in the root of the project.)
+#       #   -v, --debug           debug mode
+#       #   -h, --help            help for ocpup
+#       #
+#       # Use "ocpup [command] --help" for more information about a command.
+# }
 
-  verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
+# ------------------------------------------
 
-  echo -e "\n# TODO: Need to fix ocpup alias"
-
-  cd "${WORKDIR}" || return 1
-  # rm -rf ocpup # We should not remove directory, as it may included previous install config files
-  git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
-  cd ocpup || return 1
-
-  # To cleanup GOLANG mod files:
-    # go clean -cache -modcache -i -r
-
-  git_reset_local_repo "master" "https://github.com/redhat-openshift/ocpup.git"
-
-  echo -e "\n# Build OCPUP and install it to $GOBIN/"
-  export GO111MODULE=on
-  go mod vendor
-  go install -mod vendor # Compile binary and moves it to $GOBIN
-  # go build -mod vendor # Saves binary in current directory
-
-  echo -e "\n# Check OCPUP command:"
-  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
-  type -P ocpup
-
-  ocpup -h
-      # Create multiple OCP4 clusters and resources
-      #
-      # Usage:
-      #   ocpup [command]
-      #
-      # Available Commands:
-      #   create      Create resources
-      #   deploy      deploy resources
-      #   destroy     Destroy resources
-      #   help        Help about any command
-      #
-      # Flags:
-      #       --config string   config file location(default is ocpup.yaml in the root of the project.)
-      #   -v, --debug           debug mode
-      #   -h, --help            help for ocpup
-      #
-      # Use "ocpup [command] --help" for more information about a command.
-}
+# Deprecated (used for OCPUP)
+#
+# function destroy_cluster() {
+# ### Destroy OCP cluster ###
+#   trap_to_debug_commands;
+#
+#   local ocp_install_dir="$1"
+#   local cluster_name="$2"
+#
+#   # Deprecated (used for OCPUP)
+#   #
+#   # local installer_yaml_source="$3"
+#   #
+#   # # Get cluster platform type from OCP installer yaml
+#   # local platform
+#   # platform="$(print_ocp_install_platform "${installer_yaml_source}")"
+#   #
+#   # if [[ "${platform}" == osp ]] ; then
+#   #   # Only for Openstack - Using OCPUP
+#   #   destroy_openstack_cluster "$ocp_install_dir" "$cluster_name"
+#   # else
+#   #   destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
+#   # fi
+#
+#   destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
+#
+# }
 
 # ------------------------------------------
 
 function destroy_cluster() {
-### Destroy OCP cluster ###
-  trap_to_debug_commands;
-
-  local ocp_install_dir="$1"
-  local installer_yaml_source="$2"
-  local cluster_name="$3"
-
-  # Get cluster platform type from OCP installer yaml
-  local platform
-  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-
-  if [[ "${platform}" == openstack ]] ; then
-    # Only for Openstack - Using OCPUP
-    destroy_openstack_cluster "$ocp_install_dir" "$cluster_name"
-  else
-    destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
-  fi
-
-}
-
-# ------------------------------------------
-
-function destroy_ocp_cluster() {
-### Destroy your previous OCP cluster (public) ###
+### Destroy your previous OCP cluster ###
   trap_to_debug_commands;
   local ocp_install_dir="$1"
   local cluster_name="$2"
@@ -711,7 +721,7 @@ function destroy_ocp_cluster() {
 
   [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
-  # Only if your AWS cluster still exists (less than 48 hours passed) - run destroy command:
+  # Only if your OCP cluster still exists - run destroy command:
   echo -e "\n# TODO: should first check if it was not already purged, because it can save a lot of time."
   if [[ -d "${ocp_install_dir}" ]]; then
     TITLE "Previous OCP Installation found: ${ocp_install_dir}"
@@ -772,127 +782,133 @@ function destroy_ocp_cluster() {
 
 # ------------------------------------------
 
-function destroy_openstack_cluster() {
-### If Required - Destroy your previous Openstack cluster B (on-prem) ###
-  trap_to_debug_commands;
-  local ocp_install_dir="$1"
-  local cluster_name="$2"
+# Deprecated (used for OCPUP)
+#
+# function destroy_openstack_cluster() {
+# ### If Required - Destroy your previous Openstack cluster B (on-prem) ###
+#   trap_to_debug_commands;
+#   local ocp_install_dir="$1"
+#   local cluster_name="$2"
+#
+#   PROMPT "Destroying previous Openstack cluster: $cluster_name"
+#
+#   cd "${OCPUP_DIR}" || return 1
+#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
+#
+#   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
+#     TITLE "Using last created OCPUP yaml configuration file"
+#     local ocpup_yml
+#     ocpup_yml="$(ls -1 -tc *ocpup*.yaml | head -1 )" || :
+#
+#     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
+#
+#     local ocpup_cluster_name
+#     ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
+#
+#     local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
+#     local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
+#
+#     run_and_tail "$ocp_cmd" "$ocp_log" 5m || BUG "OCP destroy cluster B did not complete as expected"
+#
+#     # To tail all OpenShift Installer logs (in a new session):
+#       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
+#
+#     TITLE "Backup previous OCP install-config directory of cluster ${cluster_name}"
+#     backup_and_remove_dir ".config"
+#   else
+#     TITLE "OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
+#   fi
+# }
 
-  PROMPT "Destroying previous Openstack cluster: $cluster_name"
+# ------------------------------------------
 
-  cd "${OCPUP_DIR}" || return 1
-  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
+# Deprecated (used for OCPUP)
+#
+# function prepare_ocp_install() {
+# ### Prepare OCP install-config file ###
+#   trap_to_debug_commands;
+#
+#   local ocp_install_dir="$1"
+#   local cluster_name="$2"
+#   local installer_yaml_source="$3"
+#
+#   # Get cluster platform type from OCP installer yaml
+#   local platform
+#   platform="$(print_ocp_install_platform "${installer_yaml_source}")"
+#
+#   if [[ "${platform}" == osp ]] ; then
+#     # Only for Openstack - Using OCPUP
+#     # prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
+#
+#     # Without OCPUP:
+#     prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name" "$OSP_CRED_YAML"
+#   else
+#     prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
+#   fi
+#
+# }
 
-  if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
-    TITLE "Using last created OCPUP yaml configuration file"
-    local ocpup_yml
-    ocpup_yml="$(ls -1 -tc *ocpup*.yaml | head -1 )" || :
+# ------------------------------------------
 
-    ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
-
-    local ocpup_cluster_name
-    ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
-
-    local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
-    local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
-
-    run_and_tail "$ocp_cmd" "$ocp_log" 5m || BUG "OCP destroy cluster B did not complete as expected"
-
-    # To tail all OpenShift Installer logs (in a new session):
-      # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
-
-    TITLE "Backup previous OCP install-config directory of cluster ${cluster_name}"
-    backup_and_remove_dir ".config"
-  else
-    TITLE "OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
-  fi
-}
+# Deprecated (used for OCPUP)
+#
+# function prepare_install_openstack_cluster() {
+# ### Prepare installation files for OSP cluster (on-prem) ###
+#   trap_to_debug_commands;
+#
+#   local installer_yaml_source="$1"
+#   local cluster_name="$2"
+#
+#   PROMPT "Preparing installation files for OSP cluster $cluster_name"
+#
+#   cd "${OCPUP_DIR}" || return 1
+#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
+#
+# #   local terraform_osp_provider="./tf/osp-sg/versions.tf"
+# #
+# #   cat <<-EOF > $terraform_osp_provider
+# #   terraform {
+# #     required_version = ">= 0.12, <= 0.12.12"
+# #
+# #     required_providers {
+# #       openstack = {
+# #         source  = "terraform-provider-openstack/openstack"
+# #         version = "~> 1.41"
+# #       }
+# #     }
+# #   }
+# # EOF
+# #
+# #   echo -e "\n# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
+#
+#   local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
+#   echo -e "\n# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
+#   cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
+#
+#   ls -l "$installer_yaml_new"
+#   chmod 777 "$installer_yaml_new"
+#
+#   TITLE "Update $installer_yaml_new with OSP cloud info, before installing $cluster_name"
+#   ( # subshell to hide commands
+#     [[ -z "$OS_AUTH_URL" ]] || change_yaml_key_value "$installer_yaml_new" "authUrl" "$OS_AUTH_URL" "openstack"
+#     [[ -z "$OS_USERNAME" ]] || change_yaml_key_value "$installer_yaml_new" "userName" "$OS_USERNAME" "openstack"
+#     [[ -z "$OS_PROJECT_DOMAIN_ID" ]] || change_yaml_key_value "$installer_yaml_new" "projectId" "$OS_PROJECT_DOMAIN_ID" "openstack"
+#     [[ -z "$OS_PROJECT_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "projectName" "$OS_PROJECT_NAME" "openstack"
+#     [[ -z "$OS_USER_DOMAIN_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "userDomainName" "$OS_USER_DOMAIN_NAME" "openstack"
+#   )
+#
+# }
 
 # ------------------------------------------
 
 function prepare_ocp_install() {
-### Prepare OCP install-config file ###
+### Prepare installation files for OCP cluster (according to install-config file) ###
   trap_to_debug_commands;
 
   local ocp_install_dir="$1"
   local installer_yaml_source="$2"
   local cluster_name="$3"
-
-  # Get cluster platform type from OCP installer yaml
-  local platform
-  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-
-  if [[ "${platform}" == osp ]] ; then
-    # Only for Openstack - Using OCPUP
-    # prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
-
-    # Without OCPUP:
-    prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name" "$OSP_CRED_YAML"
-  else
-    prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
-  fi
-
-}
-
-# ------------------------------------------
-
-function prepare_install_openstack_cluster() {
-### Prepare installation files for OSP cluster (on-prem) ###
-  trap_to_debug_commands;
-
-  local installer_yaml_source="$1"
-  local cluster_name="$2"
-
-  PROMPT "Preparing installation files for OSP cluster $cluster_name"
-
-  cd "${OCPUP_DIR}" || return 1
-  [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
-
-#   local terraform_osp_provider="./tf/osp-sg/versions.tf"
-#
-#   cat <<-EOF > $terraform_osp_provider
-#   terraform {
-#     required_version = ">= 0.12, <= 0.12.12"
-#
-#     required_providers {
-#       openstack = {
-#         source  = "terraform-provider-openstack/openstack"
-#         version = "~> 1.41"
-#       }
-#     }
-#   }
-# EOF
-#
-#   echo -e "\n# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
-
-  local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
-  echo -e "\n# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
-  cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
-
-  ls -l "$installer_yaml_new"
-  chmod 777 "$installer_yaml_new"
-
-  TITLE "Update $installer_yaml_new with OSP cloud info, before installing $cluster_name"
-  ( # subshell to hide commands
-    [[ -z "$OS_AUTH_URL" ]] || change_yaml_key_value "$installer_yaml_new" "authUrl" "$OS_AUTH_URL" "openstack"
-    [[ -z "$OS_USERNAME" ]] || change_yaml_key_value "$installer_yaml_new" "userName" "$OS_USERNAME" "openstack"
-    [[ -z "$OS_PROJECT_DOMAIN_ID" ]] || change_yaml_key_value "$installer_yaml_new" "projectId" "$OS_PROJECT_DOMAIN_ID" "openstack"
-    [[ -z "$OS_PROJECT_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "projectName" "$OS_PROJECT_NAME" "openstack"
-    [[ -z "$OS_USER_DOMAIN_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "userDomainName" "$OS_USER_DOMAIN_NAME" "openstack"
-  )
-
-}
-
-# ------------------------------------------
-
-function prepare_install_ocp_cluster() {
-### Prepare installation files for OCP cluster (public) ###
-  trap_to_debug_commands;
-
-  local ocp_install_dir="$1"
-  local installer_yaml_source="$2"
-  local cluster_name="$3"
-  local opt_cred_file="$4"
+  # local opt_cred_file="$4"
 
   PROMPT "Preparing installation files for OCP cluster $cluster_name"
 
@@ -928,19 +944,22 @@ function prepare_install_ocp_cluster() {
   local platform
   platform="$(print_ocp_install_platform "${installer_yaml_new}")"
 
+  # Specific requirements for OCP installer on AWS:
   if [[ -n "$AWS_REGION" && "$platform" == aws ]] ; then
     echo -e "\n# Set region for AWS cluster to: $AWS_REGION"
     change_yaml_key_value "$installer_yaml_new" "region" "$AWS_REGION" "aws"
 
+  # Specific requirements for OCP installer on GCP:
   elif [[ -n "$GCP_REGION" && "$platform" == gcp ]] ; then
     echo -e "\n# Set region for GCP cluster to: $GCP_REGION"
     change_yaml_key_value "$installer_yaml_new" "region" "$GCP_REGION" "gcp"
 
-  elif [[ -s "$opt_cred_file" && "$platform" == osp ]] ; then
+  # Specific requirements for OCP installer on OSP:
+  elif [[ "$platform" == osp && -s "$OSP_CRED_YAML" ]] ; then
     local cred_file_new="${ocp_install_dir}/clouds.yaml"
 
-    echo -e "\n# Using OCP install-config.yaml - make sure to have it in the workspace: ${installer_yaml_source}"
-    cp -f "$opt_cred_file" "$cred_file_new"
+    echo -e "\n# Using clouds.yaml for OSP cluster"
+    cp -f "$OSP_CRED_YAML" "$cred_file_new"
     chmod 777 "$cred_file_new"
   fi
 
@@ -950,89 +969,97 @@ function prepare_install_ocp_cluster() {
 
 # ------------------------------------------
 
+# Deprecated (used for OCPUP)
+#
+# function create_cluster() {
+# ### Create OCP cluster ###
+#   trap_to_debug_commands;
+#
+#   local ocp_install_dir="$1"
+#   local cluster_name="$2"
+#
+#   # Deprecated (used for OCPUP)
+#   #
+#   # local installer_yaml_source="$3"
+#   #
+#   # # Get cluster platform type from OCP installer yaml
+#   # local platform
+#   # platform="$(print_ocp_install_platform "${installer_yaml_source}")"
+#   #
+#   # if [[ "${platform}" == osp ]] ; then
+#   #   # Only for Openstack - Using OCPUP
+#   #   create_openstack_cluster "$cluster_name"
+#   # else
+#   #   create_ocp_cluster "$ocp_install_dir" "$cluster_name"
+#   # fi
+#
+#   create_ocp_cluster "$ocp_install_dir" "$cluster_name"
+#
+# }
+
+# ------------------------------------------
+
+# Deprecated (used for OCPUP)
+#
+# function create_openstack_cluster() {
+# ### Create Openstack cluster B (on-prem) with OCPUP tool ###
+#   trap_to_debug_commands;
+#
+#   local cluster_name="$1"
+#
+#   PROMPT "Creating Openstack cluster $cluster_name (on-prem) with OCP-UP tool"
+#
+#   cd "${OCPUP_DIR}" || return 1
+#
+#   local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
+#
+#   echo -e "\n# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
+#   mv -f ocpup.yaml "${ocpup_yml}" || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
+#
+#   ls -l "$ocpup_yml"
+#
+#   # Due to OCPUP limitation, $ocpup_cluster_name != $CLUSTER_B_NAME
+#   local ocpup_cluster_name
+#   ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
+#   local ocpup_project_name
+#   ocpup_project_name="$(awk '/projectName:/ {print $NF}' "$ocpup_yml")"
+#   local ocpup_user_name
+#   ocpup_user_name="$(awk '/userName:/ {print $NF}' "$ocpup_yml")"
+#
+#   echo -e "\n# Running OCPUP to create OpenStack cluster B (on-prem):
+#   \n# Cluster name: $ocpup_cluster_name
+#   \n# OSP Project: $ocpup_project_name
+#   \n# OSP User: $ocpup_user_name"
+#
+#   # ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
+#   # pid=$!
+#   # tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
+#   # tail --pid=$pid -f /dev/null
+#
+#   local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
+#   local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
+#
+#   run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
+#   || FATAL "OCP create cluster B did not complete as expected"
+#
+#   # To tail all OpenShift Installer logs (in a new session):
+#     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
+#
+#   # Login to the new created cluster:
+#   # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
+#     # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
+#     # "Login to the console with user: kubeadmin, password: ..."
+# }
+#
+# ------------------------------------------
+
 function create_cluster() {
-### Create OCP cluster ###
-  trap_to_debug_commands;
-
-  local ocp_install_dir="$1"
-  local installer_yaml_source="$2"
-  local cluster_name="$3"
-
-  # Get cluster platform type from OCP installer yaml
-  local platform
-  platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-
-  if [[ "${platform}" == openstack ]] ; then
-    # Only for Openstack - Using OCPUP
-    create_openstack_cluster "$cluster_name"
-  else
-    create_ocp_cluster "$ocp_install_dir" "$cluster_name"
-  fi
-
-}
-
-# ------------------------------------------
-
-function create_openstack_cluster() {
-### Create Openstack cluster B (on-prem) with OCPUP tool ###
-  trap_to_debug_commands;
-
-  local cluster_name="$1"
-
-  PROMPT "Creating Openstack cluster $cluster_name (on-prem) with OCP-UP tool"
-
-  cd "${OCPUP_DIR}" || return 1
-
-  local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
-
-  echo -e "\n# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
-  mv -f ocpup.yaml "${ocpup_yml}" || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
-
-  ls -l "$ocpup_yml"
-
-  # Due to OCPUP limitation, $ocpup_cluster_name != $CLUSTER_B_NAME
-  local ocpup_cluster_name
-  ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
-  local ocpup_project_name
-  ocpup_project_name="$(awk '/projectName:/ {print $NF}' "$ocpup_yml")"
-  local ocpup_user_name
-  ocpup_user_name="$(awk '/userName:/ {print $NF}' "$ocpup_yml")"
-
-  echo -e "\n# Running OCPUP to create OpenStack cluster B (on-prem):
-  \n# Cluster name: $ocpup_cluster_name
-  \n# OSP Project: $ocpup_project_name
-  \n# OSP User: $ocpup_user_name"
-
-  # ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
-  # pid=$!
-  # tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
-  # tail --pid=$pid -f /dev/null
-
-  local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
-  local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
-
-  run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
-  || FATAL "OCP create cluster B did not complete as expected"
-
-  # To tail all OpenShift Installer logs (in a new session):
-    # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
-
-  # Login to the new created cluster:
-  # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
-    # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
-    # "Login to the console with user: kubeadmin, password: ..."
-}
-
-# ------------------------------------------
-
-function create_ocp_cluster() {
-### Create OCP cluster A (public) with OCP installer ###
+### Create OCP cluster with OCP installer ###
   trap_to_debug_commands;
   local ocp_install_dir="$1"
   local cluster_name="$2"
-  local cred_file="$3"
 
-  PROMPT "Creating OCP cluster (public): $cluster_name"
+  PROMPT "Creating OCP cluster: $cluster_name"
 
   if [[ ! -d "$ocp_install_dir" ]] ; then
     FATAL "OCP install directory [$ocp_install_dir] does not exist"

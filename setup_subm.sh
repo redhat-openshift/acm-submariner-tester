@@ -10,18 +10,15 @@
 # https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
-# for both cluster A (AWS) and clusters B or C (OSP/GCP/AWS), in the current directory.               #
+# for all the clusters (AWS/OSP/GCP) in the current directory. For example:                           #
 #                                                                                                     #
-# For cluster A - use Openshift-installer config format. For example on Amazon cloud:                 #
+# To create Openshift-installer config for Amazon cloud:                                              #
 # https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
 #                                                                                                     #
-# For cluster B - use OCPUP config format:                                                            #
-# https://github.com/redhat-openshift/ocpup#create-config-file                                        #
-#                                                                                                     #
-# For cluster C - use Openshift-installer config format. For example on Google cloud:                 #
+# To create Openshift-installer config for Google cloud:                                              #
 # https://github.com/openshift/installer/blob/master/docs/user/gcp/customization.md#examples          #
 #                                                                                                     #
-# To create those config files, you need to supply your AWS pull secret, and SSH public key:          #
+# To create those config files, you need to supply your Red Hat pull secret, and SSH public key:      #
 #                                                                                                     #
 # (1) Get access to OpenStack on PSI account:                                                         #
 # - Follow PnT Resource Workflow:                                                                     #
@@ -83,7 +80,6 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Clean existing OCP cluster C:                      --clean-cluster-c
   * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z / nightly]
-  * Download latest OCPUP Tool:                        --get-ocpup-tool
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
   * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
@@ -216,9 +212,9 @@ for param in ${SCRIPT_PARAMS} ; do
     export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
     export GET_OCP_INSTALLER=YES
     shift 2 ;;
-  --get-ocpup-tool)
-    export GET_OCPUP_TOOL=YES
-    shift ;;
+  # --get-ocpup-tool) # DEPRECATED
+  #   export GET_OCPUP_TOOL=YES
+  #   shift ;;
   --acm-version)
     export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
@@ -253,15 +249,15 @@ for param in ${SCRIPT_PARAMS} ; do
     export CLEAN_CLUSTER_A=YES
     shift ;;
   --destroy-cluster-b)
-    export OCPUP_TOOL_REQUIRED=YES
+    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export DESTROY_CLUSTER_B=YES
     shift ;;
   --create-cluster-b)
-    export OCPUP_TOOL_REQUIRED=YES
+    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export CREATE_CLUSTER_B=YES
     shift ;;
   --reset-cluster-b)
-    export OCPUP_TOOL_REQUIRED=YES
+    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export RESET_CLUSTER_B=YES
     shift ;;
   --clean-cluster-b)
@@ -374,13 +370,13 @@ if [[ -z "$got_user_input" ]]; then
       done
     fi
 
-    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest
-    while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      GET_OCPUP_TOOL=${input:-no}
-    done
+    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest # Deprecated
+    # while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
+    #   echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
+    #   Enter \"yes\", or nothing to skip: "
+    #   read -r input
+    #   GET_OCPUP_TOOL=${input:-no}
+    # done
 
     # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
     while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
@@ -628,21 +624,20 @@ cat "$SYS_LOG"
 
     fi
 
-    # Running build_ocpup_tool_latest for Openstack cluster only
-    # TODO: replace OCUP with common OCP installer
-
-    if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} build_ocpup_tool_latest
-
-    fi
+    # Deprecated: replaced OCPUP with common OCP installer
+    #
+    # if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
+    #
+    #   ${JUNIT_CMD} build_ocpup_tool_latest
+    #
+    # fi
 
     ### Cluster A Setup (mandatory cluster)
 
     # Running destroy or create or both (reset) for cluster A
     if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
@@ -650,7 +645,7 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
 
-      ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+      ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
@@ -662,7 +657,7 @@ cat "$SYS_LOG"
 
       if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
       fi
 
@@ -670,7 +665,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
 
-        ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
       fi
 
@@ -694,7 +689,7 @@ cat "$SYS_LOG"
 
       if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
@@ -702,7 +697,7 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
 
-        ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+        ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
