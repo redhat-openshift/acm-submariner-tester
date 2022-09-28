@@ -1708,7 +1708,7 @@ function get_latest_repository_version_by_tag() {
 
   local regex="tags/\K.*${tag_to_search}.*"
   local branch_tag
-  branch_tag="$(git ls-remote --tags "$repo_url" | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+  branch_tag="$(git ls-remote --tags "$repo_url" | sort -V -k2 | grep -Po -m 1 "$regex" || :)"
 
   [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
 
