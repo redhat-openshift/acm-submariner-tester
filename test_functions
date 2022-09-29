@@ -137,13 +137,16 @@ function export_global_script_variable() {
   export EXIT_STATUS
   : > "$TEST_STATUS_FILE"
 
+  # Filename (relative to current directory) to store OCP version 
+  export OCP_VERSION_FILE="installer.ver"
+
   # File to store SubCtl version
   export SUBCTL_VERSION_FILE="$OUTPUT_DIR/subctl.ver"
   : > "$SUBCTL_VERSION_FILE"
 
-  # File to store Submariner installed versions
-  export SUBMARINER_VERSIONS_FILE="$OUTPUT_DIR/submariner.ver"
-  : > "$SUBMARINER_VERSIONS_FILE"
+  # File to store Submariner components images versions
+  export SUBM_IMAGES_VERSION_FILE="$OUTPUT_DIR/submariners.ver"
+  : > "$SUBM_IMAGES_VERSION_FILE"
 
   # File to store SubCtl JOIN command for cluster A
   export SUBCTL_JOIN_CLUSTER_A_FILE="$OUTPUT_DIR/subctl_join_cluster_a.cmd"
@@ -196,8 +199,7 @@ function set_missing_cli_variables() {
 
   TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
 
-  export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO}
-  # export OCP_VERSION=${OCP_VERSION}
+  # export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO} # [DEPRECATED]
   # export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO} # [DEPRECATED]
   # export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
   export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
@@ -312,24 +314,22 @@ function show_test_plan() {
   else
     echo "### Execution plan: Openshift clusters creation/cleanup before Submariner deployment:
 
-    - download_ocp_installer: $GET_OCP_INSTALLER $OCP_VERSION
-
     AWS cluster A (public):
     - DESTROY_CLUSTER_A: $DESTROY_CLUSTER_A
     - CREATE_CLUSTER_A: $CREATE_CLUSTER_A
-    - RESET_CLUSTER_A: $RESET_CLUSTER_A
+    - RESET_CLUSTER_A: $RESET_CLUSTER_A $TARGET_VERION_CLUSTER_A
     - CLEAN_CLUSTER_A: $CLEAN_CLUSTER_A
 
     OSP cluster B (on-prem):
     - DESTROY_CLUSTER_B: $DESTROY_CLUSTER_B
     - CREATE_CLUSTER_B: $CREATE_CLUSTER_B
-    - RESET_CLUSTER_B: $RESET_CLUSTER_B
+    - RESET_CLUSTER_B: $RESET_CLUSTER_B $TARGET_VERION_CLUSTER_B
     - CLEAN_CLUSTER_B: $CLEAN_CLUSTER_B
 
     AWS/GCP cluster C:
     - DESTROY_CLUSTER_C: $DESTROY_CLUSTER_C
     - CREATE_CLUSTER_C: $CREATE_CLUSTER_C
-    - RESET_CLUSTER_C: $RESET_CLUSTER_C
+    - RESET_CLUSTER_C: $RESET_CLUSTER_C $TARGET_VERION_CLUSTER_C
     - CLEAN_CLUSTER_C: $CLEAN_CLUSTER_C
     "
   fi
@@ -564,11 +564,15 @@ function set_trap_functions() {
 
 function download_ocp_installer() {
 ### Download OCP installer ###
-  PROMPT "Downloading OCP Installer $1"
   trap_to_debug_commands;
 
-  # Optional param: $OCP_VERSION
-  local ocp_installer_version="${1:-latest}" # default version to download is latest formal release
+  # Target OCP version to be installed (could also be "latest")
+  local ocp_installer_version="$1"
+
+  # Target OCP directory, where to keep the installation files
+  local ocp_install_dir="$2"
+  
+  PROMPT "Downloading OCP Installer version $ocp_installer_version"
 
   local ocp_major_version
   ocp_major_version="$(echo "$ocp_installer_version" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
@@ -601,20 +605,28 @@ function download_ocp_installer() {
   download_file "${oc_installer_url}${ocp_install_gz}"
   download_file "${oc_installer_url}${oc_client_gz}"
 
-  TITLE "Extracting OCP installer and client into ${WORKDIR}: \n $ocp_install_gz \n $oc_client_gz"
+  TITLE "Extracting OCP installer and client into ${ocp_install_dir} : \n $ocp_install_gz \n $oc_client_gz"
 
   ocp_install_gz="${ocp_install_gz%%$'\n'*}"
   oc_client_gz="${oc_client_gz%%$'\n'*}"
 
-  tar -xvf "$ocp_install_gz" # -C "${WORKDIR}"
-  tar -xvf "$oc_client_gz" # -C "${WORKDIR}"
+  # Create the OCP cluster directory and extract installation files
+  echo -e "\n# Get actual OCP version from '$ocp_install_gz', and create installer directory for this version:"
+  ocp_installer_version="$(find -name "$ocp_install_gz" | grep -Eo '([0-9]+)(\.?[0-9]+)*')"
 
-  TITLE "Install OC (Openshift Client tool) into ${GOBIN}:"
+  # ocp_install_dir="${WORKDIR}/${ocp_installer_version}" # Using cluster directory instead of WORKDIR
+  mkdir -p "${ocp_install_dir}"
+  echo "${ocp_installer_version}" > "${ocp_install_dir}/${OCP_VERSION_FILE}"
+
+  tar -xvf "$ocp_install_gz" -C "${ocp_install_dir}"
+  tar -xvf "$oc_client_gz" -C "${ocp_install_dir}"
+
+  TITLE "Install OC (Openshift Client tool) version ${ocp_installer_version} into ${GOBIN}:"
   mkdir -p "$GOBIN"
-  /usr/bin/install ./oc "$GOBIN/oc" || :
+  /usr/bin/install "${ocp_install_dir}/oc" "$GOBIN/oc" || :
 
   echo -e "\n# Install OC into user HOME bin:"
-  /usr/bin/install ./oc ~/.local/bin/oc
+  /usr/bin/install "${ocp_install_dir}/oc" ~/.local/bin/oc
 
   echo -e "\n# Add user HOME bin to system PATH:"
   export PATH="$HOME/.local/bin:$PATH"
@@ -716,18 +728,19 @@ function destroy_cluster() {
   PROMPT "Destroying previous OCP cluster: $cluster_name"
   trap_to_debug_commands;
 
-  # Temp - CD to main working directory
   cd "${WORKDIR}" || return 1
-
-  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
 
   # Only if your OCP cluster still exists - run destroy command:
   echo -e "\n# TODO: should first check if it was not already purged, because it can save a lot of time."
   if [[ -d "${ocp_install_dir}" ]]; then
     TITLE "Previous OCP Installation found: ${ocp_install_dir}"
-    # cd "${ocp_install_dir}"
     if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
       echo -e "\n# Destroying OCP cluster ${cluster_name}:"
+      
+      cd "${ocp_install_dir}" || return 1
+      [[ -f openshift-install ]] \
+      || FATAL "OCP Installer is missing. Try to run again with option '--reset-cluster-a/b/c [latest / x.y.z]'"
+
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${ocp_install_dir}" || \
       ( [[ $? -eq 124 ]] && \
         BUG "WARNING: OCP destroy timeout exceeded - loop state while destroying cluster" \
@@ -735,7 +748,6 @@ function destroy_cluster() {
         "Please submit a new bug for OCP installer (in Bugzilla)"
       ) || :
     fi
-    # cd ..
 
     TITLE "Backup previous OCP install-config directory of cluster ${cluster_name}"
     parent_dir=$(dirname -- "$ocp_install_dir")
@@ -768,8 +780,8 @@ function destroy_cluster() {
   # curl -LO https://github.com/manosnoam/shift-stack-helpers/raw/master/delete_aws_dns_alias_zones.sh
   # chmod +x delete_aws_dns_alias_zones.sh
   # ./delete_aws_dns_alias_zones.sh "${cluster_name}"
-  delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS1"
-  delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS2"
+  delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS1" || :
+  delete_aws_dns_records "$AWS_ZONE_ID" "$AWS_DNS_ALIAS2" || :
 
   # Or Manually in https://console.aws.amazon.com/route53/home#hosted-zones:
     # https://console.aws.amazon.com/route53/home#resource-record-sets
@@ -912,8 +924,9 @@ function prepare_ocp_install() {
 
   PROMPT "Preparing installation files for OCP cluster $cluster_name"
 
-  cd "${WORKDIR}" || return 1
-  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--get-ocp-installer [latest / x.y.z]'"
+  # cd "${WORKDIR}" || return 1
+  cd "${ocp_install_dir}" || return 1
+  [[ -f openshift-install ]] || FATAL "OCP Installer is missing. Try to run again with option '--reset-cluster-a/b/c [latest / x.y.z]'"
 
   # To manually create new OCP install-config.yaml:
   # ./openshift-install create install-config --dir user-cluster-a
@@ -921,7 +934,7 @@ function prepare_ocp_install() {
   # $ cluster_name=user-cluster-a
   # $ mkdir ${cluster_name}
   # $ cd ${cluster_name}
-  # $ ../openshift-install create install-config
+  # $ ./openshift-install create install-config
 
     # ? SSH Public Key ~/.ssh/id_rsa.pub
     # ? Platform aws
@@ -1056,13 +1069,18 @@ function prepare_ocp_install() {
 function create_cluster() {
 ### Create OCP cluster with OCP installer ###
   trap_to_debug_commands;
+
   local ocp_install_dir="$1"
   local cluster_name="$2"
 
-  PROMPT "Creating OCP cluster: $cluster_name"
+  # Get the OCP version to be installed, as created during download_ocp_installer()
+  local ocp_target_version
+  ocp_target_version="$(< "${ocp_install_dir}/${OCP_VERSION_FILE}")" || :
+  
+  PROMPT "Creating OCP cluster version [${ocp_target_version}]: $cluster_name"
 
-  if [[ ! -d "$ocp_install_dir" ]] ; then
-    FATAL "OCP install directory [$ocp_install_dir] does not exist"
+  if [[ -z "$ocp_target_version" ]] ; then
+    FATAL "OCP install directory [$ocp_install_dir] does not exist or missing installation files"
   else
     cd "${ocp_install_dir}" || return 1
   fi
@@ -1071,7 +1089,7 @@ function create_cluster() {
   if [[ -s "metadata.json" ]] ; then
     TITLE "$ocp_install_dir directory contains previous OCP installer files. Will attempt to continue previous installation"
 
-    local ocp_cmd="../openshift-install wait-for install-complete --log-level=debug" # --dir="$CLUSTER_DIR"
+    local ocp_cmd="./openshift-install wait-for install-complete --log-level=debug" # --dir="$CLUSTER_DIR"
     local ocp_log=".openshift_install.log"
 
     run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
@@ -1081,7 +1099,7 @@ function create_cluster() {
   else
     TITLE "Run OCP installer from scratch using install-config.yaml"
 
-    local ocp_cmd="../openshift-install create cluster --log-level debug"
+    local ocp_cmd="./openshift-install create cluster --log-level debug"
     local ocp_log=".openshift_install.log"
 
     run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
@@ -4383,10 +4401,10 @@ function test_subctl_show_on_merged_kubeconfigs() {
 
   export_merged_kubeconfigs
 
-  echo -e "\n# Store SubCtl version in $SUBMARINER_VERSIONS_FILE"
-  subctl show versions > "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
+  echo -e "\n# Store SubCtl version in $SUBM_IMAGES_VERSION_FILE"
+  subctl show versions > "$SUBM_IMAGES_VERSION_FILE" || subctl_info=ERROR
 
-  highlight "submariner.*${SUBM_VER_TAG}" "$SUBMARINER_VERSIONS_FILE" || subctl_info=ERROR
+  highlight "submariner.*${SUBM_VER_TAG}" "$SUBM_IMAGES_VERSION_FILE" || subctl_info=ERROR
 
   subctl show networks || subctl_info=ERROR
 
@@ -4695,8 +4713,8 @@ function build_submariner_repos() {
 
   if [[ -z "$submariner_version_or_tag" ]] ; then
     echo -e "\n# No Submariner version was specified, retrieving installed version with subctl:"
-    subctl show versions > "$SUBMARINER_VERSIONS_FILE"
-    submariner_version_or_tag="$(grep -m 1 "submariner" "$SUBMARINER_VERSIONS_FILE" | awk '{print $3}')"
+    subctl show versions > "$SUBM_IMAGES_VERSION_FILE"
+    submariner_version_or_tag="$(grep -m 1 "submariner" "$SUBM_IMAGES_VERSION_FILE" | awk '{print $3}')"
   fi
 
   if [[ "$submariner_version_or_tag" =~ latest|devel ]]; then
