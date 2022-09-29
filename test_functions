@@ -612,7 +612,7 @@ function download_ocp_installer() {
 
   # Create the OCP cluster directory and extract installation files
   echo -e "\n# Get actual OCP version from '$ocp_install_gz', and create installer directory for this version:"
-  ocp_installer_version="$(find -name "$ocp_install_gz" | grep -Eo '([0-9]+)(\.?[0-9]+)*')"
+  ocp_installer_version="$(find -name "$ocp_install_gz" | grep -Eo '([0-9]+)(\.?[0-9]+)*' | head -1 )"
 
   # ocp_install_dir="${WORKDIR}/${ocp_installer_version}" # Using cluster directory instead of WORKDIR
   mkdir -p "${ocp_install_dir}"
@@ -726,20 +726,26 @@ function destroy_cluster() {
   local cluster_name="$2"
 
   PROMPT "Destroying previous OCP cluster: $cluster_name"
-  trap_to_debug_commands;
 
   cd "${WORKDIR}" || return 1
 
   # Only if your OCP cluster still exists - run destroy command:
   echo -e "\n# TODO: should first check if it was not already purged, because it can save a lot of time."
-  if [[ -d "${ocp_install_dir}" ]]; then
-    TITLE "Previous OCP Installation found: ${ocp_install_dir}"
+  if [[ -d "${ocp_install_dir}" ]] ; then
+
+    echo -e "\n# Previous OCP Installation found: ${ocp_install_dir}"
+    
     if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
-      echo -e "\n# Destroying OCP cluster ${cluster_name}:"
+
+      echo -e "\n# Verifying 'openshift-install' command to destroy cluster $cluster_name"
+      local oc_install_cmd
+      oc_install_cmd="${ocp_install_dir}/openshift-install"
       
-      cd "${ocp_install_dir}" || return 1
-      [[ -f openshift-install ]] \
+      [[ -f "${oc_install_cmd}" ]] || oc_install_cmd="${WORKDIR}/openshift-install"
+      [[ -f "${oc_install_cmd}" ]] \
       || FATAL "OCP Installer is missing. Try to run again with option '--reset-cluster-a/b/c [latest / x.y.z]'"
+
+      TITLE "Destroying OCP cluster ${cluster_name}:"
 
       timeout 10m ./openshift-install destroy cluster --log-level debug --dir "${ocp_install_dir}" || \
       ( [[ $? -eq 124 ]] && \
@@ -3252,6 +3258,9 @@ function upload_submariner_images_to_cluster_registry() {
 
   create_namespace "$SUBM_NAMESPACE"
 
+  local import_image_output
+  import_image_output="$(mktemp)_import_image"
+
   for img in \
     $SUBM_IMG_GATEWAY \
     $SUBM_IMG_ROUTE \
@@ -3263,11 +3272,18 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_BUNDLE \
     ; do
       local img_source="${image_path_prefix}${img}:${SUBM_VER_TAG}"
-      echo -e "\n# Importing image from a mirror OCP registry: ${img_source} \n"
+      TITLE "Importing image '${img}:${SUBM_VER_TAG}' from a mirror OCP registry: \n ${img_source}"
 
       local cmd="${OC} import-image -n ${SUBM_NAMESPACE} ${img}:${SUBM_VER_TAG} --from=${img_source} --confirm"
 
-      watch_and_retry "$cmd" 3m "Image Name:\s+${img}:${SUBM_VER_TAG}"
+      # Wait (silently) for import image to complete
+      watch_and_retry "$cmd &> $import_image_output" 3m || :
+      
+      echo -e "\n# Verify that the imported image '${img}' has correct version tag: ${SUBM_VER_TAG} \n\n"
+
+      highlight "Image Name:\s+${img}:${SUBM_VER_TAG}" "$import_image_output" # e.g. Image Name:	submariner-route-agent-rhel8:v0.13.0
+      grep "version=${SUBM_VER_TAG}" "$import_image_output" # e.g. version=v0.13.0
+      
   done
 
 }
