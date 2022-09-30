@@ -1444,7 +1444,8 @@ EOF
 
   ${OC} create clusterrolebinding master-cluster-admin-binding --clusterrole=cluster-admin --user="${OCP_USR}" || :
   ${OC} adm policy add-cluster-role-to-user cluster-admin "${OCP_USR}" --rolebinding-name cluster-admin
-
+  ${OC} adm policy add-scc-to-user privileged "${OCP_USR}"
+  
   ${OC} describe clusterrolebindings system:"${OCP_USR}"
 
   ${OC} describe clusterrole system:"${OCP_USR}"
@@ -1835,7 +1836,7 @@ function configure_namespace_for_submariner_tests() {
   TITLE "Set the default namespace to '${TEST_NS}' (if TEST_NS parameter was set in variables file)"
   if [[ -n "$TEST_NS" ]] ; then
     TITLE "Create namespace for Submariner tests: ${TEST_NS}"
-    create_namespace "${TEST_NS}"
+    create_namespace "${TEST_NS}" "privileged"
   else
     TITLE "Using the 'default' namespace for Submariner tests"
     export TEST_NS=default
@@ -1859,7 +1860,7 @@ function install_netshoot_app_on_cluster_a() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
+  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}" "privileged"
 
   ${OC} delete pod "${NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -1913,7 +1914,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   local netshoot_pod=netshoot-cl-bc-new # A new Netshoot pod on cluster B/C
   TITLE "Install $netshoot_pod on OSP managed cluster, and verify connectivity in the SAME cluster, to ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
-  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}"
+  [[ -z "$TEST_NS" ]] || create_namespace "${TEST_NS}" "privileged"
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
@@ -4258,7 +4259,7 @@ function install_new_netshoot_cluster_a() {
   PROMPT "Install NEW Netshoot pod on OCP cluster A${TEST_NS:+ (Namespace $TEST_NS)}"
   export KUBECONFIG="${KUBECONF_HUB}" # Can also use --context ${CLUSTER_A_NAME} on all further oc commands
 
-  [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS"
+  [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS" "privileged"
 
   ${OC} delete pod "${NEW_NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
