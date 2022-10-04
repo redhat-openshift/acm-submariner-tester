@@ -1499,11 +1499,8 @@ fi
 # Artifact ${OCP_USR}.sec file
 find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
-# Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
-
-# Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner*" -exec cp -R "{}" ${OUTPUT_DIR}/ \; || :
+# # Artifact broker.info file (if created with subctl deploy) - Depecated.
+# find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Compress the required artifacts (either files or directories)
 
@@ -1518,6 +1515,12 @@ find "${OUTPUT_DIR}" -maxdepth 1 \( \
 -iname "*.html" \
 \) -print0 | \
 tar --transform 's/.*\///g' --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
+
+# Compress "submariner-gather" directory (if it was created with subctl gather)
+subm_gather_gz="${OUTPUT_DIR}/submariner-gather_${DATE_TIME}.tar.gz"
+
+find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner-gather*" -print0 | \
+tar -cvzf "${subm_gather_gz}" --null -T - || :
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf "$ARCHIVE_FILE"
