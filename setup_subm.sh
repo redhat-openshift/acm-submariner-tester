@@ -73,13 +73,12 @@ Running with pre-defined parameters (optional):
   * Destroy existing OCP cluster A:                    --destroy-cluster-a
   * Destroy existing OSP cluster B:                    --destroy-cluster-b
   * Destroy existing OCP cluster C:                    --destroy-cluster-c
-  * Reset (create & destroy) OCP cluster A:            --reset-cluster-a
-  * Reset (create & destroy) OSP cluster B:            --reset-cluster-b
-  * Reset (create & destroy) OCP cluster C:            --reset-cluster-c
+  * Reset (create & destroy) OCP cluster A:            --reset-cluster-a [latest / x.y.z / nightly]
+  * Reset (create & destroy) OSP cluster B:            --reset-cluster-b [latest / x.y.z / nightly]
+  * Reset (create & destroy) OCP cluster C:            --reset-cluster-c [latest / x.y.z / nightly]
   * Clean existing OCP cluster A:                      --clean-cluster-a
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Clean existing OCP cluster C:                      --clean-cluster-c
-  * Download OCP Installer version:                    --get-ocp-installer [latest / x.y.z / nightly]
   * Install Golang if missing:                         --config-golang
   * Install AWS-CLI and configure access:              --config-aws-cli
   * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
@@ -129,7 +128,7 @@ Examples with pre-defined options:
   * Run Submariner E2E tests (with subctl)
 
 
-`./setup_subm.sh --get-ocp-installer nightly --reset-cluster-c --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
+`./setup_subm.sh --reset-cluster-c nightly --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
 
   * Download OCP installer pre-release (nightly)
   * Recreate new cluster C (e.g. on GCP)
@@ -207,11 +206,11 @@ for param in ${SCRIPT_PARAMS} ; do
   -d|--debug)
     export SCRIPT_DEBUG_MODE=YES
     shift ;;
-  --get-ocp-installer)
-    # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-    export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
-    export GET_OCP_INSTALLER=YES
-    shift 2 ;;
+  # --get-ocp-installer) # DEPRECATED
+  #   # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+  #   export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
+  #   export GET_OCP_INSTALLER=YES
+  #   shift 2 ;;
   # --get-ocpup-tool) # DEPRECATED
   #   export GET_OCPUP_TOOL=YES
   #   shift ;;
@@ -234,16 +233,19 @@ for param in ${SCRIPT_PARAMS} ; do
     export BUILD_GO_TESTS=YES
     shift ;;
   --destroy-cluster-a)
-    export OCP_INSTALLER_REQUIRED=YES
+    # export OCP_INSTALLER_REQUIRED=YES
     export DESTROY_CLUSTER_A=YES
     shift ;;
   --create-cluster-a)
-    export OCP_INSTALLER_REQUIRED=YES
+    # export OCP_INSTALLER_REQUIRED=YES
     export CREATE_CLUSTER_A=YES
     shift ;;
   --reset-cluster-a)
-    OCP_INSTALLER_REQUIRED=YES
+    # OCP_INSTALLER_REQUIRED=YES
+    export_param_value "${param_value}" "TARGET_VERION_CLUSTER_A" # $TARGET_VERION_CLUSTER_A will get the value
     export RESET_CLUSTER_A=YES
+    export DESTROY_CLUSTER_A=YES
+    export CREATE_CLUSTER_A=YES
     shift ;;
   --clean-cluster-a)
     export CLEAN_CLUSTER_A=YES
@@ -258,7 +260,10 @@ for param in ${SCRIPT_PARAMS} ; do
     shift ;;
   --reset-cluster-b)
     # export OCPUP_TOOL_REQUIRED=YES # Deprecated
+    export_param_value "${param_value}" "TARGET_VERION_CLUSTER_B" # $TARGET_VERION_CLUSTER_B will get the value
     export RESET_CLUSTER_B=YES
+    export DESTROY_CLUSTER_B=YES
+    export CREATE_CLUSTER_B=YES
     shift ;;
   --clean-cluster-b)
     export CLEAN_CLUSTER_B=YES
@@ -272,8 +277,11 @@ for param in ${SCRIPT_PARAMS} ; do
     export CREATE_CLUSTER_C=YES
     shift ;;
   --reset-cluster-c)
+    export_param_value "${param_value}" "TARGET_VERION_CLUSTER_C" # $TARGET_VERION_CLUSTER_C will get the value
     export OCP_INSTALLER_REQUIRED=YES
     export RESET_CLUSTER_C=YES
+    export DESTROY_CLUSTER_C=YES
+    export CREATE_CLUSTER_C=YES
     shift ;;
   --clean-cluster-c)
     export CLEAN_CLUSTER_C=YES
@@ -352,23 +360,24 @@ if [[ -z "$got_user_input" ]]; then
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
 
-    # User input: $GET_OCP_INSTALLER - to download_ocp_installer
-    while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
-      echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
-      Enter \"yes\", or nothing to skip: "
-      read -r input
-      GET_OCP_INSTALLER=${input:-no}
-    done
-
-    # User input: $OCP_VERSION - to download_ocp_installer with specific version
-    if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-      while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
-        echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
-        Enter version number, or nothing to install latest version: "
-        read -r input
-        OCP_VERSION=${input:-latest}
-      done
-    fi
+    # DEPRECATED: 
+    # # User input: $GET_OCP_INSTALLER - to download_ocp_installer
+    # while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
+    #   echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
+    #   Enter \"yes\", or nothing to skip: "
+    #   read -r input
+    #   GET_OCP_INSTALLER=${input:-no}
+    # done
+    #
+    # # User input: $OCP_VERSION - to download_ocp_installer with specific version
+    # if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
+    #   while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
+    #     echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
+    #     Enter version number, or nothing to install latest version: "
+    #     read -r input
+    #     OCP_VERSION=${input:-latest}
+    #   done
+    # fi
 
     # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest # Deprecated
     # while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
@@ -616,13 +625,12 @@ cat "$SYS_LOG"
     ### Destroy / Create OCP Clusters ###
 
     # Running download_ocp_installer
-    # TODO: Download specific OCP version for each cluster
-
-    if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
-
-    fi
+    # DEPRECATED: Downloading specific OCP version for each cluster now
+    # if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
+    #
+    #   ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
+    #
+    # fi
 
     # Deprecated: replaced OCPUP with common OCP installer
     #
@@ -635,15 +643,22 @@ cat "$SYS_LOG"
     ### Cluster A Setup (mandatory cluster)
 
     # Running destroy or create or both (reset) for cluster A
-    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+    if [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
     fi
 
-    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_A" "$CLUSTER_A_DIR"
 
       ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+
+    fi
+
+    if [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
       ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
@@ -655,15 +670,21 @@ cat "$SYS_LOG"
 
       # Running destroy or create or both (reset) for cluster B
 
-      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
       fi
 
-      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      
+        ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_B" "$CLUSTER_B_DIR"
 
         ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+
+      fi
+
+      if [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
 
@@ -675,27 +696,23 @@ cat "$SYS_LOG"
 
     if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-      # Running download_ocp_installer if requested, for cluster C
-
-      if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
-
-        echo -e "\n# TODO: Need to download specific OCP version for each OCP cluster (i.e. CLI flag for each cluster is required)"
-
-        # ${JUNIT_CMD} download_ocp_installer ${OCP_VERSION}
-
-      fi
-
       # Running destroy or create or both (reset) for cluster C
 
-      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
       fi
 
-      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] || [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      
+        ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_C" "$CLUSTER_C_DIR"
 
         ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+      
+      fi
+
+      if [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
 
@@ -1482,11 +1499,8 @@ fi
 # Artifact ${OCP_USR}.sec file
 find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
-# Artifact broker.info file (if created with subctl deploy)
-find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
-
-# Artifact "submariner" directory (if created with subctl gather)
-find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner*" -exec cp -R "{}" ${OUTPUT_DIR}/ \; || :
+# # Artifact broker.info file (if created with subctl deploy) - Depecated.
+# find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Compress the required artifacts (either files or directories)
 
@@ -1501,6 +1515,12 @@ find "${OUTPUT_DIR}" -maxdepth 1 \( \
 -iname "*.html" \
 \) -print0 | \
 tar --transform 's/.*\///g' --dereference --hard-dereference -cvzf "${ARCHIVE_FILE}" --null -T - || :
+
+# Compress "submariner-gather" directory (if it was created with subctl gather)
+subm_gather_gz="${OUTPUT_DIR}/submariner-gather_${DATE_TIME}.tar.gz"
+
+find "${WORKDIR}" -maxdepth 1 -type d -iname "submariner-gather*" -print0 | \
+tar -cvzf "${subm_gather_gz}" --null -T - || :
 
 TITLE "Archive \"$ARCHIVE_FILE\" now contains:"
 tar tvf "$ARCHIVE_FILE"

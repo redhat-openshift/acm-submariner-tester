@@ -1303,17 +1303,31 @@ function install_nginx_service() {
 
 # ------------------------------------------
 
-# Function to create a namespace, if it does not exist
+# Function to create/modify a namespace via API, with optional security policy
 function create_namespace() {
   trap_to_debug_commands;
 
-  local ns=$1
+  # Input params:
+  local ns="$1" # Name of namespace
+
+  # Optional: use "privileged" to allow privileged security for namespaces pods
+  # Namespace security is restricted since K8s v1.24
+  local security_policy="$2" 
+
   # Create the namespace with the API directly
-  echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
 
-  # TODO: Consider 'oc new-project' command:
-  # ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
+  cat <<EOF | ${OC} apply -f -
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: ${ns}
+    labels:
+      ${security_policy:+pod-security.kubernetes.io/audit: ${security_policy}}
+      ${security_policy:+pod-security.kubernetes.io/enforce: ${security_policy}}
+      ${security_policy:+pod-security.kubernetes.io/warn: ${security_policy}}
+EOF
 
+  # Might need also: ${security_policy:+security.openshift.io/scc.podSecurityLabelSync: false}
 }
 
 # ------------------------------------------
