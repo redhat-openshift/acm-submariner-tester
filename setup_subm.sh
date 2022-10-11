@@ -1471,6 +1471,7 @@ if [[ -s "${CLUSTER_A_YAML}" ]] ; then
 
   cp -f "${KUBECONF_HUB}" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}" || :
   cp -f "${KUBECONF_HUB}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_A_NAME}.bak" || :
+  cp -f "${CLUSTER_A_DIR}/metadata.json" "${OUTPUT_DIR}/metadata_${CLUSTER_A_NAME}.json" || :
 
   find "${CLUSTER_A_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_a_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
@@ -1481,6 +1482,7 @@ if [[ -s "${CLUSTER_B_YAML}" ]] ; then
 
   cp -f "${KUBECONF_CLUSTER_B}" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_B}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_B_NAME}.bak" || :
+  cp -f "${CLUSTER_B_DIR}/metadata.json" "${OUTPUT_DIR}/metadata_${CLUSTER_B_NAME}.json" || :
 
   find "${CLUSTER_B_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_b_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
@@ -1491,6 +1493,7 @@ if [[ -s "${CLUSTER_C_YAML}" ]] ; then
 
   cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
   cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${CLUSTER_C_DIR}/metadata.json" "${OUTPUT_DIR}/metadata_${CLUSTER_C_NAME}.json" || :
 
   find "${CLUSTER_C_DIR}" -type f -iname "*.log" -exec \
   sh -c 'cp "{}" "'${OUTPUT_DIR}'/cluster_c_$(basename "$(dirname "{}")")$(basename "{}")"' \; || :
@@ -1510,6 +1513,7 @@ find "${OUTPUT_DIR}" -maxdepth 1 \( \
 -iname "*.sec" -o \
 -iname "*.xml" -o \
 -iname "*.yaml" -o \
+-iname "*.json" -o \
 -iname "*.log" -o \
 -iname "*.ver" -o \
 -iname "*.html" \
