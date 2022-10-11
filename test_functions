@@ -1375,7 +1375,7 @@ EOF
     usages:
     - digital signature
     - key encipherment
-    - server auth
+    - client auth
 EOF
 
   ${OC} get csr
