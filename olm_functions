@@ -41,11 +41,10 @@ function export_LATEST_IIB() {
       # Workaround:
       cvp_component="cvp-teamsubmariner"
 
-    elif [[ "$operator_version" =~ 0\.12\.1 ]] ; then
-      BUG "For Submariner 0.12.1 the CVP issuer should be 'freshmaker' (CVE release)"
+    elif [[ "$operator_version" =~ 0\.12 ]] ; then
+      BUG "For Submariner 0.12.* the CVP issuer should be 'freshmaker' (CVE release)"
       # Workaround:
       cvp_issuer="freshmaker"
-
     fi
   fi
 

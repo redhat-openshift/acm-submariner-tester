@@ -1107,6 +1107,8 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
     ${OC} logs deploy/submariner-addon \
     --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
 
+    ${OC} describe submarinerconfig "${SUBM_OPERATOR}" -n "${cluster_id}" || :
+
     FATAL "Submariner ManagedClusterAddon has unhealthy conditions in ACM cluster id: $cluster_id"
   fi
 
