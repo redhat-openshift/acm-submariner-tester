@@ -97,6 +97,10 @@ function export_global_script_variable() {
   mkdir -p "$OUTPUT_DIR"
   export_absolute_path 'OUTPUT_DIR'
 
+  # Trim trailing and leading spaces from $TEST_NS
+  TEST_NS="$(echo "$TEST_NS" | xargs)"
+  export TEST_NS
+
   # Export cred files absolute paths
   export_absolute_path 'GCP_CRED_JSON'
   export_absolute_path 'OSP_CRED_YAML'
@@ -226,7 +230,7 @@ function set_missing_cli_variables() {
   export GLOBALNET=${GLOBALNET:-NO}
   export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-libreswan}
   export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-  export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
+  export CONFIG_CLOUDS_CLI=${CONFIG_CLOUDS_CLI:-NO}
   export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
   export SKIP_TESTS=${SKIP_TESTS:-NO}
   export PRINT_LOGS=${PRINT_LOGS:-NO}
@@ -338,7 +342,7 @@ function show_test_plan() {
 
   echo -e "\n# OCP and Submariner setup and test tools:
   - CONFIG_GOLANG: $CONFIG_GOLANG
-  - CONFIG_AWS_CLI: $CONFIG_AWS_CLI
+  - CONFIG_CLOUDS_CLI: $CONFIG_CLOUDS_CLI
   - build_ocpup_tool_latest: \$GET_OCPUP_TOOL # [DEPRECATED]
   - build_operator_latest: \$build_operator # [DEPRECATED]
   - build_submariner_repos: $BUILD_GO_TESTS
@@ -512,8 +516,6 @@ function setup_workspace() {
     verify_golang
   fi
 
-
-
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
     TITLE "Set Polarion access for the user [$POLARION_USR]"
@@ -524,22 +526,26 @@ function setup_workspace() {
     )
   fi
 
-  # Trim trailing and leading spaces from $TEST_NS
-  TEST_NS="$(echo "$TEST_NS" | xargs)"
-
-  # Installing AWS-CLI if $CONFIG_AWS_CLI = yes/y
-  if [[ "$CONFIG_AWS_CLI" =~ ^(y|yes)$ ]] ; then
-    TITLE "Installing and configuring AWS-CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
+  # Installing Clouds CLIs and Configuring access, if $CONFIG_CLOUDS_CLI = yes/y
+  if [[ "$CONFIG_CLOUDS_CLI" =~ ^(y|yes)$ ]] ; then
+    TITLE "Installing and configuring AWS CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
     ( # subshell to hide commands
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
     ) || FATAL "Missing AWS access details. Did you set AWS variables in the 'subm_variables' file ?"
 
-    # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
+    # For GCP
     if [[ -s "$GCP_CRED_JSON" ]] ; then
-      TITLE "Installing and configuring GCP-CLI"
+      TITLE "Installing and configuring GCP CLI"
       configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" \
       || FATAL "Missing GCP access details. Did you set GCP_CRED_JSON path in the 'subm_variables' file ?"
+    fi
+
+    # For Azure
+    if [[ -s "$AZURE_CRED_JSON" ]] ; then
+      TITLE "Installing and configuring Azure CLI"
+      configure_azure_access "${AZURE_SUBSCRIPTION}" "${AZURE_CRED_JSON}" "${WORKDIR}" \
+      || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
     fi
   fi
 

@@ -427,8 +427,7 @@ function record_junit() {
 function install_anaconda() {
   # trap_to_debug_commands
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   miniconda_bin_dir="${conda_install_dir}/bin"
@@ -480,8 +479,7 @@ function install_anaconda() {
 function verify_anaconda() {
   trap_to_debug_commands
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   miniconda_bin_dir="${conda_install_dir}/bin"
@@ -499,8 +497,7 @@ function install_conda_package() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_name="$2"
@@ -543,8 +540,7 @@ function install_local_golang() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -590,8 +586,7 @@ function install_local_terraform() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -612,8 +607,7 @@ function install_local_docker() {
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -628,8 +622,7 @@ function install_local_podman() {
   trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -644,8 +637,7 @@ function install_local_jq() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -661,8 +653,7 @@ function install_local_gcloud() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -687,6 +678,38 @@ function install_local_gcloud() {
   # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
 
   gcloud --version
+
+}
+
+# ------------------------------------------
+
+# Function to install Azure cli with Anaconda (https://anaconda.org/bioconda/azure-cli)
+function install_local_azure_cli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
+
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  install_conda_package "${conda_install_dir}" "azure-cli" "${pkg_version}" || CONDA_PKG=FAILED
+  # install_conda_package "${conda_install_dir}" "bioconda" "${pkg_version}" || CONDA_PKG=FAILED
+  # install_conda_package "${conda_install_dir}" "azure-cli" "${pkg_version}" || CONDA_PKG=FAILED
+
+  if [[ "$CONDA_PKG" == FAILED ]] ; then
+    TITLE "Installing Azure-CLI with Anaconda failed - trying to download and install from Microsoft"
+    # https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-yum?view=azure-cli-latest
+    pip install azure-cli
+    # curl -L https://aka.ms/InstallAzureCli > azure-cli-install.sh
+    # bash azure-cli-install.sh
+  fi
+
+  az --version
 
 }
 
@@ -870,12 +893,13 @@ function change_yaml_key_value() {
 # Function to install gcloud CLI, and configure GCP (Google Cloud Platform) access:
 function configure_gcp_access() {
   local gcp_cred_json="$1"
+  local work_dir="$2"
 
   if ! jq . "$gcp_cred_json" 1>/dev/null ; then
     FAILURE "JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
   fi
 
-  work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
 
   if [[ ! -x "$(command -v aws)" ]] ; then
     install_local_gcloud "$work_dir"
@@ -894,6 +918,45 @@ function configure_gcp_access() {
   # gcloud config set compute/zone us-east1
 
   gcloud auth list --filter=status:ACTIVE --format="value(account)"
+
+}
+
+# ------------------------------------------
+
+# Function to install Azure CLI, and configure Azure access:
+function configure_azure_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_subscription="$1"
+  local azure_cred_json="$2"
+  local work_dir="$3"
+
+  if ! jq . "$azure_cred_json" 1>/dev/null ; then
+    FAILURE "JQ is not installed, or file '${azure_cred_json}' is not in JSON format"
+  fi
+
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  if [[ ! -x "$(command -v az)" ]] ; then
+    install_local_azure_cli "$work_dir"
+  fi
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_app_id
+  azure_app_id=$(jq -r '.clientId' "$azure_cred_json")
+
+  local azure_pwd
+  azure_pwd=$(jq -r '.clientSecret' "$azure_cred_json")
+
+  local azure_tenant_id
+  azure_tenant_id=$(jq -r '.tenantId' "$azure_cred_json")
+
+  az login --service-principal -u "${azure_app_id}" -p "${azure_pwd}" --tenant "${azure_tenant_id}"
+
+  az account set -s "${azure_subscription}"
+
+  cp "$azure_cred_json" ~/.azure/osServicePrincipal.json
 
 }
 
@@ -936,8 +999,6 @@ function install_awscli() {
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
   aws_bin_dir="${2:-$(dirname "$work_dir")/miniconda}"
 
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   if [[ ! -x "$(command -v aws)" ]] ; then
@@ -2165,8 +2226,6 @@ function install_aha() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   if [[ ! -x "$(command -v aha)" ]] ; then

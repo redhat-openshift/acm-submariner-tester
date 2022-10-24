@@ -80,7 +80,7 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Clean existing OCP cluster C:                      --clean-cluster-c
   * Install Golang if missing:                         --config-golang
-  * Install AWS-CLI and configure access:              --config-aws-cli
+  * Configure clouds access and CLI tools:             --config-clouds
   * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
 
 - Submariner installation options:
@@ -318,8 +318,8 @@ for param in ${SCRIPT_PARAMS} ; do
   --config-golang)
     export CONFIG_GOLANG=YES
     shift ;;
-  --config-aws-cli)
-    export CONFIG_AWS_CLI=YES
+  --config-clouds)
+    export CONFIG_CLOUDS_CLI=YES
     shift ;;
   --junit)
     export CREATE_JUNIT_XML=YES
@@ -550,12 +550,12 @@ if [[ -z "$got_user_input" ]]; then
     CONFIG_GOLANG=${input:-NO}
   done
 
-  # User input: $CONFIG_AWS_CLI - to install latest aws-cli and configure aws access
-  while [[ ! "$CONFIG_AWS_CLI" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install aws-cli and configure AWS access ? ${NO_COLOR}
+  # User input: $CONFIG_CLOUDS_CLI - to configure clouds access and required CLI tools
+  while [[ ! "$CONFIG_CLOUDS_CLI" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to configure clouds access and required CLI tools ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    CONFIG_AWS_CLI=${input:-NO}
+    CONFIG_CLOUDS_CLI=${input:-NO}
   done
 
   # User input: $CREATE_JUNIT_XML - to record shell results into Junit xml output
