@@ -786,6 +786,15 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   local managed_cluster_cloud
   managed_cluster_cloud=$(${OC} get managedcluster -o jsonpath="{.items[?(@.metadata.name=='${cluster_id}')].metadata.labels.cloud}")
 
+  if [[ "$managed_cluster_cloud" == "Unknown" ]] ; then
+    BUG "Azure Managed cluster '${cluster_id}' Cloud label is Unknown" \
+    "Retrieve Platform name from clusterClaims instead" \
+    "https://issues.redhat.com/browse/ACM-1918"
+    
+    managed_cluster_cloud="$(${OC} get managedcluster "${cluster_id}" -o json \
+    | jq -r '.status.clusterClaims[] | select(.name == "platform.open-cluster-management.io").value')"
+  fi
+
   TITLE "Configure ${cluster_id} credentials for the Submariner Gateway on cloud: $managed_cluster_cloud"
 
   local cluster_secret_name
