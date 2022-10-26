@@ -769,10 +769,13 @@ function configure_submariner_addon_for_acm_managed_cluster() {
 
   export KUBECONFIG="$kubeconfig_file"
 
-  echo -e "\n# Generate '\$cluster_id' according to the current cluster name of kubeconfig: $kubeconfig_file"
-
+  echo -e "\n# Generate new Managed cluster ID according to the current cluster name of kubeconfig: $kubeconfig_file"
   local cluster_id
   cluster_id="acm-$(print_current_cluster_name || :)"
+
+  echo -e "\n# Get OCP Infra ID for the new Managed cluster" # Required for Azure Resource group identification
+  local ocp_infra_id
+  ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
 
   PROMPT "Configure Submariner $SUBM_VER_TAG Addon for ACM managed cluster: $cluster_id"
 
@@ -805,6 +808,9 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   elif [[ "$managed_cluster_cloud" == "Google" ]] ; then
     cluster_secret_name="${cluster_id}-gcp-creds"
     configure_submariner_addon_for_google "$cluster_id" "$cluster_secret_name"
+  elif [[ "$managed_cluster_cloud" == "Azure" ]] ; then
+    cluster_secret_name="${cluster_id}-azure-creds"
+    configure_submariner_addon_for_azure "$cluster_id" "$cluster_secret_name" "$ocp_infra_id"
   elif [[ "$managed_cluster_cloud" == "Openstack" ]] ; then
     cluster_secret_name="${cluster_id}-osp-creds"
     configure_submariner_addon_for_openstack "$cluster_id" "$cluster_secret_name"
@@ -884,6 +890,43 @@ function configure_submariner_addon_for_google() {
     type: Opaque
     data:
         osServiceAccount.json: $(base64 -w0 "${GCP_CRED_JSON}")
+EOF
+  )
+
+}
+
+# ------------------------------------------
+
+function configure_submariner_addon_for_azure() {
+  ### Configure submariner addon credentials for Azure cloud ###
+
+  trap_to_debug_commands;
+
+  local cluster_id="${1}"
+  local cluster_secret_name="${2}"
+
+  local ocp_infra_id="${3}"
+  local azure_resource_group_name="${ocp_infra_id}-rg"
+
+  TITLE "Azure Resource group is required, and it should be named as OCP infra ID of Azure Cluster + '-rg'"
+
+  az group show -n "$azure_resource_group_name"
+
+  TITLE "Using '${cluster_secret_name}' for Submariner on Azure"
+
+  ( # subshell to hide commands
+    [[ -s "$AZURE_CRED_JSON" ]] || FATAL "Azure credentials file (json) is required to configure Submariner in the managed cluster '${cluster_id}'"
+
+    cat <<EOF | ${OC} apply -f -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: ${cluster_secret_name}
+      namespace: ${cluster_id}
+    type: Opaque
+    data:
+      baseDomainResourceGroupName: $(base64 -w0 "${azure_resource_group_name}")
+      osServicePrincipal.json: $(base64 -w0 "${AZURE_CRED_JSON}")
 EOF
   )
 
