@@ -206,14 +206,6 @@ for param in ${SCRIPT_PARAMS} ; do
   -d|--debug)
     export SCRIPT_DEBUG_MODE=YES
     shift ;;
-  # --get-ocp-installer) # DEPRECATED
-  #   # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-  #   export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
-  #   export GET_OCP_INSTALLER=YES
-  #   shift 2 ;;
-  # --get-ocpup-tool) # DEPRECATED
-  #   export GET_OCPUP_TOOL=YES
-  #   shift ;;
   --acm-version)
     export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
@@ -251,15 +243,12 @@ for param in ${SCRIPT_PARAMS} ; do
     export CLEAN_CLUSTER_A=YES
     shift ;;
   --destroy-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export DESTROY_CLUSTER_B=YES
     shift ;;
   --create-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export CREATE_CLUSTER_B=YES
     shift ;;
   --reset-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export_param_value "${param_value}" "TARGET_VERION_CLUSTER_B" # $TARGET_VERION_CLUSTER_B will get the value
     export RESET_CLUSTER_B=YES
     export DESTROY_CLUSTER_B=YES
@@ -359,33 +348,6 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
-
-    # DEPRECATED: 
-    # # User input: $GET_OCP_INSTALLER - to download_ocp_installer
-    # while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
-    #   echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
-    #   Enter \"yes\", or nothing to skip: "
-    #   read -r input
-    #   GET_OCP_INSTALLER=${input:-no}
-    # done
-    #
-    # # User input: $OCP_VERSION - to download_ocp_installer with specific version
-    # if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-    #   while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
-    #     echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
-    #     Enter version number, or nothing to install latest version: "
-    #     read -r input
-    #     OCP_VERSION=${input:-latest}
-    #   done
-    # fi
-
-    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest # Deprecated
-    # while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
-    #   echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
-    #   Enter \"yes\", or nothing to skip: "
-    #   read -r input
-    #   GET_OCPUP_TOOL=${input:-no}
-    # done
 
     # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
     while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
@@ -621,25 +583,7 @@ cat "$SYS_LOG"
   ### OCP Clusters Setups and preparations (unless requested to --skip-ocp-setup) ###
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-
-    ### Destroy / Create OCP Clusters ###
-
-    # Running download_ocp_installer
-    # DEPRECATED: Downloading specific OCP version for each cluster now
-    # if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
-    #
-    #   ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
-    #
-    # fi
-
-    # Deprecated: replaced OCPUP with common OCP installer
-    #
-    # if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
-    #
-    #   ${JUNIT_CMD} build_ocpup_tool_latest
-    #
-    # fi
-
+   
     ### Cluster A Setup (mandatory cluster)
 
     # Running destroy or create or both (reset) for cluster A

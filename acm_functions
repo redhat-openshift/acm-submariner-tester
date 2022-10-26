@@ -575,7 +575,7 @@ function create_new_managed_cluster_in_acm_hub() {
   trap_to_debug_commands;
 
   local cluster_id="${1}"
-  local cluster_type="${2:}"
+  local cluster_type="${2}"
 
   # Run on ACM MultiClusterHub cluster (Manager)
   export KUBECONFIG="${KUBECONF_HUB}"
