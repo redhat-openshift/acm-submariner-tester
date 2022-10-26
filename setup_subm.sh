@@ -1084,7 +1084,7 @@ cat "$SYS_LOG"
       fi
 
     fi
-    ### END of INSTALL_WITH_SUBCTL ###
+    ### END of install with subctl / API ###
 
     TITLE "Once Submariner install is completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
