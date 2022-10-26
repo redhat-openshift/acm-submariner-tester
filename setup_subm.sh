@@ -989,28 +989,36 @@ cat "$SYS_LOG"
 
     [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
 
+    # Create the the Managed cluster instance, and a new cluster-set for the managed clusters
+
     ${JUNIT_CMD} create_acm_multiclusterhub
-
-
-    # Setup ACM Managed Clusters
 
     ${JUNIT_CMD} create_clusterset_for_submariner_in_acm_hub
 
-    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
-
-    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-    fi
-
-    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-    fi
   fi
   ### END of ACM Install ###
+
+  # Add first managed cluster A (the Hub)
+  if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
+
+  fi
+
+  # Add second managed cluster B
+  if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+  fi
+
+  # Add third managed cluster C
+  if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+  fi
+  
 
   ### Install Submariner (if using --subctl-version) ###
 

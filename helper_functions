@@ -1440,16 +1440,18 @@ function print_current_cluster_cloud() {
 
   export KUBECONFIG="$KUBECONFIG"
 
-  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster || echo 'Unknown')" 
 
   if [[ "$cluster_platform" == "AWS" ]] ; then
     echo "Amazon"
   elif [[ "$cluster_platform" == "GCP" ]] ; then
     echo "Google"
+  elif [[ "$cluster_platform" == "Azure" ]] ; then
+    echo "Azure"
   elif [[ "$cluster_platform" == "OpenStack" ]] ;
     then echo "Openstack"
   else
-    echo "Unknown"
+    echo "$cluster_platform"
   fi
 
 }
