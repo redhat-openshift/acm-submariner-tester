@@ -138,6 +138,7 @@ export SUBM_GLOBALNET="submariner-globalnet"
 export SUBM_LH_COREDNS="submariner-lighthouse-coredns"
 
 export SUBM_IMG_SUBCTL="${SUBM_IMG_SUBCTL:-subctl-rhel8}"
+export SUBM_IMG_NETTEST="${SUBM_IMG_NETTEST:-nettest-rhel8}"
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
 export SUBM_IMG_NETWORK="${SUBM_IMG_NETWORK:-submariner-networkplugin-syncer-rhel8}"

@@ -1574,6 +1574,8 @@ function install_netshoot_app_on_cluster_a() {
 
   ${OC} delete pod "${NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
+  set_netshoot_image_spec
+  
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
   # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
@@ -1584,6 +1586,60 @@ function install_netshoot_app_on_cluster_a() {
   TITLE "Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run="${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
   ${OC} describe pod "${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
+}
+
+# ------------------------------------------
+
+function set_netshoot_image_spec() {
+  ### Export the $NETSHOOT_IMAGE (Nettest) registry url (downstream or upstream) ###
+    trap_to_debug_commands;
+
+    # Optional param: $1 => Nettest version to find in the registry
+    local submariner_version_or_tag="${1:-$SUBM_VER_TAG}"
+
+    # Downloading Nettest from VPN_REGISTRY (downstream) only
+    # if using --registry-images and if $submariner_version_or_tag is not devel
+    # if check_version_greater_or_equal "${submariner_version_or_tag}" "0.14" && \
+    if  [[ ! "$submariner_version_or_tag" =~ devel ]] && \
+        [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
+        [[ -n "$SUBM_IMG_NETTEST" ]] ; then
+
+      # Fix the $submariner_version_or_tag value for custom images
+      set_subm_version_tag_var "submariner_version_or_tag"
+
+      local netshot_image_url
+      netshot_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_NETTEST}:${submariner_version_or_tag}"
+
+      TITLE "Setting \$NETSHOOT_IMAGE security policy and downstream registry url: \n ${netshot_image_url}"
+
+      export "NETSHOOT_IMAGE=${netshot_image_url}"
+    
+      export NETSHOOT_IMAGE_OVERRIDES='{
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "imagePullPolicy": "IfNotPresent",
+                                "securityContext": {
+                                    "allowPrivilegeEscalation": false,
+                                    "capabilities": {
+                                        "drop": [
+                                            "ALL"
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        '
+
+    else
+      TITLE "Using upstream \$NETSHOOT_IMAGE url: $NETSHOOT_IMAGE"
+    fi
 }
 
 # ------------------------------------------
@@ -1628,8 +1684,11 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
+  set_netshoot_image_spec
+
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=3m --request-timeout=3m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" "${NETSHOOT_IMAGE_OVERRIDES:+--overrides $NETSHOOT_IMAGE_OVERRIDES}" \
+  -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 }
 
 # ------------------------------------------
@@ -1765,7 +1824,7 @@ function download_subctl_by_tag() {
 
     cd "${WORKDIR}" || return 1
 
-    # Downloading SubCtl from VPN_REGISTRY (downstream)
+    # Downloading SubCtl from VPN_REGISTRY (downstream) only
     # if using --registry-images and if $submariner_version_or_tag is not devel
     if [[ ! "$submariner_version_or_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
@@ -1775,7 +1834,7 @@ function download_subctl_by_tag() {
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f "${subctl_xz}" "${subctl_xz}".bak
 
-      TITLE "Downloading SubCtl from $SUBM_IMG_SUBCTL"
+      TITLE "Downloading SubCtl from [${VPN_REGISTRY}]"
 
       # Fix the $submariner_version_or_tag value for custom images
       set_subm_version_tag_var "submariner_version_or_tag"
@@ -3966,6 +4025,8 @@ function install_new_netshoot_cluster_a() {
   [[ -z "$TEST_NS" ]] || create_namespace "$TEST_NS" "privileged"
 
   ${OC} delete pod "${NEW_NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
+
+  set_netshoot_image_spec
 
   ${OC} run "${NEW_NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" \
   --pod-running-timeout=5m --restart=Never -- sleep 5m
