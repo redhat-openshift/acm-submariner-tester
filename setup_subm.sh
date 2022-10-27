@@ -80,7 +80,7 @@ Running with pre-defined parameters (optional):
   * Clean existing OSP cluster B:                      --clean-cluster-b
   * Clean existing OCP cluster C:                      --clean-cluster-c
   * Install Golang if missing:                         --config-golang
-  * Install AWS-CLI and configure access:              --config-aws-cli
+  * Configure clouds access and CLI tools:             --config-clouds
   * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
 
 - Submariner installation options:
@@ -206,14 +206,6 @@ for param in ${SCRIPT_PARAMS} ; do
   -d|--debug)
     export SCRIPT_DEBUG_MODE=YES
     shift ;;
-  # --get-ocp-installer) # DEPRECATED
-  #   # E.g as in https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-  #   export_param_value "${param_value}" "OCP_VERSION" # $OCP_VERSION will get the value
-  #   export GET_OCP_INSTALLER=YES
-  #   shift 2 ;;
-  # --get-ocpup-tool) # DEPRECATED
-  #   export GET_OCPUP_TOOL=YES
-  #   shift ;;
   --acm-version)
     export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
@@ -251,15 +243,12 @@ for param in ${SCRIPT_PARAMS} ; do
     export CLEAN_CLUSTER_A=YES
     shift ;;
   --destroy-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export DESTROY_CLUSTER_B=YES
     shift ;;
   --create-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export CREATE_CLUSTER_B=YES
     shift ;;
   --reset-cluster-b)
-    # export OCPUP_TOOL_REQUIRED=YES # Deprecated
     export_param_value "${param_value}" "TARGET_VERION_CLUSTER_B" # $TARGET_VERION_CLUSTER_B will get the value
     export RESET_CLUSTER_B=YES
     export DESTROY_CLUSTER_B=YES
@@ -318,8 +307,8 @@ for param in ${SCRIPT_PARAMS} ; do
   --config-golang)
     export CONFIG_GOLANG=YES
     shift ;;
-  --config-aws-cli)
-    export CONFIG_AWS_CLI=YES
+  --config-clouds)
+    export CONFIG_CLOUDS_CLI=YES
     shift ;;
   --junit)
     export CREATE_JUNIT_XML=YES
@@ -359,33 +348,6 @@ if [[ -z "$got_user_input" ]]; then
   done
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(yes|y)$ ]]; then
-
-    # DEPRECATED: 
-    # # User input: $GET_OCP_INSTALLER - to download_ocp_installer
-    # while [[ ! "$GET_OCP_INSTALLER" =~ ^(yes|no)$ ]]; do
-    #   echo -e "\n${YELLOW}Do you want to download OCP Installer ? ${NO_COLOR}
-    #   Enter \"yes\", or nothing to skip: "
-    #   read -r input
-    #   GET_OCP_INSTALLER=${input:-no}
-    # done
-    #
-    # # User input: $OCP_VERSION - to download_ocp_installer with specific version
-    # if [[ "$GET_OCP_INSTALLER" =~ ^(yes|y)$ ]]; then
-    #   while [[ ! "$OCP_VERSION" =~ ^[0-9\.]+$ ]]; do
-    #     echo -e "\n${YELLOW}Which OCP Installer version do you want to download ? ${NO_COLOR}
-    #     Enter version number, or nothing to install latest version: "
-    #     read -r input
-    #     OCP_VERSION=${input:-latest}
-    #   done
-    # fi
-
-    # User input: $GET_OCPUP_TOOL - to build_ocpup_tool_latest # Deprecated
-    # while [[ ! "$GET_OCPUP_TOOL" =~ ^(yes|no)$ ]]; do
-    #   echo -e "\n${YELLOW}Do you want to download OCPUP tool ? ${NO_COLOR}
-    #   Enter \"yes\", or nothing to skip: "
-    #   read -r input
-    #   GET_OCPUP_TOOL=${input:-no}
-    # done
 
     # User input: $RESET_CLUSTER_A - to destroy_ocp_cluster AND create_ocp_cluster
     while [[ ! "$RESET_CLUSTER_A" =~ ^(yes|no)$ ]]; do
@@ -550,12 +512,12 @@ if [[ -z "$got_user_input" ]]; then
     CONFIG_GOLANG=${input:-NO}
   done
 
-  # User input: $CONFIG_AWS_CLI - to install latest aws-cli and configure aws access
-  while [[ ! "$CONFIG_AWS_CLI" =~ ^(yes|no)$ ]]; do
-    echo -e "\n${YELLOW}Do you want to install aws-cli and configure AWS access ? ${NO_COLOR}
+  # User input: $CONFIG_CLOUDS_CLI - to configure clouds access and required CLI tools
+  while [[ ! "$CONFIG_CLOUDS_CLI" =~ ^(yes|no)$ ]]; do
+    echo -e "\n${YELLOW}Do you want to configure clouds access and required CLI tools ? ${NO_COLOR}
     Enter \"yes\", or nothing to skip: "
     read -r input
-    CONFIG_AWS_CLI=${input:-NO}
+    CONFIG_CLOUDS_CLI=${input:-NO}
   done
 
   # User input: $CREATE_JUNIT_XML - to record shell results into Junit xml output
@@ -621,25 +583,7 @@ cat "$SYS_LOG"
   ### OCP Clusters Setups and preparations (unless requested to --skip-ocp-setup) ###
 
   if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-
-    ### Destroy / Create OCP Clusters ###
-
-    # Running download_ocp_installer
-    # DEPRECATED: Downloading specific OCP version for each cluster now
-    # if [[ "$GET_OCP_INSTALLER" =~ ^(y|yes)$ ]] && [[ "$OCP_INSTALLER_REQUIRED" =~ ^(y|yes)$ ]] ; then
-    #
-    #   ${JUNIT_CMD} download_ocp_installer "${OCP_VERSION}"
-    #
-    # fi
-
-    # Deprecated: replaced OCPUP with common OCP installer
-    #
-    # if [[ "$GET_OCPUP_TOOL" =~ ^(y|yes)$ ]] && [[ "$OCPUP_TOOL_REQUIRED" =~ ^(y|yes)$ ]] ; then
-    #
-    #   ${JUNIT_CMD} build_ocpup_tool_latest
-    #
-    # fi
-
+   
     ### Cluster A Setup (mandatory cluster)
 
     # Running destroy or create or both (reset) for cluster A
@@ -989,28 +933,36 @@ cat "$SYS_LOG"
 
     [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
 
+    # Create the the Managed cluster instance, and a new cluster-set for the managed clusters
+
     ${JUNIT_CMD} create_acm_multiclusterhub
-
-
-    # Setup ACM Managed Clusters
 
     ${JUNIT_CMD} create_clusterset_for_submariner_in_acm_hub
 
-    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
-
-    if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-    fi
-
-    if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-    fi
   fi
   ### END of ACM Install ###
+
+  # Add first managed cluster A (the Hub)
+  if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
+
+  fi
+
+  # Add second managed cluster B
+  if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+  fi
+
+  # Add third managed cluster C
+  if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+  fi
+  
 
   ### Install Submariner (if using --subctl-version) ###
 
@@ -1076,7 +1028,7 @@ cat "$SYS_LOG"
       fi
 
     fi
-    ### END of INSTALL_WITH_SUBCTL ###
+    ### END of install with subctl / API ###
 
     TITLE "Once Submariner install is completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"

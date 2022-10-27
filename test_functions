@@ -24,7 +24,7 @@ function export_all_env_variables() {
     # export VERBOSE_FLAG="--v=2"
     # export OC="$OC $VERBOSE_FLAG"
 
-    # Debug flag for ocpup and aws commands
+    # Debug flag for aws commands
     export DEBUG_FLAG="--debug"
 
   else
@@ -96,6 +96,10 @@ function export_global_script_variable() {
   OUTPUT_DIR+="_${DATE_TIME}"
   mkdir -p "$OUTPUT_DIR"
   export_absolute_path 'OUTPUT_DIR'
+
+  # Trim trailing and leading spaces from $TEST_NS
+  TEST_NS="$(echo "$TEST_NS" | xargs)"
+  export TEST_NS
 
   # Export cred files absolute paths
   export_absolute_path 'GCP_CRED_JSON'
@@ -199,8 +203,6 @@ function set_missing_cli_variables() {
 
   TITLE "Set CLI/User inputs if missing (Default is 'NO' for any unset variable)"
 
-  # export GET_OCP_INSTALLER=${GET_OCP_INSTALLER:-NO} # [DEPRECATED]
-  # export GET_OCPUP_TOOL=${GET_OCPUP_TOOL:-NO} # [DEPRECATED]
   # export BUILD_OPERATOR=${BUILD_OPERATOR:-NO} # [DEPRECATED]
   export BUILD_GO_TESTS=${BUILD_GO_TESTS:-NO}
   export INSTALL_ACM=${INSTALL_ACM:-NO}
@@ -226,7 +228,7 @@ function set_missing_cli_variables() {
   export GLOBALNET=${GLOBALNET:-NO}
   export SUBM_CABLE_DRIVER=${SUBM_CABLE_DRIVER:-libreswan}
   export CONFIG_GOLANG=${CONFIG_GOLANG:-NO}
-  export CONFIG_AWS_CLI=${CONFIG_AWS_CLI:-NO}
+  export CONFIG_CLOUDS_CLI=${CONFIG_CLOUDS_CLI:-NO}
   export SKIP_OCP_SETUP=${SKIP_OCP_SETUP:-NO}
   export SKIP_TESTS=${SKIP_TESTS:-NO}
   export PRINT_LOGS=${PRINT_LOGS:-NO}
@@ -278,13 +280,6 @@ function export_cluster_variables() {
     cluster_name="${cluster_install_platform:+${cluster_install_platform}-}${cluster_name}"
 
     echo -e "\n# Exporting \$KUBECONF_CLUSTER_${cluster_index} for $cluster_name"
-
-    # DEPRECATED: This was just for OCPUP (OCP install directory is defined by OCPUP yaml)
-    # if [[ "$cluster_install_platform" == openstack ]] ; then
-    #   cluster_install_dir="${OCPUP_DIR}/.config/$(awk '/clusterName:/ {print $NF}' "${cluster_install_yaml}")"
-    # else
-    #   cluster_install_dir="${WORKDIR}/${cluster_name}"
-    # fi
 
     cluster_install_dir="${WORKDIR}/${cluster_name}"
 
@@ -338,8 +333,7 @@ function show_test_plan() {
 
   echo -e "\n# OCP and Submariner setup and test tools:
   - CONFIG_GOLANG: $CONFIG_GOLANG
-  - CONFIG_AWS_CLI: $CONFIG_AWS_CLI
-  - build_ocpup_tool_latest: \$GET_OCPUP_TOOL # [DEPRECATED]
+  - CONFIG_CLOUDS_CLI: $CONFIG_CLOUDS_CLI
   - build_operator_latest: \$build_operator # [DEPRECATED]
   - build_submariner_repos: $BUILD_GO_TESTS
   "
@@ -512,8 +506,6 @@ function setup_workspace() {
     verify_golang
   fi
 
-
-
   # Set Polarion access if $UPLOAD_TO_POLARION = yes/y
   if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] ; then
     TITLE "Set Polarion access for the user [$POLARION_USR]"
@@ -524,22 +516,26 @@ function setup_workspace() {
     )
   fi
 
-  # Trim trailing and leading spaces from $TEST_NS
-  TEST_NS="$(echo "$TEST_NS" | xargs)"
-
-  # Installing AWS-CLI if $CONFIG_AWS_CLI = yes/y
-  if [[ "$CONFIG_AWS_CLI" =~ ^(y|yes)$ ]] ; then
-    TITLE "Installing and configuring AWS-CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
+  # Installing Clouds CLIs and Configuring access, if $CONFIG_CLOUDS_CLI = yes/y
+  if [[ "$CONFIG_CLOUDS_CLI" =~ ^(y|yes)$ ]] ; then
+    TITLE "Installing and configuring AWS CLI for profile [$AWS_PROFILE_NAME] and region [$AWS_REGION]"
     ( # subshell to hide commands
     configure_aws_access \
     "${AWS_PROFILE_NAME}" "${AWS_REGION}" "${AWS_KEY}" "${AWS_SECRET}" "${WORKDIR}" "${GOBIN}"
     ) || FATAL "Missing AWS access details. Did you set AWS variables in the 'subm_variables' file ?"
 
-    # TODO: need to add script CLI flag for $config_gcp_cli = yes/y
+    # For GCP
     if [[ -s "$GCP_CRED_JSON" ]] ; then
-      TITLE "Installing and configuring GCP-CLI"
+      TITLE "Installing and configuring GCP CLI"
       configure_gcp_access "${GCP_CRED_JSON}" "${WORKDIR}" \
       || FATAL "Missing GCP access details. Did you set GCP_CRED_JSON path in the 'subm_variables' file ?"
+    fi
+
+    # For Azure
+    if [[ -s "$AZURE_CRED_JSON" ]] ; then
+      TITLE "Installing and configuring Azure CLI"
+      configure_azure_access "${AZURE_SUBSCRIPTION}" "${AZURE_CRED_JSON}" "${WORKDIR}" \
+      || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
     fi
   fi
 
@@ -636,89 +632,6 @@ function download_ocp_installer() {
 
 # ------------------------------------------
 
-# DEPRECATED - Not using OCPUP 
-#
-# function build_ocpup_tool_latest() {
-# ### Download OCPUP tool ###
-#   PROMPT "Downloading latest OCP-UP tool, and installing it to $GOBIN/ocpup"
-#   trap_to_debug_commands;
-#
-#   verify_golang || FATAL "No Golang compiler found. Try to run again with option '--config-golang'"
-#
-#   echo -e "\n# TODO: Need to fix ocpup alias"
-#
-#   cd "${WORKDIR}" || return 1
-#   # rm -rf ocpup # We should not remove directory, as it may included previous install config files
-#   git clone https://github.com/redhat-openshift/ocpup || echo -e "\n# OCPUP directory already exists"
-#   cd ocpup || return 1
-#
-#   # To cleanup GOLANG mod files:
-#     # go clean -cache -modcache -i -r
-#
-#   git_reset_local_repo "master" "https://github.com/redhat-openshift/ocpup.git"
-#
-#   echo -e "\n# Build OCPUP and install it to $GOBIN/"
-#   export GO111MODULE=on
-#   go mod vendor
-#   go install -mod vendor # Compile binary and moves it to $GOBIN
-#   # go build -mod vendor # Saves binary in current directory
-#
-#   echo -e "\n# Check OCPUP command:"
-#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool installation error occurred."
-#   type -P ocpup
-#
-#   ocpup -h
-#       # Create multiple OCP4 clusters and resources
-#       #
-#       # Usage:
-#       #   ocpup [command]
-#       #
-#       # Available Commands:
-#       #   create      Create resources
-#       #   deploy      deploy resources
-#       #   destroy     Destroy resources
-#       #   help        Help about any command
-#       #
-#       # Flags:
-#       #       --config string   config file location(default is ocpup.yaml in the root of the project.)
-#       #   -v, --debug           debug mode
-#       #   -h, --help            help for ocpup
-#       #
-#       # Use "ocpup [command] --help" for more information about a command.
-# }
-
-# ------------------------------------------
-
-# Deprecated (used for OCPUP)
-#
-# function destroy_cluster() {
-# ### Destroy OCP cluster ###
-#   trap_to_debug_commands;
-#
-#   local ocp_install_dir="$1"
-#   local cluster_name="$2"
-#
-#   # Deprecated (used for OCPUP)
-#   #
-#   # local installer_yaml_source="$3"
-#   #
-#   # # Get cluster platform type from OCP installer yaml
-#   # local platform
-#   # platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-#   #
-#   # if [[ "${platform}" == osp ]] ; then
-#   #   # Only for Openstack - Using OCPUP
-#   #   destroy_openstack_cluster "$ocp_install_dir" "$cluster_name"
-#   # else
-#   #   destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
-#   # fi
-#
-#   destroy_ocp_cluster "$ocp_install_dir" "$cluster_name"
-#
-# }
-
-# ------------------------------------------
-
 function destroy_cluster() {
 ### Destroy your previous OCP cluster ###
   trap_to_debug_commands;
@@ -800,125 +713,6 @@ function destroy_cluster() {
 
 # ------------------------------------------
 
-# Deprecated (used for OCPUP)
-#
-# function destroy_openstack_cluster() {
-# ### If Required - Destroy your previous Openstack cluster B (on-prem) ###
-#   trap_to_debug_commands;
-#   local ocp_install_dir="$1"
-#   local cluster_name="$2"
-#
-#   PROMPT "Destroying previous Openstack cluster: $cluster_name"
-#
-#   cd "${OCPUP_DIR}" || return 1
-#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
-#
-#   if [[ -f "${ocp_install_dir}/metadata.json" ]] ; then
-#     TITLE "Using last created OCPUP yaml configuration file"
-#     local ocpup_yml
-#     ocpup_yml="$(ls -1 -tc *ocpup*.yaml | head -1 )" || :
-#
-#     ls -l "$ocpup_yml" || FATAL "OCPUP yaml configuration file is missing."
-#
-#     local ocpup_cluster_name
-#     ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
-#
-#     local ocp_cmd="ocpup destroy clusters ${DEBUG_FLAG} --config $ocpup_yml"
-#     local ocp_log="${OCPUP_DIR}/.config/${ocpup_cluster_name}/.openshift_install.log"
-#
-#     run_and_tail "$ocp_cmd" "$ocp_log" 5m || BUG "OCP destroy cluster B did not complete as expected"
-#
-#     # To tail all OpenShift Installer logs (in a new session):
-#       # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
-#
-#     TITLE "Backup previous OCP install-config directory of cluster ${cluster_name}"
-#     backup_and_remove_dir ".config"
-#   else
-#     TITLE "OCP cluster config (metadata.json) was not found in ${ocp_install_dir}. Skipping cluster Destroy."
-#   fi
-# }
-
-# ------------------------------------------
-
-# Deprecated (used for OCPUP)
-#
-# function prepare_ocp_install() {
-# ### Prepare OCP install-config file ###
-#   trap_to_debug_commands;
-#
-#   local ocp_install_dir="$1"
-#   local cluster_name="$2"
-#   local installer_yaml_source="$3"
-#
-#   # Get cluster platform type from OCP installer yaml
-#   local platform
-#   platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-#
-#   if [[ "${platform}" == osp ]] ; then
-#     # Only for Openstack - Using OCPUP
-#     # prepare_install_openstack_cluster "$installer_yaml_source" "$cluster_name"
-#
-#     # Without OCPUP:
-#     prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name" "$OSP_CRED_YAML"
-#   else
-#     prepare_install_ocp_cluster "$ocp_install_dir" "$installer_yaml_source" "$cluster_name"
-#   fi
-#
-# }
-
-# ------------------------------------------
-
-# Deprecated (used for OCPUP)
-#
-# function prepare_install_openstack_cluster() {
-# ### Prepare installation files for OSP cluster (on-prem) ###
-#   trap_to_debug_commands;
-#
-#   local installer_yaml_source="$1"
-#   local cluster_name="$2"
-#
-#   PROMPT "Preparing installation files for OSP cluster $cluster_name"
-#
-#   cd "${OCPUP_DIR}" || return 1
-#   [[ -x "$(command -v ocpup)" ]] || FATAL "OCPUP tool is missing. Try to run again with option '--get-ocpup-tool'"
-#
-# #   local terraform_osp_provider="./tf/osp-sg/versions.tf"
-# #
-# #   cat <<-EOF > $terraform_osp_provider
-# #   terraform {
-# #     required_version = ">= 0.12, <= 0.12.12"
-# #
-# #     required_providers {
-# #       openstack = {
-# #         source  = "terraform-provider-openstack/openstack"
-# #         version = "~> 1.41"
-# #       }
-# #     }
-# #   }
-# # EOF
-# #
-# #   echo -e "\n# Setting terraform-provider-openstack version into $terraform_osp_provider: \n$(< $terraform_osp_provider)"
-#
-#   local installer_yaml_new="${OCPUP_DIR}/ocpup.yaml"
-#   echo -e "\n# Copy $cluster_name installer configuration: ${installer_yaml_source} \n# To OCPUP directory: ${installer_yaml_new}"
-#   cp -f "${installer_yaml_source}" "${installer_yaml_new}" || FATAL "$cluster_name installer configuration file for OCPUP is missing."
-#
-#   ls -l "$installer_yaml_new"
-#   chmod 777 "$installer_yaml_new"
-#
-#   TITLE "Update $installer_yaml_new with OSP cloud info, before installing $cluster_name"
-#   ( # subshell to hide commands
-#     [[ -z "$OS_AUTH_URL" ]] || change_yaml_key_value "$installer_yaml_new" "authUrl" "$OS_AUTH_URL" "openstack"
-#     [[ -z "$OS_USERNAME" ]] || change_yaml_key_value "$installer_yaml_new" "userName" "$OS_USERNAME" "openstack"
-#     [[ -z "$OS_PROJECT_DOMAIN_ID" ]] || change_yaml_key_value "$installer_yaml_new" "projectId" "$OS_PROJECT_DOMAIN_ID" "openstack"
-#     [[ -z "$OS_PROJECT_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "projectName" "$OS_PROJECT_NAME" "openstack"
-#     [[ -z "$OS_USER_DOMAIN_NAME" ]] || change_yaml_key_value "$installer_yaml_new" "userDomainName" "$OS_USER_DOMAIN_NAME" "openstack"
-#   )
-#
-# }
-
-# ------------------------------------------
-
 function prepare_ocp_install() {
 ### Prepare installation files for OCP cluster (according to install-config file) ###
   trap_to_debug_commands;
@@ -986,90 +780,6 @@ function prepare_ocp_install() {
 
 }
 
-# ------------------------------------------
-
-# Deprecated (used for OCPUP)
-#
-# function create_cluster() {
-# ### Create OCP cluster ###
-#   trap_to_debug_commands;
-#
-#   local ocp_install_dir="$1"
-#   local cluster_name="$2"
-#
-#   # Deprecated (used for OCPUP)
-#   #
-#   # local installer_yaml_source="$3"
-#   #
-#   # # Get cluster platform type from OCP installer yaml
-#   # local platform
-#   # platform="$(print_ocp_install_platform "${installer_yaml_source}")"
-#   #
-#   # if [[ "${platform}" == osp ]] ; then
-#   #   # Only for Openstack - Using OCPUP
-#   #   create_openstack_cluster "$cluster_name"
-#   # else
-#   #   create_ocp_cluster "$ocp_install_dir" "$cluster_name"
-#   # fi
-#
-#   create_ocp_cluster "$ocp_install_dir" "$cluster_name"
-#
-# }
-
-# ------------------------------------------
-
-# Deprecated (used for OCPUP)
-#
-# function create_openstack_cluster() {
-# ### Create Openstack cluster B (on-prem) with OCPUP tool ###
-#   trap_to_debug_commands;
-#
-#   local cluster_name="$1"
-#
-#   PROMPT "Creating Openstack cluster $cluster_name (on-prem) with OCP-UP tool"
-#
-#   cd "${OCPUP_DIR}" || return 1
-#
-#   local ocpup_yml=${cluster_name}_ocpup.yaml # $(basename -- "$installer_yaml_source")
-#
-#   echo -e "\n# Renaming ocpup.yaml configuration file to: ${ocpup_yml}"
-#   mv -f ocpup.yaml "${ocpup_yml}" || FATAL "ocpup.yaml configuration was not found in ${OCPUP_DIR}"
-#
-#   ls -l "$ocpup_yml"
-#
-#   # Due to OCPUP limitation, $ocpup_cluster_name != $CLUSTER_B_NAME
-#   local ocpup_cluster_name
-#   ocpup_cluster_name="$(awk '/clusterName:/ {print $NF}' "$ocpup_yml")"
-#   local ocpup_project_name
-#   ocpup_project_name="$(awk '/projectName:/ {print $NF}' "$ocpup_yml")"
-#   local ocpup_user_name
-#   ocpup_user_name="$(awk '/userName:/ {print $NF}' "$ocpup_yml")"
-#
-#   echo -e "\n# Running OCPUP to create OpenStack cluster B (on-prem):
-#   \n# Cluster name: $ocpup_cluster_name
-#   \n# OSP Project: $ocpup_project_name
-#   \n# OSP User: $ocpup_user_name"
-#
-#   # ocpup create clusters ${DEBUG_FLAG} --config "$ocpup_yml" &
-#   # pid=$!
-#   # tail --pid=$pid -f --retry .config/${ocpup_cluster_name}/.openshift_install.log &
-#   # tail --pid=$pid -f /dev/null
-#
-#   local ocp_cmd="ocpup create clusters ${DEBUG_FLAG} --config $ocpup_yml"
-#   local ocp_log=".config/${ocpup_cluster_name}/.openshift_install.log"
-#
-#   run_and_tail "$ocp_cmd" "$ocp_log" 100m "Access the OpenShift web-console" \
-#   || FATAL "OCP create cluster B did not complete as expected"
-#
-#   # To tail all OpenShift Installer logs (in a new session):
-#     # find . -name "*openshift_install.log" | xargs tail --pid=$pid -f # tail ocpup/.config/${ocpup_cluster_name}/.openshift_install.log
-#
-#   # Login to the new created cluster:
-#   # $ grep "Access the OpenShift web-console" -r . --include='*.log' -A 1
-#     # "Access the OpenShift web-console here: https://console-openshift-console.apps..."
-#     # "Login to the console with user: kubeadmin, password: ..."
-# }
-#
 # ------------------------------------------
 
 function create_cluster() {
@@ -3348,12 +3058,6 @@ function run_subctl_join_cmd_from_file() {
   # Note: You don’t need to specify the CIDRs - subctl determines them on its own.
   # The user can specify them if necessary, and subctl will use that information
   # (warning the user if it doesn’t match what it determined).
-  #
-  # For example:
-  # ./bin/subctl join --operator-image submariner-operator:local --kubeconfig \
-  # ~/automation/ocp-install/ocpup/.config/cl1/auth/kubeconfig --clusterid cluster3 \
-  # --repository local --version local broker-info.subm
-  #
 
   # export KUBECONFIG="${KUBECONFIG}:${KUBECONF_HUB}"
   ${OC} config view
