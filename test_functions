@@ -1687,7 +1687,7 @@ function test_basic_cluster_connectivity_before_submariner() {
   set_netshoot_image_spec
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=3m --request-timeout=3m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" "${NETSHOOT_IMAGE_OVERRIDES:+--overrides $NETSHOOT_IMAGE_OVERRIDES}" \
+  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" "${NETSHOOT_IMAGE_OVERRIDES:+--overrides=$NETSHOOT_IMAGE_OVERRIDES}" \
   -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 }
 

@@ -714,15 +714,21 @@ cat "$SYS_LOG"
       fi
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-      \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+      \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
       # Cluster A configurations
-      ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+       
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      # Cluster B custom configurations for OpenStack
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+
+      fi
+
+      # Cluster B configurations (plus custom configurations for OpenStack)
+      
       if [[ -s "$CLUSTER_B_YAML" ]] ; then
 
         echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
@@ -740,28 +746,26 @@ cat "$SYS_LOG"
 
         fi
 
-        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
+        if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+          ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
+
+          # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+        fi
 
       fi
 
       # Cluster C configurations
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-        #
-        # ${JUNIT_CMD} open_firewall_ports_on_cluster_c
-        #
-        # ${JUNIT_CMD} label_first_gateway_cluster_c
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
       fi
+
     fi
     ### END of all Clusters configurations
 
@@ -841,7 +845,7 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
 
@@ -849,7 +853,7 @@ cat "$SYS_LOG"
 
       fi
 
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 

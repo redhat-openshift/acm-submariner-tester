@@ -901,7 +901,7 @@ function configure_gcp_access() {
 
   work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  if [[ ! -x "$(command -v aws)" ]] ; then
+  if [[ ! -x "$(command -v gcloud)" ]] ; then
     install_local_gcloud "$work_dir"
   fi
 
