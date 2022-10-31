@@ -894,17 +894,18 @@ function update_kubeconfig_default_context() {
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
-
-  [[ -s "$kubeconfig_file" ]] || FATAL "Kubeconfig file '$kubeconfig_file' is missing or empty"
-
-  export KUBECONFIG="$kubeconfig_file"
-
   local cluster_name
-  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  if [[ -s "$kubeconfig_file" ]] ; then
+    export KUBECONFIG="$kubeconfig_file"
+    cluster_name="${2:-$(print_current_cluster_name || :)}"
+  else
+    cluster_name="Unknown"
+  fi
 
   PROMPT "Updating kubeconfig to the default context on cluster ${cluster_name}"
 
-  [[ -f ${kubeconfig_file} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${kubeconfig_file}"
+  [[ -s ${kubeconfig_file} ]] || FATAL "Openshift deployment configuration for cluster '$cluster_name' is missing: ${kubeconfig_file}"
 
   # Backup/restore KUBECONFIG to/from: ${kubeconfig_file}.bak
   if [[ -s ${kubeconfig_file}.bak ]] ; then
@@ -964,14 +965,12 @@ function update_kubeconfig_default_context() {
     ${OC} config rename-context "${cur_context}" "${renamed_context}" || :
   fi
 
-  TITLE "Updating KUBECONFIG current context '$renamed_context' to use:
+  TITLE "Updating kubeconfig current context '$renamed_context' to use:
   Cluster name: $renamed_context
   Auth user: $cur_username
   Namespace: default
   "
 
-  # ${OC} config set "contexts.${renamed_context}.cluster" "${renamed_context}"
-  # ${OC} config set "contexts.${renamed_context}.namespace" "default"
   ${OC} config set-context "$renamed_context" --cluster "$renamed_context" --user "${cur_username}" --namespace "default"
   ${OC} config use-context "$renamed_context"
 
@@ -1039,16 +1038,18 @@ function add_elevated_user() {
   local cluster_name
   cluster_name="${2:-$(print_current_cluster_name || :)}"
 
-  PROMPT "Adding elevated user to cluster ${cluster_name}"
+  PROMPT "Adding elevated user with certificate to cluster ${cluster_name}"
+
+  # TITLE "Restart OCP API server pods"
+
+  # oc delete pods --all -n openshift-apiserver
+   
+  # ${OC} wait --timeout=5m --for=condition=ready pod -n openshift-apiserver --all
+
+  TITLE "Creating Certificate data '${cluster_name}.csr' and private key for OCP user '$OCP_USR'"
 
   ${OC} create user ${OCP_USR} || :
 
-  TITLE "Adding certificate for OCP user '$OCP_USR'"
-
-  local crt_file="${WORKDIR}/${OCP_USR}.crt"
-  #crt_file='/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
-  crt_file="${WORKDIR}/${OCP_USR}.crt"
-  
   cat > csr.conf <<EOF
   [req]
   req_extensions = v3_req
@@ -1068,10 +1069,18 @@ function add_elevated_user() {
 EOF
 
   openssl req -new -newkey rsa:4096 -nodes -keyout "${cluster_name}.key" -config csr.conf \
-  -out "${cluster_name}.csr" -subj "/CN=system:node:${OCP_USR};/O=system:nodes"
+  -out "${cluster_name}.csr" -subj "/CN=system:admin" # "/CN=system:node:${OCP_USR};/O=system:nodes"
+ 
+  TITLE "Verify the SSL key '${cluster_name}.key' and CSR data file '${cluster_name}.csr'"
+
+  openssl rsa -in "${cluster_name}.key" -check
+
+  openssl req -text -noout -verify -in "${cluster_name}.csr"
+
+  TITLE "Approving the Certificate Signing Request as '${cluster_name}-access'"
 
   ${OC} delete csr "${cluster_name}-access" --ignore-not-found
-  
+
   cat <<EOF | ${OC} create -f -
   apiVersion: certificates.k8s.io/v1
   kind: CertificateSigningRequest
@@ -1081,28 +1090,37 @@ EOF
     groups:
     - system:authenticated
     request: $(base64 "${cluster_name}.csr" | tr -d '\n')
-    signerName: kubernetes.io/kubelet-serving
+    signerName: kubernetes.io/kube-apiserver-client
     usages:
     - digital signature
     - key encipherment
     - client auth
 EOF
-
-  ${OC} get csr
+    # signerName: kubernetes.io/kubelet-serving
+    # - server auth
 
   ${OC} adm certificate approve "${cluster_name}-access"
 
+  ${OC} wait --timeout=1m --for=condition=approved csr "${cluster_name}-access"
+
+  ${OC} get csr |& highlight 'Approved,Issued'
+
+  local crt_file
+  crt_file="${kubeconfig_file}.crt"
+
+  TITLE "Download and validate the new certificate '${crt_file}'"
+
   ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
 
-  TITLE "Adding '${OCP_USR}' user credentials and context into the kubeconfig"
+  openssl x509 -in "${crt_file}" -text -noout
+
+  TITLE "Updating '${OCP_USR}' user credentials and certificate into the kubeconfig"
 
   ${OC} config set-credentials "${OCP_USR}" --client-certificate="${crt_file}" \
   --client-key="${cluster_name}.key" --embed-certs --kubeconfig="${kubeconfig_file}"
 
-  # ${OC} config set-context "${OCP_USR}" --cluster="${cluster_name}" \
-  # --namespace=default --user="${OCP_USR}" --kubeconfig="${kubeconfig_file}"
-
-  # ${OC} config use-context "${OCP_USR}" --kubeconfig="${kubeconfig_file}"
+  ${OC} config set-credentials system:admin --client-certificate="${crt_file}" \
+  --client-key="${cluster_name}.key" --embed-certs --kubeconfig="${kubeconfig_file}"
 
   TITLE "Create HTPasswd for OCP user '$OCP_USR'"
 
@@ -1165,8 +1183,21 @@ EOF
 
   ${OC} get clusterrolebindings
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
 
+  TITLE "Updating kubeconfig Certificate Authority"
+
+  ${OC} get pods -n openshift-authentication
+  
+  local auth_pod
+  auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
+  
+  ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > ingress-ca.crt
+
+  ${OC} config set-cluster $(${OC} config view -o jsonpath='{.clusters[0].name}') \
+  --certificate-authority=ingress-ca.crt --kubeconfig="${kubeconfig_file}" --embed-certs
+  # --server=$(oc config view -o jsonpath='{.clusters[0].cluster.server}')
+  
   local cur_context
   cur_context="$(${OC} config current-context)"
   TITLE "Kubeconfig current-context is: $cur_context"
@@ -1405,14 +1436,8 @@ function delete_all_evicted_pods_in_cluster() {
 
   PROMPT "Delete all evicted pods in cluster $cluster_name"
 
-  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
-
   delete_all_evicted_pods_in_current_cluster || :
 
-  # export KUBECONFIG="$kubeconfig_file"
-
-  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
-  
   verify_all_nodes_ready_current_cluster
 
 }
@@ -1505,7 +1530,7 @@ function prune_all_mirror_images_from_current_cluster_registry() {
 
   TITLE "Prune all images associated with mirror registry (Brew): ${registry_url} in the registry of cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
 
   ${OC} adm prune images --registry-url "${registry_url}" --confirm \
   --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
@@ -2546,7 +2571,7 @@ function configure_ocp_garbage_collection_and_images_prune() {
 
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
 
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
@@ -2688,7 +2713,7 @@ function configure_custom_registry_in_cluster() {
 
   [[ -n "${cluster_name}" ]] || FATAL "Cluster is inaccessible"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
   
   configure_cluster_custom_registry_secrets
 

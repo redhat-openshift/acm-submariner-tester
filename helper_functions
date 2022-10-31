@@ -1120,7 +1120,7 @@ function ocp_login() {
   ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
 
   local ocp_pwd # stored later in ${2}
-  local crt_file # stored later in ${3}
+  # local crt_file # stored later in ${3}
 
   local ocp_server
   ocp_server="${4:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
@@ -1135,18 +1135,29 @@ function ocp_login() {
     FAILURE "User '${ocp_usr}' or Server '${ocp_server}' is missing"
   fi
 
-  TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
+  TITLE "Login with user ${ocp_usr} and Certificate to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
+
+  ${OC} wait --timeout=5m --for=condition=ready pod -n openshift-authentication \
+  --field-selector=status.phase!='Pending|Terminating'
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    crt_file="${3}"   
-    [[ -s "$crt_file" ]] || crt_file=''
+    # crt_file="${3}"   
+    # [[ -s "$crt_file" ]] || crt_file=''
 
-    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+    # cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+
+    # crt_file="ingress-ca.crt"
+    # auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
+    # ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
+    
+    crt_file="${KUBECONFIG}.crt"
+
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify"
     
     # Attempt to login up to 10 minutes
-    watch_and_retry "$cmd" 10m
+    watch_and_retry "$cmd || $cmd --certificate-authority=${crt_file}" 10m
   )
 }
 
