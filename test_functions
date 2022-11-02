@@ -4825,7 +4825,7 @@ function test_products_versions() {
 # Show OCP clusters versions, and Submariner version
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  ${OC} status || FAILURE "OCP cluster is inaccessible"
+  ${OC} status || { FAILURE "OCP cluster is inaccessible" ; return ; }
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -4920,7 +4920,7 @@ function save_cluster_info_to_file() {
 # Save important OCP cluster and Submariner information to local files
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  ${OC} status || FAILURE "OCP cluster is inaccessible"
+  ${OC} status || { FAILURE "OCP cluster is inaccessible" ; return ; }
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -5007,7 +5007,7 @@ function print_resources_and_pod_logs() {
 
   PROMPT "Gather logs of OCP, ACM and Submariner in ${cluster_name}"
 
-  ${OC} status || FAILURE "OCP cluster is inaccessible"
+  ${OC} status || { FAILURE "OCP cluster is inaccessible" ; return ; }
 
   ${OC} version || :
 
