@@ -856,7 +856,7 @@ function verify_yaml_for_cluster_deploy() {
 # ------------------------------------------
 
 function print_ocp_install_platform() {
-  # Print the platform type found in the OCP install yaml
+  # Print the platform type found in the OCP install yaml, as a 3 letters abbreviation
   trap '' DEBUG # DONT trap_to_debug_commands
 
   local ocp_install_yaml="$1"
@@ -864,8 +864,16 @@ function print_ocp_install_platform() {
 
   platform_name="$(grep -Poz 'platform:\s*(name:\s*)?\K\w+' "$ocp_install_yaml" | awk -F'\0' '{print $1; exit}')" 2>/dev/null || :
 
-  # If it's "openstack", it will print "osp" instead
-  echo "${platform_name/openstack/osp}"
+  if [[ "$platform_name" == openstack ]] ; then
+    # If it's "openstack", it will print "osp" instead
+    echo "osp"
+  elif [[ "$platform_name" == azure ]] ; then
+    # If it's "azure", it will print "osp" instead
+    echo "azr"
+  else
+    # For all the other platforms print just the first 3 letters
+    echo "${platform_name:0:3}"
+  fi
 
 }
 
