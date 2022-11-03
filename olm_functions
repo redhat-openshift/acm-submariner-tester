@@ -221,8 +221,9 @@ function deploy_ocp_bundle() {
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  echo -e "\n# Create/switch project"
-  ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  echo -e "\n# Create/switch to the bundle namespace"
+  # ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  create_namespace "${bundle_namespace}"
 
   # echo -e "\n# Disable the default remote OperatorHub sources for OLM"
   # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
