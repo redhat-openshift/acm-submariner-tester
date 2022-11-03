@@ -694,11 +694,10 @@ function import_managed_cluster() {
   local kluster_crd="./${cluster_id}-klusterlet-crd.yaml"
   local kluster_import="./${cluster_id}-import.yaml"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   TITLE "Install klusterlet (Addon) on the managed clusters"
   # Import the managed clusters
-  # info "install the agent"
   ${OC} apply -f "${kluster_crd}"
 
   # TODO: Wait for klusterlet crds installation
@@ -738,7 +737,7 @@ function install_submariner_operator_on_cluster() {
   local submariner_catalog
   submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   # Deploy Submariner operator as an OCP bundle
   deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
@@ -782,7 +781,7 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   ${OC} get managedcluster -o wide
 

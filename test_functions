@@ -1191,7 +1191,7 @@ EOF
 
   ${OC} get clusterrolebindings
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   TITLE "Updating kubeconfig Certificate Authority"
 
@@ -1538,7 +1538,7 @@ function prune_all_mirror_images_from_current_cluster_registry() {
 
   TITLE "Prune all images associated with mirror registry (Brew): ${registry_url} in the registry of cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   ${OC} adm prune images --registry-url "${registry_url}" --confirm \
   --request-timeout="1m" --insecure-skip-tls-verify --cluster="${cluster_name}"
@@ -2579,7 +2579,7 @@ function configure_ocp_garbage_collection_and_images_prune() {
 
   PROMPT "Configure Garbage Collection and Registry Images Prune on cluster ${cluster_name}"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   TITLE "Setting garbage collection on all OCP cluster nodes"
 
@@ -2721,7 +2721,7 @@ function configure_custom_registry_in_cluster() {
 
   [[ -n "${cluster_name}" ]] || FATAL "Cluster is inaccessible"
 
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" #  "${WORKDIR}/${OCP_USR}.crt"
+  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
   
   configure_cluster_custom_registry_secrets
 
