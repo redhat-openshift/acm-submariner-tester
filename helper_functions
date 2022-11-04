@@ -1137,8 +1137,7 @@ function ocp_login() {
   TITLE "Login with user '${ocp_usr}' and Certificate to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
 
-  ${OC} wait --timeout=5m --for=condition=ready pod -n openshift-authentication \
-  --field-selector=status.phase!='Pending|Terminating'
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
@@ -1151,8 +1150,8 @@ function ocp_login() {
 
   )
 
-  ${OC} wait --timeout=5m --for=condition=ready pod -n openshift-authentication \
-  --field-selector=status.phase!='Pending|Terminating'
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
+
 }
 
 # ------------------------------------------
