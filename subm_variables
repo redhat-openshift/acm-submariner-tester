@@ -40,6 +40,8 @@ export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-500}
 export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
 export TEST_NS="${TEST_NS:-test-submariner}"
+export SUBM_ADDON="${TEST_NS}-addon"
+export SUBM_CONFIG="${TEST_NS}-config"
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 export OUTPUT_DIR="${TEST_NS:-output}"
