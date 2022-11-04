@@ -1233,10 +1233,16 @@ function force_delete_namespace() {
 function delete_all_evicted_pods_in_current_cluster() {
   trap_to_debug_commands;
 
-  echo -e "\n# Delete all regular pods from all namespaces"
+  echo -e "\n# Delete all regular pods which are not running or completed, from all namespaces:"
 
-  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' | awk '{system("oc delete pod "$2" -n "$1)}' || :
- 
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' \
+  | awk '{system("oc delete pod "$2" -n "$1)}' || :
+
+  echo -e "\n# Delete OLM pods that are in an 'Error' state:"
+
+  ${OC} get pods -n openshift-operator-lifecycle-manager --field-selector=status.phase==Failed -o name \
+  | xargs -r "${OC}" delete -n openshift-operator-lifecycle-manager || :
+
   # echo -e "\n# Generate list of PDBs (Pod Disruption Budget) to be deleted"
 
   # local pdb_list
