@@ -64,6 +64,13 @@ function export_all_env_variables() {
   # Exporting variables for Managed Cluster C
   export_cluster_variables "${CLUSTER_C_NAME}" "${CLUSTER_C_YAML}" "C"
 
+  if [[ ! -s "$CLUSTER_B_YAML" ]] && [[ ! -s "$CLUSTER_C_YAML" ]] ; then
+
+    FATAL "No OCP YAML were set for either cluster B or cluster C. \
+    Multi-Cluster tests require at least one more cluster (beside cluster A)"
+      
+  fi
+
   # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
   set_versions_variables
 
@@ -879,17 +886,17 @@ function print_ocp_install_platform() {
 
 # ------------------------------------------
 
-function check_if_cluster_is_running() {
-  # Check if cluster is already running (return exit code 1 if it's not)
+function check_if_cluster_is_active() {
+  # Check if cluster status is active (return exit code 1 if it's not)
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
 
-  if ${OC} status --kubeconfig "${kubeconfig_file}" ; then
-    echo -e "\n# '$kubeconfig_file' default cluster is running"
+  if [[ -s "${kubeconfig_file}" ]] && \
+  ${OC} status --kubeconfig "${kubeconfig_file}" ; then
     return 0
   else
-    echo -e "\n# '$kubeconfig_file' default cluster is not running (or not installed yet)"
+    echo -e "\n# '$kubeconfig_file' does not point to an active cluster"
     return 1
   fi
 
