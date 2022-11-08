@@ -1055,12 +1055,6 @@ function add_elevated_user() {
 
   PROMPT "Adding elevated user with certificate to cluster ${cluster_name}"
 
-  # TITLE "Restart OCP API server pods"
-
-  # oc delete pods --all -n openshift-apiserver
-   
-  # ${OC} wait --timeout=5m --for=condition=ready pod -n openshift-apiserver --all
-
   TITLE "Creating Certificate data '${cluster_name}.csr' and private key for OCP user '$OCP_USR'"
 
   ${OC} create user ${OCP_USR} || :
@@ -1125,7 +1119,13 @@ EOF
 
   TITLE "Download and validate the new certificate '${crt_file}'"
 
-  ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
+  # This doesn't always work:
+  # ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
+
+  # Using current SA certificate
+  local auth_pod
+  auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
+  ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
 
   openssl x509 -in "${crt_file}" -text -noout
 
@@ -1204,15 +1204,11 @@ EOF
 
   ${OC} get pods -n openshift-authentication
   
-  local auth_pod
-  auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
-  
-  ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > ingress-ca.crt
+  ${OC} config set-cluster "$(${OC} config view -o jsonpath='{.clusters[0].name}')" \
+  --certificate-authority="${crt_file}" --kubeconfig="${kubeconfig_file}" --embed-certs \
+  --server="$(oc config view -o jsonpath='{.clusters[0].cluster.server}')"
+  # --certificate-authority=ingress-ca.crt --kubeconfig="${kubeconfig_file}" --embed-certs
 
-  ${OC} config set-cluster $(${OC} config view -o jsonpath='{.clusters[0].name}') \
-  --certificate-authority=ingress-ca.crt --kubeconfig="${kubeconfig_file}" --embed-certs
-  # --server=$(oc config view -o jsonpath='{.clusters[0].cluster.server}')
-  
   local cur_context
   cur_context="$(${OC} config current-context)"
   TITLE "Kubeconfig current-context is: $cur_context"
@@ -2742,7 +2738,10 @@ function configure_cluster_custom_registry_secrets() {
 ### Configure access to external docker registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  TITLE "Configure OCP registry local secret"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Configure OCP registry local secret on cluster $cluster_name"
 
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
@@ -2766,7 +2765,10 @@ function configure_cluster_custom_registry_mirror() {
 ### Configure a mirror server on the cluster registry
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  TITLE "Wait for Cluster Operators, Authentication and Kube API Server readiness"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Wait for Cluster Operators, Authentication and Kube API Server readiness on cluster $cluster_name"
 
   ${OC} wait --timeout=5m --for=condition=Available clusteroperators authentication kube-apiserver || :
   ${OC} wait --timeout=5m --for='condition=Progressing=False' clusteroperators authentication kube-apiserver || :
@@ -2774,7 +2776,7 @@ function configure_cluster_custom_registry_mirror() {
 
   ${OC} get clusteroperators authentication kube-apiserver
 
-  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' in the namespaces of Submariner, ACM, and MCE"
+  TITLE "Add OCP secrets to access custom registry '${BREW_REGISTRY}' on cluster $cluster_name"
 
   echo -e "\n# Adding access to ${BREW_REGISTRY} in ${SUBM_NAMESPACE}"
   ( # subshell to hide commands
@@ -2791,7 +2793,7 @@ function configure_cluster_custom_registry_mirror() {
     create_docker_registry_secret "$BREW_REGISTRY" "$REGISTRY_USR" "$REGISTRY_PWD" "$MCE_NAMESPACE"
   )
 
-  TITLE "Add OCP Registry mirrors to all OCP cluster nodes using MachineConfig"
+  TITLE "Add OCP Registry mirrors to OCP cluster '$cluster_name' nodes using MachineConfig"
 
   local ocp_registry_url
   ocp_registry_url=$(${OC} registry info --internal)
@@ -2808,10 +2810,10 @@ function configure_cluster_custom_registry_mirror() {
   wait_for_all_machines_ready || :
   wait_for_all_nodes_ready || :
 
-  TITLE "Show OCP Registry (machine-config encoded) on master nodes:"
+  TITLE "Show OCP Registry (machine-config encoded) on master nodes of cluster $cluster_name:"
   ${OC} get mc 99-master-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
 
-  TITLE "Show OCP Registry (machine-config encoded) on worker nodes:"
+  TITLE "Show OCP Registry (machine-config encoded) on worker nodes of cluster $cluster_name:"
   ${OC} get mc 99-worker-submariner-registries -o json | jq -r '.spec.config.storage.files[0].contents.source' | awk -F ',' '{print $2}' || :
 
 }
@@ -2822,7 +2824,10 @@ function add_image_content_source_policy() {
 ### Helper function to add OCP registry mirror for ACM and Submariner on all master or all worker nodes
   trap_to_debug_commands
 
-  TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy in current cluster"
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Configuring custom registry mirrors with ImageContentSourcePolicy on cluster $cluster_name"
 
   local img_policy
   img_policy="$(mktemp)_ImageContentSourcePolicy.yaml"
@@ -2867,10 +2872,13 @@ function add_acm_registry_mirror_to_ocp_node() {
   node_type = $node_type
   local_registry_path = $local_registry_path"
 
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
   if [[ -z "$local_registry_path" ]] || [[ ! "$node_type" =~ ^(master|worker)$ ]]; then
     FATAL "Openshift Registry values are missing: $reg_values"
   else
-    TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes:
+    TITLE "Adding Submariner registry mirrors in all OCP '${node_type}' nodes of cluster $cluster_name:
     * ${OFFICIAL_REGISTRY}/${REGISTRY_IMAGE_PREFIX} -->
           - ${local_registry_path}
           - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}
@@ -3009,7 +3017,7 @@ EOF
 
   ignition_version=$(${OC} extract -n openshift-machine-api secret/worker-user-data --keys=userData --to=- | grep -oP '(?s)(?<=version":")[0-9\.]+(?=")')
 
-  TITLE "Updating Registry in ${node_type} Machine configuration, via OCP API Ignition version: $ignition_version"
+  TITLE "Updating Registry in ${node_type} Machine configuration of cluster '$cluster_name', via OCP API Ignition version: $ignition_version"
 
   local nodes_conf
   nodes_conf="$(mktemp)_${node_type}.yaml"
@@ -4247,13 +4255,13 @@ function export_merged_kubeconfigs() {
   local merged_kubeconfigs="${KUBECONF_HUB}"
   # local active_context_names="${CLUSTER_A_NAME}"
 
-  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
     echo -e "\n# Appending ${CLUSTER_B_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_B}"
     # active_context_names="${active_context_names}|${CLUSTER_B_NAME}"
   fi
 
-  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
     echo -e "\n# Appending ${CLUSTER_C_NAME} context to \"${merged_kubeconfigs}\""
     merged_kubeconfigs="${merged_kubeconfigs}:${KUBECONF_CLUSTER_C}"
     # active_context_names="${active_context_names}|${CLUSTER_C_NAME}"
@@ -4380,13 +4388,13 @@ function test_project_e2e_with_go() {
 
   e2e_dp_context=("--dp-context" "$(${OC} config current-context)")
 
-  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
     echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_dp_context[*]})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_dp_context+=("--dp-context" "$(${OC} config current-context)")
   fi
 
-  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
     echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_dp_context[*]})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_dp_context+=("--dp-context" "$(${OC} config current-context)")
@@ -4630,13 +4638,13 @@ function test_submariner_e2e_with_subctl() {
   local e2e_subctl_context
   e2e_subctl_context="$(${OC} config current-context)"
 
-  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
     echo -e "\n# Appending \"${CLUSTER_B_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_B}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
   fi
 
-  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
     echo -e "\n# Appending \"${CLUSTER_C_NAME}\" to current E2E context (${e2e_subctl_context})"
     export KUBECONFIG="${KUBECONF_CLUSTER_C}"
     e2e_subctl_context="${e2e_subctl_context},$(${OC} config current-context)"
@@ -4775,9 +4783,9 @@ function env_teardown() {
 
     ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_b || :
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_b || :
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_c || :
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_c || :
 
   fi
 
@@ -4978,12 +4986,12 @@ function gather_submariner_info() {
     print_resources_and_pod_logs "${KUBECONF_HUB}" || :
 
     # Gather logs of cluster B
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
       print_resources_and_pod_logs "${KUBECONF_CLUSTER_B}" || :
     fi
 
     # Gather logs of cluster C
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
       print_resources_and_pod_logs "${KUBECONF_CLUSTER_C}" || :
     fi
 

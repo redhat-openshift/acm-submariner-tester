@@ -1312,7 +1312,10 @@ function create_docker_registry_secret() {
   # Replace anything but letters and numbers with "-"
   local secret_name="${secret_name//[^a-zA-Z0-9]/-}"
 
-  TITLE "Creating new docker-registry in '$namespace' namespace
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Creating new docker-registry in '$namespace' namespace on cluster $cluster_name
   Server: ${registry_server}
   Secret name: ${secret_name}"
 
