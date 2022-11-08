@@ -41,8 +41,8 @@ function export_LATEST_IIB() {
       # Workaround:
       cvp_component="cvp-teamsubmariner"
 
-    elif [[ "$operator_version" =~ 0\.12 ]] ; then
-      BUG "For Submariner 0.12.* the CVP issuer should be 'freshmaker' (CVE release)"
+    elif [[ "$operator_version" =~ 0\.(12|13) ]] ; then
+      BUG "For Submariner 0.12.* or 0.13.* the CVP issuer should be 'freshmaker' (CVE release)"
       # Workaround:
       cvp_issuer="freshmaker"
     fi
@@ -221,8 +221,9 @@ function deploy_ocp_bundle() {
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  echo -e "\n# Create/switch project"
-  ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  echo -e "\n# Create/switch to the bundle namespace"
+  # ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  create_namespace "${bundle_namespace}"
 
   # echo -e "\n# Disable the default remote OperatorHub sources for OLM"
   # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'

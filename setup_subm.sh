@@ -696,43 +696,57 @@ cat "$SYS_LOG"
       ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
       # Verify cluster B (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
         ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
         ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
+      else
+
+        check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
+
       fi
 
       # Verify cluster C (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
 
         ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
         ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
 
+      else
+
+        check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
+
       fi
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-      \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
+      \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
 
       # Cluster A configurations
-      ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+       
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
-      # Cluster B custom configurations for OpenStack
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
-        echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+      fi
 
-        # ${JUNIT_CMD} open_firewall_ports_on_cluster_a
+      # Cluster B configurations (plus custom configurations for OpenStack)
+      
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        # ${JUNIT_CMD} label_gateway_on_broker_nodes_with_external_ip
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
-        # Since ACM 2.5 Openstack cloud prepare is supported
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+        # Before ACM 2.5 - Need to open ports and label nodes on Openstack (cloud prepare was not supported)
         if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+
+          echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
 
           ${JUNIT_CMD} open_firewall_ports_on_openstack_cluster_b
 
@@ -740,28 +754,18 @@ cat "$SYS_LOG"
 
         fi
 
-        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
-
-        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
-
       fi
 
       # Cluster C configurations
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
 
-        echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-        \n\# Then for AWS/GCP run subctl cloud prepare, and for OSP use terraform script"
-        # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-        #
-        # ${JUNIT_CMD} open_firewall_ports_on_cluster_c
-        #
-        # ${JUNIT_CMD} label_first_gateway_cluster_c
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
       fi
+
     fi
     ### END of all Clusters configurations
 
@@ -797,7 +801,7 @@ cat "$SYS_LOG"
     # END of cluster A cleanup
 
     # Running cleanup on cluster B if requested
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
       if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
@@ -814,7 +818,7 @@ cat "$SYS_LOG"
     # END of cluster B cleanup
 
     # Running cleanup on cluster C if requested
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
 
       if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
@@ -841,7 +845,7 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
 
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
 
@@ -849,7 +853,7 @@ cat "$SYS_LOG"
 
       fi
 
-      if [[ -s "$CLUSTER_C_YAML" ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -872,11 +876,11 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} install_netshoot_app_on_cluster_a
 
-      if [[ -s "$CLUSTER_B_YAML" ]] ; then
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
         export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
 
-      elif [[ -s "$CLUSTER_C_YAML" ]] ; then
+      elif [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
 
         export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
 
@@ -897,9 +901,25 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}"
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}"
+      if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}"
+        test_cluster_status "${KUBECONF_CLUSTER_B}"
+      
+      else
+
+        check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
+
+      fi
+
+      if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+        test_cluster_status "${KUBECONF_CLUSTER_C}"
+
+      else
+
+        check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
+
+      fi
 
     fi
     ### END of prerequisites for Submariner system tests  ###
@@ -972,35 +992,44 @@ cat "$SYS_LOG"
 
     if [[ "$INSTALL_WITH_SUBCTL" =~ ^(y|yes)$ ]]; then
 
-      # Running build_operator_latest if requested  # [DEPRECATED]
-      # [[ ! "$build_operator" =~ ^(y|yes)$ ]] || ${JUNIT_CMD} build_operator_latest
-
+      # Configure subctl join params
       ${JUNIT_CMD} set_join_parameters_for_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} set_join_parameters_for_cluster_b
+      # Override custom images (if using --registry-images)
+      [[ ! "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_a
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} set_join_parameters_for_cluster_c
-
-      # Overriding Submariner images with custom images from registry
-      if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]]; then
-
-        ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_a
-
-        [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_b
-
-        [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_c
-
-      fi
-
+      # Install and test Broker on Cluster A
       ${JUNIT_CMD} install_broker_via_subctl_on_cluster_a
 
       ${JUNIT_CMD} test_broker_before_join
 
+      # Join Cluster A with subctl
+
       ${JUNIT_CMD} run_subctl_join_on_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} run_subctl_join_on_cluster_b
+      # Join Cluster B with subctl
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} run_subctl_join_on_cluster_c
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} set_join_parameters_for_cluster_b
+
+        [[ ! "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_b
+
+        ${JUNIT_CMD} run_subctl_join_on_cluster_b
+
+      fi
+
+      # Join Cluster C with subctl
+
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} set_join_parameters_for_cluster_c
+
+        [[ ! "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] || ${JUNIT_CMD} append_custom_images_to_join_cmd_cluster_c
+
+        ${JUNIT_CMD} run_subctl_join_on_cluster_c
+
+      fi 
 
     else
       ### Otherwise (if NOT using --subctl-install) - Deploy Submariner on the clusters via API ###
@@ -1011,7 +1040,7 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} configure_submariner_addon_for_acm_managed_cluster "${KUBECONF_HUB}"
 
-      if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_B}"
 
@@ -1019,7 +1048,7 @@ cat "$SYS_LOG"
 
       fi
 
-      if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} install_submariner_operator_on_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -1061,33 +1090,33 @@ cat "$SYS_LOG"
 
     # Testing Submariner resources on all clusters
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_submariner_resources_cluster_c
 
     # Testing Submariner cable-driver on all clusters
 
     ${JUNIT_CMD} test_cable_driver_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_cable_driver_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_cable_driver_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_cable_driver_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_cable_driver_cluster_c
 
     # Testing Submariner HA (High Availability) status on all clusters
 
     ${JUNIT_CMD} test_ha_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_ha_status_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_ha_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_ha_status_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_ha_status_cluster_c
 
     # Testing Submariner connectivity status on all clusters
 
     ${JUNIT_CMD} test_submariner_connection_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_submariner_connection_cluster_c
 
     # Testing SubCtl (Submariner CLI tool) info on all clusters
 
@@ -1097,9 +1126,9 @@ cat "$SYS_LOG"
 
     ${JUNIT_CMD} test_ipsec_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_ipsec_status_cluster_c
 
     # Testing GlobalNet connectivity (if enabled) on all clusters
 
@@ -1107,27 +1136,27 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} test_globalnet_status_cluster_a
 
-      [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_b
+      [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_b
 
-      [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_c
+      [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_globalnet_status_cluster_c
     fi
 
     # Test service-discovery (lighthouse) on all clusters
 
     ${JUNIT_CMD} test_lighthouse_status_cluster_a
 
-    [[ ! -s "$CLUSTER_B_YAML" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_b
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_b
 
-    [[ ! -s "$CLUSTER_C_YAML" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_c
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_lighthouse_status_cluster_c
 
     ### Running connectivity tests between the clusters ###
     # (Validating that now Submariner made the connection possible)
 
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
+    if [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
       export KUBECONF_MANAGED="${KUBECONF_CLUSTER_B}"
 
-    elif [[ -s "$CLUSTER_C_YAML" ]] ; then
+    elif [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
 
       export KUBECONF_MANAGED="${KUBECONF_CLUSTER_C}"
 

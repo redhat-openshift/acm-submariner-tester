@@ -901,7 +901,7 @@ function configure_gcp_access() {
 
   work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  if [[ ! -x "$(command -v aws)" ]] ; then
+  if [[ ! -x "$(command -v gcloud)" ]] ; then
     install_local_gcloud "$work_dir"
   fi
 
@@ -1120,7 +1120,6 @@ function ocp_login() {
   ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
 
   local ocp_pwd # stored later in ${2}
-  local crt_file # stored later in ${3}
 
   local ocp_server
   ocp_server="${4:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
@@ -1135,19 +1134,24 @@ function ocp_login() {
     FAILURE "User '${ocp_usr}' or Server '${ocp_server}' is missing"
   fi
 
-  TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
+  TITLE "Login with user '${ocp_usr}' and Certificate to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
+
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    crt_file="${3}"   
-    [[ -s "$crt_file" ]] || crt_file=''
+    crt_file="${KUBECONFIG}.crt"
 
-    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify"
     
-    # Attempt to login up to 10 minutes
-    watch_and_retry "$cmd" 10m
+    # Attempt to login up to 10 minutes, with or w/o a certificate
+    watch_and_retry "$cmd || $cmd --certificate-authority=${crt_file}" 10m
+
   )
+
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
+
 }
 
 # ------------------------------------------
@@ -1229,10 +1233,16 @@ function force_delete_namespace() {
 function delete_all_evicted_pods_in_current_cluster() {
   trap_to_debug_commands;
 
-  echo -e "\n# Delete all regular pods from all namespaces"
+  echo -e "\n# Delete all regular pods which are not running or completed, from all namespaces:"
 
-  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' | awk '{system("oc delete pod "$2" -n "$1)}' || :
- 
+  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' \
+  | awk '{system("oc delete pod "$2" -n "$1)}' || :
+
+  echo -e "\n# Delete OLM pods that are in an 'Error' state:"
+
+  ${OC} get pods -n openshift-operator-lifecycle-manager --field-selector=status.phase==Failed -o name \
+  | xargs -r "${OC}" delete -n openshift-operator-lifecycle-manager || :
+
   # echo -e "\n# Generate list of PDBs (Pod Disruption Budget) to be deleted"
 
   # local pdb_list
@@ -1302,7 +1312,10 @@ function create_docker_registry_secret() {
   # Replace anything but letters and numbers with "-"
   local secret_name="${secret_name//[^a-zA-Z0-9]/-}"
 
-  TITLE "Creating new docker-registry in '$namespace' namespace
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Creating new docker-registry in '$namespace' namespace on cluster $cluster_name
   Server: ${registry_server}
   Secret name: ${secret_name}"
 
@@ -1686,10 +1699,10 @@ function print_pod_logs_in_namespace() {
     ${OC} -n "$namespace" get pod "$pod" -o yaml || :
 
     if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
-      echo -e "\n### Active pod $pod logs ###\n"
+      TITLE "Active pod $pod logs in cluster: $cluster_name, namespace: $namespace"
       ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     else
-      echo -e "\n### Terminated (previous) pod $pod logs ###\n"
+      TITLE "Terminated (previous) pod $pod logs in cluster: $cluster_name, namespace: $namespace"
       ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     fi
   done
