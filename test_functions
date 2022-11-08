@@ -580,16 +580,24 @@ function download_ocp_installer() {
   local ocp_major_version
   ocp_major_version="$(echo "$ocp_installer_version" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
 
-  local ocp_major_version="${ocp_major_version:-4}" # if no numerical version was requested (e.g. "latest"), the default OCP major version is 4
+  # If no numerical version was requested (e.g. "latest"), the default OCP major version is 4
+  local ocp_major_version="${ocp_major_version:-4}"
   local oc_version_path="ocp/${ocp_installer_version}"
+  local oc_major_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients"
 
-  # Get the nightly (ocp-dev-preview) build, if requested by user input
-  if [[ "$oc_version_path" =~ nightly ]] ; then
-    oc_version_path="ocp-dev-preview/latest"
-    # Also available at: https://openshift-release-artifacts.svc.ci.openshift.org/
+  # Get latest "ocp-dev-preview Engineering Candidate" build, if the OCP version requested was "ec" or "nightly".
+  # These builds are also available at: 
+  # https://openshift-release-artifacts.svc.ci.openshift.org/ 
+  # https://amd64.ocp.releases.ci.openshift.org/
+  if [[ "$ocp_installer_version" =~ ^(ec|nightly)$  ]] ; then
+    oc_version_path="ocp-dev-preview/"
+    
+    # Append latest EC version, for example: 4.12.0-ec.5
+    oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
+    grep -Eoh ".*-ec\..*" | awk '{ gsub(/>|</, " " ); print $3; }' | tail -1)"
   fi
 
-  local oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+  local oc_installer_url="${oc_major_url}/${oc_version_path}/"
 
   cd "${WORKDIR}" || return 1
 
@@ -1124,7 +1132,7 @@ EOF
 
   # Using current SA certificate
   local auth_pod
-  auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
+  auth_pod="$(${OC} get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
   ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
 
   openssl x509 -in "${crt_file}" -text -noout
