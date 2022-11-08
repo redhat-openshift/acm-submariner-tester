@@ -1618,14 +1618,12 @@ function install_netshoot_app_on_cluster_a() {
 
   ${OC} delete pod "${NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
+  set_netshoot_image_spec "sleep infinity"
   
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
-  # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
-  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS}
-  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image ${NETSHOOT_IMAGE} ${TEST_NS:+-n $TEST_NS}
-  ${OC} run "${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" -- sleep infinity
+  ${OC} run "${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" \
+  --overrides="${NETSHOOT_IMAGE_SPEC}"
 
   TITLE "Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run="${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
@@ -1638,8 +1636,11 @@ function set_netshoot_image_spec() {
   ### Export the $NETSHOOT_IMAGE (Nettest) registry url (downstream or upstream) ###
     trap_to_debug_commands;
 
-    # Optional param: $1 => Nettest version to find in the registry
-    local submariner_version_or_tag="${1:-$SUBM_VER_TAG}"
+    # Command to run in the netshoot container
+    local cmd_for_netshoot="$1"
+
+    # Optional param: $2 => Nettest version to find in the registry
+    local submariner_version_or_tag="${2:-$SUBM_VER_TAG}"
 
     # Downloading Nettest from VPN_REGISTRY (downstream) only
     # if using --registry-images and if $submariner_version_or_tag is not devel
@@ -1657,33 +1658,40 @@ function set_netshoot_image_spec() {
       TITLE "Setting \$NETSHOOT_IMAGE security policy and downstream registry url: \n ${netshot_image_url}"
 
       export "NETSHOOT_IMAGE=${netshot_image_url}"
-    
-      export NETSHOOT_IMAGE_OVERRIDES='{
-            "spec": {
-                "template": {
-                    "spec": {
-                        "containers": [
-                            {
-                                "imagePullPolicy": "IfNotPresent",
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": false,
-                                    "capabilities": {
-                                        "drop": [
-                                            "ALL"
-                                        ]
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-        '
 
     else
       TITLE "Using upstream \$NETSHOOT_IMAGE url: $NETSHOOT_IMAGE"
+      
     fi
+
+    export NETSHOOT_IMAGE_SPEC='{
+      "spec": {
+        "securityContext": {
+          "runAsNonRoot": true,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "containers": [
+          {
+            "name": "netshoot",
+            "image": "'${NETSHOOT_IMAGE}'",
+            "command": [
+                "/bin/bash",
+                "-c",
+                "'${cmd_for_netshoot}'"
+              ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": ["ALL"]
+              }
+            }
+          }
+        ]
+      }
+    }'
+
 }
 
 # ------------------------------------------
@@ -1728,11 +1736,10 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
+  set_netshoot_image_spec "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=3m --request-timeout=3m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" "${NETSHOOT_IMAGE_OVERRIDES:+--overrides=$NETSHOOT_IMAGE_OVERRIDES}" \
-  -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" --overrides="${NETSHOOT_IMAGE_SPEC}"
 }
 
 # ------------------------------------------
@@ -4072,10 +4079,10 @@ function install_new_netshoot_cluster_a() {
 
   ${OC} delete pod "${NEW_NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
-
+  set_netshoot_image_spec "sleep 5m"
+  
   ${OC} run "${NEW_NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" \
-  --pod-running-timeout=5m --restart=Never -- sleep 5m
+  --pod-running-timeout=5m --restart=Never --overrides="${NETSHOOT_IMAGE_SPEC}"
 
   TITLE "Wait up to 3 minutes for NEW Netshoot pod [${NEW_NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run="${NEW_NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
