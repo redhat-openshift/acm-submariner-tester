@@ -721,6 +721,13 @@ cat "$SYS_LOG"
 
       fi
 
+      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+        FATAL "Both cluster B and cluster C are down. \
+        Multi-Cluster tests require at least one more cluster (beside cluster A)"
+        
+      fi
+
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
       # https://submariner.io/operations/deployment/subctl/#cloud-prepare
@@ -919,6 +926,13 @@ cat "$SYS_LOG"
 
         check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
 
+      fi
+
+      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+        FATAL "Both cluster B and cluster C are down. \
+        Multi-Cluster tests require at least one more cluster (beside cluster A)"
+        
       fi
 
     fi
