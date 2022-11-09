@@ -1498,7 +1498,7 @@ fi
 find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
 # # Artifact broker.info file (if created with subctl deploy) - Depecated.
-# find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
+# find "${WORKDIR}" -maxdepth 1 -type f -iname "$SUBM_BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Compress the required artifacts (either files or directories)
 

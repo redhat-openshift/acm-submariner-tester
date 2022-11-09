@@ -470,7 +470,7 @@ function setup_workspace() {
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
 
   # CD to main working directory
-  cd ${WORKDIR}
+  cd "${WORKDIR}" || return 1
 
   # Installing GoLang with Anaconda, if $CONFIG_GOLANG = yes/y
   if [[ "$CONFIG_GOLANG" =~ ^(y|yes)$ ]] ; then
@@ -492,23 +492,10 @@ function setup_workspace() {
       export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
 
-    # Terraform preparations are not required since Submariner 0.12
-    # TITLE "Installing Terraform with Anaconda"
-    # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-    # "Use Terraform v0.12.29" \
-    # "https://github.com/submariner-io/submariner/issues/847"
-    # # Workaround:
-    # install_local_terraform "${WORKDIR}" "0.12.29"
-
     TITLE "Installing JQ (JSON parser) with Anaconda"
     install_local_jq "${WORKDIR}"
 
   else
-    # Set GOBIN to system's default golang
-    # export GOROOT="/usr/local/go"
-    # export PATH="${GOROOT}/bin:${PATH}"
-    # export GOBIN="${GOROOT}/bin"
-
     # Verify GO installation
     verify_golang
   fi
@@ -1295,8 +1282,23 @@ function delete_submariner_namespace_and_crds() {
   ${OC} wait --for=delete namespace "${SUBM_NAMESPACE}" || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
-  # ${OC} delete namespace ${BROKER_NAMESPACE} --wait || :
-  force_delete_namespace "${BROKER_NAMESPACE}"
+  local broker_namespace
+  broker_namespace="$(get_broker_namespace)"
+  [[ -z "${broker_namespace}" ]] || force_delete_namespace "${broker_namespace}"
+
+}
+
+# ------------------------------------------
+
+function get_broker_namespace() {
+### Run cleanup of previous Submariner namespace and CRDs ###
+  trap_to_debug_commands;
+
+  local clusterset_broker_ns
+  clusterset_broker_ns="$(${OC} get ManagedClusterSet "${ACM_CLUSTER_SET}" \
+  -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}" || :)"
+
+  echo "$clusterset_broker_ns"
 
 }
 
@@ -2077,7 +2079,7 @@ function create_subctl_join_file() {
   TITLE "Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
 
   JOIN_CMD="subctl join \
-  ./${BROKER_INFO} ${SUBM_CABLE_DRIVER:+--cable-driver $SUBM_CABLE_DRIVER} \
+  ./${SUBM_BROKER_INFO} ${SUBM_CABLE_DRIVER:+--cable-driver $SUBM_CABLE_DRIVER} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   TITLE "Adding '--health-check' to subctl join command (to enable Gateway health check)"
@@ -2212,8 +2214,8 @@ function install_broker_via_subctl_on_cluster_a() {
   cd "${WORKDIR}" || return 1
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  TITLE "Remove previous ${BROKER_INFO} (if exists)"
-  [[ ! -e "${BROKER_INFO}" ]] || rm "${BROKER_INFO}"
+  TITLE "Remove previous ${SUBM_BROKER_INFO} (if exists)"
+  [[ ! -e "${SUBM_BROKER_INFO}" ]] || rm "${SUBM_BROKER_INFO}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -2246,14 +2248,19 @@ function install_broker_via_api_on_cluster() {
   # Since Submariner 0.12 it is required to create Broker CRD
   if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
-    local clusterset_broker_namespace
-    clusterset_broker_namespace=$(${OC} get ManagedClusterSet ${TEST_NS} \
-    -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
+    local broker_namespace
+    broker_namespace="$(get_broker_namespace)"
+
+    [[ -n "${broker_namespace}" ]] || FATAL "Failed to retreive the managed cluster-set namespace on cluster ${cluster_name}"
 
     local enable_globalnet="true"
     [[ "$GLOBALNET" =~ ^(y|yes)$ ]] || enable_globalnet="false"
 
-    TITLE "Creating the Submariner Broker resource in namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+    TITLE "Creating the Submariner Broker the cluster-set namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+
+    # Submariner Broker is created once per cluster-set.
+    # Using a different name then 'submariner-broker' is not supported.
+    # Ref: https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.5/html-single/add-ons/index#submariner-globalnet
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: submariner.io/v1alpha1
@@ -5068,7 +5075,10 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :
 
-  ${OC} get all -n "${BROKER_NAMESPACE}" -o wide || :
+  local broker_namespace
+  broker_namespace="$(get_broker_namespace)"
+  [[ -z "${broker_namespace}" ]] || \
+  ${OC} get all -n "${clusterset_broker_ns}" -o wide || :
 
   TITLE "Submariner Gateway info on ${cluster_name}"
 
@@ -5083,7 +5093,8 @@ function print_resources_and_pod_logs() {
 
   ${OC} get roles -A | grep "submariner" || :
 
-  ${OC} describe role submariner-k8s-broker-cluster -n "${BROKER_NAMESPACE}" || :
+  [[ -z "${broker_namespace}" ]] || \
+  ${OC} describe role submariner-k8s-broker-cluster -n "${clusterset_broker_ns}" || :
 
   TITLE "Submariner Deployments, Daemon and Replica sets on ${cluster_name}"
 
