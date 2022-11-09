@@ -1668,6 +1668,8 @@ function set_netshoot_image_spec() {
       "spec": {
         "securityContext": {
           "runAsNonRoot": true,
+          "runAsUser": 2000,
+          "runAsGroup": 3000,
           "seccompProfile": {
             "type": "RuntimeDefault"
           }
