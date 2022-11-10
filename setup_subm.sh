@@ -977,21 +977,21 @@ cat "$SYS_LOG"
   ### END of ACM Install ###
 
   # Add first managed cluster A (the Hub)
-  if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+  if [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
   fi
 
   # Add second managed cluster B
-  if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
   fi
 
   # Add third managed cluster C
-  if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -1035,7 +1035,7 @@ cat "$SYS_LOG"
 
       # Join Cluster C with subctl
 
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} set_join_parameters_for_cluster_c
 
