@@ -1150,9 +1150,9 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   || managed_cluster_status=FAILED
 
   BUG "Submariner Addon condition shows wrong status" \
-  "Skip verifying managedclusteraddons '${SUBM_ADDON}' --for=condition=SubmarinerAgentDegraded=false" \
+  "Skip verifying managedclusteraddons '${SUBM_ADDON}' -n '${cluster_id}' --for=condition=SubmarinerAgentDegraded=false" \
   "TODO: Need to report bug"
-  # Workaround, remove this step:
+  # Workaround - Remove this step:
   # ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false
 
 
@@ -1187,9 +1187,15 @@ function validate_submariner_config_in_acm_managed_cluster() {
   ### Test SubmarinerConfig ###
   # All checks should print: submarinerconfig.submarineraddon.open-cluster-management.io/submariner condition met
 
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerClusterEnvironmentPrepared && \
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerConfigApplied && \
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerGatewaysLabeled || config_status=FAILED
+  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerClusterEnvironmentPrepared \
+  && ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerGatewaysLabeled \
+  || config_status=FAILED
+
+  BUG "Submariner Config condition shows wrong status" \
+  "Skip verifying submarinerconfig '${SUBM_CONFIG}' -n '${cluster_id}' --for=condition=SubmarinerConfigApplied" \
+  "TODO: Need to report bug"
+  # Workaround - Remove this step:
+  # ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerConfigApplied
 
   ${OC} describe submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" || config_status=FAILED
 
