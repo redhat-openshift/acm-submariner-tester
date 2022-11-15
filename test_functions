@@ -138,6 +138,12 @@ function export_global_script_variable() {
   export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
   export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
+  BUG "Submariner Broker created but Gateway was not" \
+  "Trim the length of ACM cluster set" \
+  "https://issues.redhat.com/browse/ACM-2076"
+  # Workaround:
+  export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
+
 
   #################################################################################
   #               Saving important test properties in local files                 #
@@ -1283,7 +1289,7 @@ function delete_submariner_namespace_and_crds() {
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   local broker_namespace
-  broker_namespace="$(get_broker_namespace)"
+  broker_namespace="$(get_broker_namespace || :)"
   [[ -z "${broker_namespace}" ]] || force_delete_namespace "${broker_namespace}"
 
 }
@@ -1291,14 +1297,11 @@ function delete_submariner_namespace_and_crds() {
 # ------------------------------------------
 
 function get_broker_namespace() {
-### Run cleanup of previous Submariner namespace and CRDs ###
-  trap_to_debug_commands;
+### Get correct Broker namespace from the Managed cluster set ###
+  # Do not trap_to_debug_commands since using output as return value
 
-  local clusterset_broker_ns
-  clusterset_broker_ns="$(${OC} get ManagedClusterSet "${ACM_CLUSTER_SET}" \
-  -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}" || :)"
-
-  echo "$clusterset_broker_ns"
+  ${OC} get ManagedClusterSet "${ACM_CLUSTER_SET}" \
+  -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}" || :
 
 }
 
@@ -2249,14 +2252,14 @@ function install_broker_via_api_on_cluster() {
   if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
     local broker_namespace
-    broker_namespace="$(get_broker_namespace)"
+    broker_namespace="$(get_broker_namespace || :)"
 
     [[ -n "${broker_namespace}" ]] || FATAL "Failed to retreive the managed cluster-set namespace on cluster ${cluster_name}"
 
     local enable_globalnet="true"
     [[ "$GLOBALNET" =~ ^(y|yes)$ ]] || enable_globalnet="false"
 
-    TITLE "Creating the Submariner Broker the cluster-set namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+    TITLE "Creating the Submariner Broker in the cluster-set namespace '${broker_namespace}' with Globalnet=${enable_globalnet}"
 
     # Submariner Broker is created once per cluster-set.
     # Using a different name then 'submariner-broker' is not supported.
@@ -2267,7 +2270,7 @@ function install_broker_via_api_on_cluster() {
     kind: Broker
     metadata:
       name: submariner-broker
-      namespace: ${clusterset_broker_namespace}
+      namespace: ${broker_namespace}
     spec:
       globalnetEnabled: ${enable_globalnet}
 EOF
@@ -5076,9 +5079,9 @@ function print_resources_and_pod_logs() {
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :
 
   local broker_namespace
-  broker_namespace="$(get_broker_namespace)"
+  broker_namespace="$(get_broker_namespace || :)"
   [[ -z "${broker_namespace}" ]] || \
-  ${OC} get all -n "${clusterset_broker_ns}" -o wide || :
+  ${OC} get all -n "${broker_namespace}" -o wide || :
 
   TITLE "Submariner Gateway info on ${cluster_name}"
 
@@ -5094,7 +5097,7 @@ function print_resources_and_pod_logs() {
   ${OC} get roles -A | grep "submariner" || :
 
   [[ -z "${broker_namespace}" ]] || \
-  ${OC} describe role submariner-k8s-broker-cluster -n "${clusterset_broker_ns}" || :
+  ${OC} describe role submariner-k8s-broker-cluster -n "${broker_namespace}" || :
 
   TITLE "Submariner Deployments, Daemon and Replica sets on ${cluster_name}"
 
