@@ -83,6 +83,9 @@ function remove_acm_managed_cluster() {
   ${OC} get managedcluster -o wide || :
 
   if ${OC} get managedcluster "${cluster_id}" ; then
+
+    ${OC} delete KlusterletAddonConfig "${cluster_id}" --timeout=30s --ignore-not-found || :
+
     ${OC} delete managedcluster "${cluster_id}" --timeout=30s || force_managedcluster_delete=TRUE
 
     if [[ "$force_managedcluster_delete" == TRUE && $(${OC} get managedcluster "${cluster_id}") ]]; then
