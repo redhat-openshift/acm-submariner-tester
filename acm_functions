@@ -492,7 +492,7 @@ function create_clusterset_for_submariner_in_acm_hub() {
 
   TITLE "Creating ACM 'ManagedClusterSet' object: ${ACM_CLUSTER_SET}"
 
-  create_namespace "${TEST_NS}"
+  create_namespace "${ACM_CLUSTER_SET}"
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
@@ -529,7 +529,7 @@ EOF
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding -n ${SUBM_NAMESPACE} &> '$acm_resource'"
-  local regex="Cluster Set:\s*${TEST_NS}"
+  local regex="Cluster Set:\s*${ACM_CLUSTER_SET}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
@@ -587,7 +587,7 @@ function create_new_managed_cluster_in_acm_hub() {
 
   ${OC} label namespace "${cluster_id}" cluster.open-cluster-management.io/managedCluster="${cluster_id}" --overwrite
 
-  TITLE "Create ACM ManagedCluster by ID: $cluster_id, Type: $cluster_type, ClusterSet: ${TEST_NS}"
+  TITLE "Add new ManagedCluster of type '$cluster_type' to '${ACM_CLUSTER_SET}' ClusterSet: $cluster_id"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
@@ -598,14 +598,14 @@ function create_new_managed_cluster_in_acm_hub() {
       cloud: ${cluster_type}
       name: ${cluster_id}
       vendor: OpenShift
-      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
+      cluster.open-cluster-management.io/clusterset: ${ACM_CLUSTER_SET}
   spec:
     hubAcceptsClient: true
     leaseDurationSeconds: 60
 EOF
 
 
-  TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${TEST_NS}'"
+  TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${ACM_CLUSTER_SET}'"
 
   local Klusterlet_conf="Klusterlet_${cluster_id}.yaml"
 
@@ -623,7 +623,7 @@ EOF
     clusterNamespace: ${cluster_id}
     clusterLabels:
       cloud: auto-detect
-      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
+      cluster.open-cluster-management.io/clusterset: ${ACM_CLUSTER_SET}
       name: ${cluster_id}
       vendor: auto-detect
     applicationManager:
@@ -1085,7 +1085,7 @@ EOF
   TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
   # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${TEST_NS}" --overwrite
+  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${ACM_CLUSTER_SET}" --overwrite
 
 }
 
@@ -1216,7 +1216,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
 
   local managed_cluster_status
 
-  TITLE "Verify Submariner connection established in the '${TEST_NS}' cluster-set of ACM namespace ${cluster_id}"
+  TITLE "Verify Submariner connection established in the '${ACM_CLUSTER_SET}' cluster-set of ACM namespace ${cluster_id}"
 
   ${OC} get managedcluster -o wide
 
