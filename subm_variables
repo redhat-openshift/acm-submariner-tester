@@ -170,9 +170,6 @@ export ACM_INSTANCE="multiclusterhub"
 export ACM_VER_TAG=${ACM_VER_TAG}
 export ACM_CHANNEL_PREFIX="release-"
 
-# ACM cluster-set and binding name for the managed clusters to be connected with Submariner
-export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
-
 
 ### MCE resources vars ###
 

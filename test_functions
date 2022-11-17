@@ -138,6 +138,9 @@ function export_global_script_variable() {
   export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
   export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
+  # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
+  export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
+
   BUG "Submariner Broker created but Gateway was not" \
   "Trim the length of ACM cluster set" \
   "https://issues.redhat.com/browse/ACM-2076"
@@ -1244,6 +1247,9 @@ function uninstall_submariner() {
       cleanup_required=YES
     }
 
+    # TODO: Need to add cloud cleanup, according to cloud provider:
+    # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
+
   else
     cleanup_required=YES
   fi
@@ -2036,6 +2042,17 @@ function test_subctl_command() {
   subctl version
 
   subctl --help
+
+  if [[ ! "$SUBM_VER_TAG" =~ latest|devel ]] && [[ ! $subctl_version =~ $SUBM_VER_TAG ]] ; then
+
+    local msg="Subctl tool version '${subctl_version}' is not as requested: $SUBM_VER_TAG"
+
+    BUG "$msg" \
+    "Bug was reported, no workaround is required" \
+    "https://issues.redhat.com/browse/ACM-2132"
+
+    FAILURE "$msg"
+  fi
 
 }
 

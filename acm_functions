@@ -475,7 +475,7 @@ EOF
 
 function create_clusterset_for_submariner_in_acm_hub() {
   ### Create ACM cluster-set ###
-  PROMPT "Create cluster-set for Submariner on ACM"
+  PROMPT "Create cluster-set '${ACM_CLUSTER_SET}' on ACM hub"
   trap_to_debug_commands;
 
   local acm_resource
