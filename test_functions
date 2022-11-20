@@ -138,6 +138,15 @@ function export_global_script_variable() {
   export NEW_NETSHOOT_CLUSTER_A="${NETSHOOT_CLUSTER_A}-new" # A NEW Netshoot pod on cluster A
   export HEADLESS_TEST_NS="${TEST_NS}-headless" # Namespace for the HEADLESS $NGINX_CLUSTER_BC service
 
+  # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
+  export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
+
+  BUG "Submariner Broker created but Gateway was not" \
+  "Trim the length of ACM cluster set" \
+  "https://issues.redhat.com/browse/ACM-2076"
+  # Workaround:
+  export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
+
 
   #################################################################################
   #               Saving important test properties in local files                 #
@@ -470,7 +479,7 @@ function setup_workspace() {
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || export PATH="$HOME/.local/bin:$PATH"
 
   # CD to main working directory
-  cd ${WORKDIR}
+  cd "${WORKDIR}" || return 1
 
   # Installing GoLang with Anaconda, if $CONFIG_GOLANG = yes/y
   if [[ "$CONFIG_GOLANG" =~ ^(y|yes)$ ]] ; then
@@ -492,23 +501,10 @@ function setup_workspace() {
       export OC="${GOBIN}/oc $VERBOSE_FLAG"
     fi
 
-    # Terraform preparations are not required since Submariner 0.12
-    # TITLE "Installing Terraform with Anaconda"
-    # BUG "Terraform v0.13.x is not supported when using Submariner Terraform scripts" \
-    # "Use Terraform v0.12.29" \
-    # "https://github.com/submariner-io/submariner/issues/847"
-    # # Workaround:
-    # install_local_terraform "${WORKDIR}" "0.12.29"
-
     TITLE "Installing JQ (JSON parser) with Anaconda"
     install_local_jq "${WORKDIR}"
 
   else
-    # Set GOBIN to system's default golang
-    # export GOROOT="/usr/local/go"
-    # export PATH="${GOROOT}/bin:${PATH}"
-    # export GOBIN="${GOROOT}/bin"
-
     # Verify GO installation
     verify_golang
   fi
@@ -580,16 +576,24 @@ function download_ocp_installer() {
   local ocp_major_version
   ocp_major_version="$(echo "$ocp_installer_version" | cut -s -d '.' -f 1)" # Get the major digit of OCP version
 
-  local ocp_major_version="${ocp_major_version:-4}" # if no numerical version was requested (e.g. "latest"), the default OCP major version is 4
+  # If no numerical version was requested (e.g. "latest"), the default OCP major version is 4
+  local ocp_major_version="${ocp_major_version:-4}"
   local oc_version_path="ocp/${ocp_installer_version}"
+  local oc_major_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients"
 
-  # Get the nightly (ocp-dev-preview) build, if requested by user input
-  if [[ "$oc_version_path" =~ nightly ]] ; then
-    oc_version_path="ocp-dev-preview/latest"
-    # Also available at: https://openshift-release-artifacts.svc.ci.openshift.org/
+  # Get latest "ocp-dev-preview Engineering Candidate" build, if the OCP version requested was "ec" or "nightly".
+  # These builds are also available at: 
+  # https://openshift-release-artifacts.svc.ci.openshift.org/ 
+  # https://amd64.ocp.releases.ci.openshift.org/
+  if [[ "$ocp_installer_version" =~ ^(ec|nightly)$  ]] ; then
+    oc_version_path="ocp-dev-preview/"
+    
+    # Append latest EC version, for example: 4.12.0-ec.5
+    oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
+    grep -Eoh ".*-ec\..*" | awk '{ gsub(/>|</, " " ); print $3; }' | tail -1)"
   fi
 
-  local oc_installer_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients/${oc_version_path}/"
+  local oc_installer_url="${oc_major_url}/${oc_version_path}/"
 
   cd "${WORKDIR}" || return 1
 
@@ -1124,7 +1128,7 @@ EOF
 
   # Using current SA certificate
   local auth_pod
-  auth_pod="$(oc get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
+  auth_pod="$(${OC} get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
   ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
 
   openssl x509 -in "${crt_file}" -text -noout
@@ -1243,6 +1247,9 @@ function uninstall_submariner() {
       cleanup_required=YES
     }
 
+    # TODO: Need to add cloud cleanup, according to cloud provider:
+    # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
+
   else
     cleanup_required=YES
   fi
@@ -1287,8 +1294,20 @@ function delete_submariner_namespace_and_crds() {
   ${OC} wait --for=delete namespace "${SUBM_NAMESPACE}" || :
 
   # Required if Broker cluster is not a Dataplane cluster as well:
-  # ${OC} delete namespace ${BROKER_NAMESPACE} --wait || :
-  force_delete_namespace "${BROKER_NAMESPACE}"
+  local broker_namespace
+  broker_namespace="$(get_broker_namespace || :)"
+  [[ -z "${broker_namespace}" ]] || force_delete_namespace "${broker_namespace}"
+
+}
+
+# ------------------------------------------
+
+function get_broker_namespace() {
+### Get correct Broker namespace from the Managed cluster set ###
+  # Do not trap_to_debug_commands since using output as return value
+
+  ${OC} get ManagedClusterSet "${ACM_CLUSTER_SET}" \
+  -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}" || :
 
 }
 
@@ -1610,14 +1629,12 @@ function install_netshoot_app_on_cluster_a() {
 
   ${OC} delete pod "${NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
+  set_netshoot_image_spec "sleep infinity"
   
   # NETSHOOT_CLUSTER_A=netshoot-cl-a # Already exported in global subm_variables
 
-  # Deployment is terminated after netshoot is loaded - need to "oc run" with infinite loop
-  # ${OC} delete deployment ${NETSHOOT_CLUSTER_A}  --ignore-not-found ${TEST_NS:+-n $TEST_NS}
-  # ${OC} create deployment ${NETSHOOT_CLUSTER_A}  --image ${NETSHOOT_IMAGE} ${TEST_NS:+-n $TEST_NS}
-  ${OC} run "${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" -- sleep infinity
+  ${OC} run "${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" \
+  --overrides="${NETSHOOT_IMAGE_SPEC}"
 
   TITLE "Wait up to 3 minutes for Netshoot pod [${NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run="${NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
@@ -1630,8 +1647,11 @@ function set_netshoot_image_spec() {
   ### Export the $NETSHOOT_IMAGE (Nettest) registry url (downstream or upstream) ###
     trap_to_debug_commands;
 
-    # Optional param: $1 => Nettest version to find in the registry
-    local submariner_version_or_tag="${1:-$SUBM_VER_TAG}"
+    # Command to run in the netshoot container
+    local cmd_for_netshoot="$1"
+
+    # Optional param: $2 => Nettest version to find in the registry
+    local submariner_version_or_tag="${2:-$SUBM_VER_TAG}"
 
     # Downloading Nettest from VPN_REGISTRY (downstream) only
     # if using --registry-images and if $submariner_version_or_tag is not devel
@@ -1649,33 +1669,42 @@ function set_netshoot_image_spec() {
       TITLE "Setting \$NETSHOOT_IMAGE security policy and downstream registry url: \n ${netshot_image_url}"
 
       export "NETSHOOT_IMAGE=${netshot_image_url}"
-    
-      export NETSHOOT_IMAGE_OVERRIDES='{
-            "spec": {
-                "template": {
-                    "spec": {
-                        "containers": [
-                            {
-                                "imagePullPolicy": "IfNotPresent",
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": false,
-                                    "capabilities": {
-                                        "drop": [
-                                            "ALL"
-                                        ]
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-        '
 
     else
       TITLE "Using upstream \$NETSHOOT_IMAGE url: $NETSHOOT_IMAGE"
+      
     fi
+
+    export NETSHOOT_IMAGE_SPEC='{
+      "spec": {
+        "securityContext": {
+          "runAsNonRoot": true,
+          "runAsUser": 2000,
+          "runAsGroup": 3000,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "containers": [
+          {
+            "name": "netshoot",
+            "image": "'${NETSHOOT_IMAGE}'",
+            "command": [
+                "/bin/bash",
+                "-c",
+                "'${cmd_for_netshoot}'"
+              ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": ["ALL"]
+              }
+            }
+          }
+        ]
+      }
+    }'
+
 }
 
 # ------------------------------------------
@@ -1720,11 +1749,10 @@ function test_basic_cluster_connectivity_before_submariner() {
 
   ${OC} delete pod ${netshoot_pod} --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
+  set_netshoot_image_spec "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
 
   ${OC} run ${netshoot_pod} --attach=true --restart=Never --pod-running-timeout=3m --request-timeout=3m --rm -i \
-  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" "${NETSHOOT_IMAGE_OVERRIDES:+--overrides=$NETSHOOT_IMAGE_OVERRIDES}" \
-  -- /bin/bash -c "curl --max-time 180 --verbose ${nginx_IP_cluster_bc}:${NGINX_PORT}"
+  ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" --overrides="${NETSHOOT_IMAGE_SPEC}"
 }
 
 # ------------------------------------------
@@ -2015,6 +2043,17 @@ function test_subctl_command() {
 
   subctl --help
 
+  if [[ ! "$SUBM_VER_TAG" =~ latest|devel ]] && [[ ! $subctl_version =~ $SUBM_VER_TAG ]] ; then
+
+    local msg="Subctl tool version '${subctl_version}' is not as requested: $SUBM_VER_TAG"
+
+    BUG "$msg" \
+    "Bug was reported, no workaround is required" \
+    "https://issues.redhat.com/browse/ACM-2132"
+
+    FAILURE "$msg"
+  fi
+
 }
 
 # ------------------------------------------
@@ -2060,7 +2099,7 @@ function create_subctl_join_file() {
   TITLE "Adding Broker file and IPSec ports to subctl join command on cluster ${cluster_name}"
 
   JOIN_CMD="subctl join \
-  ./${BROKER_INFO} ${SUBM_CABLE_DRIVER:+--cable-driver $SUBM_CABLE_DRIVER} \
+  ./${SUBM_BROKER_INFO} ${SUBM_CABLE_DRIVER:+--cable-driver $SUBM_CABLE_DRIVER} \
   --ikeport ${IPSEC_IKE_PORT} --nattport ${IPSEC_NATT_PORT}"
 
   TITLE "Adding '--health-check' to subctl join command (to enable Gateway health check)"
@@ -2195,8 +2234,8 @@ function install_broker_via_subctl_on_cluster_a() {
   cd "${WORKDIR}" || return 1
   #cd $GOPATH/src/github.com/submariner-io/submariner-operator
 
-  TITLE "Remove previous ${BROKER_INFO} (if exists)"
-  [[ ! -e "${BROKER_INFO}" ]] || rm "${BROKER_INFO}"
+  TITLE "Remove previous ${SUBM_BROKER_INFO} (if exists)"
+  [[ ! -e "${SUBM_BROKER_INFO}" ]] || rm "${SUBM_BROKER_INFO}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -2229,21 +2268,26 @@ function install_broker_via_api_on_cluster() {
   # Since Submariner 0.12 it is required to create Broker CRD
   if check_version_greater_or_equal "$submariner_version_or_tag" "0.12" ; then
 
-    local clusterset_broker_namespace
-    clusterset_broker_namespace=$(${OC} get ManagedClusterSet ${TEST_NS} \
-    -o jsonpath="{.metadata.annotations['cluster\.open-cluster-management\.io/submariner-broker-ns']}")
+    local broker_namespace
+    broker_namespace="$(get_broker_namespace || :)"
+
+    [[ -n "${broker_namespace}" ]] || FATAL "Failed to retreive the managed cluster-set namespace on cluster ${cluster_name}"
 
     local enable_globalnet="true"
     [[ "$GLOBALNET" =~ ^(y|yes)$ ]] || enable_globalnet="false"
 
-    TITLE "Creating the Submariner Broker resource in namespace '${clusterset_broker_namespace} with Globalnet=${enable_globalnet}"
+    TITLE "Creating the Submariner Broker in the cluster-set namespace '${broker_namespace}' with Globalnet=${enable_globalnet}"
+
+    # Submariner Broker is created once per cluster-set.
+    # Using a different name then 'submariner-broker' is not supported.
+    # Ref: https://access.redhat.com/documentation/en-us/red_hat_advanced_cluster_management_for_kubernetes/2.5/html-single/add-ons/index#submariner-globalnet
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: submariner.io/v1alpha1
     kind: Broker
     metadata:
       name: submariner-broker
-      namespace: ${clusterset_broker_namespace}
+      namespace: ${broker_namespace}
     spec:
       globalnetEnabled: ${enable_globalnet}
 EOF
@@ -4064,10 +4108,10 @@ function install_new_netshoot_cluster_a() {
 
   ${OC} delete pod "${NEW_NETSHOOT_CLUSTER_A}" --ignore-not-found ${TEST_NS:+-n $TEST_NS} || :
 
-  set_netshoot_image_spec
-
+  set_netshoot_image_spec "sleep 5m"
+  
   ${OC} run "${NEW_NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS} --image "${NETSHOOT_IMAGE}" \
-  --pod-running-timeout=5m --restart=Never -- sleep 5m
+  --pod-running-timeout=5m --restart=Never --overrides="${NETSHOOT_IMAGE_SPEC}"
 
   TITLE "Wait up to 3 minutes for NEW Netshoot pod [${NEW_NETSHOOT_CLUSTER_A}] to be ready:"
   ${OC} wait --timeout=3m --for=condition=ready pod -l run="${NEW_NETSHOOT_CLUSTER_A}" ${TEST_NS:+-n $TEST_NS}
@@ -5051,7 +5095,10 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :
 
-  ${OC} get all -n "${BROKER_NAMESPACE}" -o wide || :
+  local broker_namespace
+  broker_namespace="$(get_broker_namespace || :)"
+  [[ -z "${broker_namespace}" ]] || \
+  ${OC} get all -n "${broker_namespace}" -o wide || :
 
   TITLE "Submariner Gateway info on ${cluster_name}"
 
@@ -5066,7 +5113,8 @@ function print_resources_and_pod_logs() {
 
   ${OC} get roles -A | grep "submariner" || :
 
-  ${OC} describe role submariner-k8s-broker-cluster -n "${BROKER_NAMESPACE}" || :
+  [[ -z "${broker_namespace}" ]] || \
+  ${OC} describe role submariner-k8s-broker-cluster -n "${broker_namespace}" || :
 
   TITLE "Submariner Deployments, Daemon and Replica sets on ${cluster_name}"
 

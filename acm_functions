@@ -83,6 +83,9 @@ function remove_acm_managed_cluster() {
   ${OC} get managedcluster -o wide || :
 
   if ${OC} get managedcluster "${cluster_id}" ; then
+
+    ${OC} delete KlusterletAddonConfig "${cluster_id}" --timeout=30s --ignore-not-found || :
+
     ${OC} delete managedcluster "${cluster_id}" --timeout=30s || force_managedcluster_delete=TRUE
 
     if [[ "$force_managedcluster_delete" == TRUE && $(${OC} get managedcluster "${cluster_id}") ]]; then
@@ -472,7 +475,7 @@ EOF
 
 function create_clusterset_for_submariner_in_acm_hub() {
   ### Create ACM cluster-set ###
-  PROMPT "Create cluster-set for Submariner on ACM"
+  PROMPT "Create cluster-set '${ACM_CLUSTER_SET}' on ACM hub"
   trap_to_debug_commands;
 
   local acm_resource
@@ -488,53 +491,54 @@ function create_clusterset_for_submariner_in_acm_hub() {
   if [[ "$acm_status" == FAILED ]] ; then
     ${OC} api-resources
     FATAL "ManagedClusterSet resource type is missing"
-  fi
+  fi 
 
-  TITLE "Creating 'ManagedClusterSet' resource for ${TEST_NS}"
+  TITLE "Creating ACM 'ManagedClusterSet' object: ${ACM_CLUSTER_SET}"
 
-  create_namespace "${TEST_NS}"
+  create_namespace "${ACM_CLUSTER_SET}"
 
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSet
   metadata:
-    name: ${TEST_NS}
+    name: ${ACM_CLUSTER_SET}
 EOF
 
-  local cmd="${OC} describe ManagedClusterSets &> '$acm_resource'"
+  local cmd="${OC} describe ManagedClusterSet &> '$acm_resource'"
   # local regex="Reason:\s*ClustersSelected" # Only later it includes "ManagedClusterSet"
-  local regex="Name:\s*${TEST_NS}"
+  local regex="Name:\s*${ACM_CLUSTER_SET}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" == FAILED ]] ; then
-    # FATAL "ManagedClusterSet for '${TEST_NS}' is still empty after $duration"
-    FATAL "'${TEST_NS}' was not added to ManagedClusterSet after $duration"
+    FATAL "'${ACM_CLUSTER_SET}' was not added to ManagedClusterSet after $duration"
   fi
 
-  TITLE "Creating 'ManagedClusterSetBinding' resource for Submariner in the ClusterSet '${TEST_NS}'"
+  TITLE "Creating 'ManagedClusterSetBinding' for Submariner in the ClusterSet '${ACM_CLUSTER_SET}'"
 
-  # Bind the namespace
+  # Bind the managed cluster set to a namespace
+  # The ManagedClusterSetBinding must have the same name as the target ManagedClusterSet
+
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1beta1
   kind: ManagedClusterSetBinding
   metadata:
-    name: ${TEST_NS}
+    name: ${ACM_CLUSTER_SET}
     namespace: ${SUBM_NAMESPACE}
   spec:
-    clusterSet: ${TEST_NS}
+    clusterSet: ${ACM_CLUSTER_SET}
 EOF
 
   local cmd="${OC} describe ManagedClusterSetBinding -n ${SUBM_NAMESPACE} &> '$acm_resource'"
-  local regex="Cluster Set:\s*${TEST_NS}"
+  local regex="Cluster Set:\s*${ACM_CLUSTER_SET}"
 
   watch_and_retry "$cmd ; grep -E '$regex' $acm_resource" "$duration" || :
   highlight "$regex" "$acm_resource" || acm_status=FAILED
 
   if [[ "$acm_status" == FAILED ]] ; then
-    FATAL "ManagedClusterSetBinding for '${TEST_NS}' was not created in ${SUBM_NAMESPACE} after $duration"
+    FATAL "ManagedClusterSetBinding '${ACM_CLUSTER_SET}' was not created in ${SUBM_NAMESPACE} after $duration"
   fi
 
 }
@@ -586,7 +590,7 @@ function create_new_managed_cluster_in_acm_hub() {
 
   ${OC} label namespace "${cluster_id}" cluster.open-cluster-management.io/managedCluster="${cluster_id}" --overwrite
 
-  TITLE "Create ACM ManagedCluster by ID: $cluster_id, Type: $cluster_type, ClusterSet: ${TEST_NS}"
+  TITLE "Add new ManagedCluster of type '$cluster_type' to '${ACM_CLUSTER_SET}' ClusterSet: $cluster_id"
 
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1
@@ -597,14 +601,14 @@ function create_new_managed_cluster_in_acm_hub() {
       cloud: ${cluster_type}
       name: ${cluster_id}
       vendor: OpenShift
-      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
+      cluster.open-cluster-management.io/clusterset: ${ACM_CLUSTER_SET}
   spec:
     hubAcceptsClient: true
     leaseDurationSeconds: 60
 EOF
 
 
-  TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${TEST_NS}'"
+  TITLE "Create ACM ${ACM_VER_TAG} Klusterlet Addon Config for managed cluster '${cluster_id}', in the ClusterSet '${ACM_CLUSTER_SET}'"
 
   local Klusterlet_conf="Klusterlet_${cluster_id}.yaml"
 
@@ -622,7 +626,7 @@ EOF
     clusterNamespace: ${cluster_id}
     clusterLabels:
       cloud: auto-detect
-      cluster.open-cluster-management.io/clusterset: ${TEST_NS}
+      cluster.open-cluster-management.io/clusterset: ${ACM_CLUSTER_SET}
       name: ${cluster_id}
       vendor: auto-detect
     applicationManager:
@@ -1084,7 +1088,7 @@ EOF
   TITLE "Label the managed clusters and klusterletaddonconfigs to deploy submariner"
 
   # ${OC} label managedclusters.cluster.open-cluster-management.io ${cluster_id} "cluster.open-cluster-management.io/${SUBM_AGENT}=true" --overwrite
-  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${TEST_NS}" --overwrite
+  ${OC} label managedcluster "${cluster_id}" "cluster.open-cluster-management.io/clusterset=${ACM_CLUSTER_SET}" --overwrite
 
 }
 
@@ -1142,16 +1146,17 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   # All checks should print: managedclusteraddon.addon.open-cluster-management.io/submariner condition met
   # "Degraded" conditions should be false
 
-  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=RegistrationApplied && \
-  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=ManifestApplied && \
-  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled && \
-  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false || managed_cluster_status=FAILED
+  ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=RegistrationApplied \
+  && ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=ManifestApplied \
+  && ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=SubmarinerGatewayNodesLabeled \
+  && ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=Available \
+  || managed_cluster_status=FAILED
 
-  BUG "Submariner Addon condition shows as Unavailable, even when connection already esablished" \
-  "Skip verifying managedclusteraddons "${SUBM_ADDON}" --for=condition=Available" \
-  "No bug yet"
-  # Workaround, remove this step:
-  # ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=Available && \
+  BUG "Submariner Addon condition shows wrong status" \
+  "Skip verifying managedclusteraddons '${SUBM_ADDON}' -n '${cluster_id}' --for=condition=SubmarinerAgentDegraded=false" \
+  "TODO: Need to report bug"
+  # Workaround - Remove this step:
+  # ${OC} wait --timeout=20m managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" --for=condition=SubmarinerAgentDegraded=false
 
 
   ${OC} describe managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" || managed_cluster_status=FAILED
@@ -1185,9 +1190,15 @@ function validate_submariner_config_in_acm_managed_cluster() {
   ### Test SubmarinerConfig ###
   # All checks should print: submarinerconfig.submarineraddon.open-cluster-management.io/submariner condition met
 
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerClusterEnvironmentPrepared && \
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerConfigApplied && \
-  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerGatewaysLabeled || config_status=FAILED
+  ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerClusterEnvironmentPrepared \
+  && ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerGatewaysLabeled \
+  || config_status=FAILED
+
+  BUG "Submariner Config condition shows wrong status" \
+  "Skip verifying submarinerconfig '${SUBM_CONFIG}' -n '${cluster_id}' --for=condition=SubmarinerConfigApplied" \
+  "TODO: Need to report bug"
+  # Workaround - Remove this step:
+  # ${OC} wait --timeout=5m submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" --for=condition=SubmarinerConfigApplied
 
   ${OC} describe submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" || config_status=FAILED
 
@@ -1208,7 +1219,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
 
   local managed_cluster_status
 
-  TITLE "Verify Submariner connection established in the '${TEST_NS}' cluster-set of ACM namespace ${cluster_id}"
+  TITLE "Verify Submariner connection established in the '${ACM_CLUSTER_SET}' cluster-set of ACM namespace ${cluster_id}"
 
   ${OC} get managedcluster -o wide
 
@@ -1228,7 +1239,7 @@ function validate_submariner_agent_connected_in_acm_managed_cluster() {
     fi
 
   else
-    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 Submariner agents in '${TEST_NS}' ManagedClusterSet"
+    echo -e "\n# Ignoring 'SubmarinerConnectionDegraded' condition, as it requires at least 2 ManagedClusterSet with Submariner Addon '${SUBM_ADDON}'"
   fi
 
 }

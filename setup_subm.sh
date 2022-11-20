@@ -580,98 +580,98 @@ cat "$SYS_LOG"
   # Print planned steps according to CLI/User inputs
   ${JUNIT_CMD} show_test_plan
 
-  ### OCP Clusters Setups and preparations (unless requested to --skip-ocp-setup) ###
+  ### OCP Clusters preparations (unless requested to --skip-ocp-setup) ###
 
-  if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+  # if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
    
-    ### Cluster A Setup (mandatory cluster)
+  ### Cluster A Setup (mandatory cluster)
 
-    # Running destroy or create or both (reset) for cluster A
+  # Running destroy or create or both (reset) for cluster A
 
-    if [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+  if [[ "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
-
-    fi
-
-    if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_A" "$CLUSTER_A_DIR"
-
-      ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
-
-    fi
-
-    if [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
-
-    fi
-
-    ### Cluster B Setup (if it is expected to be an active cluster) ###
-
-    if [[ -s "$CLUSTER_B_YAML" ]] ; then
-
-      # Running destroy or create or both (reset) for cluster B
-
-      if [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
-
-      fi
-
-      if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-      
-        ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_B" "$CLUSTER_B_DIR"
-
-        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
-
-      fi
-
-      if [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
-
-      fi
-
-    fi
-
-    ### Cluster C Setup (if it is expected to be an active cluster) ###
-
-    if [[ -s "$CLUSTER_C_YAML" ]] ; then
-
-      # Running destroy or create or both (reset) for cluster C
-
-      if [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
-
-      fi
-
-      if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-      
-        ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_C" "$CLUSTER_C_DIR"
-
-        ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
-      
-      fi
-
-      if [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
-
-      fi
-
-    fi
-
-    # Get test exit status (from file $TEST_STATUS_FILE)
-    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
-
-    # Update test exit status to 0, unless it is already 1 or 2
-    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+    ${JUNIT_CMD} destroy_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
 
   fi
-  ### END of OCP Setup (Create or Destroy) ###
+
+  if [[ "$RESET_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_A" "$CLUSTER_A_DIR"
+
+    ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_A_DIR" "$CLUSTER_A_YAML" "$CLUSTER_A_NAME"
+
+  fi
+
+  if [[ "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+    ${JUNIT_CMD} create_cluster "$CLUSTER_A_DIR" "$CLUSTER_A_NAME"
+
+  fi
+
+  ### Cluster B Setup (if it is expected to be an active cluster) ###
+
+  if [[ -s "$CLUSTER_B_YAML" ]] ; then
+
+    # Running destroy or create or both (reset) for cluster B
+
+    if [[ "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} destroy_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+
+    fi
+
+    if [[ "$RESET_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+    
+      ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_B" "$CLUSTER_B_DIR"
+
+      ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_B_DIR" "$CLUSTER_B_YAML" "$CLUSTER_B_NAME"
+
+    fi
+
+    if [[ "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} create_cluster "$CLUSTER_B_DIR" "$CLUSTER_B_NAME"
+
+    fi
+
+  fi
+
+  ### Cluster C Setup (if it is expected to be an active cluster) ###
+
+  if [[ -s "$CLUSTER_C_YAML" ]] ; then
+
+    # Running destroy or create or both (reset) for cluster C
+
+    if [[ "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} destroy_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+
+    fi
+
+    if [[ "$RESET_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+    
+      ${JUNIT_CMD} download_ocp_installer "$TARGET_VERION_CLUSTER_C" "$CLUSTER_C_DIR"
+
+      ${JUNIT_CMD} prepare_ocp_install "$CLUSTER_C_DIR" "$CLUSTER_C_YAML" "$CLUSTER_C_NAME"
+    
+    fi
+
+    if [[ "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} create_cluster "$CLUSTER_C_DIR" "$CLUSTER_C_NAME"
+
+    fi
+
+  fi
+
+  # Get test exit status (from file $TEST_STATUS_FILE)
+  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+
+  # Update test exit status to 0, unless it is already 1 or 2
+  [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+
+  # fi
+  # ### END of OCP Setup (Create or Destroy) ###
 
 
   ### OCP general preparations required for ALL tests, except unit-tests (pkg) ###
@@ -687,6 +687,7 @@ cat "$SYS_LOG"
 
     ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
 
+    # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
     if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
       ### Verify clusters status after OCP reset/create, and add elevated user and context ###
@@ -719,6 +720,13 @@ cat "$SYS_LOG"
 
         check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
 
+      fi
+
+      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+        FATAL "Both cluster B and cluster C are down. \
+        Multi-Cluster tests require at least one more cluster (beside cluster A)"
+        
       fi
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
@@ -921,6 +929,13 @@ cat "$SYS_LOG"
 
       fi
 
+      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+        FATAL "Both cluster B and cluster C are down. \
+        Multi-Cluster tests require at least one more cluster (beside cluster A)"
+        
+      fi
+
     fi
     ### END of prerequisites for Submariner system tests  ###
 
@@ -953,31 +968,33 @@ cat "$SYS_LOG"
 
     [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
 
-    # Create the the Managed cluster instance, and a new cluster-set for the managed clusters
+    # Create ACM Hub instance
 
     ${JUNIT_CMD} create_acm_multiclusterhub
-
-    ${JUNIT_CMD} create_clusterset_for_submariner_in_acm_hub
 
   fi
   ### END of ACM Install ###
 
+  ### Create ACM cluster-set and add the managed clusters ### 
+
+  ${JUNIT_CMD} create_clusterset_for_submariner_in_acm_hub
+
   # Add first managed cluster A (the Hub)
-  if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+  if [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_HUB}"
 
   fi
 
   # Add second managed cluster B
-  if [[ -s "$CLUSTER_B_YAML" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_B}"
 
   fi
 
   # Add third managed cluster C
-  if [[ -s "$CLUSTER_C_YAML" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+  if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
     ${JUNIT_CMD} create_and_import_managed_cluster "${KUBECONF_CLUSTER_C}"
 
@@ -1021,7 +1038,7 @@ cat "$SYS_LOG"
 
       # Join Cluster C with subctl
 
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} set_join_parameters_for_cluster_c
 
@@ -1484,7 +1501,7 @@ fi
 find "${WORKDIR}" -maxdepth 1 -type f -iname "${OCP_USR}.sec" -exec cp -f "{}" ${OUTPUT_DIR}/ \; || :
 
 # # Artifact broker.info file (if created with subctl deploy) - Depecated.
-# find "${WORKDIR}" -maxdepth 1 -type f -iname "$BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
+# find "${WORKDIR}" -maxdepth 1 -type f -iname "$SUBM_BROKER_INFO" -exec cp -f "{}" "${OUTPUT_DIR}/submariner_{}" \; || :
 
 # Compress the required artifacts (either files or directories)
 

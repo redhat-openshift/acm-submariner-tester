@@ -73,13 +73,21 @@ function export_LATEST_IIB() {
 
     index_images="$(jq -r "${iib_query}" $umb_output)" || :
 
-    # If still no image found - increase the delta to 500 days (but filter completed pipelines only)
+    # If still no image found - search within NON-completed pipelines too
     if [[ -z "$index_images" || "$index_images" == null ]]; then
-      BUG "Failed to retrieve images during the last 100 days - Searching images during the last 500 days (in completed pipelines only)"
+      BUG "Failed to retrieve images during the last 100 days - Searching images within non-completed pipelines"
 
-      fetch_datagrapper "${bundle_name}" "${operator_version}" "500" "${umb_output}"
+      local iib_non_completed
+      iib_non_completed='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
-      iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+      index_images="$(jq -r "${iib_non_completed}" $umb_output)" || :
+    fi
+
+    # If still no image found - increase the delta to 200 days (but filter completed pipelines only)
+    if [[ -z "$index_images" || "$index_images" == null ]]; then
+      BUG "Failed to retrieve images during the last 100 days - Searching images during the last 200 days"
+
+      fetch_datagrapper "${bundle_name}" "${operator_version}" "200" "${umb_output}"
 
       index_images="$(jq -r "${iib_query}" $umb_output)" || :
     fi
@@ -146,6 +154,9 @@ function fetch_datagrapper() {
   local version="${2}"
   local num_of_days="${3}"
   local umb_output_file="${4}"
+
+  # Datagrepper keeps build info at most eight months into the past (i.e. 240 days)
+  (( num_of_days < 240 )) || num_of_days=240
 
   TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat)
   Bundle: ${bundle_name}
