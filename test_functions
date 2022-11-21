@@ -1886,6 +1886,16 @@ function download_subctl_by_tag() {
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
     local submariner_version_or_tag="${1:-v[0-9]}"
 
+    echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+    local subctl_image_url
+
+    if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
+      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+    else
+      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+    fi
+
     cd "${WORKDIR}" || return 1
 
     # Downloading SubCtl from VPN_REGISTRY (downstream) only
@@ -1894,28 +1904,18 @@ function download_subctl_by_tag() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
+      # Fix the $submariner_version_or_tag value for custom images
+      set_subm_version_tag_var "submariner_version_or_tag"
+
       TITLE "Backup previous subctl archive (if exists)"
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f "${subctl_xz}" "${subctl_xz}".bak
 
       TITLE "Downloading SubCtl from [${VPN_REGISTRY}]"
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
-
-      echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
-      local subctl_image_url
-
-      if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-      else
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-        # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
-      fi
-
       echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract "$subctl_image_url" --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$submariner_version_or_tag' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || getsubctl_status=FAILED
 
       ${OC} image extract "$subctl_image_url" --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2012,6 +2012,11 @@ function download_subctl_by_tag() {
 
     echo -e "\n# Store SubCtl version in $SUBCTL_VERSION_FILE"
     subctl version | awk '{print $3}' > "$SUBCTL_VERSION_FILE"
+
+    if [[ "$getsubctl_status" == FAILED ]] ; then
+      FAILURE "getsubctl.sh failed to retreive subctl tool, 
+      or '$submariner_version_or_tag' was not set correctly in $subctl_image_url"
+    fi
 
 }
 
