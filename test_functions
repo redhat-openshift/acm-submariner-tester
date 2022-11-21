@@ -5158,6 +5158,8 @@ function print_resources_and_pod_logs() {
 
   TITLE "All Submariner logs on ${cluster_name}"
 
+  print_pod_logs_in_namespace "$ACM_NAMESPACE" "app=submariner-addon"
+  
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
