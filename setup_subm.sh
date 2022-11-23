@@ -792,11 +792,6 @@ cat "$SYS_LOG"
     # Running cleanup on cluster A if requested
     if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      # ${JUNIT_CMD} clean_acm_namespace_and_resources  # Skipping ACM cleanup, as it might not be required for Submariner tests
-      ${JUNIT_CMD} remove_multicluster_engine # Required only for the Hub cluster
-
-      ${JUNIT_CMD} delete_acm_image_streams_and_tags # Required only for the Hub cluster
-
       ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_HUB}"
 
       ${JUNIT_CMD} uninstall_submariner "${KUBECONF_HUB}"
@@ -804,6 +799,15 @@ cat "$SYS_LOG"
       ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
 
       ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_HUB}"
+
+      # Cleaning ACM and MCE is required only for the Hub cluster A
+      # TODO: Move to a separate flag, as it might not required for Submariner tests
+
+      ${JUNIT_CMD} delete_acm_image_streams_and_tags
+
+      ${JUNIT_CMD} remove_multicluster_engine 
+
+      ${JUNIT_CMD} clean_acm_namespace_and_resources
 
     fi
     # END of cluster A cleanup
