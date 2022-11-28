@@ -407,7 +407,6 @@ EOF
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
 
   echo -e "\n# MultiClusterEngine version '${mce_current_version}' is installed"
-  # TITLE "MCE ${mce_current_version} console url: $(${OC} get routes -n ${MCE_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
 
@@ -442,16 +441,26 @@ function create_acm_multiclusterhub() {
     disableHubSelfManagement: true
 EOF
 
-  TITLE "Wait for ACM console url to be available"
+  TITLE "Wait for ACM Instance '${ACM_INSTANCE}' to be running"
   local duration=15m
-  cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
-  watch_and_retry "$cmd" "$duration" || acm_status=FAILED
+  # cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -o jsonpath='{.status.phase}'"
+  cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -n ${ACM_NAMESPACE}"
+  watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
 
-  if [[ "$acm_status" != FAILED ]] ; then
-    TITLE "Wait for ACM Instance '${ACM_INSTANCE}' to be running"
-    # cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -o jsonpath='{.status.phase}'"
-    cmd="${OC} get MultiClusterHub ${ACM_INSTANCE} -n ${ACM_NAMESPACE}"
-    watch_and_retry "$cmd" "$duration" "Running" || acm_status=FAILED
+  # Since ACM 2.7 ACM console route is not available, check for console plugin instead
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
+    TITLE "Verify ACM console plugin (for ACM >= 2.7)"
+
+    ${OC} wait --timeout=$duration consoles.operator.openshift.io cluster \
+    --for=condition=DeploymentAvailable || acm_status=FAILED
+
+    ${OC} get consoleplugin || :
+
+  else
+    TITLE "Verify ACM console url (for ACM < 2.7)"
+    
+    cmd="${OC} get routes -n ${ACM_NAMESPACE} multicloud-console --no-headers -o custom-columns='URL:spec.host'"
+    watch_and_retry "$cmd" "$duration" || acm_status=FAILED
   fi
 
   TITLE "All MultiClusterHub resources status:"
@@ -470,7 +479,8 @@ EOF
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
 
-  TITLE "ACM ${acm_current_version} console url: $(${OC} get routes -n "${ACM_NAMESPACE}" multicloud-console --no-headers -o custom-columns='URL:spec.host')"
+  TITLE "ACM version [${acm_current_version}] hub installed" 
+  # console url: $(${OC} get routes -n "${ACM_NAMESPACE}" multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
 
