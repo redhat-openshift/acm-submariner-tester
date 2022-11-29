@@ -1330,7 +1330,8 @@ cat "$SYS_LOG"
       fi
     fi
 
-    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" != 1 ]] ; then
+    # If all E2E tests passed, update test exit status to 0 (unless it is already 1 or 2)
+    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" != @(1|2) ]] ; then
       echo 0 > "$TEST_STATUS_FILE"
     else
       FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
