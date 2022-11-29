@@ -141,11 +141,11 @@ function export_global_script_variable() {
   # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
   export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
 
-  BUG "Submariner Broker created but Gateway was not" \
-  "Trim the length of ACM cluster set" \
-  "https://issues.redhat.com/browse/ACM-2076"
-  # Workaround:
-  export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
+  # BUG "Submariner Broker created but Gateway was not" \
+  # "Trim the length of ACM cluster set" \
+  # "https://issues.redhat.com/browse/ACM-2076"
+  # # Workaround:
+  # export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
 
 
   #################################################################################
@@ -1517,6 +1517,7 @@ function delete_old_submariner_images_from_cluster() {
   #   $SUBM_IMG_LIGHTHOUSE \
   #   $SUBM_IMG_COREDNS \
   #   $SUBM_IMG_GLOBALNET \
+  #   $SUBM_IMG_METRICS \
   #   $SUBM_IMG_OPERATOR \
   #   $SUBM_IMG_BUNDLE \
   #   ; do
@@ -3135,6 +3136,7 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_LIGHTHOUSE \
     $SUBM_IMG_COREDNS \
     $SUBM_IMG_GLOBALNET \
+    $SUBM_IMG_METRICS \
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
@@ -3278,10 +3280,10 @@ function test_submariner_resources_status() {
   ${OC} get all -n "${SUBM_NAMESPACE}" --show-labels || submariner_status=DOWN
 
   ${OC} get pods -n "${SUBM_NAMESPACE}" | grep "${SUBM_OPERATOR}" \
-  |& (! highlight "Error|CrashLoopBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
+  |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
 
   if [[ "$submariner_status" == DOWN ]] ; then
-    FATAL "Submariner installation failure occurred on $cluster_name.
+    FAILURE "Submariner installation failure occurred on $cluster_name.
     Resources/CRDs were not installed, or Submariner pods have crashed."
   fi
 
@@ -4940,6 +4942,7 @@ function test_products_versions() {
   #     $SUBM_IMG_LIGHTHOUSE|\
   #     $SUBM_IMG_COREDNS|\
   #     $SUBM_IMG_GLOBALNET|\
+  #     $SUBM_IMG_METRICS|\
   #     $SUBM_IMG_OPERATOR|\
   #     $SUBM_IMG_BUNDLE" |\
   # while read -r line ; do
@@ -5184,6 +5187,8 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-routeagent"
+
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-metrics-proxy"
 
   print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 
