@@ -3129,6 +3129,12 @@ function upload_submariner_images_to_cluster_registry() {
   local import_image_output
   import_image_output="$(mktemp)_import_image"
 
+  BUG "Submariner Metrics-Proxy does not have a dedicated image" \
+  "Import Nettest image instead, which includes Submariner Matrics-Proxy" \
+  "https://issues.redhat.com/browse/ACM-2066"
+  # Workaound:
+  export "SUBM_IMG_METRICS=${SUBM_IMG_NETTEST}"
+
   for img in \
     $SUBM_IMG_GATEWAY \
     $SUBM_IMG_ROUTE \
