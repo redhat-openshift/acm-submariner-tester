@@ -141,11 +141,11 @@ function export_global_script_variable() {
   # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
   export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
 
-  BUG "Submariner Broker created but Gateway was not" \
-  "Trim the length of ACM cluster set" \
-  "https://issues.redhat.com/browse/ACM-2076"
-  # Workaround:
-  export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
+  # BUG "Submariner Broker created but Gateway was not" \
+  # "Trim the length of ACM cluster set" \
+  # "https://issues.redhat.com/browse/ACM-2076"
+  # # Workaround:
+  # export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
 
 
   #################################################################################
@@ -1517,6 +1517,7 @@ function delete_old_submariner_images_from_cluster() {
   #   $SUBM_IMG_LIGHTHOUSE \
   #   $SUBM_IMG_COREDNS \
   #   $SUBM_IMG_GLOBALNET \
+  #   $SUBM_IMG_METRICS \
   #   $SUBM_IMG_OPERATOR \
   #   $SUBM_IMG_BUNDLE \
   #   ; do
@@ -1886,6 +1887,16 @@ function download_subctl_by_tag() {
     # If not specifying a tag - it will download latest version released (not latest subctl-devel)
     local submariner_version_or_tag="${1:-v[0-9]}"
 
+    echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
+    local subctl_image_url
+
+    if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
+      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+    else
+      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+    fi
+
     cd "${WORKDIR}" || return 1
 
     # Downloading SubCtl from VPN_REGISTRY (downstream) only
@@ -1894,28 +1905,18 @@ function download_subctl_by_tag() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
+      # Fix the $submariner_version_or_tag value for custom images
+      set_subm_version_tag_var "submariner_version_or_tag"
+
       TITLE "Backup previous subctl archive (if exists)"
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
       [[ ! -e "$subctl_xz" ]] || mv -f "${subctl_xz}" "${subctl_xz}".bak
 
       TITLE "Downloading SubCtl from [${VPN_REGISTRY}]"
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
-
-      echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
-      local subctl_image_url
-
-      if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-      else
-        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-        # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
-      fi
-
       echo -e "\n# Check if $subctl_xz exists in $subctl_image_url"
       ${OC} image extract "$subctl_image_url" --path=/dist/subctl*:./ --dry-run \
-      |& highlight "$subctl_xz" || BUG "SubCtl binary with tag '$submariner_version_or_tag' was not found in $subctl_image_url"
+      |& highlight "$subctl_xz" || getsubctl_status=FAILED
 
       ${OC} image extract "$subctl_image_url" --path=/dist/subctl-*-linux-amd64.tar.xz:./ --confirm
 
@@ -2012,6 +2013,11 @@ function download_subctl_by_tag() {
 
     echo -e "\n# Store SubCtl version in $SUBCTL_VERSION_FILE"
     subctl version | awk '{print $3}' > "$SUBCTL_VERSION_FILE"
+
+    if [[ "$getsubctl_status" == FAILED ]] ; then
+      FAILURE "getsubctl.sh failed to retreive subctl tool, 
+      or '$submariner_version_or_tag' was not set correctly in $subctl_image_url"
+    fi
 
 }
 
@@ -3130,6 +3136,7 @@ function upload_submariner_images_to_cluster_registry() {
     $SUBM_IMG_LIGHTHOUSE \
     $SUBM_IMG_COREDNS \
     $SUBM_IMG_GLOBALNET \
+    $SUBM_IMG_METRICS \
     $SUBM_IMG_OPERATOR \
     $SUBM_IMG_BUNDLE \
     ; do
@@ -3273,10 +3280,10 @@ function test_submariner_resources_status() {
   ${OC} get all -n "${SUBM_NAMESPACE}" --show-labels || submariner_status=DOWN
 
   ${OC} get pods -n "${SUBM_NAMESPACE}" | grep "${SUBM_OPERATOR}" \
-  |& (! highlight "Error|CrashLoopBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
+  |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
 
   if [[ "$submariner_status" == DOWN ]] ; then
-    FATAL "Submariner installation failure occurred on $cluster_name.
+    FAILURE "Submariner installation failure occurred on $cluster_name.
     Resources/CRDs were not installed, or Submariner pods have crashed."
   fi
 
@@ -4935,6 +4942,7 @@ function test_products_versions() {
   #     $SUBM_IMG_LIGHTHOUSE|\
   #     $SUBM_IMG_COREDNS|\
   #     $SUBM_IMG_GLOBALNET|\
+  #     $SUBM_IMG_METRICS|\
   #     $SUBM_IMG_OPERATOR|\
   #     $SUBM_IMG_BUNDLE" |\
   # while read -r line ; do
@@ -5158,6 +5166,8 @@ function print_resources_and_pod_logs() {
 
   TITLE "All Submariner logs on ${cluster_name}"
 
+  print_pod_logs_in_namespace "$ACM_NAMESPACE" "app=submariner-addon"
+  
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
   local gw_label='app=submariner-gateway'
@@ -5177,6 +5187,8 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-lighthouse-coredns"
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-routeagent"
+
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-metrics-proxy"
 
   print_pod_logs_in_namespace "kube-system" "k8s-app=kube-proxy"
 

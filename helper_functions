@@ -1205,9 +1205,16 @@ function force_delete_namespace() {
     return
   fi
 
-  echo -e "\n# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
+  echo -e "\n# Show all resources (and OLMs) in namespace '${ns_name}' to be deleted:"
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
   ${OC} get all,olm -n "${ns_name}" |& highlight "No resources found" || :
+
+  TITLE "Deleting all resources associated with namespace '${ns_name}' from the cluster"
+
+  ${OC} api-resources --verbs=list --namespaced -o name | xargs -i -n 1 sh -c \
+  "echo -e \"\n### {} ###\n\" ;\
+  ${OC} get {} -o name --show-kind --ignore-not-found -n $ns_name \
+  | xargs -r ${OC} delete -n $ns_name --timeout=30s" || :
 
   TITLE "Deleting whole namespace ${ns_name} from the cluster"
 
@@ -1236,7 +1243,7 @@ function delete_all_evicted_pods_in_current_cluster() {
   echo -e "\n# Delete all regular pods which are not running or completed, from all namespaces:"
 
   ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' \
-  | awk '{system("oc delete pod "$2" -n "$1)}' || :
+  | awk '{system("oc delete pod "$2" -n "$1 --timeout=30s)}' || :
 
   echo -e "\n# Delete OLM pods that are in an 'Error' state:"
 
