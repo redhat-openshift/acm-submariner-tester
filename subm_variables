@@ -167,6 +167,8 @@ export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
 export ACM_INSTANCE="multiclusterhub"
+export ACM_HUB_NS="open-cluster-management-hub"
+export ACM_GS_NS="open-cluster-management-global-set"
 
 export ACM_VER_TAG=${ACM_VER_TAG}
 export ACM_CHANNEL_PREFIX="release-"
