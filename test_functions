@@ -1234,29 +1234,33 @@ function uninstall_submariner() {
 
   PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) from cluster $cluster_name"
 
-  local cleanup_required=NO
+  local uninstall_status
 
   # Since Submariner 0.12 there's a subctl uninstall command
   if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
     subctl uninstall --yes || {
-
-      BUG "subctl uninstall failed deleting resource 'service-discovery'" \
-      "Run cleanup the old way" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=2073812"
-
-      cleanup_required=YES
+      uninstall_status=FAILED
     }
 
     # TODO: Need to add cloud cleanup, according to cloud provider:
     # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
 
   else
-    cleanup_required=YES
+    uninstall_status=FAILED
   fi
 
   export KUBECONFIG="$kubeconfig_file"
 
-  if [[ "$cleanup_required" == YES ]] ; then
+  delete_submariner_test_namespaces || :
+
+  BUG "Low disk-space on OCP cluster that was running for few weeks" \
+  "Delete old E2E namespaces" \
+  "https://github.com/submariner-io/submariner-website/issues/341
+  https://github.com/submariner-io/shipyard/issues/355"
+
+  delete_e2e_namespaces || :
+  
+  if [[ "$uninstall_status" == FAILED ]] ; then
 
     delete_submariner_namespace_and_crds || :
 
@@ -1267,16 +1271,9 @@ function uninstall_submariner() {
     remove_submariner_gateway_labels || :
 
     remove_submariner_machine_sets || :
+
+    FAILURE "subctl uninstall failed to delete Submariner resources, please investigate"
   fi
-
-  delete_submariner_test_namespaces || :
-
-  BUG "Low disk-space on OCP cluster that was running for few weeks" \
-  "Delete old E2E namespaces" \
-  "https://github.com/submariner-io/submariner-website/issues/341
-  https://github.com/submariner-io/shipyard/issues/355"
-
-  delete_e2e_namespaces || :
 
 }
 
@@ -1286,12 +1283,9 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  # force_delete_namespace "${SUBM_NAMESPACE}"
-
   delete_crds_by_name 'submariner\.io'
 
-  ${OC} delete namespace "${SUBM_NAMESPACE}" --wait || :
-  ${OC} wait --for=delete namespace "${SUBM_NAMESPACE}" || :
+  force_delete_namespace "${SUBM_NAMESPACE}" 3m
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   local broker_namespace
