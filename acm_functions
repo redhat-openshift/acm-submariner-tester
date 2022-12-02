@@ -141,6 +141,7 @@ function clean_acm_namespace_and_resources() {
   # "https://github.com/open-cluster-management/deploy/issues/218"
   # # Workaround:
 
+  ${OC} project "$ACM_NAMESPACE"
   ${OC} delete managedcluster --all --timeout=3m || :
 
   ${OC} delete DiscoveryConfig --all --all-namespaces --timeout=3m || :
@@ -225,8 +226,14 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete service --all -n "${ACM_NAMESPACE}" --timeout=30s || :
 
   force_delete_namespace "${MCE_NAMESPACE}" 1m || :
+
+  BUG "Uninstalling ACM did not remove open-cluster-management-hub resources" \
+  "Forcedly delete ${ACM_HUB_NS} and ${ACM_GS_NS} namespaces from the Hub" \
+  "https://issues.redhat.com/browse/ACM-2258"
+  # Workaround:
   force_delete_namespace "${ACM_HUB_NS}" 1m || :
   force_delete_namespace "${ACM_GS_NS}" 1m || :
+
   force_delete_namespace "${ACM_NAMESPACE}" 1m || :
 
 }
