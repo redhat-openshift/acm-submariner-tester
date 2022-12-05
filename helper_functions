@@ -1242,8 +1242,8 @@ function delete_all_evicted_pods_in_current_cluster() {
 
   echo -e "\n# Delete all regular pods which are not running or completed, from all namespaces:"
 
-  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' \
-  | awk '{system("oc delete pod "$2" -n "$1 --timeout=30s)}' || :
+  ${OC} get pod -A --no-headers | grep -Ev 'Completed|Running' \
+  | awk '{system("oc delete pod "$2" -n "$1" --timeout=30s")}' || :
 
   echo -e "\n# Delete OLM pods that are in an 'Error' state:"
 

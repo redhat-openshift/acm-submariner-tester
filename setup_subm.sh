@@ -685,97 +685,44 @@ cat "$SYS_LOG"
     # Update test exit status to empty, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
 
-    ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
+    ### Verify clusters status after OCP reset/create ###
 
-    # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
-    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+    ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
-      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
+    ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
 
-      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+    # Verify cluster B (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
 
-      ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
-      # Verify cluster B (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
 
-        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+    else
 
-        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
-
-      else
-
-        check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
-
-      fi
-
-      # Verify cluster C (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
-
-        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-      else
-
-        check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
-
-      fi
-
-      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
-
-        FATAL "Both cluster B and cluster C are down. \
-        Multi-Cluster tests require at least one more cluster (beside cluster A)"
-        
-      fi
-
-      echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
-      \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
-      # https://submariner.io/operations/deployment/subctl/#cloud-prepare
-
-      # Cluster A configurations
-
-      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
-       
-        ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
-
-        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
-
-      fi
-
-      # Cluster B configurations (plus custom configurations for OpenStack)
-      
-      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
-
-        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
-
-        # Before ACM 2.5 - Need to open ports and label nodes on Openstack (cloud prepare was not supported)
-        if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
-
-          echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
-
-          ${JUNIT_CMD} open_firewall_ports_on_openstack_cluster_b
-
-          ${JUNIT_CMD} label_first_gateway_cluster_b
-
-        fi
-
-      fi
-
-      # Cluster C configurations
-
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
-
-        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
-
-      fi
+      check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
 
     fi
-    ### END of all Clusters configurations
+
+    # Verify cluster C (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+    else
+
+      check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
+
+    fi
+
+    if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+      FATAL "Both cluster B and cluster C are down. \
+      Multi-Cluster tests require at least one more cluster (beside cluster A)"
+      
+    fi
 
     ### Download subctl binary, even if not using subctl deploy and join (e.g. to uninstall Submariner) ###
 
@@ -846,6 +793,58 @@ cat "$SYS_LOG"
     fi
     # END of cluster C cleanup
 
+    ### Clusters configurations (unless requested to --skip-ocp-setup): Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels ###
+    # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
+   
+    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+
+      echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
+      \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
+      # https://submariner.io/operations/deployment/subctl/#cloud-prepare
+
+      # Cluster A configurations
+
+      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+       
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
+
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
+
+      fi
+
+      # Cluster B configurations (plus custom configurations for OpenStack)
+      
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
+
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+        # Before ACM 2.5 - Need to open ports and label nodes on Openstack (cloud prepare was not supported)
+        if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
+
+          echo -e "\n# TODO: Run only if it's an openstack (on-prem) cluster"
+
+          ${JUNIT_CMD} open_firewall_ports_on_openstack_cluster_b
+
+          ${JUNIT_CMD} label_first_gateway_cluster_b
+
+        fi
+
+      fi
+
+      # Cluster C configurations
+
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
+
+        # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
+
+      fi
+
+    fi
+    ### END of all Clusters configurations
 
     ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
 
