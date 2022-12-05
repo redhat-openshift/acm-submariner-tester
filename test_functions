@@ -578,8 +578,8 @@ function download_ocp_installer() {
 
   # If no numerical version was requested (e.g. "latest"), the default OCP major version is 4
   local ocp_major_version="${ocp_major_version:-4}"
-  local oc_version_path="ocp/${ocp_installer_version}"
   local oc_major_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients"
+  local oc_version_path
 
   # Get latest "ocp-dev-preview Engineering Candidate" build, if the OCP version requested was "ec" or "nightly".
   # These builds are also available at: 
@@ -588,12 +588,19 @@ function download_ocp_installer() {
   if [[ "$ocp_installer_version" =~ ^(ec|nightly)$  ]] ; then
     oc_version_path="ocp-dev-preview/"
     
-    # Append latest EC version, for example: 4.12.0-ec.5
+    # Get the latest ocp-dev-preview EC version, for example: 4.13.0-ec.0/
     oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
-    grep -Eoh ".*-ec\..*" | awk '{ gsub(/>|</, " " ); print $3; }' | tail -1)"
+    grep "href=\".*-ec." | sort -V -k2 | tail -1 | cut -d '"' -f 2)"
+
+  else
+    oc_version_path="ocp/"
+    
+    # Get the latest OCP release of the requested version, for example: 4.12.0-rc.2/
+    oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
+    grep "href=\"${ocp_installer_version}" | sort -V -k2 | tail -1 | cut -d '"' -f 2)"
   fi
 
-  local oc_installer_url="${oc_major_url}/${oc_version_path}/"
+  local oc_installer_url="${oc_major_url}/${oc_version_path}"
 
   cd "${WORKDIR}" || return 1
 
