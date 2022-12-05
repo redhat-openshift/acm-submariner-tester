@@ -122,28 +122,28 @@ function export_LATEST_IIB_NVR() {
 
     LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
     LATEST_NVR=$(echo "$index_images" | jq -r '.nvr') || :
-
-    if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-      BUG "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
-    fi
   fi
 
-  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
+  if [[ "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
 
-  local iib_number
-  iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')"
-  curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
+    local iib_number
+    iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')" || :
+    curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
 
-  # IIB information example:
-  #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-  #                                  Dload  Upload   Total   Spent    Left  Speed
-  # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
-  # "2022-05-17T03:52:40.797378Z"
-  # {
-  #   "advanced-cluster-management": [
-  #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
-  #   ]
-  # }
+    # IIB information example:
+    #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+    #                                  Dload  Upload   Total   Spent    Left  Speed
+    # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
+    # "2022-05-17T03:52:40.797378Z"
+    # {
+    #   "advanced-cluster-management": [
+    #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
+    #   ]
+    # }
+  else
+    BUG "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from Datagrepper"
+  fi
 
   export "LATEST_IIB=$(echo "${LATEST_IIB}" | cut -d'/' -f2-)" || :
   export "LATEST_NVR=$(echo "${LATEST_NVR}" | grep -Po "${bundle_name}-container-\K.*")" || :
