@@ -1660,7 +1660,7 @@ function set_netshoot_image_spec() {
     # if check_version_greater_or_equal "${submariner_version_or_tag}" "0.14" && \
     if  [[ ! "$submariner_version_or_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
-        [[ -n "$SUBM_IMG_NETTEST" ]] ; then
+        check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
       # Fix the $submariner_version_or_tag value for custom images
       set_subm_version_tag_var "submariner_version_or_tag"
@@ -3144,11 +3144,16 @@ function upload_submariner_images_to_cluster_registry() {
   local import_image_output
   import_image_output="$(mktemp)_import_image"
 
-  BUG "Submariner Metrics-Proxy does not have a dedicated image" \
-  "Import Nettest image instead, which includes Submariner Matrics-Proxy" \
-  "https://issues.redhat.com/browse/ACM-2066"
-  # Workaound:
-  export "SUBM_IMG_METRICS=${SUBM_IMG_NETTEST}"
+  # Only for Submariner >= 0.14 upload SUBM_IMG_METRICS image
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
+    BUG "Submariner Metrics-Proxy does not have a dedicated image" \
+    "Import Nettest image instead, which includes Submariner Matrics-Proxy" \
+    "https://issues.redhat.com/browse/ACM-2066"
+    # Workaound:
+    export "SUBM_IMG_METRICS=${SUBM_IMG_NETTEST}"
+  else
+    export "SUBM_IMG_METRICS="
+  fi
 
   for img in \
     $SUBM_IMG_GATEWAY \

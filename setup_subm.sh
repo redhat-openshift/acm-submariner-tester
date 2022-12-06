@@ -752,9 +752,9 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} delete_acm_image_streams_and_tags
 
-      ${JUNIT_CMD} remove_multicluster_engine 
-
       ${JUNIT_CMD} clean_acm_namespace_and_resources
+
+      ${JUNIT_CMD} remove_multicluster_engine 
 
     fi
     # END of cluster A cleanup
