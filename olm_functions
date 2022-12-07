@@ -6,13 +6,16 @@
 # ------------------------------------------
 
 ### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat
-function export_LATEST_IIB() {
+function export_LATEST_IIB_NVR() {
   trap_to_debug_commands;
 
+  # Input args:
   local bundle_name="${1}"
   local operator_version="${2}"
-  local cvp_component="${3}"
-  local cvp_issuer="${4}"
+
+  # Optional input args:
+  local cvp_component="${3:-$CVP_COMPONENT}"
+  local cvp_issuer="${4:-$CVP_ISSUER}" # e.g. "contra/pipeline" or "freshmaker"
 
   TITLE "Set and export the variable \$LATEST_IIB according to Bundle, version and component:
   Bundle Name: ${bundle_name}
@@ -106,6 +109,7 @@ function export_LATEST_IIB() {
   TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
 
   LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
+  LATEST_NVR=$(echo "$index_images" | jq -r '.nvr') || :
 
   if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
     BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
@@ -117,30 +121,32 @@ function export_LATEST_IIB() {
     TITLE "Getting index-image for bundle '${bundle_name}', for the latest supported OCP version: '${ocp_version_x_y}'"
 
     LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
-
-    if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-      FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
-    fi
+    LATEST_NVR=$(echo "$index_images" | jq -r '.nvr') || :
   fi
 
-  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
+  if [[ "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
 
-  local iib_number
-  iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')"
-  curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
+    local iib_number
+    iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')" || :
+    curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
 
-  # IIB information example:
-  #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-  #                                  Dload  Upload   Total   Spent    Left  Speed
-  # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
-  # "2022-05-17T03:52:40.797378Z"
-  # {
-  #   "advanced-cluster-management": [
-  #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
-  #   ]
-  # }
+    # IIB information example:
+    #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+    #                                  Dload  Upload   Total   Spent    Left  Speed
+    # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
+    # "2022-05-17T03:52:40.797378Z"
+    # {
+    #   "advanced-cluster-management": [
+    #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
+    #   ]
+    # }
+  else
+    BUG "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from Datagrepper"
+  fi
 
-  export LATEST_IIB
+  export "LATEST_IIB=$(echo "${LATEST_IIB}" | cut -d'/' -f2-)" || :
+  export "LATEST_NVR=$(echo "${LATEST_NVR}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
 }
 
@@ -191,7 +197,7 @@ function deploy_ocp_bundle() {
   local operator_name="$3"
   local operator_channel="$4"
 
-  # Optional args:
+  # Optional input args:
   local catalog_source="${5:-${operator_name}-${operator_channel}-catalog}"
   local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
   local cvp_component="${7:-$CVP_COMPONENT}"
@@ -240,10 +246,12 @@ function deploy_ocp_bundle() {
   # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo -e "\n# Set and export the variable \$LATEST_IIB"
-  export_LATEST_IIB "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
+  export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
+
+  [[ -n "$LATEST_IIB" ]] || FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
 
   local source_image_path
-  source_image_path="${BREW_REGISTRY}/$(echo "${LATEST_IIB}" | cut -d'/' -f2-)"
+  source_image_path="${BREW_REGISTRY}/${LATEST_IIB}"
 
   local bundle_image_name="${bundle_name}-index"
 

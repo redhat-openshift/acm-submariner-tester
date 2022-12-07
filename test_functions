@@ -192,6 +192,14 @@ function export_global_script_variable() {
   export PRODUCT_IMAGES="$OUTPUT_DIR/product_images.ver"
   : > "$PRODUCT_IMAGES"
 
+  # File to store ACM operator version
+  export ACM_VERSION_FILE="$OUTPUT_DIR/acm.ver"
+  : > "$ACM_VERSION_FILE"
+
+  # File to store MCE operator version
+  export MCE_VERSION_FILE="$OUTPUT_DIR/mce.ver"
+  : > "$MCE_VERSION_FILE"
+
 }
 
 # ------------------------------------------
@@ -578,8 +586,8 @@ function download_ocp_installer() {
 
   # If no numerical version was requested (e.g. "latest"), the default OCP major version is 4
   local ocp_major_version="${ocp_major_version:-4}"
-  local oc_version_path="ocp/${ocp_installer_version}"
   local oc_major_url="https://mirror.openshift.com/pub/openshift-v${ocp_major_version}/clients"
+  local oc_version_path
 
   # Get latest "ocp-dev-preview Engineering Candidate" build, if the OCP version requested was "ec" or "nightly".
   # These builds are also available at: 
@@ -588,12 +596,19 @@ function download_ocp_installer() {
   if [[ "$ocp_installer_version" =~ ^(ec|nightly)$  ]] ; then
     oc_version_path="ocp-dev-preview/"
     
-    # Append latest EC version, for example: 4.12.0-ec.5
+    # Get the latest ocp-dev-preview EC version, for example: 4.13.0-ec.0/
     oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
-    grep -Eoh ".*-ec\..*" | awk '{ gsub(/>|</, " " ); print $3; }' | tail -1)"
+    grep "href=\".*-ec." | sort -V -k2 | tail -1 | cut -d '"' -f 2)"
+
+  else
+    oc_version_path="ocp/"
+    
+    # Get the latest OCP release of the requested version, for example: 4.12.0-rc.2/
+    oc_version_path+="$(curl "${oc_major_url}/${oc_version_path}" | \
+    grep "href=\"${ocp_installer_version}" | sort -V -k2 | tail -1 | cut -d '"' -f 2)"
   fi
 
-  local oc_installer_url="${oc_major_url}/${oc_version_path}/"
+  local oc_installer_url="${oc_major_url}/${oc_version_path}"
 
   cd "${WORKDIR}" || return 1
 
@@ -1234,29 +1249,33 @@ function uninstall_submariner() {
 
   PROMPT "Uninstalling previous Submariner (Namespaces, OLM, CRDs, Cluster Roles, ServiceExports) from cluster $cluster_name"
 
-  local cleanup_required=NO
+  local uninstall_status
 
   # Since Submariner 0.12 there's a subctl uninstall command
   if check_version_greater_or_equal "${SUBM_VER_TAG}" "0.12" ; then
     subctl uninstall --yes || {
-
-      BUG "subctl uninstall failed deleting resource 'service-discovery'" \
-      "Run cleanup the old way" \
-      "https://bugzilla.redhat.com/show_bug.cgi?id=2073812"
-
-      cleanup_required=YES
+      uninstall_status=FAILED
     }
 
     # TODO: Need to add cloud cleanup, according to cloud provider:
     # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
 
   else
-    cleanup_required=YES
+    uninstall_status=FAILED
   fi
 
   export KUBECONFIG="$kubeconfig_file"
 
-  if [[ "$cleanup_required" == YES ]] ; then
+  delete_submariner_test_namespaces || :
+
+  BUG "Low disk-space on OCP cluster that was running for few weeks" \
+  "Delete old E2E namespaces" \
+  "https://github.com/submariner-io/submariner-website/issues/341
+  https://github.com/submariner-io/shipyard/issues/355"
+
+  delete_e2e_namespaces || :
+  
+  if [[ "$uninstall_status" == FAILED ]] ; then
 
     delete_submariner_namespace_and_crds || :
 
@@ -1267,16 +1286,9 @@ function uninstall_submariner() {
     remove_submariner_gateway_labels || :
 
     remove_submariner_machine_sets || :
+
+    FAILURE "subctl uninstall failed to delete Submariner resources, please investigate"
   fi
-
-  delete_submariner_test_namespaces || :
-
-  BUG "Low disk-space on OCP cluster that was running for few weeks" \
-  "Delete old E2E namespaces" \
-  "https://github.com/submariner-io/submariner-website/issues/341
-  https://github.com/submariner-io/shipyard/issues/355"
-
-  delete_e2e_namespaces || :
 
 }
 
@@ -1286,12 +1298,9 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
-  # force_delete_namespace "${SUBM_NAMESPACE}"
-
   delete_crds_by_name 'submariner\.io'
 
-  ${OC} delete namespace "${SUBM_NAMESPACE}" --wait || :
-  ${OC} wait --for=delete namespace "${SUBM_NAMESPACE}" || :
+  force_delete_namespace "${SUBM_NAMESPACE}" 3m
 
   # Required if Broker cluster is not a Dataplane cluster as well:
   local broker_namespace
@@ -1659,7 +1668,7 @@ function set_netshoot_image_spec() {
     # if check_version_greater_or_equal "${submariner_version_or_tag}" "0.14" && \
     if  [[ ! "$submariner_version_or_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
-        [[ -n "$SUBM_IMG_NETTEST" ]] ; then
+        check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
       # Fix the $submariner_version_or_tag value for custom images
       set_subm_version_tag_var "submariner_version_or_tag"
@@ -1890,23 +1899,37 @@ function download_subctl_by_tag() {
     echo -e "\n# Since Submariner 0.12 the image prefix should not include 'tech-preview'"
     local subctl_image_url
 
-    if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
-      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-    else
-      subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
-      # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
-    fi
-
     cd "${WORKDIR}" || return 1
 
-    # Downloading SubCtl from VPN_REGISTRY (downstream) only
-    # if using --registry-images and if $submariner_version_or_tag is not devel
+    # if using --registry-images and if $submariner_version_or_tag is not devel,
+    # then downloading SubCtl from VPN_REGISTRY or BREW_REGISTRY (downstream)
     if [[ ! "$submariner_version_or_tag" =~ devel ]] && \
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
       # Fix the $submariner_version_or_tag value for custom images
       set_subm_version_tag_var "submariner_version_or_tag"
+
+      # If version is vX.Y without .Z - fetch the latest minor Z version 
+      if [[ "$submariner_version_or_tag" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+        TITLE "Fetching the latest minor Z version for '${submariner_version_or_tag}'"
+
+        echo -e "\n# Set and export the variable \$LATEST_NVR for subctl-container version ${submariner_version_or_tag}'"
+        export_LATEST_IIB_NVR "subctl" "${submariner_version_or_tag}" 
+        # This should exported for example: LATEST_NVR=v0.14.0-5
+
+        [[ -n "$LATEST_NVR" ]] || FATAL "No Image was found for subctl version '${submariner_version_or_tag}'"
+
+        submariner_version_or_tag="${LATEST_NVR}"
+      fi
+
+      if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+      else
+        subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
+        # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
+      fi
+
 
       TITLE "Backup previous subctl archive (if exists)"
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
@@ -2016,7 +2039,7 @@ function download_subctl_by_tag() {
 
     if [[ "$getsubctl_status" == FAILED ]] ; then
       FAILURE "getsubctl.sh failed to retreive subctl tool, 
-      or '$submariner_version_or_tag' was not set correctly in $subctl_image_url"
+      or '$submariner_version_or_tag' does not have valid IIB for '$subctl_image_url'"
     fi
 
 }
@@ -3128,6 +3151,17 @@ function upload_submariner_images_to_cluster_registry() {
 
   local import_image_output
   import_image_output="$(mktemp)_import_image"
+
+  # Only for Submariner >= 0.14 upload SUBM_IMG_METRICS image
+  if check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
+    BUG "Submariner Metrics-Proxy does not have a dedicated image" \
+    "Import Nettest image instead, which includes Submariner Matrics-Proxy" \
+    "https://issues.redhat.com/browse/ACM-2066"
+    # Workaound:
+    export "SUBM_IMG_METRICS=${SUBM_IMG_NETTEST}"
+  else
+    export "SUBM_IMG_METRICS="
+  fi
 
   for img in \
     $SUBM_IMG_GATEWAY \

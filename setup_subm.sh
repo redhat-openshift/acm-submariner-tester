@@ -685,49 +685,118 @@ cat "$SYS_LOG"
     # Update test exit status to empty, unless it is already 1 or 2
     [[ "$EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
 
-    ### Clusters configurations (unless requested to --skip-ocp-setup): OCP user, Registry prune policy, Firewall ports, Gateway labels ###
+    ### Verify clusters status after OCP reset/create ###
 
+    ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+
+    ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
+
+    # Verify cluster B (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
+
+      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
+
+    else
+
+      check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
+
+    fi
+
+    # Verify cluster C (if it is expected to be an active cluster)
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+      ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
+
+    else
+
+      check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
+
+    fi
+
+    if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+      FATAL "Both cluster B and cluster C are down. \
+      Multi-Cluster tests require at least one more cluster (beside cluster A)"
+      
+    fi
+
+    ### Download subctl binary, even if not using subctl deploy and join (e.g. to uninstall Submariner) ###
+
+    if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} download_and_install_subctl "$SUBM_VER_TAG"
+
+      ${JUNIT_CMD} test_subctl_command
+
+    fi
+
+    ### Clusters Cleanup (of ACM and Submariner resources) - Only for existing clusters ###
+
+    # Running cleanup on cluster A if requested
+    if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+
+      ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_HUB}"
+
+      ${JUNIT_CMD} uninstall_submariner "${KUBECONF_HUB}"
+
+      ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
+
+      ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_HUB}"
+
+      # Cleaning ACM and MCE is required only for the Hub cluster A
+      # TODO: Move to a separate flag, as it might not required for Submariner tests
+
+      ${JUNIT_CMD} delete_acm_image_streams_and_tags
+
+      ${JUNIT_CMD} clean_acm_namespace_and_resources
+
+      ${JUNIT_CMD} remove_multicluster_engine 
+
+    fi
+    # END of cluster A cleanup
+
+    # Running cleanup on cluster B if requested
+    if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
+
+      if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
+
+      fi
+    fi
+    # END of cluster B cleanup
+
+    # Running cleanup on cluster C if requested
+    if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
+
+      if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+
+        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_C}"
+
+      fi
+    fi
+    # END of cluster C cleanup
+
+    ### Clusters configurations (unless requested to --skip-ocp-setup): Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels ###
     # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
+   
     if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-
-      ### Verify clusters status after OCP reset/create, and add elevated user and context ###
-
-      ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
-
-      ${JUNIT_CMD} test_cluster_status "${KUBECONF_HUB}" "${CLUSTER_A_NAME}"
-
-      # Verify cluster B (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
-
-        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
-
-        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_B}" "${CLUSTER_B_NAME}"
-
-      else
-
-        check_if_cluster_is_active "${KUBECONF_CLUSTER_B}" || unset "KUBECONF_CLUSTER_B"
-
-      fi
-
-      # Verify cluster C (if it is expected to be an active cluster)
-      if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
-
-        ${JUNIT_CMD} update_kubeconfig_default_context "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-        ${JUNIT_CMD} test_cluster_status "${KUBECONF_CLUSTER_C}" "${CLUSTER_C_NAME}"
-
-      else
-
-        check_if_cluster_is_active "${KUBECONF_CLUSTER_C}" || unset "KUBECONF_CLUSTER_C"
-
-      fi
-
-      if [[ ! -s "$KUBECONF_CLUSTER_B" ]] && [[ ! -s "$KUBECONF_CLUSTER_C" ]] ; then
-
-        FATAL "Both cluster B and cluster C are down. \
-        Multi-Cluster tests require at least one more cluster (beside cluster A)"
-        
-      fi
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
@@ -776,76 +845,6 @@ cat "$SYS_LOG"
 
     fi
     ### END of all Clusters configurations
-
-    ### Download subctl binary, even if not using subctl deploy and join (e.g. to uninstall Submariner) ###
-
-    if [[ "$INSTALL_SUBMARINER" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} download_and_install_subctl "$SUBM_VER_TAG"
-
-      ${JUNIT_CMD} test_subctl_command
-
-    fi
-
-    ### Clusters Cleanup (of ACM and Submariner resources) - Only for existing clusters ###
-
-    # Running cleanup on cluster A if requested
-    if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
-
-      ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_HUB}"
-
-      ${JUNIT_CMD} uninstall_submariner "${KUBECONF_HUB}"
-
-      ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_HUB}"
-
-      ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_HUB}"
-
-      # Cleaning ACM and MCE is required only for the Hub cluster A
-      # TODO: Move to a separate flag, as it might not required for Submariner tests
-
-      ${JUNIT_CMD} delete_acm_image_streams_and_tags
-
-      ${JUNIT_CMD} remove_multicluster_engine 
-
-      ${JUNIT_CMD} clean_acm_namespace_and_resources
-
-    fi
-    # END of cluster A cleanup
-
-    # Running cleanup on cluster B if requested
-    if [[ -s "$CLUSTER_B_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_B" ]] ; then
-
-      if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
-
-        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
-
-        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_B}"
-
-        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
-
-      fi
-    fi
-    # END of cluster B cleanup
-
-    # Running cleanup on cluster C if requested
-    if [[ -s "$CLUSTER_C_YAML" ]] && [[ -s "$KUBECONF_CLUSTER_C" ]] ; then
-
-      if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
-
-        ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
-
-        ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
-
-        ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_C}"
-
-      fi
-    fi
-    # END of cluster C cleanup
-
 
     ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
 
