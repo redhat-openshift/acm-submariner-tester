@@ -250,6 +250,9 @@ function deploy_ocp_bundle() {
 
   [[ -n "$LATEST_IIB" ]] || FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
 
+  # Remove extra build number from operator version
+  operator_version="${operator_version%%-*}" # e.g. v2.2.0-230 --> v2.2.0
+
   local source_image_path
   source_image_path="${BREW_REGISTRY}/${LATEST_IIB}"
 

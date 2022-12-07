@@ -793,10 +793,12 @@ cat "$SYS_LOG"
     fi
     # END of cluster C cleanup
 
-    ### Clusters configurations (unless requested to --skip-ocp-setup): Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels ###
-    # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
+    ### Clusters configurations ### 
+    # Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels.
+    # Add custom (downstream) registry mirrors, secrets and images.
+    # TODO: Should rename flag "--registry-images" to "--config-cluster", and deprecate flag "--skip-ocp-setup".
    
-    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ && ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
@@ -810,6 +812,12 @@ cat "$SYS_LOG"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
+        # ${JUNIT_CMD} remove_submariner_images_from_local_registry_with_podman
+
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
+
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
+
       fi
 
       # Cluster B configurations (plus custom configurations for OpenStack)
@@ -819,6 +827,10 @@ cat "$SYS_LOG"
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
         # Before ACM 2.5 - Need to open ports and label nodes on Openstack (cloud prepare was not supported)
         if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
@@ -841,40 +853,14 @@ cat "$SYS_LOG"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
-      fi
-
-    fi
-    ### END of all Clusters configurations
-
-    ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
-
-    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
-
-      # ${JUNIT_CMD} remove_submariner_images_from_local_registry_with_podman
-
-      ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
-
-      ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
-
-      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
-
-        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
-
-      fi
-
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
       fi
-
+    
     fi
-    ### END of configure custom clusters registry
-
+    ### END of all Clusters and Registry configurations
 
     ### Submariner system tests prerequisites ###
     # Following will NOT be executed if using "--skip-tests sys" (useful for deployment without system tests)

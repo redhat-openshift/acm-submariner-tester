@@ -346,7 +346,7 @@ function install_acm_operator_on_hub() {
     fi
 
     # Deploy ACM operator as an OCP bundle
-    acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.7.0-220 
+    acm_version="v${acm_version}" # e.g. v2.7.0-220 
 
     local acm_channel
     acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
