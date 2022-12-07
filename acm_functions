@@ -270,18 +270,24 @@ function install_mce_operator_on_hub() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local mce_version="v${2:-$MCE_VER_TAG}" # e.g. v2.2.0
+  local mce_version="${2:-$MCE_VER_TAG}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Install MCE $mce_version bundle on the Hub cluster ${cluster_name}"
 
+  # Get MCE version from ACM snapshot, if MCE version not specified
+  if [[ -z "$mce_version" ]] ; then
+    find_acm_component_version_in_snapshot "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+    mce_version="$(< "${MCE_VERSION_FILE}")"
+  fi
+
   local mce_current_version
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$mce_version" != "$mce_current_version" ]] ; then
+  if [[ "$mce_version" =~ ${mce_current_version} ]] ; then
 
     if [[ -z "$mce_current_version" ]] ; then
       echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
@@ -298,6 +304,8 @@ function install_mce_operator_on_hub() {
     "
 
     # Deploy MCE operator as an OCP bundle
+    mce_version="v${mce_version}" # e.g. v2.2.0-231
+
     deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
     echo -e "\n# MCE $mce_version installation completed"
 
@@ -315,20 +323,21 @@ function install_acm_operator_on_hub() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
+  local acm_version="${1:-$ACM_VER_TAG}"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
   PROMPT "Install ACM $acm_version bundle on the Hub cluster ${cluster_name}"
 
-  # TODO: Move the following logic into deploy_ocp_bundle
+  find_acm_component_version_in_snapshot "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+  acm_version="$(< "${ACM_VERSION_FILE}")"
 
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$acm_version" != "$acm_current_version" ]] ; then
+  if [[ "$acm_version" =~ ${acm_current_version} ]] ; then
 
     if [[ -z "$acm_current_version" ]] ; then
       echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
@@ -337,6 +346,8 @@ function install_acm_operator_on_hub() {
     fi
 
     # Deploy ACM operator as an OCP bundle
+    acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.7.0-220 
+
     local acm_channel
     acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
 
@@ -359,13 +370,69 @@ function install_acm_operator_on_hub() {
 
 # ------------------------------------------
 
+function find_acm_component_version_in_snapshot() {
+  ### Get full image number for an ACM image found in https://github.com/stolostron ###
+  trap_to_debug_commands;
+
+  # Input args:
+  local acm_component="$1" # e.g. mce-operator-bundle
+  local acm_version="$2" # e.g. 2.7.0
+  local component_version_file="$3" # Where to save the component version. e.g. mce-operator-bundle.ver
+
+  # Optional args:
+  local stolostron_commit_date="$4" # Snapshot date to filter by (otherwise using the latest date found)
+
+  local stolostron_commit_title
+  local stolostron_commit_hash
+  local stolostron_snapshot_file
+
+  TITLE "Get the latest commit for the requested ACM version '$acm_version', with an optional date [$stolostron_commit_date]"
+  # For example:
+  # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
+  
+  stolostron_commit_title="$(curl "https://github.com/stolostron/deploy/commits/master/mirror" \
+  | grep "href=\".* ${acm_version} .*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+
+  stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
+
+  stolostron_commit_hash="$(basename "${stolostron_commit_title%% *}")" || : # e.g. 78ee917f1303cb32dddc430db49a1bd0199ec6da
+  
+  stolostron_snapshot_file="mirror/${acm_version}-DOWNSTREAM-${stolostron_commit_date}.txt" 
+
+  TITLE "Download snapshot file from https://github.com/stolostron, of the latest commit for ACM version '$acm_version':
+  Stolostron commit title: \n${stolostron_commit_title}
+  Stolostron commit hash: \n${stolostron_commit_hash}
+  Stolostron commit date: \n${stolostron_commit_date}
+  Stolostron snapshot file: \n${stolostron_snapshot_file}
+  "
+
+  download_github_file_or_dir "stolostron" "deploy" "${stolostron_commit_hash}" "${stolostron_snapshot_file}"
+
+  TITLE "Find and save the full version number for ACM component '$acm_component'"
+
+  grep -Po "${acm_component}:v\K.*" "${stolostron_snapshot_file}" > "$component_version_file"
+
+  echo -e "\n# $acm_component version stored in ${component_version_file}: $(< "${component_version_file}")"
+
+}
+
+# ------------------------------------------
+
 function create_mce_subscription() {
   ### Create MCE subscription - It should be run only on the Hub cluster ###
   trap_to_debug_commands;
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local mce_version="v${1:-$MCE_VER_TAG}" # e.g. v2.2.0
+  local mce_version="${1:-$MCE_VER_TAG}" # e.g. v2.2.0
+
+  # Get MCE version from ACM snapshot, if MCE version not specified
+  if [[ -z "$mce_version" ]] ; then
+    find_acm_component_version_in_snapshot "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+    mce_version="$(< "${MCE_VERSION_FILE}")"
+  fi
+  
+  mce_version="v${mce_version}" # e.g. v2.2.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"

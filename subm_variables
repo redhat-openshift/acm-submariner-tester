@@ -166,6 +166,7 @@ export CVP_ISSUER=${CVP_ISSUER:-"contra/pipeline"} # For CVE (security errata re
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+export ACM_BUNDLE_IMAGE="acm-operator-bundle"
 export ACM_INSTANCE="multiclusterhub"
 export ACM_HUB_NS="open-cluster-management-hub"
 export ACM_GS_NS="open-cluster-management-global-set"
@@ -179,7 +180,8 @@ export ACM_CHANNEL_PREFIX="release-"
 export MCE_NAMESPACE="mce" # instead of "multicluster-engine"
 export MCE_OPERATOR="multicluster-engine"
 export MCE_BUNDLE="multicluster-engine-operator-bundle"
+export MCE_BUNDLE_IMAGE="mce-operator-bundle"
 export MCE_INSTANCE="multiclusterengine"
 
-export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
+export MCE_VER_TAG=${MCE_VER_TAG}
 export MCE_CHANNEL_PREFIX="stable-"

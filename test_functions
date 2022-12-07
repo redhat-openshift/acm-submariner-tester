@@ -192,6 +192,14 @@ function export_global_script_variable() {
   export PRODUCT_IMAGES="$OUTPUT_DIR/product_images.ver"
   : > "$PRODUCT_IMAGES"
 
+  # File to store ACM operator version
+  export ACM_VERSION_FILE="$OUTPUT_DIR/acm.ver"
+  : > "$ACM_VERSION_FILE"
+
+  # File to store MCE operator version
+  export MCE_VERSION_FILE="$OUTPUT_DIR/mce.ver"
+  : > "$MCE_VERSION_FILE"
+
 }
 
 # ------------------------------------------
@@ -2031,7 +2039,7 @@ function download_subctl_by_tag() {
 
     if [[ "$getsubctl_status" == FAILED ]] ; then
       FAILURE "getsubctl.sh failed to retreive subctl tool, 
-      or '$submariner_version_or_tag' was not set correctly in registry url '$subctl_image_url'"
+      or '$submariner_version_or_tag' does not have valid IIB for '$subctl_image_url'"
     fi
 
 }
