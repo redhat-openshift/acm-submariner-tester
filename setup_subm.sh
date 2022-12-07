@@ -89,6 +89,7 @@ Running with pre-defined parameters (optional):
   * Install MCE operator version:                      --mce-version [x.y.z]
   * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
+  * Get stolostron/deploy images by date:              --acm-date [YYYY-MM-DD]
   * Configure and test GlobalNet:                      --globalnet
   * Install Submariner with SubCtl:                    --subctl-install
   * Join managed cluster A:                            --join-cluster-a
@@ -209,6 +210,9 @@ for param in ${SCRIPT_PARAMS} ; do
   --acm-version)
     export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
+    shift 2 ;;
+  --acm-date)
+    export_param_value "${param_value}" "ACM_BUILD_DATE" # $ACM_BUILD_DATE will get the value
     shift 2 ;;
   --mce-version)
     export_param_value "${param_value}" "MCE_VER_TAG" # $MCE_VER_TAG will get the value
@@ -796,7 +800,7 @@ cat "$SYS_LOG"
     ### Clusters configurations ### 
     # Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels.
     # Add custom (downstream) registry mirrors, secrets and images.
-    # TODO: Should rename flag "--registry-images" to "--config-cluster", and deprecate flag "--skip-ocp-setup".
+    # TODO: Should rename flag "--skip-ocp-setup" to "--skip-ocp-config".
    
     if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ && ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 

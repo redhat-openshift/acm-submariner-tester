@@ -277,9 +277,9 @@ function install_mce_operator_on_hub() {
 
   PROMPT "Install MCE $mce_version bundle on the Hub cluster ${cluster_name}"
 
-  # Get MCE version from ACM snapshot, if MCE version not specified
+  # Get MCE version from ACM downstream, if MCE version not specified
   if [[ -z "$mce_version" ]] ; then
-    find_acm_component_version_in_snapshot "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+    find_acm_component_version_in_downstream "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_BUILD_DATE}"
     mce_version="$(< "${MCE_VERSION_FILE}")"
   fi
 
@@ -330,7 +330,7 @@ function install_acm_operator_on_hub() {
 
   PROMPT "Install ACM $acm_version bundle on the Hub cluster ${cluster_name}"
 
-  find_acm_component_version_in_snapshot "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+  find_acm_component_version_in_downstream "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_BUILD_DATE}"
   acm_version="$(< "${ACM_VERSION_FILE}")"
 
   local acm_current_version
@@ -370,8 +370,8 @@ function install_acm_operator_on_hub() {
 
 # ------------------------------------------
 
-function find_acm_component_version_in_snapshot() {
-  ### Get full image number for an ACM image found in https://github.com/stolostron ###
+function find_acm_component_version_in_downstream() {
+  ### Get full image number for an ACM image found in https://github.com/stolostron/deploy ###
   trap_to_debug_commands;
 
   # Input args:
@@ -380,11 +380,11 @@ function find_acm_component_version_in_snapshot() {
   local component_version_file="$3" # Where to save the component version. e.g. mce-operator-bundle.ver
 
   # Optional args:
-  local stolostron_commit_date="$4" # Snapshot date to filter by (otherwise using the latest date found)
+  local stolostron_commit_date="$4" # downstream date to filter by (otherwise using the latest date found)
 
   local stolostron_commit_title
   local stolostron_commit_hash
-  local stolostron_snapshot_file
+  local stolostron_downstream_file
 
   TITLE "Get the latest commit for the requested ACM version '$acm_version', with an optional date [$stolostron_commit_date]"
   # For example:
@@ -397,20 +397,20 @@ function find_acm_component_version_in_snapshot() {
 
   stolostron_commit_hash="$(basename "${stolostron_commit_title%% *}")" || : # e.g. 78ee917f1303cb32dddc430db49a1bd0199ec6da
   
-  stolostron_snapshot_file="mirror/${acm_version}-DOWNSTREAM-${stolostron_commit_date}.txt" 
+  stolostron_downstream_file="mirror/${acm_version}-DOWNSTREAM-${stolostron_commit_date}.txt" 
 
-  TITLE "Download snapshot file from https://github.com/stolostron, of the latest commit for ACM version '$acm_version':
+  TITLE "Download downstream file from https://github.com/stolostron, of the latest commit for ACM version '$acm_version':
   Stolostron commit title: \n${stolostron_commit_title}
   Stolostron commit hash: \n${stolostron_commit_hash}
   Stolostron commit date: \n${stolostron_commit_date}
-  Stolostron snapshot file: \n${stolostron_snapshot_file}
+  Stolostron downstream file: \n${stolostron_downstream_file}
   "
 
-  download_github_file_or_dir "stolostron" "deploy" "${stolostron_commit_hash}" "${stolostron_snapshot_file}"
+  download_github_file_or_dir "stolostron" "deploy" "${stolostron_commit_hash}" "${stolostron_downstream_file}"
 
   TITLE "Find and save the full version number for ACM component '$acm_component'"
 
-  grep -Po "${acm_component}:v\K.*" "${stolostron_snapshot_file}" > "$component_version_file"
+  grep -Po "${acm_component}:v\K.*" "${stolostron_downstream_file}" > "$component_version_file"
 
   echo -e "\n# $acm_component version stored in ${component_version_file}: $(< "${component_version_file}")"
 
@@ -426,9 +426,9 @@ function create_mce_subscription() {
 
   local mce_version="${1:-$MCE_VER_TAG}" # e.g. v2.2.0
 
-  # Get MCE version from ACM snapshot, if MCE version not specified
+  # Get MCE version from ACM downstream, if MCE version not specified
   if [[ -z "$mce_version" ]] ; then
-    find_acm_component_version_in_snapshot "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_SNAPSHOT_DATE}"
+    find_acm_component_version_in_downstream "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_BUILD_DATE}"
     mce_version="$(< "${MCE_VERSION_FILE}")"
   fi
   
