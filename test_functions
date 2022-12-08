@@ -1133,21 +1133,29 @@ EOF
 
   ${OC} get csr |& highlight 'Approved,Issued'
 
-  local crt_file
-  crt_file="${kubeconfig_file}.crt"
+  local crt_file="${cluster_name}.crt"
 
-  TITLE "Download and validate the new certificate '${crt_file}'"
+  TITLE "Download certificate into '${crt_file}'"
 
-  # This doesn't always work:
-  # ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
-
-  # Using current SA certificate
   local auth_pod
   auth_pod="$(${OC} get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
-  ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
 
-  openssl x509 -in "${crt_file}" -text -noout
+  local cmd="${OC} rsh -n openshift-authentication ${auth_pod} cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > ${crt_file}"
+  
+  # Try to download SA certificate (maximum 10 attempts, or from ${cluster_name}-access)
+  watch_and_retry "$cmd" 10 || \
+  ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
 
+  TITLE "Validate the certificate and copy to '${kubeconfig_file}.crt'"
+
+  if openssl x509 -in "${crt_file}" -text -noout ; then
+    cp -f "${crt_file}" "${kubeconfig_file}.crt"
+  else
+    cp -f "${kubeconfig_file}.crt" "${crt_file}" 
+  fi
+
+  crt_file="${kubeconfig_file}.crt"
+  
   TITLE "Updating '${OCP_USR}' user credentials and certificate into the kubeconfig"
 
   ${OC} config set-credentials "${OCP_USR}" --client-certificate="${crt_file}" \
