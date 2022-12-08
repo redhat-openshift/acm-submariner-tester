@@ -544,7 +544,7 @@ EOF
 
 # ------------------------------------------
 
-function get_channel_name() {
+function generate_channel_name() {
   ### Generate and print Subscription Channel from a defined perfix and version number ###
 
   local prefix="$1"
@@ -562,7 +562,7 @@ function get_channel_name() {
 
 # ------------------------------------------
 
-function get_catalog_name() {
+function generate_catalog_name() {
   ### Generate and print Catalog Source name from Operator and Channel ###
 
   local operator_name="$1"

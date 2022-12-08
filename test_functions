@@ -5206,9 +5206,17 @@ function print_resources_and_pod_logs() {
     }
   }'
 
-  TITLE "All Submariner logs on ${cluster_name}"
+  TITLE "Main Operators logs in cluster ${cluster_name} namespaces: '$ACM_NAMESPACE', '$MCE_NAMESPACE' and '$SUBM_NAMESPACE'"
 
+  print_pod_logs_in_namespace "$ACM_NAMESPACE" "name=multiclusterhub-operator"
+
+  print_pod_logs_in_namespace "$MCE_NAMESPACE" "control-plane=backplane-operator"
+
+  # Submariner-Addon pod in the Hub cluster, is running in "ocm" namespace:
   print_pod_logs_in_namespace "$ACM_NAMESPACE" "app=submariner-addon"
+
+  # Submariner-Addon pod in a managed cluster, is running in "submariner-operator" namespace:
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
   
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -5219,8 +5227,6 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" $gw_label
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "control-plane=submariner-operator"
-
-  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-globalnet"
 

@@ -296,7 +296,10 @@ function install_mce_operator_on_hub() {
     fi
 
     local mce_channel
-    mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
+    mce_channel="$(generate_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
+
+    local mce_catalog
+    mce_catalog="$(generate_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
     TITLE "Install MCE bundle $mce_version in namespace '${MCE_NAMESPACE}' on the Hub ${cluster_name}
     Catalog: ${mce_catalog}
@@ -349,10 +352,10 @@ function install_acm_operator_on_hub() {
     acm_version="v${acm_version}" # e.g. v2.7.0-220 
 
     local acm_channel
-    acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
+    acm_channel="$(generate_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")"
 
     local acm_catalog
-    acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
+    acm_catalog="$(generate_catalog_name "${ACM_OPERATOR}" "${acm_channel}")"
 
     TITLE "Install ACM bundle $acm_version in namespace '${ACM_NAMESPACE}' on the Hub ${cluster_name}
     Catalog: ${acm_catalog}
@@ -440,10 +443,10 @@ function create_mce_subscription() {
   PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
 
   local mce_channel
-  mce_channel="$(get_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
+  mce_channel="$(generate_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
 
   local mce_catalog
-  mce_catalog="$(get_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
+  mce_catalog="$(generate_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
   # Create Automatic Subscription (channel without a specific version) for MCE operator
   create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
@@ -451,7 +454,7 @@ function create_mce_subscription() {
   # # Create Manual Subscription with a specific version for MCE operator
   # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
 
-  echo -e "\n# ACM Subscription for ${MCE_OPERATOR} is ready"
+  echo -e "\n# MCE Subscription for ${MCE_OPERATOR} is ready"
 
 }
 
@@ -469,10 +472,10 @@ function create_acm_subscription() {
   cluster_name="$(print_current_cluster_name || :)"
 
   local acm_channel
-  acm_channel="$(get_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")" || :
+  acm_channel="$(generate_channel_name "${ACM_CHANNEL_PREFIX}" "$acm_version")" || :
 
   local acm_catalog
-  acm_catalog="$(get_catalog_name "${ACM_OPERATOR}" "${acm_channel}")" || :
+  acm_catalog="$(generate_catalog_name "${ACM_OPERATOR}" "${acm_channel}")" || :
 
   PROMPT "Create Subscription for ${ACM_OPERATOR} in ${ACM_NAMESPACE} (catalog ${acm_catalog}) on cluster ${cluster_name}"
 
@@ -535,19 +538,25 @@ EOF
   TITLE "Wait for MCE instance '${MCE_INSTANCE}' to be available"
   local duration=15m
   cmd="${OC} get MultiClusterEngine ${MCE_INSTANCE} -n ${MCE_NAMESPACE}"
-  watch_and_retry "$cmd" "$duration" "Available" || acm_status=FAILED
+  watch_and_retry "$cmd" "$duration" "Available" || mce_status=FAILED
 
   TITLE "All MultiClusterEngine resources status:"
   ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
 
-  if [[ "$acm_status" == FAILED ]] ; then
+  if [[ "$mce_status" == FAILED ]] ; then
+    TITLE "Check Operator deployment logs of '${MCE_OPERATOR}' in cluster ${cluster_name}"
+
+    ${OC} logs -n "${MCE_NAMESPACE}" deploy/multicluster-engine-operator \
+    --all-containers --tail=100 --timestamps \
+    |& (! highlight '^E0|"error"|level=error|Error') || :
+
     FATAL "MultiClusterEngine is not ready after $duration"
   fi
 
   local mce_current_version
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
 
-  echo -e "\n# MultiClusterEngine version '${mce_current_version}' is installed"
+  TITLE "MultiClusterEngine version [${acm_current_version}] is installed" 
 
 }
 
@@ -571,7 +580,10 @@ function create_acm_multiclusterhub() {
 
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
 
-  cat <<EOF | ${OC} apply -f -
+  local existing_mce_catalog
+  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | awk -F '/' 'NR==1 {print $2}')" || :
+
+  cat <<EOF | ${OC} apply -f - || acm_status=FAILED
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
   metadata:
@@ -581,6 +593,15 @@ function create_acm_multiclusterhub() {
   spec:
     disableHubSelfManagement: true
 EOF
+
+  BUG "${ACM_OPERATOR} deployment error: Found more than one catalogSource with expected channel" \
+  "Annotate MultiClusterHub to point to MCE catalog-source" \
+  "https://issues.redhat.com/browse/ACM-2347"
+  # Workaround:
+  local mce_annotation="{\"source\": \"${existing_mce_catalog}\", \"sourceNamespace\": \"${MCE_NAMESPACE}\"}"
+  ${OC} annotate MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
+  installer.open-cluster-management.io/mce-subscription-spec="${mce_annotation}" || :
+
 
   TITLE "Wait for ACM Instance '${ACM_INSTANCE}' to be running"
   local duration=15m
@@ -609,10 +630,11 @@ EOF
   ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
   if [[ "$acm_status" == FAILED ]] ; then
-    TITLE "Checking for errors in MultiClusterHub deployment logs in cluster ${cluster_name}"
+    TITLE "Check Operator deployment logs of '${ACM_OPERATOR}' in cluster ${cluster_name}"
 
-    ${OC} logs deploy/multiclusterhub-operator \
-    --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
+    ${OC} logs -n "${ACM_NAMESPACE}" deploy/multiclusterhub-operator \
+    --all-containers --tail=100 --timestamps \
+    |& (! highlight '^E0|"error"|level=error|Error') || :
 
     FATAL "ACM MultiClusterHub is not ready after $duration"
   fi
@@ -887,13 +909,13 @@ function install_submariner_operator_on_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
+    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
+    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
   local submariner_catalog
-  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
+  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
@@ -1176,13 +1198,13 @@ function create_submariner_config_in_acm_managed_cluster() {
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local submariner_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
+    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="$(get_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
+    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
   local submariner_catalog
-  submariner_catalog="$(get_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
+  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
 
   TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
 
@@ -1317,7 +1339,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
 
   if [[ "$managed_cluster_status" == FAILED ]] ; then
     ${OC} logs deploy/submariner-addon \
-    --all-containers --limit-bytes=10000 --since=10m |& (! highlight '^E0|"error"|level=error') || :
+    --all-containers --tail=100 |& (! highlight '^E0|"error"|level=error|Error') || :
 
     ${OC} describe submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" || :
 
