@@ -673,6 +673,8 @@ function create_clusterset_for_submariner_in_acm_hub() {
 
   create_namespace "${ACM_CLUSTER_SET}"
 
+  create_namespace "${SUBM_NAMESPACE}"
+
   # Create the cluster-set
   cat <<EOF | ${OC} apply -f -
   apiVersion: cluster.open-cluster-management.io/v1beta1
@@ -692,13 +694,13 @@ EOF
     FATAL "'${ACM_CLUSTER_SET}' was not added to ManagedClusterSet after $duration"
   fi
 
-  TITLE "Creating 'ManagedClusterSetBinding' for Submariner in the ClusterSet '${ACM_CLUSTER_SET}'"
+  TITLE "Creating 'ManagedClusterSetBinding' for the ClusterSet '${ACM_CLUSTER_SET}' in namespace '${SUBM_NAMESPACE}'"
 
   # Bind the managed cluster set to a namespace
   # The ManagedClusterSetBinding must have the same name as the target ManagedClusterSet
 
   cat <<EOF | ${OC} apply -f -
-  apiVersion: cluster.open-cluster-management.io/v1beta1
+  apiVersion: cluster.open-cluster-management.io/v1beta2
   kind: ManagedClusterSetBinding
   metadata:
     name: ${ACM_CLUSTER_SET}
