@@ -154,7 +154,7 @@ function export_global_script_variable() {
 
   # File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
   export TEST_STATUS_FILE="$OUTPUT_DIR/test_status.rc"
-  export EXIT_STATUS
+  export SCRIPT_EXIT_STATUS
   : > "$TEST_STATUS_FILE"
 
   # Filename (relative to current directory) to store OCP version 
@@ -1266,7 +1266,8 @@ function uninstall_submariner() {
     }
 
     # TODO: Need to add cloud cleanup, according to cloud provider:
-    # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
+    # ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
+    # subctl cloud cleanup rhos --infra-id $ocp_infra_id --region regionOne --project-id "multi-cluster-networking"
 
   else
     uninstall_status=FAILED
@@ -4868,11 +4869,11 @@ function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  TITLE "Showing product versions on script teardown (only if EXIT_STATUS [${EXIT_STATUS}] is already set)"
+  TITLE "Showing product versions on script teardown (only if SCRIPT_EXIT_STATUS [${SCRIPT_EXIT_STATUS}] is already set)"
 
-  if [[ -n "$EXIT_STATUS" ]] ; then
+  if [[ -n "$SCRIPT_EXIT_STATUS" ]] ; then
 
     ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
 
