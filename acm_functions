@@ -882,11 +882,22 @@ function import_managed_cluster() {
   # Import the managed clusters
   ${OC} apply -f "${kluster_crd}"
 
-  # TODO: Wait for klusterlet crds installation
-  # sleep 2m
-
   ${OC} apply -f "${kluster_import}"
-  ${OC} get pod -n open-cluster-management-agent
+
+  TITLE "Verify klusterlets for the managed cluster id: ${cluster_id}"
+
+  local ocm_deployments
+  ocm_deployments="$(oc get deployments -n open-cluster-management-agent -o name)"
+
+  for deploy_name in $ocm_deployments ; do
+    ${OC} rollout status -n open-cluster-management-agent --watch --timeout 1m $deploy_name || klusterlet_status=FAILED
+  done
+
+  ${OC} get all -n open-cluster-management-agent
+
+  if [[ "$klusterlet_status" == FAILED ]] ; then
+    FAILURE "Klusterlet installation failure occurred for managed cluster id: $cluster_id"
+  fi
 
 }
 
