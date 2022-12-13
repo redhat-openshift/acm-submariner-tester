@@ -73,7 +73,7 @@ function remove_acm_managed_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name || :)"
+  cluster_id="$(generate_acm_managed_cluster_id)"
 
   PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
 
@@ -731,7 +731,7 @@ function create_and_import_managed_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name || :)"
+  cluster_id="$(generate_acm_managed_cluster_id)"
 
   PROMPT "Create and import a managed cluster in ACM: $cluster_id"
 
@@ -743,6 +743,31 @@ function create_and_import_managed_cluster() {
   export KUBECONFIG="$kubeconfig_file"
 
   import_managed_cluster "$cluster_id"
+}
+
+
+# ------------------------------------------
+
+function generate_acm_managed_cluster_id() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  export KUBECONFIG="$KUBECONFIG"
+
+  local cluster_id
+  local ocp_cloud
+  ocp_cloud="$(print_current_cluster_cloud)"
+
+  if [[ "$ocp_cloud" != "Amazon" ]] ; then
+    local cluster_name
+    cluster_name="$(print_current_cluster_name)"
+    cluster_id="acm-${cluster_name}"
+  else
+    # Workaround for https://issues.redhat.com/browse/ACM-2380
+    cluster_id="local-cluster"
+  fi
+
+  echo "$cluster_id"
+
 }
 
 # ------------------------------------------
@@ -963,7 +988,12 @@ function configure_submariner_addon_for_acm_managed_cluster() {
 
   echo -e "\n# Generate new Managed cluster ID according to the current cluster name of kubeconfig: $kubeconfig_file"
   local cluster_id
-  cluster_id="acm-$(print_current_cluster_name || :)"
+
+  BUG "Submariner Gateway on OVN: unable to parse node L3 gw annotation" \
+  "Rename the managed cluster id on the Hub to 'local-cluster" \
+  "https://issues.redhat.com/browse/ACM-2380"
+  # Workaround in:
+  cluster_id="$(generate_acm_managed_cluster_id)"
 
   echo -e "\n# Get OCP Infra ID for the new Managed cluster" # Required for Azure Resource group identification
   local ocp_infra_id
