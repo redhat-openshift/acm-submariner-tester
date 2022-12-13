@@ -141,11 +141,11 @@ function export_global_script_variable() {
   # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
   export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
 
-  # BUG "Submariner Broker created but Gateway was not" \
-  # "Trim the length of ACM cluster set" \
-  # "https://issues.redhat.com/browse/ACM-2076"
-  # # Workaround:
-  # export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
+  BUG "Submariner Gateway on OVN: unable to parse node L3 gw annotation" \
+  "Rename the cluster set to 'local-cluster" \
+  "https://issues.redhat.com/browse/ACM-2380"
+  # Workaround:
+  export ACM_CLUSTER_SET="local-cluster"
 
 
   #################################################################################
