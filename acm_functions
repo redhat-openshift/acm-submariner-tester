@@ -763,19 +763,21 @@ function generate_acm_managed_cluster_id() {
 
   export KUBECONFIG="$KUBECONFIG"
 
+  local cluster_name
   local cluster_id
-  local ocp_cloud
-  ocp_cloud="$(print_current_cluster_cloud)"
+  
+  # local ocp_cloud
+  # ocp_cloud="$(print_current_cluster_cloud)"
+  # if [[ "$ocp_cloud" != "Amazon" ]] ; then
+  #   cluster_name="$(print_current_cluster_name)"
+  #   cluster_id="acm-${cluster_name}"
+  # else
+  #   # Workaround for https://issues.redhat.com/browse/ACM-2380
+  #   cluster_id="local-cluster"
+  # fi
 
-  if [[ "$ocp_cloud" != "Amazon" ]] ; then
-    local cluster_name
-    cluster_name="$(print_current_cluster_name)"
-    cluster_id="acm-${cluster_name}"
-  else
-    # Workaround for https://issues.redhat.com/browse/ACM-2380
-    cluster_id="local-cluster"
-  fi
-
+  cluster_name="$(print_current_cluster_name)"
+  cluster_id="acm-${cluster_name}"
   echo "$cluster_id"
 
 }
@@ -852,7 +854,7 @@ EOF
       enabled: true
     searchCollector:
       enabled: true
-    version: ${ACM_VER_TAG}
+    version: "${ACM_VER_TAG}"
 EOF
 
   echo -e "\n# Apply Klusterlet (and wait until created)"
