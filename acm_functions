@@ -394,7 +394,7 @@ function find_acm_component_version_in_downstream() {
   # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
   
   stolostron_commit_title="$(curl "https://github.com/stolostron/deploy/commits/master/mirror" \
-  | grep "href=\".* ${acm_version} .*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+  | grep "href=\".* ${acm_version}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
 
   stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
 
@@ -699,8 +699,14 @@ EOF
   # Bind the managed cluster set to a namespace
   # The ManagedClusterSetBinding must have the same name as the target ManagedClusterSet
 
+  # API in ACM 2.7 for ManagedClusterSetBinding was upgraded from v1beta1 to v1beta2:
+  local api_version="cluster.open-cluster-management.io/v1beta1"
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
+    api_version="cluster.open-cluster-management.io/v1beta2"
+  fi
+
   cat <<EOF | ${OC} apply -f -
-  apiVersion: cluster.open-cluster-management.io/v1beta2
+  apiVersion: ${api_version}
   kind: ManagedClusterSetBinding
   metadata:
     name: ${ACM_CLUSTER_SET}
