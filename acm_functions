@@ -400,9 +400,13 @@ function find_acm_component_version_in_downstream() {
 
   stolostron_commit_hash="$(basename "${stolostron_commit_title%% *}")" || : # e.g. 78ee917f1303cb32dddc430db49a1bd0199ec6da
   
-  stolostron_downstream_file="mirror/${acm_version}-DOWNSTREAM-${stolostron_commit_date}.txt" 
+  # Update ACM version tag
+  ACM_VER_TAG="$(echo "$stolostron_commit_title" | awk '{print $3}')"
+  export ACM_VER_TAG
 
-  TITLE "Download downstream file from https://github.com/stolostron, of the latest commit for ACM version '$acm_version':
+  stolostron_downstream_file="mirror/${ACM_VER_TAG}-DOWNSTREAM-${stolostron_commit_date}.txt" 
+
+  TITLE "Download downstream file from https://github.com/stolostron, of the latest commit for ACM version '$ACM_VER_TAG':
   Stolostron commit title: \n${stolostron_commit_title}
   Stolostron commit hash: \n${stolostron_commit_hash}
   Stolostron commit date: \n${stolostron_commit_date}
