@@ -233,8 +233,8 @@ function deploy_ocp_bundle() {
        Catalog Source: ${catalog_source}"
   fi
 
-  # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  # login to current kubeconfig cluster should've already be called before
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
@@ -312,7 +312,7 @@ EOF
   Catalog: ${catalog_display_name}
   Operator: ${operator_name}
   Channel: ${operator_channel}
-  Version ${operator_version}
+  Version: ${operator_version}
   "
 
   local packagemanifests_status
@@ -460,9 +460,11 @@ EOF
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
+    # starting_csv="${operator_name}.${operator_version}"
+    starting_csv="$(get_csv_for_operator "$operator_name" "$operator_version" "$subscription_namespace")"
+
     echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
     install_plan_approval="Manual"
-    starting_csv="${operator_name}.${operator_version}"
 
     # BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
     # "Use Automatic installPlanApproval (instead of Manual)"
@@ -540,6 +542,26 @@ EOF
     FAILURE "InstallPlan '${install_plan_name}' or Subscription '${subscription_display_name}' for Operator '${operator_name}' could not be created"
   fi
 
+}
+
+# ------------------------------------------
+
+function get_csv_for_operator() {
+  ### Print (return) the current CSV by operator name, version and subscription namespace ###
+  trap '' DEBUG # DONT trap_to_debug_commands
+  
+  # Input args:
+  local operator_name="$1"
+  local operator_version="$2"
+
+  # Optional args:
+  local subscription_namespace="${3:-default}"
+
+  local current_csv="$(${OC} get packagemanifests -n "${subscription_namespace}" "${operator_name}" -o json \
+  | jq -r '(.status.channels[].currentCSV)' | awk -v version="${operator_version}" '$0 ~ version { print $1 }')"
+
+  echo "${current_csv}"
+    
 }
 
 # ------------------------------------------

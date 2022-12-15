@@ -957,20 +957,20 @@ function install_submariner_operator_on_cluster() {
   set_subm_version_tag_var "submariner_version"
 
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
-  local submariner_channel
+  local subscription_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
+    subscription_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
+    subscription_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
   local submariner_catalog
-  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
+  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${subscription_channel}")"
 
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   # Deploy Submariner operator as an OCP bundle
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${submariner_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${subscription_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
   TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
@@ -1251,17 +1251,24 @@ function create_submariner_config_in_acm_managed_cluster() {
   set_subm_version_tag_var "submariner_version"
 
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
-  local submariner_channel
+  local subscription_channel
   if check_version_greater_or_equal "$SUBM_VER_TAG" "0.12" ; then
-    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
+    subscription_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX}" "$submariner_version")"
   else
-    submariner_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
+    subscription_channel="$(generate_channel_name "${SUBM_CHANNEL_PREFIX_TECH_PREVIEW}" "$submariner_version")"
   fi
 
   local submariner_catalog
-  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${submariner_channel}")"
+  submariner_catalog="$(generate_catalog_name "${SUBM_OPERATOR}" "${subscription_channel}")"
 
-  TITLE "Create the SubmarinerConfig in ACM namespace '${cluster_id}' with version: ${submariner_version} (channel ${submariner_channel})"
+  local starting_csv
+  starting_csv="$(get_csv_for_operator "$SUBM_OPERATOR" "$submariner_version" "$SUBM_NAMESPACE")"
+
+  TITLE "Create the SubmarinerConfig for ACM managed cluster '${cluster_id}'
+  Submariner version: ${submariner_version}
+  Subscription channel ${subscription_channel}
+  Subscription version ${starting_csv}
+  "
 
   local submariner_conf="SubmarinerConfig_${cluster_id}.yaml"
 
@@ -1287,10 +1294,10 @@ function create_submariner_config_in_acm_managed_cluster() {
       submarinerImagePullSpec: ''
       submarinerRouteAgentImagePullSpec: ''
     subscriptionConfig:
-      channel: ${submariner_channel}
+      channel: ${subscription_channel}
       source: ${submariner_catalog}
       sourceNamespace: ${SUBM_NAMESPACE}
-      startingCSV: ${SUBM_OPERATOR}.${submariner_version}
+      startingCSV: ${starting_csv}
 EOF
 
   echo -e "\n# Apply SubmarinerConfig (if failed once - apply again)"
