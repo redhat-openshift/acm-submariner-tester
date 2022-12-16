@@ -1056,16 +1056,20 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   create_submariner_config_in_acm_managed_cluster "$cluster_id" "$cluster_secret_name" "$SUBM_VER_TAG"
 
   # Validate manifestwork
-  validate_submariner_manifestwork_in_acm_managed_cluster "$cluster_id"
+  validate_submariner_manifestwork_in_acm_managed_cluster "$cluster_id" || sumariner_addon_status=FAILED
 
   # Validate managedclusteraddons
-  validate_submariner_addon_status_in_acm_managed_cluster "$cluster_id"
+  validate_submariner_addon_status_in_acm_managed_cluster "$cluster_id" || sumariner_addon_status=FAILED
 
   # Validate submarinerconfig
-  validate_submariner_config_in_acm_managed_cluster "$cluster_id"
+  validate_submariner_config_in_acm_managed_cluster "$cluster_id" || sumariner_addon_status=FAILED
 
   # Validate submariner connection
-  validate_submariner_agent_connected_in_acm_managed_cluster "$cluster_id"
+  validate_submariner_agent_connected_in_acm_managed_cluster "$cluster_id" || sumariner_addon_status=FAILED
+
+  if [[ "$sumariner_addon_status" == FAILED ]] ; then
+    FAILURE "Submariner Addon had installation failures on managed cluster '$cluster_id'"
+  fi
 
 }
 
