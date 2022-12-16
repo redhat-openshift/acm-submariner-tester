@@ -953,8 +953,8 @@ function install_submariner_operator_on_cluster() {
 
   PROMPT "Install Submariner bundle $submariner_version (without Subscription) on cluster $cluster_name"
 
-  # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
-  set_subm_version_tag_var "submariner_version"
+  # # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
+  # set_subm_version_tag_var "submariner_version"
 
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local subscription_channel
@@ -1251,8 +1251,8 @@ function create_submariner_config_in_acm_managed_cluster() {
   local cluster_secret_name="${2}"
   local submariner_version="${3:-$SUBM_VER_TAG}"
 
-  # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
-  set_subm_version_tag_var "submariner_version"
+  # # Fix the $submariner_version value for custom images (the function is defined in main setup_subm.sh)
+  # set_subm_version_tag_var "submariner_version"
 
   echo -e "\n# Since Submariner 0.12 the channel has changed from 'alpha' to 'stable'"
   local subscription_channel
@@ -1404,7 +1404,7 @@ function validate_submariner_addon_status_in_acm_managed_cluster() {
   ${OC} describe managedclusteraddons "${SUBM_ADDON}" -n "${cluster_id}" || managed_cluster_status=FAILED
 
   if [[ "$managed_cluster_status" == FAILED ]] ; then
-    ${OC} logs deploy/submariner-addon \
+    ${OC} logs deploy/submariner-addon -n "${SUBM_NAMESPACE}" \
     --all-containers --tail=100 |& (! highlight '^E0|"error"|level=error|Error') || :
 
     ${OC} describe submarinerconfig "${SUBM_CONFIG}" -n "${cluster_id}" || :

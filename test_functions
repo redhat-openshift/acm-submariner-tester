@@ -71,8 +71,8 @@ function export_all_env_variables() {
       
   fi
 
-  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
-  set_versions_variables
+  # # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+  # set_versions_variables
 
   # List all environment variables
   print_all_env_variables
@@ -543,6 +543,9 @@ function setup_workspace() {
       || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
     fi
   fi
+
+  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+  set_versions_variables
 
 }
 
@@ -1673,8 +1676,8 @@ function set_netshoot_image_spec() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
+      # # Fix the $submariner_version_or_tag value for custom images
+      # set_subm_version_tag_var "submariner_version_or_tag"
 
       local netshot_image_url
       netshot_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_NETTEST}:${submariner_version_or_tag}"
@@ -1853,6 +1856,19 @@ function set_subm_version_tag_var() {
     subm_version_tag=v${subm_version_tag}
   fi
 
+  # If version is vX.Y without .Z - fetch the latest minor Z version 
+  if [[ "$subm_version_tag" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+    TITLE "Fetching the latest minor Z version for '${subm_version_tag}'"
+
+    echo -e "\n# Set and export the variable \$LATEST_NVR for subctl-container version ${subm_version_tag}'"
+    export_LATEST_IIB_NVR "${SUBM_BUNDLE}" "${subm_version_tag}" 
+    # This should exported for example: LATEST_NVR=v0.14.0-5
+
+    [[ -n "$LATEST_NVR" ]] || FATAL "No Image was found for '${SUBM_BUNDLE}' version '${subm_version_tag}'"
+
+    subm_version_tag="${LATEST_NVR%%-*}"
+  fi
+
   # export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
   # echo -e "\n# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
   # subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
@@ -1910,21 +1926,8 @@ function download_subctl_by_tag() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
-
-      # If version is vX.Y without .Z - fetch the latest minor Z version 
-      if [[ "$submariner_version_or_tag" =~ ^v[0-9]+\.[0-9]+$ ]]; then
-        TITLE "Fetching the latest minor Z version for '${submariner_version_or_tag}'"
-
-        echo -e "\n# Set and export the variable \$LATEST_NVR for subctl-container version ${submariner_version_or_tag}'"
-        export_LATEST_IIB_NVR "subctl" "${submariner_version_or_tag}" 
-        # This should exported for example: LATEST_NVR=v0.14.0-5
-
-        [[ -n "$LATEST_NVR" ]] || FATAL "No Image was found for subctl version '${submariner_version_or_tag}'"
-
-        submariner_version_or_tag="${LATEST_NVR}"
-      fi
+      # # Fix the $submariner_version_or_tag value for custom images
+      # set_subm_version_tag_var "submariner_version_or_tag"
 
       if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
         subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
@@ -1932,7 +1935,6 @@ function download_subctl_by_tag() {
         subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
         # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
       fi
-
 
       TITLE "Backup previous subctl archive (if exists)"
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
