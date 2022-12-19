@@ -5,7 +5,7 @@
 
 # ------------------------------------------
 
-### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat
+### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat (UMB)
 function export_LATEST_IIB_NVR() {
   trap_to_debug_commands;
 
@@ -15,7 +15,7 @@ function export_LATEST_IIB_NVR() {
 
   # Optional input args:
   local cvp_component="${3:-$CVP_COMPONENT}"
-  local cvp_issuer="${4:-$CVP_ISSUER}" # e.g. "contra/pipeline" or "freshmaker"
+  local cvp_issuer="${4:-$CVP_ISSUER}" # e.g. "contra/pipeline" (default) or "freshmaker" (CVE)
 
   TITLE "Set and export the variable \$LATEST_IIB according to Bundle, version and component:
   Bundle Name: ${bundle_name}
@@ -23,85 +23,78 @@ function export_LATEST_IIB_NVR() {
   CVP Component: ${cvp_component}
   "
 
-  local umb_output="latest_iib.txt"
-
-  fetch_datagrapper "${bundle_name}" "${operator_version}" "30" "${umb_output}"
-
-  # local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-
-  # if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
-  #   BUG "'acm-operator-bundle' has unstable CVP tests" \
-  #   "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
-
-  #   # Workaround:
-  #   iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-  # fi
+  local contra_output="contra_iib.txt" # External file to store IIB (Index Image Bundle) data for "contra"
+  local freshmaker_output="freshmaker_iib.txt" # External file to store IIB (Index Image Bundle) data for "freshmaker"
+  local contra_nvr
+  local freshmaker_nvr
+  local index_images
 
   if [[ "${bundle_name}" == "submariner-operator-bundle" ]] ; then
-    
     if [[ "$operator_version" =~ 0\.11 ]] ; then
       BUG "For Submariner 0.11.* the CVP component should be 'cvp-teamsubmariner'"
       # Workaround:
       cvp_component="cvp-teamsubmariner"
-
-    elif [[ "$operator_version" =~ 0\.(12|13) ]] ; then
-      BUG "For Submariner 0.12.* or 0.13.* the CVP issuer should be 'freshmaker' (CVE release)"
-      # Workaround:
-      cvp_issuer="freshmaker"
     fi
   fi
 
-  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
-    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
-    | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  # cvp_issuer="contra/pipeline"
+  fetch_datagrepper "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "contra/pipeline" "${contra_output}"
+  contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
-  local index_images
-  index_images="$(jq -r "${iib_query}" $umb_output)" || :
+  # cvp_issuer="freshmaker"
+  fetch_datagrepper "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "freshmaker" "${freshmaker_output}"
+  freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
-  # index-images example:
-  # {
-  # "nvr": "submariner-operator-bundle-container-v0.11.0-6",
-  # "index_image": {
-  #   "v4.6": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105099",
-  #   "v4.7": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105101",
-  #   "v4.8": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105104",
-  #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
-  # }
+  if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
+    
+    # No image was found - increase the delta to 100 days
 
-  # If no image was found - increase the delta to 100 days
-  if [[ -z "$index_images" || "$index_images" == null ]]; then
     BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
     
-    fetch_datagrapper "${bundle_name}" "${operator_version}" "100" "${umb_output}"
+    # cvp_issuer="contra/pipeline"
+    fetch_datagrepper "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "contra/pipeline" "${contra_output}"
+    contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
-    index_images="$(jq -r "${iib_query}" $umb_output)" || :
+    # cvp_issuer="freshmaker"
+    fetch_datagrepper "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "freshmaker" "${freshmaker_output}"
+    freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
-    # If still no image found - search within NON-completed pipelines too
-    if [[ -z "$index_images" || "$index_images" == null ]]; then
-      BUG "Failed to retrieve images during the last 100 days - Searching images within non-completed pipelines"
+    # # If still no image found - search within NON-completed pipelines too
+    # if [[ -z "$index_images" || "$index_images" == null ]]; then
+    #   BUG "Failed to retrieve images during the last 100 days - Searching images within non-completed pipelines"
 
-      local iib_non_completed
-      iib_non_completed='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+    #   local iib_non_completed
+    #   iib_non_completed='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
-      index_images="$(jq -r "${iib_non_completed}" $umb_output)" || :
-    fi
+    #   index_images="$(jq -r "${iib_non_completed}" $umb_output)" || :
+    # fi
+    #
+    # # If still no image found - increase the delta to 200 days (but filter completed pipelines only)
+    # if [[ -z "$index_images" || "$index_images" == null ]]; then
+    #   BUG "Failed to retrieve images during the last 100 days - Searching images during the last 200 days"
 
-    # If still no image found - increase the delta to 200 days (but filter completed pipelines only)
-    if [[ -z "$index_images" || "$index_images" == null ]]; then
-      BUG "Failed to retrieve images during the last 100 days - Searching images during the last 200 days"
+    #   fetch_datagrepper "${bundle_name}" "${operator_version}" "200" "${umb_output}"
 
-      fetch_datagrapper "${bundle_name}" "${operator_version}" "200" "${umb_output}"
-
-      index_images="$(jq -r "${iib_query}" $umb_output)" || :
-    fi
+    #   index_images="$(jq -r "${iib_query}" $umb_output)" || :
+    # fi
   fi
 
-  if [[ -z "$index_images" || "$index_images" == null ]]; then
+  if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
     FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': $index_images"
-  else
-    TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
-    $index_images"
   fi
+
+  TITLE "Check if ${bundle_name} NVR for cvp issuer of 'freshmaker' (CVE release) has a newer version to use"
+
+  if check_version_greater_or_equal "$freshmaker_nvr" "$contra_nvr" ; then
+    export "LATEST_NVR=${freshmaker_nvr}"
+    index_images="$(< "${freshmaker_output}")"
+  else
+    export "LATEST_NVR=${contra_nvr}"
+    index_images="$(< "${contra_output}")"
+  fi
+
+  TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
+  $index_images"
 
   local ocp_version_x_y
   ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
@@ -109,24 +102,25 @@ function export_LATEST_IIB_NVR() {
   TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
 
   LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
-  LATEST_NVR=$(echo "$index_images" | jq -r '.nvr') || :
 
   if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
     BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
 
-    # Find the latest version, after sorting by product versions (not by real numbers), so for example: v4.10 is higher than v4.9
+    # Find the latest version, after sorting by product versions (not by real numbers).
+    # For example: v4.10 is higher than v4.9
 
-    ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
+    local latest_ocp_version_x_y
+    latest_ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
 
-    TITLE "Getting index-image for bundle '${bundle_name}', for the latest supported OCP version: '${ocp_version_x_y}'"
-
-    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
-    LATEST_NVR=$(echo "$index_images" | jq -r '.nvr') || :
+    if [[ -n "$latest_ocp_version_x_y" ]] ; then
+      TITLE "Getting latest supported '${bundle_name}' for OCP version '${latest_ocp_version_x_y}'"
+      LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${latest_ocp_version_x_y}" ) || :
+    fi
   fi
 
-  if [[ "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-    TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
+  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
 
+  if [[ "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
     local iib_number
     iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')" || :
     curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
@@ -146,20 +140,21 @@ function export_LATEST_IIB_NVR() {
   fi
 
   export "LATEST_IIB=$(echo "${LATEST_IIB}" | cut -d'/' -f2-)" || :
-  export "LATEST_NVR=$(echo "${LATEST_NVR}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
 }
 
 # ------------------------------------------
 
 ### Helper function to fetch datagrapper (UMB) for component images by version and days, into a file
-function fetch_datagrapper() {
+function fetch_datagrepper() {
   # trap_to_debug_commands;
 
   local bundle_name="${1}"
   local version="${2}"
   local num_of_days="${3}"
-  local umb_output_file="${4}"
+  local cvp_component="${4}"
+  local cvp_issuer="${5}"
+  local umb_output_file="${6}"
 
   # Datagrepper keeps build info at most eight months into the past (i.e. 240 days)
   (( num_of_days < 240 )) || num_of_days=240
@@ -168,6 +163,8 @@ function fetch_datagrapper() {
   Bundle: ${bundle_name}
   Version: ${version}
   Delta by Days: ${num_of_days}
+  CVP Component: ${cvp_component}
+  CVP Issuer: ${cvp_issuer}
   Output file: ${umb_output_file}
   "
 
@@ -181,6 +178,26 @@ function fetch_datagrapper() {
   
   echo -e "\n# Running: ${curl_cmd[*]}"
   "${curl_cmd[@]}"
+
+  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
+    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
+    | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+
+  local index_images
+  index_images="$(jq -r "${iib_query}" $umb_output_file)" || :
+
+  echo "$index_images" > $umb_output_file
+  cat "$umb_output_file"
+
+  # index-images example:
+  # {
+  # "nvr": "submariner-operator-bundle-container-v0.11.0-6",
+  # "index_image": {
+  #   "v4.6": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105099",
+  #   "v4.7": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105101",
+  #   "v4.8": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105104",
+  #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
+  # }
 
 }
 
@@ -233,8 +250,8 @@ function deploy_ocp_bundle() {
        Catalog Source: ${catalog_source}"
   fi
 
-  # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  # login to current kubeconfig cluster should've already be called before
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
@@ -249,6 +266,9 @@ function deploy_ocp_bundle() {
   export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
 
   [[ -n "$LATEST_IIB" ]] || FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
+
+  # Remove extra build number from operator version
+  operator_version="${operator_version%%-*}" # e.g. v2.2.0-230 --> v2.2.0
 
   local source_image_path
   source_image_path="${BREW_REGISTRY}/${LATEST_IIB}"
@@ -309,7 +329,7 @@ EOF
   Catalog: ${catalog_display_name}
   Operator: ${operator_name}
   Channel: ${operator_channel}
-  Version ${operator_version}
+  Version: ${operator_version}
   "
 
   local packagemanifests_status
@@ -457,9 +477,11 @@ EOF
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
+    # starting_csv="${operator_name}.${operator_version}"
+    starting_csv="$(get_csv_for_operator "$operator_name" "$operator_version" "$subscription_namespace")"
+
     echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
     install_plan_approval="Manual"
-    starting_csv="${operator_name}.${operator_version}"
 
     # BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
     # "Use Automatic installPlanApproval (instead of Manual)"
@@ -541,7 +563,27 @@ EOF
 
 # ------------------------------------------
 
-function get_channel_name() {
+function get_csv_for_operator() {
+  ### Print (return) the current CSV by operator name, version and subscription namespace ###
+  trap '' DEBUG # DONT trap_to_debug_commands
+  
+  # Input args:
+  local operator_name="$1"
+  local operator_version="$2"
+
+  # Optional args:
+  local subscription_namespace="${3:-default}"
+
+  local current_csv="$(${OC} get packagemanifests -n "${subscription_namespace}" "${operator_name}" -o json \
+  | jq -r '(.status.channels[].currentCSV)' | awk -v version="${operator_version}" '$0 ~ version { print $1 }')"
+
+  echo "${current_csv}"
+    
+}
+
+# ------------------------------------------
+
+function generate_channel_name() {
   ### Generate and print Subscription Channel from a defined perfix and version number ###
 
   local prefix="$1"
@@ -559,7 +601,7 @@ function get_channel_name() {
 
 # ------------------------------------------
 
-function get_catalog_name() {
+function generate_catalog_name() {
   ### Generate and print Catalog Source name from Operator and Channel ###
 
   local operator_name="$1"

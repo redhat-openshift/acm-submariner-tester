@@ -89,6 +89,7 @@ Running with pre-defined parameters (optional):
   * Install MCE operator version:                      --mce-version [x.y.z]
   * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
   * Override images from a custom registry:            --registry-images
+  * Get stolostron/deploy images by date:              --acm-date [YYYY-MM-DD]
   * Configure and test GlobalNet:                      --globalnet
   * Install Submariner with SubCtl:                    --subctl-install
   * Join managed cluster A:                            --join-cluster-a
@@ -209,6 +210,9 @@ for param in ${SCRIPT_PARAMS} ; do
   --acm-version)
     export_param_value "${param_value}" "ACM_VER_TAG" # $ACM_VER_TAG will get the value
     export INSTALL_ACM=YES
+    shift 2 ;;
+  --acm-date)
+    export_param_value "${param_value}" "ACM_BUILD_DATE" # $ACM_BUILD_DATE will get the value
     shift 2 ;;
   --mce-version)
     export_param_value "${param_value}" "MCE_VER_TAG" # $MCE_VER_TAG will get the value
@@ -665,10 +669,10 @@ cat "$SYS_LOG"
   fi
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
   # Update test exit status to 0, unless it is already 1 or 2
-  [[ "$EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
+  [[ "$SCRIPT_EXIT_STATUS" == @(1|2) ]] || echo 0 > "$TEST_STATUS_FILE"
 
   # fi
   # ### END of OCP Setup (Create or Destroy) ###
@@ -680,10 +684,10 @@ cat "$SYS_LOG"
   if [[ ! "$SKIP_TESTS" =~ ((all)(,|$))+ ]]; then
 
     # Get test exit status (from file $TEST_STATUS_FILE)
-    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
     # Update test exit status to empty, unless it is already 1 or 2
-    [[ "$EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
+    [[ "$SCRIPT_EXIT_STATUS" == @(1|2) ]] || : > "$TEST_STATUS_FILE"
 
     ### Verify clusters status after OCP reset/create ###
 
@@ -793,10 +797,12 @@ cat "$SYS_LOG"
     fi
     # END of cluster C cleanup
 
-    ### Clusters configurations (unless requested to --skip-ocp-setup): Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels ###
-    # TODO: Should rename flag from "--skip-ocp-setup" to "--config-cluster"
+    ### Clusters configurations ### 
+    # Add OCP elevated user, Registry prune policy, Firewall ports, Gateway labels.
+    # Add custom (downstream) registry mirrors, secrets and images.
+    # TODO: Should rename flag "--skip-ocp-setup" to "--skip-ocp-config".
    
-    if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
+    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ && ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
 
       echo -e "\n# TODO: If installing without ADDON (when adding clusters with subctl join) -
       \n\# Then for AWS/GCP/AZURE/OSP run subctl cloud prepare command"
@@ -810,6 +816,12 @@ cat "$SYS_LOG"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_HUB}"
 
+        # ${JUNIT_CMD} remove_submariner_images_from_local_registry_with_podman
+
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
+
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
+
       fi
 
       # Cluster B configurations (plus custom configurations for OpenStack)
@@ -819,6 +831,10 @@ cat "$SYS_LOG"
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
 
         # Before ACM 2.5 - Need to open ports and label nodes on Openstack (cloud prepare was not supported)
         if ! check_version_greater_or_equal "$ACM_VER_TAG" "2.5" ; then
@@ -841,40 +857,14 @@ cat "$SYS_LOG"
 
         # ${JUNIT_CMD} configure_ocp_garbage_collection_and_images_prune "${KUBECONF_CLUSTER_C}"
 
-      fi
-
-    fi
-    ### END of all Clusters configurations
-
-    ### Adding custom (downstream) registry mirrors, secrets and images (if using --registry-images) ###
-
-    if [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] ; then
-
-      # ${JUNIT_CMD} remove_submariner_images_from_local_registry_with_podman
-
-      ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_HUB}"
-
-      ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_HUB}"
-
-      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
-
-        ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_B}"
-
-        ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_B}"
-
-      fi
-
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
-
         ${JUNIT_CMD} configure_custom_registry_in_cluster "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} upload_submariner_images_to_cluster_registry "${KUBECONF_CLUSTER_C}"
 
       fi
-
+    
     fi
-    ### END of configure custom clusters registry
-
+    ### END of all Clusters and Registry configurations
 
     ### Submariner system tests prerequisites ###
     # Following will NOT be executed if using "--skip-tests sys" (useful for deployment without system tests)
@@ -1083,10 +1073,10 @@ cat "$SYS_LOG"
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
     # Get test exit status (from file $TEST_STATUS_FILE)
-    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
     # Update test exit status to 2, unless it is already 1 or 2
-    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
+    [[ "$SCRIPT_EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi
   ### END of INSTALL_SUBMARINER ###
@@ -1238,21 +1228,21 @@ cat "$SYS_LOG"
     TITLE "Once System tests are completed - \$TEST_STATUS_FILE is considered UNSTABLE.
     Tests will be reported to Polarion ($TEST_STATUS_FILE with exit code 2)"
 
-    # Get test exit status (from file $TEST_STATUS_FILE)
-    EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+    # Get system tests status (from file $TEST_STATUS_FILE)
+    sys_tests_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-    # Update test exit status to 2, unless it is already 1 or 2
-    [[ "$EXIT_STATUS" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
+    # Update $TEST_STATUS_FILE to 2, unless it is already 1 or 2
+    [[ "$sys_tests_status" == @(1|2) ]] || echo 2 > "$TEST_STATUS_FILE"
 
   fi # END of all System tests
 
 
   ### Running Submariner tests with Ginkgo or with subctl commands
 
-  # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  # Get system tests status (from file $TEST_STATUS_FILE), and run Golang tests only if system tests passed
+  sys_tests_status="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  if [[ ! "$SKIP_TESTS" =~ all && "$EXIT_STATUS" != 1 ]]; then
+  if [[ ! "$SKIP_TESTS" =~ all && "$sys_tests_status" != 1 ]]; then
 
     ### Compiling Submariner projects in order to run Ginkgo tests with GO
 
@@ -1329,19 +1319,23 @@ cat "$SYS_LOG"
       fi
     fi
 
-    # If all E2E tests passed, update test exit status to 0 (unless it is already 1 or 2)
-    if [[ "$ginkgo_tests_status" != FAILED && "$EXIT_STATUS" != @(1|2) ]] ; then
+    # If all E2E tests passed, update $TEST_STATUS_FILE to 0 (unless $sys_tests_status is already 1 or 2)
+    if [[ "$ginkgo_tests_status" != FAILED && "$sys_tests_status" != @(1|2) ]] ; then
       echo 0 > "$TEST_STATUS_FILE"
     else
       FATAL "Submariner E2E or Unit-Tests have ended with failures, please investigate."
     fi
-
-  elif [[ -z "$EXIT_STATUS" ]]; then
-    TITLE "No tests were required to be executed, but \$TEST_STATUS_FILE was not yet set - Changing status to UNSTABLE"
+  
+  elif [[ -z "$SCRIPT_EXIT_STATUS" ]]; then
+    TITLE "No tests were required to be executed, but \$SCRIPT_EXIT_STATUS was not yet set - Changing $TEST_STATUS_FILE to UNSTABLE"
 
     # Update test exit status to 2
     echo 2 > "$TEST_STATUS_FILE"
+  fi
 
+  # Update $TEST_STATUS_FILE with current $SCRIPT_EXIT_STATUS value (if not null)
+  if [[ -n "$SCRIPT_EXIT_STATUS" ]]; then
+    echo "$SCRIPT_EXIT_STATUS" > "$TEST_STATUS_FILE"
   fi
 
 ) |& tee -a "$SYS_LOG"
@@ -1362,18 +1356,18 @@ cat "$SYS_LOG"
   # ------------------------------------------
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  if [[ "$EXIT_STATUS" == 0 ]] ; then
-    # If script got 0 EXIT_STATUS here - All tests of Submariner have passed ;-)
+  if [[ "$SCRIPT_EXIT_STATUS" == 0 ]] ; then
+    # If script got 0 SCRIPT_EXIT_STATUS here - All tests of Submariner have passed ;-)
     TITLE "SUBMARINER SYSTEM AND E2E TESTS PASSED"
   fi
 
   echo -e "\n# Publishing test results to Polarion = $UPLOAD_TO_POLARION"
-  echo -e "\n# $TEST_STATUS_FILE includes: [${EXIT_STATUS}]\n"
+  echo -e "\n# $TEST_STATUS_FILE includes: [${SCRIPT_EXIT_STATUS}]\n"
 
-  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $EXIT_STATUS is either 0 (pass) or 2 (unstable) ###
-  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$EXIT_STATUS" == @(0|2) ]] ; then
+  ### Upload Junit xmls to Polarion - only if requested by user CLI, and $SCRIPT_EXIT_STATUS is either 0 (pass) or 2 (unstable) ###
+  if [[ "$UPLOAD_TO_POLARION" =~ ^(y|yes)$ ]] && [[ "$SCRIPT_EXIT_STATUS" == @(0|2) ]] ; then
     create_all_test_results_in_polarion || :
   else
     echo -e "\n# Skip publishing test results to Polarion \n"
@@ -1386,14 +1380,14 @@ cat "$SYS_LOG"
   message="Creating HTML Report"
 
   # If $TEST_STATUS_FILE does not include 0 (0 = all Tests passed) or 2 (2 = some tests passed) - it means that system tests have failed (or not run at all)
-  if [[ "$EXIT_STATUS" != @(0|2) ]] ; then
-    message="$message - System tests failed with exit status [$EXIT_STATUS]"
+  if [[ "$SCRIPT_EXIT_STATUS" != @(0|2) ]] ; then
+    message="$message - System tests failed with exit status [$SCRIPT_EXIT_STATUS]"
     color="$RED"
   fi
   PROMPT "$message" "$color"
 
   TITLE "Creating HTML Report
-  EXIT_STATUS = $EXIT_STATUS
+  SCRIPT_EXIT_STATUS = $SCRIPT_EXIT_STATUS
   SYS_LOG = $SYS_LOG
   REPORT_NAME = $REPORT_NAME
   REPORT_FILE = $REPORT_FILE
@@ -1534,14 +1528,14 @@ tar tvf "$ARCHIVE_FILE"
 TITLE "To view in your Browser, run:\n tar -xvf ${ARCHIVE_FILE}; firefox ${REPORT_FILE}"
 
 # Get test exit status (from file $TEST_STATUS_FILE)
-EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$EXIT_STATUS]"
+TITLE "Exiting script with \$TEST_STATUS_FILE return code: [$SCRIPT_EXIT_STATUS]"
 
-if [[ -z "$EXIT_STATUS" ]] ; then
+if [[ -z "$SCRIPT_EXIT_STATUS" ]] ; then
   exit 3
 else
-  exit "$EXIT_STATUS"
+  exit "$SCRIPT_EXIT_STATUS"
 fi
 
 

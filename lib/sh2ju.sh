@@ -70,7 +70,7 @@ function eVal() {
       {
         trap 'RC=$? ; echo "${RC} > ${returnf}" ; echo ${RC} > "${returnf}" ; 
         echo "+++ sh2ju command exit code: [${RC}]" ; if [[ "${RC}" == 5 ]] ; then RC=0 ; fi ; exit ${RC}' ERR;
-        trap 'RC="$(lastRC)" ; echo +++ sh2ju command termination code: [${RC}]" ; exit ${RC}' HUP INT TERM;
+        trap 'RC="$(lastRC)" ; echo "+++ sh2ju command termination code: [${RC}]" ; exit ${RC}' HUP INT TERM;
         set -e; $1;
       } | tee -a "${outf}"
     ) 3>&1 1>&2 2>&3 | tee "${errf}"

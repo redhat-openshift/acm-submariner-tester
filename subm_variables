@@ -173,6 +173,7 @@ export ACM_GS_NS="open-cluster-management-global-set"
 
 export ACM_VER_TAG=${ACM_VER_TAG}
 export ACM_CHANNEL_PREFIX="release-"
+export ACM_BUILD_DATE=${ACM_BUILD_DATE} # e.g. "2022-12-05", according to https://github.com/stolostron/deploy/commits/master/mirror 
 
 
 ### MCE resources vars ###

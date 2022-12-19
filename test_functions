@@ -71,8 +71,8 @@ function export_all_env_variables() {
       
   fi
 
-  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
-  set_versions_variables
+  # # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+  # set_versions_variables
 
   # List all environment variables
   print_all_env_variables
@@ -141,12 +141,6 @@ function export_global_script_variable() {
   # ACM cluster-set and binding name for the managed clusters to be connected with Submariner
   export ACM_CLUSTER_SET="${TEST_NS}-set${CLUSTER_SET_ID}"
 
-  # BUG "Submariner Broker created but Gateway was not" \
-  # "Trim the length of ACM cluster set" \
-  # "https://issues.redhat.com/browse/ACM-2076"
-  # # Workaround:
-  # export ACM_CLUSTER_SET="submariner-set${CLUSTER_SET_ID}"
-
 
   #################################################################################
   #               Saving important test properties in local files                 #
@@ -154,7 +148,7 @@ function export_global_script_variable() {
 
   # File and variable to store test status. Resetting to empty - before running tests (i.e. don't publish to Polarion yet)
   export TEST_STATUS_FILE="$OUTPUT_DIR/test_status.rc"
-  export EXIT_STATUS
+  export SCRIPT_EXIT_STATUS
   : > "$TEST_STATUS_FILE"
 
   # Filename (relative to current directory) to store OCP version 
@@ -549,6 +543,9 @@ function setup_workspace() {
       || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
     fi
   fi
+
+  # Set $SUBM_VER_TAG and $ACM_VER_TAG variables with the correct version (vX.Y.Z), branch name, or tag
+  set_versions_variables
 
 }
 
@@ -1133,21 +1130,29 @@ EOF
 
   ${OC} get csr |& highlight 'Approved,Issued'
 
-  local crt_file
-  crt_file="${kubeconfig_file}.crt"
+  local crt_file="${cluster_name}.crt"
 
-  TITLE "Download and validate the new certificate '${crt_file}'"
+  TITLE "Download certificate into '${crt_file}'"
 
-  # This doesn't always work:
-  # ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
-
-  # Using current SA certificate
   local auth_pod
   auth_pod="$(${OC} get pods -n openshift-authentication --field-selector=status.phase==Running -o name | head -1)"
-  ${OC} rsh -n openshift-authentication "${auth_pod}" cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > "${crt_file}"
 
-  openssl x509 -in "${crt_file}" -text -noout
+  local cmd="${OC} rsh -n openshift-authentication ${auth_pod} cat /run/secrets/kubernetes.io/serviceaccount/ca.crt > ${crt_file}"
+  
+  # Try to download SA certificate (maximum 10 attempts, or from ${cluster_name}-access)
+  watch_and_retry "$cmd" 10 || \
+  ${OC} get csr "${cluster_name}-access" -o jsonpath='{.status.certificate}' | base64 -d > "${crt_file}"
 
+  TITLE "Validate the certificate and copy to '${kubeconfig_file}.crt'"
+
+  if openssl x509 -in "${crt_file}" -text -noout ; then
+    cp -f "${crt_file}" "${kubeconfig_file}.crt"
+  else
+    cp -f "${kubeconfig_file}.crt" "${crt_file}" 
+  fi
+
+  crt_file="${kubeconfig_file}.crt"
+  
   TITLE "Updating '${OCP_USR}' user credentials and certificate into the kubeconfig"
 
   ${OC} config set-credentials "${OCP_USR}" --client-certificate="${crt_file}" \
@@ -1258,7 +1263,8 @@ function uninstall_submariner() {
     }
 
     # TODO: Need to add cloud cleanup, according to cloud provider:
-    # subctl cloud cleanup rhos --infra-id osp-nmanos-b2-xyz --region region_name --project-id project_id
+    # ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
+    # subctl cloud cleanup rhos --infra-id $ocp_infra_id --region regionOne --project-id "multi-cluster-networking"
 
   else
     uninstall_status=FAILED
@@ -1670,8 +1676,8 @@ function set_netshoot_image_spec() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
+      # # Fix the $submariner_version_or_tag value for custom images
+      # set_subm_version_tag_var "submariner_version_or_tag"
 
       local netshot_image_url
       netshot_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_NETTEST}:${submariner_version_or_tag}"
@@ -1850,6 +1856,19 @@ function set_subm_version_tag_var() {
     subm_version_tag=v${subm_version_tag}
   fi
 
+  # If version is vX.Y without .Z - fetch the latest minor Z version 
+  if [[ "$subm_version_tag" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+    TITLE "Fetching the latest minor Z version for '${subm_version_tag}'"
+
+    echo -e "\n# Set and export the variable \$LATEST_NVR for subctl-container version ${subm_version_tag}'"
+    export_LATEST_IIB_NVR "${SUBM_BUNDLE}" "${subm_version_tag}" 
+    # This should exported for example: LATEST_NVR=v0.14.0-5
+
+    [[ -n "$LATEST_NVR" ]] || FATAL "No Image was found for '${SUBM_BUNDLE}' version '${subm_version_tag}'"
+
+    subm_version_tag="${LATEST_NVR%%-*}"
+  fi
+
   # export REGISTRY_TAG_MATCH='[0-9]+\.[0-9]+' # Regex for required image tag (X.Y.Z ==> X.Y)
   # echo -e "\n# REGISTRY_TAG_MATCH variable was set to extract from '$subm_version_tag' the regex match: $REGISTRY_TAG_MATCH"
   # subm_version_tag=v$(echo $subm_version_tag | grep -Po "$REGISTRY_TAG_MATCH")
@@ -1907,21 +1926,8 @@ function download_subctl_by_tag() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         [[ -n "$SUBM_IMG_SUBCTL" ]] ; then
 
-      # Fix the $submariner_version_or_tag value for custom images
-      set_subm_version_tag_var "submariner_version_or_tag"
-
-      # If version is vX.Y without .Z - fetch the latest minor Z version 
-      if [[ "$submariner_version_or_tag" =~ ^v[0-9]+\.[0-9]+$ ]]; then
-        TITLE "Fetching the latest minor Z version for '${submariner_version_or_tag}'"
-
-        echo -e "\n# Set and export the variable \$LATEST_NVR for subctl-container version ${submariner_version_or_tag}'"
-        export_LATEST_IIB_NVR "subctl" "${submariner_version_or_tag}" 
-        # This should exported for example: LATEST_NVR=v0.14.0-5
-
-        [[ -n "$LATEST_NVR" ]] || FATAL "No Image was found for subctl version '${submariner_version_or_tag}'"
-
-        submariner_version_or_tag="${LATEST_NVR}"
-      fi
+      # # Fix the $submariner_version_or_tag value for custom images
+      # set_subm_version_tag_var "submariner_version_or_tag"
 
       if check_version_greater_or_equal "${submariner_version_or_tag}" "0.12" ; then
         subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
@@ -1929,7 +1935,6 @@ function download_subctl_by_tag() {
         subctl_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX_TECH_PREVIEW}-${SUBM_IMG_SUBCTL}:${submariner_version_or_tag}"
         # e.g. subctl_image_url="registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-tech-preview-subctl-rhel8:0.9"
       fi
-
 
       TITLE "Backup previous subctl archive (if exists)"
       local subctl_xz="subctl-${submariner_version_or_tag}-linux-amd64.tar.xz"
@@ -4860,11 +4865,11 @@ function env_teardown() {
   # Run tests and environment functions at the end (call with trap exit)
 
   # Get test exit status (from file $TEST_STATUS_FILE)
-  EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
+  SCRIPT_EXIT_STATUS="$([[ ! -s "$TEST_STATUS_FILE" ]] || cat "$TEST_STATUS_FILE")"
 
-  TITLE "Showing product versions on script teardown (only if EXIT_STATUS [${EXIT_STATUS}] is already set)"
+  TITLE "Showing product versions on script teardown (only if SCRIPT_EXIT_STATUS [${SCRIPT_EXIT_STATUS}] is already set)"
 
-  if [[ -n "$EXIT_STATUS" ]] ; then
+  if [[ -n "$SCRIPT_EXIT_STATUS" ]] ; then
 
     ${JUNIT_CMD_IGNORE_STATUS} test_products_versions_cluster_a || :
 
@@ -5198,9 +5203,17 @@ function print_resources_and_pod_logs() {
     }
   }'
 
-  TITLE "All Submariner logs on ${cluster_name}"
+  TITLE "Main Operators logs in cluster ${cluster_name} namespaces: '$ACM_NAMESPACE', '$MCE_NAMESPACE' and '$SUBM_NAMESPACE'"
 
+  print_pod_logs_in_namespace "$ACM_NAMESPACE" "name=multiclusterhub-operator"
+
+  print_pod_logs_in_namespace "$MCE_NAMESPACE" "control-plane=backplane-operator"
+
+  # Submariner-Addon pod in the Hub cluster, is running in "ocm" namespace:
   print_pod_logs_in_namespace "$ACM_NAMESPACE" "app=submariner-addon"
+
+  # Submariner-Addon pod in a managed cluster, is running in "submariner-operator" namespace:
+  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
   
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "name=submariner-operator"
 
@@ -5211,8 +5224,6 @@ function print_resources_and_pod_logs() {
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" $gw_label
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "control-plane=submariner-operator"
-
-  print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-addon"
 
   print_pod_logs_in_namespace "$SUBM_NAMESPACE" "app=submariner-globalnet"
 
