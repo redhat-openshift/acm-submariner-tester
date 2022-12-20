@@ -172,17 +172,19 @@ function fetch_datagrepper() {
   local num_of_latest_builds=5
   local rows=$((num_of_latest_builds * 5))
   local delta=$((num_of_days * 86400)) # For example: 30 days * 86400 seconds = 2592000
-
-  local curl_cmd
-  curl_cmd=(curl --retry 30 --retry-delay 5 -o "${umb_output_file}" -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}")
+  umb_url="${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
   
-  echo -e "\n# Running: ${curl_cmd[*]}"
-  "${curl_cmd[@]}"
+  local curl_cmd
+  curl_cmd="curl --retry 30 --retry-delay 5 -o ${umb_output_file} -Ls '${umb_url}'"
+
+  echo -e "\n# Querying Datagrepper: ${curl_cmd}"
+  watch_and_retry "$curl_cmd" 3m
 
   local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
-    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
-    | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
+  | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
+  echo -e "\n# Filtering IIB: jq -r '${iib_query}' $umb_output_file"
   local index_images
   index_images="$(jq -r "${iib_query}" $umb_output_file)" || :
 
