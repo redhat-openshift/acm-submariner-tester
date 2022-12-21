@@ -127,7 +127,7 @@ function export_LATEST_IIB_NVR() {
 
 # ------------------------------------------
 
-### Helper function to fetch datagrapper (UMB) for component images by version and days, into a file
+### Helper function to fetch datagrepper (UMB) for component images by version and days, into a file
 function fetch_datagrepper() {
   # trap_to_debug_commands;
 

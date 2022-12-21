@@ -1156,12 +1156,12 @@ function ocp_login() {
 
 # ------------------------------------------
 
-# Function to delete all CRDs wich includes the input text on the current cluster
+# Function to delete all CRDs by regex name, in the current cluster
 function delete_crds_by_name() {
   trap_to_debug_commands;
 
   # Input $1 : All CRDs to delete, by searching for *crd_regex*
-  local crd_regex=$1
+  local crd_regex="$1"
 
   local delete_crds=FALSE
 
@@ -1169,9 +1169,8 @@ function delete_crds_by_name() {
   if ${OC} get crds |& highlight "${crd_regex}" ; then delete_crds=TRUE ; fi
 
   # If there are existing CRDs on the cluster - remove them all:
-  # if [[ $? == 0 ]]; then
   if [[ "$delete_crds" == TRUE ]]; then
-    echo -e "\n# Deleting ${crd_regex} CRDs in the cluster"
+    TITLE "Deleting ${crd_regex} CRDs in current cluster"
     crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
     # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
     # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
@@ -1188,6 +1187,20 @@ function delete_crds_by_name() {
 
 }
 
+# ------------------------------------------
+
+# Function to delete all Cluster Roles and Role Bindings by regex name, in the current cluster
+function delete_roles_by_name() {
+  trap_to_debug_commands;
+
+  # Input $1 : Search by *role_regex*
+  local role_regex="$1"
+
+  TITLE "Deleting all '${role_regex}' Cluster Roles and Role Bindings in current cluster"
+  ${OC} get clusterroles,clusterrolebindings -o name \
+  | grep -E "${role_regex}" | xargs -r "${OC}" delete --timeout=30s || :
+
+}
 
 # ------------------------------------------
 
