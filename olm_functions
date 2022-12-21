@@ -59,28 +59,10 @@ function export_LATEST_IIB_NVR() {
     fetch_datagrepper "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "freshmaker" "${freshmaker_output}"
     freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
-    # # If still no image found - search within NON-completed pipelines too
-    # if [[ -z "$index_images" || "$index_images" == null ]]; then
-    #   BUG "Failed to retrieve images during the last 100 days - Searching images within non-completed pipelines"
-
-    #   local iib_non_completed
-    #   iib_non_completed='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-
-    #   index_images="$(jq -r "${iib_non_completed}" $umb_output)" || :
-    # fi
-    #
-    # # If still no image found - increase the delta to 200 days (but filter completed pipelines only)
-    # if [[ -z "$index_images" || "$index_images" == null ]]; then
-    #   BUG "Failed to retrieve images during the last 100 days - Searching images during the last 200 days"
-
-    #   fetch_datagrepper "${bundle_name}" "${operator_version}" "200" "${umb_output}"
-
-    #   index_images="$(jq -r "${iib_query}" $umb_output)" || :
-    # fi
   fi
 
   if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
-    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': $index_images"
+    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': ${index_images}"
   fi
 
   TITLE "Check if ${bundle_name} NVR for cvp issuer of 'freshmaker' (CVE release) has a newer version to use"
@@ -94,14 +76,14 @@ function export_LATEST_IIB_NVR() {
   fi
 
   TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
-  $index_images"
+  ${index_images}"
 
   local ocp_version_x_y
   ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
 
   TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
 
-  LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
+  LATEST_IIB=$(echo "${index_images}" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
 
   if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
     BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
@@ -110,11 +92,11 @@ function export_LATEST_IIB_NVR() {
     # For example: v4.10 is higher than v4.9
 
     local latest_ocp_version_x_y
-    latest_ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
+    latest_ocp_version_x_y="$(echo "${index_images}" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
 
     if [[ -n "$latest_ocp_version_x_y" ]] ; then
       TITLE "Getting latest supported '${bundle_name}' for OCP version '${latest_ocp_version_x_y}'"
-      LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${latest_ocp_version_x_y}" ) || :
+      LATEST_IIB=$(echo "${index_images}" | jq -r '.index_image.'"${latest_ocp_version_x_y}" ) || :
     fi
   fi
 
@@ -180,16 +162,29 @@ function fetch_datagrepper() {
   echo -e "\n# Querying Datagrepper: ${curl_cmd}"
   watch_and_retry "$curl_cmd" 3m
 
-  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
+  local iib_query
+  local index_images
+
+  iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
   and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
   | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
-  echo -e "\n# Filtering IIB: jq -r '${iib_query}' $umb_output_file"
-  local index_images
-  index_images="$(jq -r "${iib_query}" $umb_output_file)" || :
+  echo -e "\n# Filtering IIB: jq -r '${iib_query}' ${umb_output_file}"
+  index_images="$(jq -r "${iib_query}" "${umb_output_file}")" || :
 
-  echo "$index_images" > $umb_output_file
-  cat "$umb_output_file"
+  # If still no image found - search within NON-completed pipelines too
+  if [[ -z "${index_images}" || "${index_images}" == null ]]; then
+    BUG "Failed to retrieve images with status 'complete'. Searching images within non-completed pipelines:"
+
+    iib_query='[.raw_messages[].msg | select(.artifact.component=="'$cvp_component'"
+    and .artifact.issuer=="'$cvp_issuer'") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+
+    echo -e "\n# Filtering IIB: jq -r '${iib_query}' ${umb_output_file}"
+    index_images="$(jq -r "${iib_query}" "${umb_output_file}")" || :
+  fi
+
+  echo "${index_images}" > "${umb_output_file}"
+  cat "${umb_output_file}"
 
   # index-images example:
   # {
