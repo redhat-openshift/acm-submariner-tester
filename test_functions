@@ -5123,6 +5123,14 @@ function print_resources_and_pod_logs() {
 
   ${OC} get pod -A |  grep -Ev '([0-9]+)/\1' | grep -v 'Completed' | grep -E '[0-9]+/[0-9]+' || :
 
+  TITLE "ACM resources in ${cluster_name}"
+
+  ${OC} get all -n "${ACM_NAMESPACE}" -o wide || :
+
+  ${OC} get all -n "open-cluster-management-agent" -o wide || :
+
+  ${OC} get all -n "open-cluster-management-agent-addon" -o wide || :
+
   TITLE "Submariner gather logs in cluster $cluster_name"
 
   # cluster_context="$cluster_name"
@@ -5133,11 +5141,7 @@ function print_resources_and_pod_logs() {
   cluster_context="admin"
 
   subctl gather --dir submariner-gather_"${cluster_name}" --kubecontexts ${cluster_context} || :
-
-  TITLE "ACM resources in ${cluster_name}"
-
-  ${OC} get all -n "${ACM_NAMESPACE}" -o wide || :
-
+  
   TITLE "Submariner resources in ${cluster_name}"
 
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :

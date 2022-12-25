@@ -77,7 +77,16 @@ function remove_acm_managed_cluster() {
 
   PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
 
-  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
+  # Following steps should be run on the managed cluster kubeconfig
+  force_delete_namespace "open-cluster-management-agent"
+  force_delete_namespace "open-cluster-management-agent-addon"
+
+  delete_roles_by_name "open-cluster-management"
+
+  delete_crds_by_name "open-cluster-management" || :
+  delete_crds_by_name "multicluster" || :
+
+  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT on the managed cluster)
   export KUBECONFIG="${KUBECONF_HUB}"
 
   ${OC} get managedcluster -o wide || :
@@ -94,6 +103,7 @@ function remove_acm_managed_cluster() {
       ${OC} patch managedcluster "${cluster_id}" --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]' || :
 
       force_delete_namespace "${cluster_id}"
+
     fi
 
   else
