@@ -159,7 +159,7 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete MultiClusterHub --all --timeout=3m || :
 
   # Show ACM resources
-  ${OC} get MultiClusterHub -o yaml
+  ${OC} get MultiClusterHub -o yaml || :
   ${OC} api-resources | grep -E "multicluster|open-cluster"
 
   # helm ls --namespace $ACM_NAMESPACE | cut -f 1 | tail -n +2 | xargs -n 1 helm delete --namespace $ACM_NAMESPACE

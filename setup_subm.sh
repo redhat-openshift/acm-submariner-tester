@@ -10,13 +10,16 @@
 # https://github.com/redhat-openshift/acm-submariner-tester                                           #
 #                                                                                                     #
 # It is assumed that you have existing Openshift configuration files (install-config.yaml)            #
-# for all the clusters (AWS/OSP/GCP) in the current directory. For example:                           #
+# for all the clusters (AWS/OSP/GCP/AZURE) in the current directory. For example:                           #
 #                                                                                                     #
 # To create Openshift-installer config for Amazon cloud:                                              #
 # https://github.com/openshift/installer/blob/master/docs/user/aws/customization.md#examples          #
 #                                                                                                     #
 # To create Openshift-installer config for Google cloud:                                              #
 # https://github.com/openshift/installer/blob/master/docs/user/gcp/customization.md#examples          #
+#                                                                                                     #
+# To create Openshift-installer config for Azure cloud:                                              #
+# https://github.com/openshift/installer/blob/master/docs/user/azure/customization.md#examples          #
 #                                                                                                     #
 # To create those config files, you need to supply your Red Hat pull secret, and SSH public key:      #
 #                                                                                                     #
@@ -47,11 +50,17 @@
 # - Download your personal GCP credentials from:                                                      #
 # https://console.cloud.google.com/iam-admin/serviceaccounts?project={gcp-project}                    #
 #                                                                                                     #
-# (4) Your Red Hat Openshift pull secret, found in:                                                   #
+# (4) Get access to Azure account:                                                                    #
+# - Follow instructions to spin up a new OCP cluster in the Azure subscriptions                       #
+# https://docs.google.com/document/d/1Kzy4N8LQGozRmgmEaz_54CkzkjAbevMfnXfv7uvHkvk                     #
+# - Verify your Azure subscription:                                                                   #
+# https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade                           #
+#                                                                                                     #
+# (5) Your Red Hat Openshift pull secret, found in:                                                   #
 # https://cloud.redhat.com/openshift/install/aws/installer-provisioned                                #
 # It is used by Openshift-installer to download OCP images from Red Hat repositories.                 #
 #                                                                                                     #
-# (5) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
+# (6) Your SSH Public Key, that you generated with " ssh-keygen -b 4096 "                             #
 # cat ~/.ssh/id_rsa.pub                                                                               #
 # It is required by Openshift-installer for authentication.                                           #
 #                                                                                                     #
@@ -67,31 +76,32 @@ Running with pre-defined parameters (optional):
 
 - Openshift setup and environment options:
 
-  * Create OCP cluster A:                              --create-cluster-a
-  * Create OSP cluster B:                              --create-cluster-b
-  * Create OCP cluster C:                              --create-cluster-c
+  * Reset (destroy & create) OCP cluster A:            --reset-cluster-a [latest / x.y / x.y.z / nightly]
+  * Reset (destroy & create) OSP cluster B:            --reset-cluster-b [latest / x.y / x.y.z / nightly]
+  * Reset (destroy & create) OCP cluster C:            --reset-cluster-c [latest / x.y / x.y.z / nightly]
   * Destroy existing OCP cluster A:                    --destroy-cluster-a
   * Destroy existing OSP cluster B:                    --destroy-cluster-b
   * Destroy existing OCP cluster C:                    --destroy-cluster-c
-  * Reset (create & destroy) OCP cluster A:            --reset-cluster-a [latest / x.y.z / nightly]
-  * Reset (create & destroy) OSP cluster B:            --reset-cluster-b [latest / x.y.z / nightly]
-  * Reset (create & destroy) OCP cluster C:            --reset-cluster-c [latest / x.y.z / nightly]
-  * Clean existing OCP cluster A:                      --clean-cluster-a
-  * Clean existing OSP cluster B:                      --clean-cluster-b
-  * Clean existing OCP cluster C:                      --clean-cluster-c
-  * Install Golang if missing:                         --config-golang
-  * Configure clouds access and CLI tools:             --config-clouds
-  * Skip OCP clusters setup (destroy/create/clean):    --skip-ocp-setup
+  * Re-create OCP cluster A (existing installation):   --create-cluster-a
+  * Re-create OCP cluster B (existing installation):   --create-cluster-b
+  * Re-create OCP cluster C (existing installation):   --create-cluster-c
+  * Delete ACM & Submariner in OCP cluster A:          --clean-cluster-a
+  * Delete ACM & Submariner in OCP cluster B:          --clean-cluster-b
+  * Delete ACM & Submariner in OCP cluster C:          --clean-cluster-c
+  * Install & configure Golang (and other libs):       --config-golang
+  * Configure Clouds access (AWS/OSP/GCP/AZURE):       --config-clouds
+  * Skip OCP clusters setup (registry, users, etc.):   --skip-ocp-setup
 
 - Submariner installation options:
 
-  * Install ACM operator version:                      --acm-version [x.y.z]
-  * Install MCE operator version:                      --mce-version [x.y.z]
-  * Install Submariner operator version:               --subctl-version [latest / x.y.z / {tag}]
-  * Override images from a custom registry:            --registry-images
-  * Get stolostron/deploy images by date:              --acm-date [YYYY-MM-DD]
-  * Configure and test GlobalNet:                      --globalnet
-  * Install Submariner with SubCtl:                    --subctl-install
+  * Install ACM version:                               --acm-version [x.y / x.y.z]
+  * Specify ACM images date (default to latest):       --acm-date [YYYY-MM-DD]
+  * Specify MCE version (default to latest):           --mce-version [x.y / x.y.z]
+  * Install Submariner version:                        --subctl-version [latest / x.y / x.y.z / {tag}]
+  * Install Submariner with SubCtl (default to API):   --subctl-install
+  * Override images from downstream registry:          --registry-images
+  * Configure and test Submariner with GlobalNet:      --globalnet
+  * Configure Submariner Network Cable Driver:         --cable-driver [libreswan / vxlan]
   * Join managed cluster A:                            --join-cluster-a
   * Join managed cluster B:                            --join-cluster-b
   * Join managed cluster C:                            --join-cluster-c
@@ -120,21 +130,20 @@ To run interactively (enter options manually):
 
 Examples with pre-defined options:
 
-`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.5.0 --subctl-version 0.12.1 --registry-images`
+`./setup_subm.sh --clean-cluster-a --clean-cluster-b --acm-version 2.7 --subctl-version 0.14 --registry-images`
 
   * Reuse (clean) existing clusters
-  * Install ACM 2.5.0 release
-  * Install Submariner 0.12.1 release
-  * Override Submariner images from a custom repository (configured in REGISTRY variables)
+  * Install ACM 2.7.z release (latest Z release)
+  * Install Submariner 0.14.z release (latest Z release)
+  * Override Submariner images from a custom downstream repository (defined in $REGISTRY variables)
   * Run Submariner E2E tests (with subctl)
 
 
 `./setup_subm.sh --reset-cluster-c nightly --clean-cluster-a --subctl-version subctl-devel --build-tests --junit`
 
-  * Download OCP installer pre-release (nightly)
-  * Recreate new cluster C (e.g. on GCP)
-  * Clean existing cluster A (e.g. on AWS)
-  * Install "subctl-devel" (subctl development branch)
+  * Install OCP nightly (RC version) on cluster C, as defined in $CLUSTER_C_YAML variable
+  * Clean existing cluster A (which is also the ACM Hub cluster)
+  * Install Submariner version "subctl-devel" (upstream development branch)
   * Build and run Submariner E2E and unit-tests with GO
   * Create Junit tests result (xml files)
 
