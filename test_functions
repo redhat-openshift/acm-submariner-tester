@@ -1676,9 +1676,6 @@ function set_netshoot_image_spec() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
-      # # Fix the $submariner_version_or_tag value for custom images
-      # set_subm_version_tag_var "submariner_version_or_tag"
-
       local netshot_image_url
       netshot_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_NETTEST}:${submariner_version_or_tag}"
 
@@ -3194,6 +3191,12 @@ function upload_submariner_images_to_cluster_registry() {
       
   done
 
+  BUG "Submariner NetTest image is refferenced without 'v' and causes ErrImagePull" \
+  "Add another refference to NetTest image in registry, but without the preceeding 'v' for version 0.14.1" \
+  "https://issues.redhat.com/browse/ACM-2387"
+  # Workaound:
+  ${OC} import-image -n ${SUBM_NAMESPACE} nettest-rhel8:0.14.1 --from=brew.registry.redhat.io/rh-osbs/rhacm2-nettest-rhel8:v0.14.1 --confirm 
+
 }
 
 # ------------------------------------------
@@ -3318,7 +3321,7 @@ function test_submariner_resources_status() {
 
   ${OC} get all -n "${SUBM_NAMESPACE}" --show-labels || submariner_status=DOWN
 
-  ${OC} get pods -n "${SUBM_NAMESPACE}" | grep "${SUBM_OPERATOR}" \
+  ${OC} get pods -n "${SUBM_NAMESPACE}" \
   |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
 
   if [[ "$submariner_status" == DOWN ]] ; then
