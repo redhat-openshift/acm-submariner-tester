@@ -400,11 +400,12 @@ function find_acm_component_version_in_downstream() {
   local stolostron_downstream_file
 
   TITLE "Get the latest commit for the requested ACM version '$acm_version', with an optional date [$stolostron_commit_date]"
-  # For example:
+  
+  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
   # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
   
   stolostron_commit_title="$(curl "https://github.com/stolostron/deploy/commits/master/mirror" \
-  | grep "href=\".* ${acm_version}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+  | grep -E "href=\".* ${acm_version//./\\.}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
 
   stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
 
