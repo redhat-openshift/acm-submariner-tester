@@ -767,7 +767,7 @@ cat "$SYS_LOG"
 
       ${JUNIT_CMD} clean_acm_namespace_and_resources
 
-      ${JUNIT_CMD} remove_multicluster_engine 
+      ${JUNIT_CMD} remove_multicluster_engine "${KUBECONF_HUB}"
 
     fi
     # END of cluster A cleanup
@@ -785,6 +785,8 @@ cat "$SYS_LOG"
 
         ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_B}"
 
+        ${JUNIT_CMD} remove_multicluster_engine "${KUBECONF_CLUSTER_B}"
+
       fi
     fi
     # END of cluster B cleanup
@@ -801,6 +803,8 @@ cat "$SYS_LOG"
         ${JUNIT_CMD} delete_old_submariner_images_from_cluster "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} delete_all_evicted_pods_in_cluster "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} remove_multicluster_engine "${KUBECONF_CLUSTER_C}"
 
       fi
     fi
