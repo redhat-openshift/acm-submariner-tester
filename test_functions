@@ -3195,11 +3195,11 @@ function upload_submariner_images_to_cluster_registry() {
       
   done
 
-  BUG "Submariner NetTest image is refferenced without 'v' and causes ErrImagePull" \
-  "Add another refference to NetTest image in registry, but without the preceeding 'v' for version 0.14.1" \
-  "https://issues.redhat.com/browse/ACM-2387"
-  # Workaound:
-  ${OC} import-image -n ${SUBM_NAMESPACE} nettest-rhel8:0.14.1 --from=brew.registry.redhat.io/rh-osbs/rhacm2-nettest-rhel8:v0.14.1 --confirm 
+  # BUG "Submariner NetTest image is refferenced without 'v' and causes ErrImagePull" \
+  # "Add another refference to NetTest image in registry, but without the preceeding 'v' for version 0.14.1" \
+  # "https://issues.redhat.com/browse/ACM-2387"
+  # # Workaound:
+  # ${OC} import-image -n ${SUBM_NAMESPACE} nettest-rhel8:0.14.1 --from=brew.registry.redhat.io/rh-osbs/rhacm2-nettest-rhel8:v0.14.1 --confirm 
 
 }
 
