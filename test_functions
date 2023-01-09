@@ -540,7 +540,14 @@ function setup_workspace() {
     if [[ -s "$AZURE_CRED_JSON" ]] ; then
       TITLE "Installing and configuring Azure CLI"
       configure_azure_access "${AZURE_SUBSCRIPTION}" "${AZURE_CRED_JSON}" "${WORKDIR}" \
-      || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
+      || FATAL "Missing Azure access details. Did you set AZURE_CRED_JSON path in the 'subm_variables' file ?"
+    fi
+
+    # For Openstack
+    if [[ -s "$OSP_CRED_YAML" ]] ; then
+      TITLE "Installing and configuring Openstack CLI"
+      configure_openstack_access "${OSP_CRED_YAML}" "${WORKDIR}" \
+      || FATAL "Missing Openstack access details. Did you set OSP_CRED_YAML path in the 'subm_variables' file ?"
     fi
   fi
 

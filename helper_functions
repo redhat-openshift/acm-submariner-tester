@@ -715,6 +715,28 @@ function install_local_azure_cli() {
 
 # ------------------------------------------
 
+# Function to install Openstack cli with Anaconda (https://anaconda.org/conda-forge/python-openstackclient)
+function install_local_openstack_cli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
+
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  install_conda_package "${conda_install_dir}" "python-openstackclient" "${pkg_version}" 
+
+  openstack --version
+
+}
+
+# ------------------------------------------
+
 # Function to convert raw text (e.g. yaml) to encoded url format
 function raw_to_url_encode() {
 
@@ -957,6 +979,40 @@ function configure_azure_access() {
   az account set -s "${azure_subscription}"
 
   cp "$azure_cred_json" ~/.azure/osServicePrincipal.json
+
+}
+
+# ------------------------------------------
+
+# Function to install Openstack CLI, and configure Openstack access:
+function configure_openstack_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_cred_json="$1"
+  local work_dir="$2"
+
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  if [[ ! -x "$(command -v openstack)" ]] ; then
+    install_local_openstack_cli "$work_dir"
+  fi
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  TITLE "Check Openstack cloud version on ${OS_AUTH_URL}"
+
+  curl "${OS_AUTH_URL}" | jq -r '.versions.values[] | .id'
+
+  local osp_config_dir="$HOME/.config/openstack"
+  echo -e "\n# Create Openstack config directory: ${osp_config_dir}"
+
+  mkdir -p "${osp_config_dir}"
+  cp -f "$OSP_CRED_YAML" "${osp_config_dir}/clouds.yaml"
+
+  openstack versions show || :
+  openstack catalog list -c Endpoints || :
+  openstack service list || :
+  openstack host list || :
 
 }
 
