@@ -1128,8 +1128,6 @@ EOF
 
   ${OC} wait --timeout=1m --for=condition=approved csr "${cluster_name}-access"
 
-  ${OC} get csr |& highlight 'Approved,Issued'
-
   # Wait for Certificate Signing Request to be approved
   local cmd="${OC} get csr"
   local regex="Approved,Issued"
@@ -1694,6 +1692,7 @@ function set_netshoot_image_spec() {
 
     export NETSHOOT_IMAGE_SPEC='{
       "spec": {
+        "serviceAccountName": "default",
         "securityContext": {
           "runAsNonRoot": true,
           "runAsUser": 2000,
