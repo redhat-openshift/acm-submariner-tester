@@ -1130,8 +1130,12 @@ EOF
 
   ${OC} get csr |& highlight 'Approved,Issued'
 
-  local crt_file="${cluster_name}.crt"
+  # Wait for Certificate Signing Request to be approved
+  local cmd="${OC} get csr"
+  local regex="Approved,Issued"
+  watch_and_retry "$cmd" 3m "$regex"
 
+  local crt_file="${cluster_name}.crt"
   TITLE "Download certificate into '${crt_file}'"
 
   local auth_pod
