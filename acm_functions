@@ -346,14 +346,15 @@ function install_acm_operator_on_hub() {
 
   PROMPT "Install ACM $acm_version bundle on the Hub cluster ${cluster_name}"
 
-  find_acm_component_version_in_downstream "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_BUILD_DATE}"
-  acm_version="$(< "${ACM_VERSION_FILE}")"
-
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
-  # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$acm_version" =~ ${acm_current_version} ]] ; then
+  # Install ACM if it's not installed, or if it's already installed, but with a different version than requested.
+  # For example, will skip install if current ACM version (e.g. 2.7.1) starts with requested version regex (e.g. ^2.7)  
+  if [[ ! ${acm_current_version} =~ ^${acm_version} ]] ; then
+
+    find_acm_component_version_in_downstream "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_BUILD_DATE}"
+    acm_version="$(< "${ACM_VERSION_FILE}")"
 
     if [[ -z "$acm_current_version" ]] ; then
       echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
