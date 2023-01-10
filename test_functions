@@ -804,6 +804,9 @@ function prepare_ocp_install() {
     echo -e "\n# Using clouds.yaml for OSP cluster"
     cp -f "$OSP_CRED_YAML" "$cred_file_new"
     chmod 777 "$cred_file_new"
+
+    openstack floating ip unset --port "10.0.205.189"
+    openstack floating ip unset --port "10.0.207.191"
   fi
 
   TITLE "OCP installer for platform '$platform' is ready to install $cluster_name"

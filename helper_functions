@@ -1009,6 +1009,8 @@ function configure_openstack_access() {
   mkdir -p "${osp_config_dir}"
   cp -f "$OSP_CRED_YAML" "${osp_config_dir}/clouds.yaml"
 
+  openstack --os-cloud openstack token issue
+  
   openstack versions show || :
   openstack catalog list -c Endpoints || :
   openstack service list || :
