@@ -1216,7 +1216,7 @@ function configure_submariner_addon_for_openstack() {
                 clouds.yaml: $(base64 -w0 "${OSP_CRED_YAML}")
                 cloud: $(echo -n "openstack" | base64 -w0)
 EOF
-      elif [[ -n "$OS_PROJECT_DOMAIN_ID" ]] ; then
+      elif [[ -n "$OS_PROJECT_ID" ]] ; then
         echo -e "\n# Using direct credentials"
 
         cat <<EOF | ${OC} apply -f -
@@ -1233,7 +1233,7 @@ EOF
                 auth:
                   auth_url: ${OS_AUTH_URL}
                   username: '${OS_USERNAME}'
-                  project_id: ${OS_PROJECT_DOMAIN_ID}
+                  project_id: ${OS_PROJECT_ID}
                   project_name: '${OS_PROJECT_NAME}'
                   user_domain_name: '${OS_USER_DOMAIN_NAME}'
                 region_name: '${OS_REGION_NAME}'
