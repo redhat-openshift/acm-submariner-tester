@@ -803,10 +803,16 @@ function prepare_ocp_install() {
 
     echo -e "\n# Using clouds.yaml for OSP cluster"
     cp -f "$OSP_CRED_YAML" "$cred_file_new"
-    chmod 777 "$cred_file_new"
 
-    openstack floating ip unset --port "10.0.205.189"
-    openstack floating ip unset --port "10.0.207.191"
+    echo -e "\n# Release Openstack Floating IPs required for new OCP installation"
+    local osp_floating_ip
+
+    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
+
+    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
+
   fi
 
   TITLE "OCP installer for platform '$platform' is ready to install $cluster_name"
