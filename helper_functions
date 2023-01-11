@@ -1020,6 +1020,8 @@ function configure_openstack_access() {
 
   openstack catalog list -c Endpoints || :
 
+  openstack server list || :
+
 }
 
 # ------------------------------------------

@@ -1859,7 +1859,7 @@ function set_subm_version_tag_var() {
   if [[ -z "${subm_version_tag}" ]] ; then
     TITLE "Submariner version to use was not defined. Checking if existing Submariner version is already installed"
 
-    subm_version_tag="$(${OC} get submariner -A -o jsonpath='{.items[0].spec.version}')" || \
+    subm_version_tag="$(${OC} get submariner -A -o yaml | grep -m1 -Po "version: \K.*")" || \
     FAILURE "Submariner version to use was not found. Try to run again with option '--subctl-version x.y.z'"
   fi
 
