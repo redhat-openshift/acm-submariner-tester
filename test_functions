@@ -488,8 +488,8 @@ function setup_workspace() {
     TITLE "Installing Anaconda (virtual environment)"
     install_anaconda "${WORKDIR}"
 
-    TITLE "Installing GoLang with Anaconda"
-    install_local_golang "${WORKDIR}"
+    TITLE "Installing GoLang 1.19.1 with Anaconda"
+    install_local_golang "${WORKDIR}" "1.19.1"
 
     # Set GOBIN to local directory in ${WORKDIR}
     export GOBIN="${WORKDIR}/GOBIN"
@@ -540,7 +540,14 @@ function setup_workspace() {
     if [[ -s "$AZURE_CRED_JSON" ]] ; then
       TITLE "Installing and configuring Azure CLI"
       configure_azure_access "${AZURE_SUBSCRIPTION}" "${AZURE_CRED_JSON}" "${WORKDIR}" \
-      || FATAL "Missing Azure access details. Did you set AZURE variables in the 'subm_variables' file ?"
+      || FATAL "Missing Azure access details. Did you set AZURE_CRED_JSON path in the 'subm_variables' file ?"
+    fi
+
+    # For Openstack
+    if [[ -s "$OSP_CRED_YAML" ]] ; then
+      TITLE "Installing and configuring Openstack CLI"
+      configure_openstack_access "${OSP_CRED_YAML}" "${WORKDIR}" \
+      || FATAL "Missing Openstack access details. Did you set OSP_CRED_YAML path in the 'subm_variables' file ?"
     fi
   fi
 
@@ -796,7 +803,16 @@ function prepare_ocp_install() {
 
     echo -e "\n# Using clouds.yaml for OSP cluster"
     cp -f "$OSP_CRED_YAML" "$cred_file_new"
-    chmod 777 "$cred_file_new"
+
+    echo -e "\n# Release Openstack Floating IPs required for new OCP installation"
+    local osp_floating_ip
+
+    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
+
+    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
+
   fi
 
   TITLE "OCP installer for platform '$platform' is ready to install $cluster_name"
@@ -1128,10 +1144,12 @@ EOF
 
   ${OC} wait --timeout=1m --for=condition=approved csr "${cluster_name}-access"
 
-  ${OC} get csr |& highlight 'Approved,Issued'
+  # Wait for Certificate Signing Request to be approved
+  local cmd="${OC} get csr"
+  local regex="Approved,Issued"
+  watch_and_retry "$cmd" 3m "$regex"
 
   local crt_file="${cluster_name}.crt"
-
   TITLE "Download certificate into '${crt_file}'"
 
   local auth_pod
@@ -1676,9 +1694,6 @@ function set_netshoot_image_spec() {
         [[ "$REGISTRY_IMAGES" =~ ^(y|yes)$ ]] && \
         check_version_greater_or_equal "$SUBM_VER_TAG" "0.14" ; then
 
-      # # Fix the $submariner_version_or_tag value for custom images
-      # set_subm_version_tag_var "submariner_version_or_tag"
-
       local netshot_image_url
       netshot_image_url="${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${REGISTRY_IMAGE_PREFIX}-${SUBM_IMG_NETTEST}:${submariner_version_or_tag}"
 
@@ -1693,6 +1708,7 @@ function set_netshoot_image_spec() {
 
     export NETSHOOT_IMAGE_SPEC='{
       "spec": {
+        "serviceAccountName": "default",
         "securityContext": {
           "runAsNonRoot": true,
           "runAsUser": 2000,
@@ -1843,7 +1859,7 @@ function set_subm_version_tag_var() {
   if [[ -z "${subm_version_tag}" ]] ; then
     TITLE "Submariner version to use was not defined. Checking if existing Submariner version is already installed"
 
-    subm_version_tag="$(${OC} get submariner -A -o jsonpath='{.items[0].spec.version}')" || \
+    subm_version_tag="$(${OC} get submariner -A -o yaml | grep -m1 -Po "version: \K.*")" || \
     FAILURE "Submariner version to use was not found. Try to run again with option '--subctl-version x.y.z'"
   fi
 
@@ -3194,6 +3210,12 @@ function upload_submariner_images_to_cluster_registry() {
       
   done
 
+  # BUG "Submariner NetTest image is refferenced without 'v' and causes ErrImagePull" \
+  # "Add another refference to NetTest image in registry, but without the preceeding 'v' for version 0.14.1" \
+  # "https://issues.redhat.com/browse/ACM-2387"
+  # # Workaound:
+  # ${OC} import-image -n ${SUBM_NAMESPACE} nettest-rhel8:0.14.1 --from=brew.registry.redhat.io/rh-osbs/rhacm2-nettest-rhel8:v0.14.1 --confirm 
+
 }
 
 # ------------------------------------------
@@ -3318,7 +3340,7 @@ function test_submariner_resources_status() {
 
   ${OC} get all -n "${SUBM_NAMESPACE}" --show-labels || submariner_status=DOWN
 
-  ${OC} get pods -n "${SUBM_NAMESPACE}" | grep "${SUBM_OPERATOR}" \
+  ${OC} get pods -n "${SUBM_NAMESPACE}" \
   |& (! highlight "Error|CrashLoopBackOff|ImagePullBackOff|ErrImagePull|No resources found") || submariner_status=DOWN
 
   if [[ "$submariner_status" == DOWN ]] ; then

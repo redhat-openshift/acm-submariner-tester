@@ -6,11 +6,12 @@
 # ------------------------------------------
 
 function remove_multicluster_engine() {
-### Removing Multi Cluster Engine from ACM hub (if exists) ###
+### Removing Multi Cluster Engine from ACM hub and Managed cluster (if exists) ###
   trap_to_debug_commands;
 
-  # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
-  export KUBECONFIG="${KUBECONF_HUB}"
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -35,6 +36,8 @@ function remove_multicluster_engine() {
   ${OC} delete MultiClusterEngine --all --timeout=30s || :
 
   force_delete_namespace "multicluster-engine"
+
+  force_delete_namespace "${ACM_NAMESPACE}" 1m || :
 
 }
 
@@ -77,7 +80,7 @@ function remove_acm_managed_cluster() {
 
   PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
 
-  # Following steps should be run on the managed cluster kubeconfig
+  # Following steps should be run on the managed cluster kubeconfig (not the Hub)
   force_delete_namespace "open-cluster-management-agent"
   force_delete_namespace "open-cluster-management-agent-addon"
 
@@ -159,8 +162,8 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete MultiClusterHub --all --timeout=3m || :
 
   # Show ACM resources
-  ${OC} get MultiClusterHub -o yaml
-  ${OC} api-resources | grep -E "multicluster|open-cluster"
+  ${OC} get MultiClusterHub -o yaml || :
+  ${OC} api-resources | grep -E "multicluster|open-cluster" || :
 
   # helm ls --namespace $ACM_NAMESPACE | cut -f 1 | tail -n +2 | xargs -n 1 helm delete --namespace $ACM_NAMESPACE
   ${OC} delete apiservice \
@@ -343,14 +346,15 @@ function install_acm_operator_on_hub() {
 
   PROMPT "Install ACM $acm_version bundle on the Hub cluster ${cluster_name}"
 
-  find_acm_component_version_in_downstream "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_BUILD_DATE}"
-  acm_version="$(< "${ACM_VERSION_FILE}")"
-
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
-  # Install ACM if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$acm_version" =~ ${acm_current_version} ]] ; then
+  # Install ACM if it's not installed, or if it's already installed, but with a different version than requested.
+  # For example, will skip install if current ACM version (e.g. 2.7.1) starts with requested version regex (e.g. ^2.7)  
+  if [[ ! ${acm_current_version} =~ ^${acm_version} ]] ; then
+
+    find_acm_component_version_in_downstream "${ACM_BUNDLE_IMAGE}" "${acm_version}" "${ACM_VERSION_FILE}" "${ACM_BUILD_DATE}"
+    acm_version="$(< "${ACM_VERSION_FILE}")"
 
     if [[ -z "$acm_current_version" ]] ; then
       echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
@@ -400,11 +404,12 @@ function find_acm_component_version_in_downstream() {
   local stolostron_downstream_file
 
   TITLE "Get the latest commit for the requested ACM version '$acm_version', with an optional date [$stolostron_commit_date]"
-  # For example:
+  
+  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
   # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
   
   stolostron_commit_title="$(curl "https://github.com/stolostron/deploy/commits/master/mirror" \
-  | grep "href=\".* ${acm_version}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+  | grep -E "href=\".* ${acm_version//./\\.}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
 
   stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
 
@@ -1211,7 +1216,7 @@ function configure_submariner_addon_for_openstack() {
                 clouds.yaml: $(base64 -w0 "${OSP_CRED_YAML}")
                 cloud: $(echo -n "openstack" | base64 -w0)
 EOF
-      elif [[ -n "$OS_PROJECT_DOMAIN_ID" ]] ; then
+      elif [[ -n "$OS_PROJECT_ID" ]] ; then
         echo -e "\n# Using direct credentials"
 
         cat <<EOF | ${OC} apply -f -
@@ -1228,7 +1233,7 @@ EOF
                 auth:
                   auth_url: ${OS_AUTH_URL}
                   username: '${OS_USERNAME}'
-                  project_id: ${OS_PROJECT_DOMAIN_ID}
+                  project_id: ${OS_PROJECT_ID}
                   project_name: '${OS_PROJECT_NAME}'
                   user_domain_name: '${OS_USER_DOMAIN_NAME}'
                 region_name: '${OS_REGION_NAME}'

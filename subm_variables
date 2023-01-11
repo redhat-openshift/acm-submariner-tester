@@ -55,12 +55,12 @@ export AWS_ZONE_ID=""
 ### OpenStack cloud vars ###
 
 export OSP_CRED_YAML="${OSP_CRED_YAML:-osp-clouds.yaml}" # OSP clouds.yaml file path
-export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
+export OS_AUTH_URL="https://openstack-auth-url:13000"
 export OS_USERNAME='openstack-user'
 export OS_PASSWORD='openstack-pass'
 export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
-export OS_PROJECT_DOMAIN_ID="openstack-project-id"
+export OS_PROJECT_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
 export OS_VOLUME_API_VERSION=3
 

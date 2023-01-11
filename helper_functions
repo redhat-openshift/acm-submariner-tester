@@ -503,6 +503,7 @@ function install_conda_package() {
   local pkg_name="$2"
   local pkg_version="$3"
   local pkg_label="$4"
+  local pkg_channel="${5:-conda-forge}"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
@@ -517,25 +518,29 @@ function install_conda_package() {
   local conda_pkg_install
   verify_anaconda "${conda_install_dir}"
 
-  # ${CONDA_CMD} config --add channels defaults
-  ${CONDA_CMD} config --add channels conda-forge
-  ${CONDA_CMD} deactivate
-
-  conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
-
-  ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
-
   source activate "$conda_env" || :
+
+  # ${CONDA_CMD} config --add channels defaults
+  ${CONDA_CMD} config --add channels "${pkg_channel}"
+
+  ${CONDA_CMD} uninstall -y "${pkg_name}" || :
+
+  conda_pkg_install="${CONDA_CMD} install -y -c ${pkg_channel}${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
+
+  ${conda_pkg_install} -n "${conda_env}" || conda_pkg_status=FAILED
+
   ${CONDA_CMD} list || :
 
   if [[ "$conda_pkg_status" == FAILED ]] ; then
-    return 1
+    ${CONDA_CMD} deactivate
+    ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps
+    source activate "$conda_env"
   fi
 }
 
 # ------------------------------------------
 
-# Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
+# Function to install local Golang with Anaconda (https://anaconda.org/anaconda/go)
 function install_local_golang() {
   # trap_to_debug_commands
 
@@ -545,7 +550,9 @@ function install_local_golang() {
 
   local pkg_version="$2"
 
-  install_conda_package "${conda_install_dir}" "go-nocgo_linux-64" "${pkg_version}"
+  # install_conda_package "${conda_install_dir}" "go" "${pkg_version}" 
+  # Using anaconda channel (instead of conda-forge):
+  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "" "anaconda"
 }
 
 # ------------------------------------------
@@ -710,6 +717,28 @@ function install_local_azure_cli() {
   fi
 
   az --version
+
+}
+
+# ------------------------------------------
+
+# Function to install Openstack cli with Anaconda (https://anaconda.org/conda-forge/python-openstackclient)
+function install_local_openstack_cli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
+
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  install_conda_package "${conda_install_dir}" "python-openstackclient" "${pkg_version}" 
+
+  openstack --version
 
 }
 
@@ -957,6 +986,41 @@ function configure_azure_access() {
   az account set -s "${azure_subscription}"
 
   cp "$azure_cred_json" ~/.azure/osServicePrincipal.json
+
+}
+
+# ------------------------------------------
+
+# Function to install Openstack CLI, and configure Openstack access:
+function configure_openstack_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_cred_json="$1"
+  local work_dir="$2"
+
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  if [[ ! -x "$(command -v openstack)" ]] ; then
+    install_local_openstack_cli "$work_dir"
+  fi
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  TITLE "Check Openstack cloud version on ${OS_AUTH_URL}"
+
+  curl "${OS_AUTH_URL}" | jq -r '.versions.values[] | .id'
+
+  local osp_config_dir="$HOME/.config/openstack"
+  echo -e "\n# Create Openstack config directory: ${osp_config_dir}"
+
+  mkdir -p "${osp_config_dir}"
+  cp -f "$OSP_CRED_YAML" "${osp_config_dir}/clouds.yaml"
+
+  openstack --os-cloud openstack token issue
+
+  openstack catalog list -c Endpoints || :
+
+  openstack server list || :
 
 }
 
