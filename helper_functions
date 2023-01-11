@@ -1277,8 +1277,8 @@ function force_delete_namespace() {
   # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
   local delete_timeout="${2:-30s}"
 
-  if [[ ${ns_name} == "default" ]] ; then
-    echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
+  if [[ ! $(${OC} get ns "$1") || ${ns_name} == "default" ]] ; then
+    echo -e "\n# Skipping namespace '${ns_name}' deletion, since it does not exists (or the default)"
     return
   fi
 

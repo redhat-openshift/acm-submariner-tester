@@ -752,7 +752,9 @@ cat "$SYS_LOG"
     # Running cleanup on cluster A if requested
     if [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
 
-      ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_HUB}"
+      ${JUNIT_CMD} remove_acm_managed_cluster_from_hub "${KUBECONF_HUB}"
+
+      ${JUNIT_CMD} remove_acm_resources_on_managed_cluster "${KUBECONF_HUB}"
 
       ${JUNIT_CMD} uninstall_submariner "${KUBECONF_HUB}"
 
@@ -777,7 +779,9 @@ cat "$SYS_LOG"
 
       if [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_B}"
+        ${JUNIT_CMD} remove_acm_managed_cluster_from_hub "${KUBECONF_CLUSTER_B}"
+
+        ${JUNIT_CMD} remove_acm_resources_on_managed_cluster "${KUBECONF_CLUSTER_B}"
 
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_B}"
 
@@ -796,7 +800,9 @@ cat "$SYS_LOG"
 
       if [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ ]] && [[ ! "$DESTROY_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
-        ${JUNIT_CMD} remove_acm_managed_cluster "${KUBECONF_CLUSTER_C}"
+        ${JUNIT_CMD} remove_acm_managed_cluster_from_hub "${KUBECONF_CLUSTER_C}"
+
+        ${JUNIT_CMD} remove_acm_resources_on_managed_cluster "${KUBECONF_CLUSTER_C}"
 
         ${JUNIT_CMD} uninstall_submariner "${KUBECONF_CLUSTER_C}"
 
