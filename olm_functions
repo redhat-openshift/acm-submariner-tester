@@ -262,9 +262,11 @@ function deploy_ocp_bundle() {
   echo -e "\n# Set and export the variable \$LATEST_IIB"
   export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
 
-  [[ -n "$LATEST_IIB" ]] || FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
+  if [[ -z "$LATEST_IIB" || "$LATEST_IIB" == "null" ]] ; then
+    FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
+  fi
 
-  # Remove extra build number from operator version
+  echo -e "\n# Trim extra build number (after '-') from operator version: $operator_version"
   operator_version="${operator_version%%-*}" # e.g. v2.2.0-230 --> v2.2.0
 
   local source_image_path

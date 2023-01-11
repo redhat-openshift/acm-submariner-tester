@@ -78,7 +78,7 @@ function remove_acm_managed_cluster_from_hub() {
   local cluster_id
   cluster_id="$(generate_acm_managed_cluster_id)"
 
-  PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
+  PROMPT "Removing the ACM Managed Cluster ID from the Hub: $cluster_id"
 
   # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT on the managed cluster)
   export KUBECONFIG="${KUBECONF_HUB}"
@@ -116,10 +116,13 @@ function remove_acm_resources_on_managed_cluster() {
 
   export KUBECONFIG="$kubeconfig_file"
 
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
   local cluster_id
   cluster_id="$(generate_acm_managed_cluster_id)"
 
-  PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
+  PROMPT "Deleting '$cluster_id' resources from cluster: $cluster_name"
 
   delete_roles_by_name "open-cluster-management"
 
