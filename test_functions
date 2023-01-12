@@ -5153,6 +5153,10 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n "open-cluster-management-agent-addon" -o wide || :
 
+  TITLE "ACM Klusterlet in ${cluster_name}"
+
+  ${OC} describe klusterlet -A
+
   TITLE "Submariner gather logs in cluster $cluster_name"
 
   # cluster_context="$cluster_name"

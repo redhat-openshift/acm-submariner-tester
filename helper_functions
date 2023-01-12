@@ -1240,8 +1240,16 @@ function delete_crds_by_name() {
     # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
 
     for crd_name in $crd_list ; do
-      echo -e "\n# Deleting CRD $crd_name"
-      ${OC} delete --timeout=1m crd "$crd_name" --ignore-not-found || \
+
+      obj_list=$(${OC} get "${crd_name}" -o name)
+      for cr_obj in $obj_list ; do
+        echo -e "\n# Deleting the custom resource (cr): $cr_obj"
+        ${OC} delete --timeout=10s "$cr_obj" || \
+        ${OC} patch "$cr_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+      done
+
+      echo -e "\n# Deleting custom resource definition (crd): $crd_name"
+      ${OC} delete --timeout=10s crd "$crd_name" --ignore-not-found || \
       ${OC} patch "crd/${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
 
