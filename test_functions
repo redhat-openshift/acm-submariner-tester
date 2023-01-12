@@ -1322,6 +1322,8 @@ function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
 
+  ${OC} delete operator "${SUBM_OPERATOR}.${SUBM_NAMESPACE}" || :
+
   delete_crds_by_name 'submariner\.io'
 
   force_delete_namespace "${SUBM_NAMESPACE}" 3m
@@ -5168,6 +5170,10 @@ function print_resources_and_pod_logs() {
 
   subctl gather --dir submariner-gather_"${cluster_name}" --kubecontexts ${cluster_context} || :
   
+  TITLE "Submariner Operator in cluster $cluster_name"
+
+  ${OC} describe operator "${SUBM_OPERATOR}.${SUBM_NAMESPACE}" || :
+
   TITLE "Submariner resources in ${cluster_name}"
 
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :
