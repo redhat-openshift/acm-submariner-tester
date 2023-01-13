@@ -502,8 +502,8 @@ function install_conda_package() {
 
   local pkg_name="$2"
   local pkg_version="$3"
-  local pkg_label="$4"
-  local pkg_channel="${5:-conda-forge}"
+  local pkg_channel="${4:-conda-forge}"
+  local pkg_label="$5"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
@@ -552,7 +552,8 @@ function install_local_golang() {
 
   # install_conda_package "${conda_install_dir}" "go" "${pkg_version}" 
   # Using anaconda channel (instead of conda-forge):
-  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "" "anaconda"
+  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "anaconda"
+  install_conda_package "${conda_install_dir}" "gcc_linux-64" "" "anaconda"
 }
 
 # ------------------------------------------
