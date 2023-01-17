@@ -320,12 +320,12 @@ function install_mce_operator_on_hub() {
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$mce_version" =~ ${mce_current_version} ]] ; then
+  if [[ ! ${mce_current_version} =~ ^${mce_version} ]] ; then
 
     if [[ -z "$mce_current_version" ]] ; then
       echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
     else
-      echo -e "\n# MCE $mce_current_version is already installed on current cluster ${cluster_name} - Re-installing MCE $mce_version"
+      echo -e "\n# MCE $mce_current_version currently installed on cluster ${cluster_name} is different then requested - Re-installing MCE $mce_version"
     fi
 
     local mce_channel
@@ -346,7 +346,7 @@ function install_mce_operator_on_hub() {
     echo -e "\n# MCE $mce_version installation completed"
 
   else
-    TITLE "MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
+    TITLE "Requested MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
   fi
 
 }
@@ -379,7 +379,7 @@ function install_acm_operator_on_hub() {
     if [[ -z "$acm_current_version" ]] ; then
       echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
     else
-      echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
+      echo -e "\n# ACM $acm_current_version currently installed on cluster ${cluster_name} is different then requested - Re-installing ACM $acm_version"
     fi
 
     # Deploy ACM operator as an OCP bundle
@@ -400,7 +400,7 @@ function install_acm_operator_on_hub() {
     echo -e "\n# ACM $acm_version installation completed"
 
   else
-    TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
+    TITLE "Requested ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
   fi
 
 }
@@ -540,7 +540,7 @@ function create_acm_subscription() {
     echo -e "\n# ACM Subscription for ${ACM_OPERATOR} is ready"
 
   else
-    TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM Subscription"
+    TITLE "Requested ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM Subscription"
   fi
 
 }
