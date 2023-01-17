@@ -5161,6 +5161,8 @@ function print_resources_and_pod_logs() {
 
   TITLE "Submariner gather logs in cluster $cluster_name"
 
+  TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
+
   # cluster_context="$cluster_name"
   BUG "subctl gather does not support multiple kubeconfig contexts"
   # Workaround:
@@ -5168,7 +5170,10 @@ function print_resources_and_pod_logs() {
   export KUBECONFIG="${kubeconfig_file}.bak"
   cluster_context="admin"
 
-  subctl gather --dir submariner-gather_"${cluster_name}" --kubecontexts ${cluster_context} || :
+  # Delete previous submariner gather log's directories (which are older than 1 day):"
+  delete_old_files_or_dirs "submariner-gather_*" "d" 1 || :
+
+  subctl gather --dir "submariner-gather_${cluster_name}" --kubecontexts ${cluster_context} || :
   
   TITLE "Submariner Operator in cluster $cluster_name"
 
