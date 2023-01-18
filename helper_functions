@@ -502,8 +502,8 @@ function install_conda_package() {
 
   local pkg_name="$2"
   local pkg_version="$3"
-  local pkg_label="$4"
-  local pkg_channel="${5:-conda-forge}"
+  local pkg_channel="${4:-conda-forge}"
+  local pkg_label="$5"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
@@ -552,7 +552,8 @@ function install_local_golang() {
 
   # install_conda_package "${conda_install_dir}" "go" "${pkg_version}" 
   # Using anaconda channel (instead of conda-forge):
-  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "" "anaconda"
+  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "anaconda"
+  install_conda_package "${conda_install_dir}" "gcc_linux-64" "" "anaconda"
 }
 
 # ------------------------------------------
@@ -1240,8 +1241,16 @@ function delete_crds_by_name() {
     # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
 
     for crd_name in $crd_list ; do
-      echo -e "\n# Deleting CRD $crd_name"
-      ${OC} delete --timeout=1m crd "$crd_name" --ignore-not-found || \
+
+      obj_list=$(${OC} get "${crd_name}" -o name)
+      for cr_obj in $obj_list ; do
+        echo -e "\n# Deleting the custom resource (cr): $cr_obj"
+        ${OC} delete --timeout=10s "$cr_obj" || \
+        ${OC} patch "$cr_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+      done
+
+      echo -e "\n# Deleting custom resource definition (crd): $crd_name"
+      ${OC} delete --timeout=10s crd "$crd_name" --ignore-not-found || \
       ${OC} patch "crd/${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
 
@@ -1262,7 +1271,7 @@ function delete_roles_by_name() {
 
   TITLE "Deleting all '${role_regex}' Cluster Roles and Role Bindings in current cluster"
   ${OC} get clusterroles,clusterrolebindings -o name \
-  | grep -E "${role_regex}" | xargs -r "${OC}" delete --timeout=30s || :
+  | grep -E "${role_regex}" | xargs -r ${OC:+ $OC} delete --timeout=30s || :
 
 }
 
@@ -1277,8 +1286,11 @@ function force_delete_namespace() {
   # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
   local delete_timeout="${2:-30s}"
 
-  if [[ ${ns_name} == "default" ]] ; then
-    echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  if [[ ! $(${OC} get ns "$1") || ${ns_name} == "default" ]] ; then
+    echo -e "\n# Skipping namespace '${ns_name}' deletion, since it does't exist on cluster $cluster_name"
     return
   fi
 
@@ -1286,7 +1298,7 @@ function force_delete_namespace() {
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
   ${OC} get all,olm -n "${ns_name}" |& highlight "No resources found" || :
 
-  TITLE "Deleting all resources associated with namespace '${ns_name}' from the cluster"
+  TITLE "Deleting all resources associated with namespace '${ns_name}' from cluster $cluster_name"
 
   ${OC} api-resources --verbs=list --namespaced -o name | grep -v "packagemanifest" | xargs -i -n 1 sh -c \
   "echo -e \"\n### {} ###\n\" ;\
@@ -1325,7 +1337,7 @@ function delete_all_evicted_pods_in_current_cluster() {
   echo -e "\n# Delete OLM pods that are in an 'Error' state:"
 
   ${OC} get pods -n openshift-operator-lifecycle-manager --field-selector=status.phase==Failed -o name \
-  | xargs -r "${OC}" delete -n openshift-operator-lifecycle-manager || :
+  | xargs -r ${OC:+ $OC} delete -n openshift-operator-lifecycle-manager || :
 
   # echo -e "\n# Generate list of PDBs (Pod Disruption Budget) to be deleted"
 

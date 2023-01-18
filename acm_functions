@@ -67,8 +67,8 @@ function delete_acm_image_streams_and_tags() {
 
 # ------------------------------------------
 
-function remove_acm_managed_cluster() {
-### Removing Cluster-ID from ACM managed clusters (if exists) ###
+function remove_acm_managed_cluster_from_hub() {
+### Removing Cluster-ID from ACM managed clusters on the Hub (if exists) ###
   trap_to_debug_commands;
 
   local kubeconfig_file="$1"
@@ -78,16 +78,7 @@ function remove_acm_managed_cluster() {
   local cluster_id
   cluster_id="$(generate_acm_managed_cluster_id)"
 
-  PROMPT "Removing the ACM Managed Cluster ID: $cluster_id"
-
-  # Following steps should be run on the managed cluster kubeconfig (not the Hub)
-  force_delete_namespace "open-cluster-management-agent"
-  force_delete_namespace "open-cluster-management-agent-addon"
-
-  delete_roles_by_name "open-cluster-management"
-
-  delete_crds_by_name "open-cluster-management" || :
-  delete_crds_by_name "multicluster" || :
+  PROMPT "Removing the ACM Managed Cluster ID from the Hub: $cluster_id"
 
   # Following steps should be run on ACM MultiClusterHub with $KUBECONF_HUB (NOT on the managed cluster)
   export KUBECONFIG="${KUBECONF_HUB}"
@@ -110,8 +101,37 @@ function remove_acm_managed_cluster() {
     fi
 
   else
-    echo -e "\n# ACM does not have the managed cluster '$cluster_id' (skipping removal)"
+    echo -e "\n# ACM Hub does not have a managed cluster '$cluster_id' (skipping removal)"
   fi
+
+}
+
+# ------------------------------------------
+
+function remove_acm_resources_on_managed_cluster() {
+### Removing ACM resources if already exists on the managed cluster (even if it's also same cluster as the Hub) ###
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  local cluster_id
+  cluster_id="$(generate_acm_managed_cluster_id)"
+
+  PROMPT "Deleting '$cluster_id' resources from cluster: $cluster_name"
+
+  delete_roles_by_name "open-cluster-management"
+
+  delete_crds_by_name "open-cluster-management" || :
+  delete_crds_by_name "multicluster" || :
+
+  force_delete_namespace "open-cluster-management-agent"
+  force_delete_namespace "open-cluster-management-agent-addon"
+  force_delete_namespace "${cluster_id}"
 
 }
 
@@ -300,12 +320,12 @@ function install_mce_operator_on_hub() {
   mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   # Install MCE if it's not installed, or if it's already installed, but with a different version than requested
-  if [[ "$mce_version" =~ ${mce_current_version} ]] ; then
+  if [[ ! ${mce_current_version} =~ ^${mce_version} ]] ; then
 
     if [[ -z "$mce_current_version" ]] ; then
       echo -e "\n# MCE is not installed on current cluster ${cluster_name} - Installing MCE $mce_version from scratch"
     else
-      echo -e "\n# MCE $mce_current_version is already installed on current cluster ${cluster_name} - Re-installing MCE $mce_version"
+      echo -e "\n# MCE $mce_current_version currently installed on cluster ${cluster_name} is different then requested - Re-installing MCE $mce_version"
     fi
 
     local mce_channel
@@ -326,7 +346,7 @@ function install_mce_operator_on_hub() {
     echo -e "\n# MCE $mce_version installation completed"
 
   else
-    TITLE "MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
+    TITLE "Requested MCE version $mce_version is already installed on current cluster ${cluster_name} - Skipping MCE installation"
   fi
 
 }
@@ -359,7 +379,7 @@ function install_acm_operator_on_hub() {
     if [[ -z "$acm_current_version" ]] ; then
       echo -e "\n# ACM is not installed on current cluster ${cluster_name} - Installing ACM $acm_version from scratch"
     else
-      echo -e "\n# ACM $acm_current_version is already installed on current cluster ${cluster_name} - Re-installing ACM $acm_version"
+      echo -e "\n# ACM $acm_current_version currently installed on cluster ${cluster_name} is different then requested - Re-installing ACM $acm_version"
     fi
 
     # Deploy ACM operator as an OCP bundle
@@ -380,7 +400,7 @@ function install_acm_operator_on_hub() {
     echo -e "\n# ACM $acm_version installation completed"
 
   else
-    TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
+    TITLE "Requested ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM installation"
   fi
 
 }
@@ -520,7 +540,7 @@ function create_acm_subscription() {
     echo -e "\n# ACM Subscription for ${ACM_OPERATOR} is ready"
 
   else
-    TITLE "ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM Subscription"
+    TITLE "Requested ACM version $acm_version is already installed on current cluster ${cluster_name} - Skipping ACM Subscription"
   fi
 
 }

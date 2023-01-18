@@ -488,8 +488,8 @@ function setup_workspace() {
     TITLE "Installing Anaconda (virtual environment)"
     install_anaconda "${WORKDIR}"
 
-    TITLE "Installing GoLang 1.19.1 with Anaconda"
-    install_local_golang "${WORKDIR}" "1.19.1"
+    TITLE "Installing GoLang 1.19.3 with Anaconda"
+    install_local_golang "${WORKDIR}" "1.19.3"
 
     # Set GOBIN to local directory in ${WORKDIR}
     export GOBIN="${WORKDIR}/GOBIN"
@@ -1321,6 +1321,8 @@ function uninstall_submariner() {
 function delete_submariner_namespace_and_crds() {
 ### Run cleanup of previous Submariner namespace and CRDs ###
   trap_to_debug_commands;
+
+  ${OC} delete operator "${SUBM_OPERATOR}.${SUBM_NAMESPACE}" || :
 
   delete_crds_by_name 'submariner\.io'
 
@@ -5153,7 +5155,13 @@ function print_resources_and_pod_logs() {
 
   ${OC} get all -n "open-cluster-management-agent-addon" -o wide || :
 
+  TITLE "ACM Klusterlet in ${cluster_name}"
+
+  ${OC} describe klusterlet -A
+
   TITLE "Submariner gather logs in cluster $cluster_name"
+
+  TITLE "Deleting all previous ${ocp_install_dir} config directories (older than 1 day):"
 
   # cluster_context="$cluster_name"
   BUG "subctl gather does not support multiple kubeconfig contexts"
@@ -5162,8 +5170,15 @@ function print_resources_and_pod_logs() {
   export KUBECONFIG="${kubeconfig_file}.bak"
   cluster_context="admin"
 
-  subctl gather --dir submariner-gather_"${cluster_name}" --kubecontexts ${cluster_context} || :
+  # Delete previous submariner gather log's directories (which are older than 1 day):"
+  delete_old_files_or_dirs "submariner-gather_*" "d" 1 || :
+
+  subctl gather --dir "submariner-gather_${cluster_name}" --kubecontexts ${cluster_context} || :
   
+  TITLE "Submariner Operator in cluster $cluster_name"
+
+  ${OC} describe operator "${SUBM_OPERATOR}.${SUBM_NAMESPACE}" || :
+
   TITLE "Submariner resources in ${cluster_name}"
 
   ${OC} get all -n "${SUBM_NAMESPACE}" -o wide || :
