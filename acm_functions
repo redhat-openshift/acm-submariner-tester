@@ -1028,18 +1028,6 @@ function install_submariner_operator_on_cluster() {
   deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${subscription_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
-  TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}"
-
-  # TODO: Wait for acm agent installation on the managed clusters
-  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
-  watch_and_retry "$cmd" 5m || BUG "WARNING: Submariner users may not be scc privileged"
-
-  ${OC} get clusterrolebindings
-
 }
 
 # ------------------------------------------
@@ -1068,6 +1056,18 @@ function configure_submariner_addon_for_acm_managed_cluster() {
 
   PROMPT "Configure Submariner $SUBM_VER_TAG Addon for ACM managed cluster: $cluster_id"
 
+  TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}"
+
+  # TODO: Wait for acm agent installation on the managed clusters
+  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
+  watch_and_retry "$cmd" 5m || BUG "WARNING: Submariner users may not be scc privileged"
+
+  ${OC} get clusterrolebindings
+  
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"
 
