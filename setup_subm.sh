@@ -978,11 +978,11 @@ cat "$SYS_LOG"
 
     ${JUNIT_CMD} create_acm_subscription "$ACM_VER_TAG"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
+    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine "$MCE_VER_TAG"
 
     # Create ACM Hub instance
 
-    ${JUNIT_CMD} create_acm_multiclusterhub
+    ${JUNIT_CMD} create_acm_multiclusterhub "$ACM_VER_TAG"
 
   fi
   ### END of ACM Install ###

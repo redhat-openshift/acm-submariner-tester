@@ -505,7 +505,7 @@ function create_acm_subscription() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.7.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -551,6 +551,8 @@ function create_multicluster_engine() {
   ### Create MCE instance ###
   trap_to_debug_commands;
 
+  local mce_version="${1:-$MCE_VER_TAG}" # e.g. 2.2.0
+
   export KUBECONFIG="${KUBECONF_HUB}"
 
   local cluster_name
@@ -582,6 +584,14 @@ EOF
   TITLE "All MultiClusterEngine resources status:"
   ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
 
+  [[ -n "$mce_version" ]] || mce_version="$(< "${MCE_VERSION_FILE}")"
+  mce_version="${mce_version%%-*}" # Remove version build number after "-"
+
+  TITLE "Verify requested MCE version '${mce_version}' appears in MultiClusterEngine" 
+
+  cmd="${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status.currentVersion'"
+  watch_and_retry "$cmd" "$duration" "$mce_version" || acm_status=FAILED
+
   if [[ "$mce_status" == FAILED ]] ; then
     TITLE "Check Operator deployment logs of '${MCE_OPERATOR}' in cluster ${cluster_name}"
 
@@ -589,13 +599,13 @@ EOF
     --all-containers --tail=100 --timestamps \
     |& (! highlight '^E0|"error"|level=error|Error') || :
 
-    FATAL "MultiClusterEngine is not ready after $duration"
+    FATAL "MultiClusterEngine version '${mce_version}' is not ready after $duration"
   fi
 
   local mce_current_version
-  mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
+  mce_current_version="$(${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status.currentVersion')" || :
 
-  TITLE "MultiClusterEngine version [${acm_current_version}] is installed" 
+  echo -e "\n# MultiClusterEngine version [${acm_current_version}] is installed" 
 
 }
 
@@ -604,6 +614,8 @@ EOF
 function create_acm_multiclusterhub() {
   ### Create ACM MultiClusterHub instance ###
   trap_to_debug_commands;
+
+  local acm_version="${1:-$ACM_VER_TAG}" # e.g. 2.7.0
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -668,6 +680,14 @@ EOF
 
   ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
+  [[ -n "$acm_version" ]] || acm_version="$(< "${ACM_VERSION_FILE}")"
+  acm_version="${acm_version%%-*}" # Remove version build number after "-"
+
+  TITLE "Verify requested ACM version '${acm_version}' appears in MultiClusterHub" 
+
+  cmd="${OC} get MultiClusterHub -n '${ACM_NAMESPACE}' '${ACM_INSTANCE}' -o jsonpath='{.status.currentVersion}'"
+  watch_and_retry "$cmd" "$duration" "$acm_version" || acm_status=FAILED
+
   if [[ "$acm_status" == FAILED ]] ; then
     TITLE "Check Operator deployment logs of '${ACM_OPERATOR}' in cluster ${cluster_name}"
 
@@ -681,7 +701,7 @@ EOF
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
 
-  TITLE "ACM version [${acm_current_version}] hub installed" 
+  echo -e "\n# ACM version [${acm_current_version}] hub installed" 
   # console url: $(${OC} get routes -n "${ACM_NAMESPACE}" multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
