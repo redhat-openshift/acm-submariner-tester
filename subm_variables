@@ -161,7 +161,7 @@ export SUBM_CONFIG="submariner" # Submariner Config name. Using different name (
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export CVP_COMPONENT="cvp-teamredhatadvancedclustermanagement"
-export CVP_ISSUER=${CVP_ISSUER:-"contra/pipeline"} # For CVE (security errata releases) use "freshmaker"
+export CVP_ISSUER=${CVP_ISSUER:-"exd-cpaas-bot-prod"} # For CVE (security errata releases) use "freshmaker"
 
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
