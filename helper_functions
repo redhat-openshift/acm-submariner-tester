@@ -1298,14 +1298,25 @@ function force_delete_namespace() {
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
   ${OC} get all,olm -n "${ns_name}" |& highlight "No resources found" || :
 
-  TITLE "Deleting all resources associated with namespace '${ns_name}' from cluster $cluster_name"
+  TITLE "Deleting all common resources in namespace '${ns_name}' from cluster $cluster_name"
+
+  local obj_list
+  obj_list=$($OC get all -n test-submariner -o name)
+
+  for ns_obj in $obj_list ; do
+    echo -e "\n# Deleting the namespaced resource: $ns_obj"
+    ${OC} delete -n "$ns_name" --timeout="$delete_timeout" "$ns_obj" || \
+    ${OC} patch -n "$ns_name" "$ns_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+  done
+
+  TITLE "Deleting all other resources associated with namespace '${ns_name}' from cluster $cluster_name"
 
   ${OC} api-resources --verbs=list --namespaced -o name | grep -v "packagemanifest" | xargs -i -n 1 sh -c \
   "echo -e \"\n### {} ###\n\" ;\
   ${OC} get {} -o name --show-kind --ignore-not-found -n $ns_name \
   | xargs -r ${OC} delete -n $ns_name --timeout=30s" || :
 
-  TITLE "Deleting whole namespace ${ns_name} from the cluster"
+  TITLE "Deleting whole namespace ${ns_name} from cluster $cluster_name"
 
   ${OC} delete --timeout="$delete_timeout" namespace "${ns_name}" --ignore-not-found || force_ns_delete=TRUE
 
