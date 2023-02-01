@@ -807,10 +807,10 @@ function prepare_ocp_install() {
     echo -e "\n# Release Openstack Floating IPs required for new OCP installation"
     local osp_floating_ip
 
-    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$installer_yaml_new" || :)"
     [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
 
-    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$installer_yaml_new" || :)"
     [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
 
   fi

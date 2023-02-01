@@ -996,9 +996,11 @@ function configure_azure_access() {
 function configure_openstack_access() {
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  local azure_cred_json="$1"
+  local osp_cloud_yaml="$1"
   local work_dir="$2"
 
+  [[ ! -s "$osp_cloud_yaml" ]] && echo "Missing file or data of OSP cloud.yaml" && return 1
+  
   work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
 
   if [[ ! -x "$(command -v openstack)" ]] ; then
@@ -1007,15 +1009,23 @@ function configure_openstack_access() {
 
   trap '' DEBUG # DONT trap_to_debug_commands
 
-  TITLE "Check Openstack cloud version on ${OS_AUTH_URL}"
+  TITLE "Configure Openstack clouds.yaml access with Application ID"
 
-  curl "${OS_AUTH_URL}" | jq -r '.versions.values[] | .id'
+  # curl "${OS_AUTH_URL}" | jq -r '.versions.values[] | .id'
+
+  unset "OS_USERNAME"
+  unset "OS_PASSWORD"
+  unset "OS_AUTH_URL"
+  unset "OS_PROJECT_ID"
+  unset "OS_PROJECT_NAME"
+  unset "OS_USER_DOMAIN_NAME"
+  export OS_CLOUD=openstack
 
   local osp_config_dir="$HOME/.config/openstack"
   echo -e "\n# Create Openstack config directory: ${osp_config_dir}"
 
   mkdir -p "${osp_config_dir}"
-  cp -f "$OSP_CRED_YAML" "${osp_config_dir}/clouds.yaml"
+  cp -f "$osp_cloud_yaml" "${osp_config_dir}/clouds.yaml"
 
   openstack --os-cloud openstack token issue
 
