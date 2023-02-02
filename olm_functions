@@ -473,8 +473,11 @@ EOF
   # Set catalog source name (replace non letters or numbers with "-", which is required for its metadata.name)
   catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
-  # Set subscription display name 
-  subscription_display_name="${operator_name}-${operator_channel}-subscription"
+  echo -e "\n# Get subscription display name from existing '${subscription_namespace}', or create new if none exists"
+
+  subscription_display_name="$(${OC} get subscription -n "${subscription_namespace}" -o name | cut -d '/' -f 2)" || :
+  
+  [[ -n "${subscription_display_name}" ]] || subscription_display_name="${operator_name}-subscription" # without ${operator_channel}
 
   TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
 
