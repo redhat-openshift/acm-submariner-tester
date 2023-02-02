@@ -1311,7 +1311,7 @@ function force_delete_namespace() {
   TITLE "Deleting all common resources in namespace '${ns_name}' from cluster $cluster_name"
 
   local obj_list
-  obj_list=$($OC get all -n test-submariner -o name)
+  obj_list=$($OC get all,olm -n "${ns_name}" -o name)
 
   for ns_obj in $obj_list ; do
     echo -e "\n# Deleting the namespaced resource: $ns_obj"
