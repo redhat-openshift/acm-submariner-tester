@@ -38,11 +38,11 @@ function export_LATEST_IIB_NVR() {
   fi
 
   # cvp_issuer="exd-cpaas-bot-prod"
-  fetch_datagrepper "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "exd-cpaas-bot-prod" "${contra_output}"
+  fetch_datagrepper "${contra_output}" "${bundle_name}" "${operator_version}" "30" "${cvp_component}" # "exd-cpaas-bot-prod"
   contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
   # cvp_issuer="freshmaker"
-  fetch_datagrepper "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "freshmaker" "${freshmaker_output}"
+  fetch_datagrepper "${freshmaker_output}" "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "freshmaker"
   freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
   if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
@@ -52,11 +52,11 @@ function export_LATEST_IIB_NVR() {
     BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
     
     # cvp_issuer="exd-cpaas-bot-prod"
-    fetch_datagrepper "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "exd-cpaas-bot-prod" "${contra_output}"
+    fetch_datagrepper "${contra_output}" "${bundle_name}" "${operator_version}" "100" "${cvp_component}" # "exd-cpaas-bot-prod"
     contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
     # cvp_issuer="freshmaker"
-    fetch_datagrepper "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "freshmaker" "${freshmaker_output}"
+    fetch_datagrepper "${freshmaker_output}" "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "freshmaker"
     freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
   fi
@@ -131,12 +131,12 @@ function export_LATEST_IIB_NVR() {
 function fetch_datagrepper() {
   # trap_to_debug_commands;
 
-  local bundle_name="${1}"
-  local version="${2}"
-  local num_of_days="${3}"
-  local cvp_component="${4}"
-  local cvp_issuer="${5}"
-  local umb_output_file="${6}"
+  local umb_output_file="${1}"
+  local bundle_name="${2}"
+  local version="${3}"
+  local num_of_days="${4}"
+  local cvp_component="${5}"
+  local cvp_issuer="${6}"
 
   # Datagrepper keeps build info at most eight months into the past (i.e. 240 days)
   (( num_of_days < 240 )) || num_of_days=240
@@ -166,7 +166,7 @@ function fetch_datagrepper() {
   local index_images
 
   iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
-  and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
+  and .artifact.component=="'$cvp_component'"'${cvp_issuer:+ and .artifact.issuer==\"$cvp_issuer\"}')
   | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
 
   echo -e "\n# Filtering IIB: jq -r '${iib_query}' ${umb_output_file}"
