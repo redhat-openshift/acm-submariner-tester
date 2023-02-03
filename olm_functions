@@ -414,8 +414,11 @@ function create_subscription() {
 
   # Catalog source name
   local catalog_source="${3:-${operator_name}-${operator_channel}-catalog}"
-  # To set a specific version of an Operator CSV with a Manual subscription (prevent automatic updates for newer versions in the channel):
+  
+  # To set a specific version of an Operator CSV with a Manual subscription 
+  # (It will prevent automatic updates for newer versions in the channel).
   local operator_version="$4"
+
   # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
   local operator_namespace="$5"
 
@@ -473,11 +476,8 @@ EOF
   # Set catalog source name (replace non letters or numbers with "-", which is required for its metadata.name)
   catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
 
-  echo -e "\n# Get subscription display name from existing '${subscription_namespace}', or create new if none exists"
-
-  subscription_display_name="$(${OC} get subscription -n "${subscription_namespace}" -o name | cut -d '/' -f 2)" || :
-  
-  [[ -n "${subscription_display_name}" ]] || subscription_display_name="${operator_name}-subscription" # without ${operator_channel}
+  # Set subscription display name
+  subscription_display_name="${operator_name}-subscription" # without ${operator_channel}
 
   TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
 

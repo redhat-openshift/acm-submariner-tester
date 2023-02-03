@@ -484,7 +484,7 @@ function create_mce_subscription() {
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
+  PROMPT "Create new Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
 
   local mce_channel
   mce_channel="$(generate_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
@@ -492,11 +492,11 @@ function create_mce_subscription() {
   local mce_catalog
   mce_catalog="$(generate_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
-  # Create Automatic Subscription (channel without a specific version) for MCE operator
-  create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
+  # Skip creating Automatic Subscription (channel without a specific version) for MCE operator
+  # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
 
-  # # Create Manual Subscription with a specific version for MCE operator
-  # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
+  # Create Manual Subscription with a specific version for MCE operator
+  create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
 
   echo -e "\n# MCE Subscription for ${MCE_OPERATOR} is ready"
 
@@ -526,21 +526,22 @@ function create_acm_subscription() {
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
-  # Create Automatic Subscription (for new install), or Manual subscription (if upgrading)
+  # Create Subscription (with Automatic or Manual install plan)
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     if [[ -z "$acm_current_version" ]] ; then
-      TITLE "ACM is not installed on current cluster ${cluster_name} - Creating Automatic Subscription for ACM $acm_version"
-
-      # Create Automatic Subscription (channel without a specific version) for ACM operator
-      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "" "${ACM_NAMESPACE}"
+      TITLE "ACM is not installed on current cluster ${cluster_name}" # Skip Creating Automatic Subscription for ACM $acm_version"
+      # # Create Automatic Subscription (channel without a specific version) for ACM operator
+      # create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "" "${ACM_NAMESPACE}"
 
     else
-      TITLE "ACM $acm_current_version is already installed on current cluster ${cluster_name} - Changing to Manual Subscription for ACM $acm_version"
-
-      # Create Manual Subscription with a specific version for ACM operator
-      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
+      TITLE "ACM $acm_current_version is already installed on current cluster ${cluster_name}" # Changing to Manual Subscription for ACM $acm_version"
+      # # Create Manual Subscription with a specific version for ACM operator
+      # create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
     fi
+
+    # Create Manual Subscription with a specific version for ACM operator
+    create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
 
     echo -e "\n# ACM Subscription for ${ACM_OPERATOR} is ready"
 
