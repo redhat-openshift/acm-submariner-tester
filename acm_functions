@@ -342,7 +342,8 @@ function install_mce_operator_on_hub() {
     # Deploy MCE operator as an OCP bundle
     mce_version="v${mce_version}" # e.g. v2.2.0-231
 
-    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${MCE_NAMESPACE}" "${mce_catalog}" "${mce_channel}"
+    
     echo -e "\n# MCE $mce_version installation completed"
 
   else
@@ -396,7 +397,8 @@ function install_acm_operator_on_hub() {
     Channel: ${acm_channel}
     "
 
-    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${ACM_NAMESPACE}"
+    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${ACM_NAMESPACE}" "${acm_catalog}" "${acm_channel}"
+
     echo -e "\n# ACM $acm_version installation completed"
 
   else
@@ -637,9 +639,6 @@ function create_acm_multiclusterhub() {
 
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
 
-  local existing_mce_catalog
-  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | awk -F '/' 'NR==1 {print $2}')" || :
-
   cat <<EOF | ${OC} apply -f - || acm_status=FAILED
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
@@ -655,6 +654,10 @@ EOF
   "Annotate MultiClusterHub to point to MCE catalog-source" \
   "https://issues.redhat.com/browse/ACM-2347"
   # Workaround:
+
+  local existing_mce_catalog
+  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | grep "${MCE_OPERATOR}" | awk -F '/' 'NR==1 {print $2}')" || :
+
   local mce_annotation="{\"source\": \"${existing_mce_catalog}\", \"sourceNamespace\": \"${MCE_NAMESPACE}\"}"
   ${OC} annotate MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
   installer.open-cluster-management.io/mce-subscription-spec="${mce_annotation}" || :
@@ -1031,7 +1034,7 @@ function install_submariner_operator_on_cluster() {
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   # Deploy Submariner operator as an OCP bundle
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${subscription_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_NAMESPACE}" "${submariner_catalog}" "${subscription_channel}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
 
 }

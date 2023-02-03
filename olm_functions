@@ -209,43 +209,29 @@ function deploy_ocp_bundle() {
   local bundle_name="$1"
   local operator_version="$2"
   local operator_name="$3"
-  local operator_channel="$4"
+  local bundle_namespace="$4"
 
   # Optional input args:
-  local catalog_source="${5:-${operator_name}-${operator_channel}-catalog}"
-  local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
-  local cvp_component="${7:-$CVP_COMPONENT}"
-  local cvp_issuer="${8:-$CVP_ISSUER}" # e.g. "exd-cpaas-bot-prod" or "freshmaker"
+  local catalog_source="$5" # "{6:-${operator_name}-${operator_channel}-catalog}"
+  local operator_channel="$6"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  # If no bundle namespece was specified, used the global marketplace
+  bundle_namespace="${bundle_namespace:-$MARKETPLACE_NAMESPACE}"
+
   # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
-  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}" || :
 
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name}' in cluster ${cluster_name}
   Bundle Name: ${bundle_name}
   Operator Version: ${operator_version}
   Operator Name: ${operator_name}
-  Channel: ${operator_channel}
-  Catalog Source: ${catalog_source}
   Bundle Namespace: ${bundle_namespace}
-  CVP Component: ${cvp_component}
-  CVP Component: ${cvp_issuer}
+  Catalog Source: ${catalog_source}
+  Channel: ${operator_channel}
   "
-
-  if [[ -z "${bundle_name}" ]] ||
-     [[ -z "${operator_version}" ]] ||
-     [[ -z "${operator_name}" ]] ||
-     [[ -z "${operator_channel}" ]] ||
-     [[ -z "${catalog_source}" ]] ; then
-       FATAL "Required parameters for the Bundle installation are missing:
-       Bundle Name: ${bundle_name}
-       Operator Version: ${operator_version}
-       Operator Name: ${operator_name}
-       Channel: ${operator_channel}
-       Catalog Source: ${catalog_source}"
-  fi
 
   # login to current kubeconfig cluster should've already be called before
   # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
@@ -260,7 +246,7 @@ function deploy_ocp_bundle() {
   # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo -e "\n# Set and export the variable \$LATEST_IIB"
-  export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
+  export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" # "${cvp_component}" "${cvp_issuer}"
 
   if [[ -z "$LATEST_IIB" || "$LATEST_IIB" == "null" ]] ; then
     FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
@@ -292,14 +278,16 @@ function deploy_ocp_bundle() {
 
   watch_and_retry "$cmd" 3m "Image Name:\s+${bundle_image_name}"
 
-  TITLE "Delete previous catalogSource and its pod (if exist)"
-  ${OC} delete catalogsource "${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
+  if [[ -n "${catalog_source}" ]] ; then
+    
+    # TITLE "Delete previous catalogSource and its pod (if exist)"
+    # ${OC} delete catalogsource "${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  ${OC} delete pod -l "olm.catalogSource=${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
+    # ${OC} delete pod -l "olm.catalogSource=${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
+    TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  local catalog_display_name="${bundle_name}-${operator_channel} Catalog Source"
+    local catalog_display_name="${bundle_name} Catalog Source" # Without ${operator_channel} in name
 
     cat <<EOF | ${OC} apply -n "${bundle_namespace}" -f -
     apiVersion: operators.coreos.com/v1alpha1
@@ -317,33 +305,35 @@ function deploy_ocp_bundle() {
           interval: 5m
 EOF
 
-  echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
+    echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
-  cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 15m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
+    cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
+    watch_and_retry "$cmd" 15m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
-  ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
+    ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}' in cluster ${cluster_name}:
-  Catalog: ${catalog_display_name}
-  Operator: ${operator_name}
-  Channel: ${operator_channel}
-  Version: ${operator_version}
-  "
+    TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}' in cluster ${cluster_name}:
+    Catalog: ${catalog_display_name}
+    Operator: ${operator_name}
+    Channel: ${operator_channel}
+    Version: ${operator_version}
+    "
 
-  local packagemanifests_status
+    local packagemanifests_status
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace}"
-  regex="${catalog_display_name}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace}"
+    regex="${catalog_display_name}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
-  regex="${operator_channel}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
+    regex="${operator_channel}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  regex="${operator_version//[a-zA-Z]}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+    regex="${operator_version//[a-zA-Z]}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+
+  fi
 
   TITLE "Verify all pods are running/completed in the Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 

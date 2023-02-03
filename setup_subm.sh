@@ -974,7 +974,8 @@ cat "$SYS_LOG"
 
     ${JUNIT_CMD} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_mce_subscription "$MCE_VER_TAG"
+    # Skip MCE Subscription, as ACM should take care of it
+    # [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_mce_subscription "$MCE_VER_TAG"
 
     ${JUNIT_CMD} create_acm_subscription "$ACM_VER_TAG"
 
