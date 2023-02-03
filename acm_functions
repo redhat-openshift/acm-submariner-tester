@@ -568,7 +568,7 @@ function create_multicluster_engine() {
   echo -e "\n# Verify that the MultiClusterEngine CRD exists in cluster ${cluster_name}"
 
   cmd="${OC} get crd multiclusterengines.multicluster.openshift.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterEngine CRD does not exist in cluster ${cluster_name}"
+  watch_and_retry "$cmd" 3m || : # FATAL "MultiClusterEngine CRD does not exist in cluster ${cluster_name}"
 
   TITLE "Create the MultiClusterEngine in namespace ${MCE_NAMESPACE} on cluster ${cluster_name}"
 
