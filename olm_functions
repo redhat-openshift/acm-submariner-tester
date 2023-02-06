@@ -142,12 +142,12 @@ function fetch_datagrepper() {
   (( num_of_days < 240 )) || num_of_days=240
 
   TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat)
+  Output file: ${umb_output_file}
   Bundle: ${bundle_name}
   Version: ${version}
   Delta by Days: ${num_of_days}
   CVP Component: ${cvp_component}
   CVP Issuer: ${cvp_issuer}
-  Output file: ${umb_output_file}
   "
 
   local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"

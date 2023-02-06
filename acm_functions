@@ -425,25 +425,33 @@ function find_acm_component_version_in_downstream() {
   local stolostron_commit_hash
   local stolostron_downstream_file
 
-  local acm_builds_info_url="https://github.com/stolostron/deploy/commits/master/mirror"
+  # ACM Stolstron recent commits: https://github.com/stolostron/deploy/commits/master/mirror"
+  local acm_builds_info_url="https://github.com/stolostron/deploy/search?o=desc&q=%22${acm_version}%22+%22downstream+mirror%22&s=committer-date&type=commits"
 
-  TITLE "Get the latest commit for the requested ACM version '$acm_version'
+  TITLE "Find build number of '${acm_component}' in the latest commit of ACM version '$acm_version'
   ACM builds information: $acm_builds_info_url
   ACM build date (optional): $stolostron_commit_date
   "
   
-  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
-  # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
-  
-  stolostron_commit_title="$(curl "${acm_builds_info_url}" \
-  | grep -E "href=\".* ${acm_version//./\\.}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+  # Filter all href links which includes the required version and commit date. For example:
+  # Added 2.7.0 downstream mirror mapping for 2023-01-26-20-15-10 : /stolostron/deploy/commit/2eb2756a18614865c50651f57e2ffeb1663e2f4c
 
-  stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
+  curl "${acm_builds_info_url}" | grep -Eo "href=\".*>${acm_version}.*<.*${stolostron_commit_date}.*" | \
+  sed -E 's#</?em>##g' | awk -F '"|=|>|<' '{print $7 $5 " : " $3}' | sort -k2,7 > "${component_version_file}"
 
-  stolostron_commit_hash="$(basename "${stolostron_commit_title%% *}")" || : # e.g. 78ee917f1303cb32dddc430db49a1bd0199ec6da
-  
-  # Update ACM version tag
-  ACM_VER_TAG="$(echo "$stolostron_commit_title" | awk '{print $3}')"
+  cat "${component_version_file}"
+
+  # Get latest ACM commit title
+  stolostron_commit_title="$(tail -1 "${component_version_file}")" || :
+
+  # Get full ACM commit date, e.g. 2023-01-26-20-15-10
+  stolostron_commit_date="$(echo "$stolostron_commit_title" | awk '{print $7}')" || :
+
+  # Get ACM commit hash, e.g. /stolostron/deploy/commit/2eb2756a18614865c50651f57e2ffeb1663e2f4c
+  stolostron_commit_hash="$(echo "$stolostron_commit_title" | awk -F '/' '{print $5}')" || :
+
+  # Get and export ACM version (global variable)
+  ACM_VER_TAG="$(echo "$stolostron_commit_title" | awk '{print $2}')"
   export ACM_VER_TAG
 
   stolostron_downstream_file="mirror/${ACM_VER_TAG}-DOWNSTREAM-${stolostron_commit_date}.txt" 
