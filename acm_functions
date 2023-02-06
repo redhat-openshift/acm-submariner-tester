@@ -274,7 +274,7 @@ function clean_acm_namespace_and_resources() {
 # ------------------------------------------
 
 function check_if_mce_is_required() {
-  ### Return 1 if MCE is NOT required to be installed before ACM 2.5 (MCE is not required if upgrading from ACM 2.4) ###
+  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.7 ###
 
   TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
 
@@ -284,14 +284,20 @@ function check_if_mce_is_required() {
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   if [[ -z "$acm_current_version" ]] ; then
-    echo -e "\n# ACM is not installed - If ACM requested version $ACM_VER_TAG < 2.5: return 1"
-    check_version_greater_or_equal "$ACM_VER_TAG" "2.5" || return 1
+    echo -e "\n# ACM is not installed"
   else
-    echo -e "\n# ACM is installed - If ACM current version $acm_current_version < 2.5: return 1"
-    check_version_greater_or_equal "$acm_current_version" "2.5" || return 1
+    echo -e "\n# ACM version $acm_current_version is currently installed"
   fi
 
-  echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
+  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.7:"
+
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" && \
+  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
+    echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
+  else
+    echo -e "\n# MCE $MCE_VER_TAG should NOT be pre-installed before ACM $ACM_VER_TAG"
+    return 1
+  fi
 
 }
 
@@ -433,10 +439,10 @@ function find_acm_component_version_in_downstream() {
   ACM build date (optional): $stolostron_commit_date
   "
   
-  # Filter all href links which includes the required version and commit date. For example:
+  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
   # Added 2.7.0 downstream mirror mapping for 2023-01-26-20-15-10 : /stolostron/deploy/commit/2eb2756a18614865c50651f57e2ffeb1663e2f4c
 
-  curl "${acm_builds_info_url}" | grep -Eo "href=\".*>${acm_version}.*<.*${stolostron_commit_date}.*" | \
+  curl "${acm_builds_info_url}" | grep -Eo "href=\".*>${acm_version//./\\.}.*<.*${stolostron_commit_date}.*" | \
   sed -E 's#</?em>##g' | awk -F '"|=|>|<' '{print $7 $5 " : " $3}' | sort -k2,7 > "${component_version_file}"
 
   cat "${component_version_file}"
