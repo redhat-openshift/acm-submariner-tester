@@ -274,7 +274,7 @@ function clean_acm_namespace_and_resources() {
 # ------------------------------------------
 
 function check_if_mce_is_required() {
-  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.7 ###
+  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.6 ###
 
   TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
 
@@ -289,10 +289,10 @@ function check_if_mce_is_required() {
     echo -e "\n# ACM version $acm_current_version is currently installed"
   fi
 
-  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.7:"
+  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.6:"
 
   if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" && \
-  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
+  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.6" ; then
     echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
   else
     echo -e "\n# MCE $MCE_VER_TAG should NOT be pre-installed before ACM $ACM_VER_TAG"
@@ -651,27 +651,34 @@ function create_acm_multiclusterhub() {
   cmd="${OC} get crd multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
 
+  echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded
+
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
 
+  local existing_mce_catalog
+  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | grep "${MCE_OPERATOR}" | awk -F '/' 'NR==1 {print $2}')" || :
+  
   cat <<EOF | ${OC} apply -f - || acm_status=FAILED
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
   metadata:
     name: ${ACM_INSTANCE}
     namespace: ${ACM_NAMESPACE}
-    annotations: {}
+    annotations: 
+      installer.open-cluster-management.io/mce-subscription-spec: '{"source": "${existing_mce_catalog}"}'
   spec:
     disableHubSelfManagement: true
+    imagePullSecret: multiclusterhub-operator-pull-secret
 EOF
 
+  echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded
+  
   BUG "${ACM_OPERATOR} deployment error: Found more than one catalogSource with expected channel" \
   "Annotate MultiClusterHub to point to MCE catalog-source" \
   "https://issues.redhat.com/browse/ACM-2347"
   # Workaround:
-
-  local existing_mce_catalog
-  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | grep "${MCE_OPERATOR}" | awk -F '/' 'NR==1 {print $2}')" || :
-
   local mce_annotation="{\"source\": \"${existing_mce_catalog}\", \"sourceNamespace\": \"${MCE_NAMESPACE}\"}"
   ${OC} annotate MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
   installer.open-cluster-management.io/mce-subscription-spec="${mce_annotation}" || :

@@ -968,7 +968,7 @@ cat "$SYS_LOG"
       export INSTALL_MCE=YES
     fi
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} install_mce_operator_on_hub "$MCE_VER_TAG"
+    ${JUNIT_CMD} install_mce_operator_on_hub "$MCE_VER_TAG"
 
     ${JUNIT_CMD} install_acm_operator_on_hub "$ACM_VER_TAG"
 
