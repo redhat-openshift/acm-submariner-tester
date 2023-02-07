@@ -427,55 +427,30 @@ function find_acm_component_version_in_downstream() {
   # Optional args:
   local stolostron_commit_date="$4" # downstream date to filter by (otherwise using the latest date found)
 
-  local stolostron_commit_title
-  local stolostron_commit_hash
   local stolostron_downstream_file
-
-  # ACM Stolstron recent commits: https://github.com/stolostron/deploy/commits/master/mirror"
-  local acm_builds_info_url="https://github.com/stolostron/deploy/search?o=desc&q=%22${acm_version}%22+%22downstream+mirror%22&s=committer-date&type=commits"
-
+  
   TITLE "Find build number of '${acm_component}' in the latest commit of ACM version '$acm_version'
-  ACM builds information: $acm_builds_info_url
+  ACM builds information: https://github.com/stolostron/deploy/commits/master/mirror
   ACM build date (optional): $stolostron_commit_date
   "
   
-  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
-  # Added 2.7.0 downstream mirror mapping for 2023-01-26-20-15-10 : /stolostron/deploy/commit/2eb2756a18614865c50651f57e2ffeb1663e2f4c
+  download_github_file_or_dir "stolostron" "deploy" "master" "mirror"
 
-  curl -L "${acm_builds_info_url}" | grep -Eo "href=\".*>${acm_version//./\\.}.*<.*${stolostron_commit_date}.*" | \
-  sed -E 's#</?em>##g' | awk -F '"|=|>|<' '{print $7 $5 " : " $3}' | sort -k2,7 > "${component_version_file}"
-
+  # The latest file for the requested ACM version, e.g. ./mirror/2.7.0-DOWNSTREAM-2023-01-26-20-15-10.txt
+  find ./mirror -wholename "./mirror/${acm_version}*${stolostron_commit_date}*" > "${component_version_file}"
   cat "${component_version_file}"
-
-  # Get latest ACM commit title
-  stolostron_commit_title="$(tail -1 "${component_version_file}")" || :
-
-  # Get full ACM commit date, e.g. 2023-01-26-20-15-10
-  stolostron_commit_date="$(echo "$stolostron_commit_title" | awk '{print $7}')" || :
-
-  # Get ACM commit hash, e.g. /stolostron/deploy/commit/2eb2756a18614865c50651f57e2ffeb1663e2f4c
-  stolostron_commit_hash="$(echo "$stolostron_commit_title" | awk -F '/' '{print $5}')" || :
+  stolostron_downstream_file="$(cat "${component_version_file}" | sort -k 2,1 | tail -1)"
 
   # Get and export ACM version (global variable)
-  ACM_VER_TAG="$(echo "$stolostron_commit_title" | awk '{print $2}')"
+  ACM_VER_TAG="$(echo "$stolostron_downstream_file" | awk -F '/|-' '{print $3}')"
   export ACM_VER_TAG
 
-  stolostron_downstream_file="mirror/${ACM_VER_TAG}-DOWNSTREAM-${stolostron_commit_date}.txt" 
-
-  TITLE "Download downstream file from https://github.com/stolostron, of the latest commit for ACM version '$ACM_VER_TAG':
-  Stolostron commit title: \n${stolostron_commit_title}
-  Stolostron commit hash: \n${stolostron_commit_hash}
-  Stolostron commit date: \n${stolostron_commit_date}
-  Stolostron downstream file: \n${stolostron_downstream_file}
-  "
-
-  download_github_file_or_dir "stolostron" "deploy" "${stolostron_commit_hash}" "${stolostron_downstream_file}"
-
-  TITLE "Find and save the full version number for ACM component '$acm_component'"
+  TITLE "Find the full version number for ACM '${ACM_VER_TAG}' component '${acm_component}' in file:
+  ${stolostron_downstream_file}"
 
   grep -Po "${acm_component}:v\K.*" "${stolostron_downstream_file}" > "$component_version_file"
 
-  echo -e "\n# $acm_component version stored in ${component_version_file}: $(< "${component_version_file}")"
+  echo -e "\n# ${acm_component} version stored in ${component_version_file}: $(< "${component_version_file}")"
 
 }
 
