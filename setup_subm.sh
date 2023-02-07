@@ -594,9 +594,7 @@ cat "$SYS_LOG"
   ${JUNIT_CMD} show_test_plan
 
   ### OCP Clusters preparations (unless requested to --skip-ocp-setup) ###
-
-  # if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-   
+  
   ### Cluster A Setup (mandatory cluster)
 
   # Running destroy or create or both (reset) for cluster A
@@ -829,7 +827,7 @@ cat "$SYS_LOG"
 
       # Cluster A configurations
 
-      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ || "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
        
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
@@ -845,7 +843,7 @@ cat "$SYS_LOG"
 
       # Cluster B configurations (plus custom configurations for OpenStack)
       
-      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ || "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
@@ -870,7 +868,7 @@ cat "$SYS_LOG"
 
       # Cluster C configurations
 
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ || "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
