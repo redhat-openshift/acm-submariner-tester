@@ -274,7 +274,7 @@ function clean_acm_namespace_and_resources() {
 # ------------------------------------------
 
 function check_if_mce_is_required() {
-  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.6 ###
+  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.7 ###
 
   TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
 
@@ -289,10 +289,10 @@ function check_if_mce_is_required() {
     echo -e "\n# ACM version $acm_current_version is currently installed"
   fi
 
-  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.6:"
+  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.7:"
 
   if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" && \
-  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.6" ; then
+  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
     echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
   else
     echo -e "\n# MCE $MCE_VER_TAG should NOT be pre-installed before ACM $ACM_VER_TAG"
@@ -634,17 +634,19 @@ function create_acm_multiclusterhub() {
   local existing_mce_catalog
   existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | grep "${MCE_OPERATOR}" | awk -F '/' 'NR==1 {print $2}')" || :
   
+  local existing_acm_secret
+  existing_acm_secret="$(${OC} get secrets -n "${ACM_NAMESPACE}" -o name | grep brew | awk -F '/' 'NR==1 {print $2}')"
+
   cat <<EOF | ${OC} apply -f - || acm_status=FAILED
   apiVersion: operator.open-cluster-management.io/v1
   kind: MultiClusterHub
   metadata:
     name: ${ACM_INSTANCE}
     namespace: ${ACM_NAMESPACE}
-    annotations: 
-      installer.open-cluster-management.io/mce-subscription-spec: '{"source": "${existing_mce_catalog}"}'
+    annotations: {}
   spec:
     disableHubSelfManagement: true
-    imagePullSecret: multiclusterhub-operator-pull-secret
+    imagePullSecret: ${existing_acm_secret}
 EOF
 
   echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
