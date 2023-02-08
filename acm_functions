@@ -489,11 +489,11 @@ function create_mce_subscription() {
   local mce_catalog
   mce_catalog="$(generate_catalog_name "${MCE_OPERATOR}" "${mce_channel}")"
 
-  # Skip creating Automatic Subscription (channel without a specific version) for MCE operator
-  # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
+  # Create Automatic Subscription (channel without a specific version) for MCE operator
+  create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
 
-  # Create Manual Subscription with a specific version for MCE operator
-  create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
+  # Do not create Manual Subscription with a specific version for MCE operator
+  # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
 
   echo -e "\n# MCE Subscription for ${MCE_OPERATOR} is ready"
 
