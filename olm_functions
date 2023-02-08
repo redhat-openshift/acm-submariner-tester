@@ -573,7 +573,13 @@ function get_csv_for_operator() {
   # Optional args:
   local subscription_namespace="${3:-default}"
 
-  local current_csv="$(${OC} get packagemanifests -n "${subscription_namespace}" "${operator_name}" -o json \
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+
+  # Trim version into major.minor (X.Y.Z ==> X.Y)
+  operator_version="$(echo "$operator_version" | grep -Po "$regex_to_major_minor")"
+
+  local current_csv
+  current_csv="$(${OC} get packagemanifests -n "${subscription_namespace}" "${operator_name}" -o json \
   | jq -r '(.status.channels[].currentCSV)' | awk -v version="${operator_version}" '$0 ~ version { print $1 }')"
 
   echo "${current_csv}"

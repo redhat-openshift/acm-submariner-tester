@@ -417,6 +417,7 @@ function install_acm_operator_on_hub() {
 
 function find_acm_component_version_in_downstream() {
   ### Get full image number for an ACM image found in https://github.com/stolostron/deploy ###
+  # The build number will be saved into $component_version_file. For example into mce.ver: 2.2.0-263
   trap_to_debug_commands;
 
   # Input args:
