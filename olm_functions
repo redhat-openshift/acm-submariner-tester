@@ -544,6 +544,8 @@ EOF
 
   ${OC} wait installplan --all -n "${subscription_namespace}" --for condition=Installed --timeout="$duration" || subscription_status=FAILED
 
+  ${OC} get installplan -n "${subscription_namespace}" -o wide
+
   local cmd="${OC} get installplan -n ${subscription_namespace} -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
 
   watch_and_retry "$cmd" "$duration" || subscription_status=FAILED

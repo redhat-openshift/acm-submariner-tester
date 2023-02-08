@@ -18,6 +18,8 @@ function remove_multicluster_engine() {
 
   PROMPT "Removing Multi Cluster Engine from cluster: $cluster_name"
 
+  ${OC} delete operator "${MCE_OPERATOR}.${MCE_NAMESPACE}" || :
+
   TITLE "Deleting Discovery CRDs"
 
   ${OC} delete crd discoveredclusters.discovery.open-cluster-management.io --ignore-not-found || :
@@ -174,7 +176,10 @@ function clean_acm_namespace_and_resources() {
   # "https://github.com/open-cluster-management/deploy/issues/218"
   # # Workaround:
 
+  ${OC} delete operator "${ACM_OPERATOR}.${ACM_NAMESPACE}" || :
+
   ${OC} project "$ACM_NAMESPACE"
+
   ${OC} delete managedcluster --all --timeout=3m || :
 
   ${OC} delete DiscoveryConfig --all --all-namespaces --timeout=3m || :
@@ -346,7 +351,7 @@ function install_mce_operator_on_hub() {
     "
 
     # Deploy MCE operator as an OCP bundle
-    mce_version="v${mce_version}" # e.g. v2.2.0-231
+    mce_version="v${mce_version}" # e.g. v2.2.0-263
 
     deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${MCE_NAMESPACE}" "${mce_catalog}" "${mce_channel}"
     
@@ -463,15 +468,15 @@ function create_mce_subscription() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local mce_version="${1:-$MCE_VER_TAG}" # e.g. v2.2.0
+  local mce_version="${1:-$MCE_VER_TAG}" # e.g. 2.2.0
 
   # Get MCE version from ACM downstream, if MCE version not specified
   if [[ -z "$mce_version" ]] ; then
     find_acm_component_version_in_downstream "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_BUILD_DATE}"
-    mce_version="$(< "${MCE_VERSION_FILE}")"
+    mce_version="$(< "${MCE_VERSION_FILE}")" # e.g. 2.2.0-263
   fi
   
-  mce_version="v${mce_version}" # e.g. v2.2.0
+  mce_version="v${mce_version}" # e.g. v2.2.0-263
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
