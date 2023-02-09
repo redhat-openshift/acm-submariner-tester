@@ -1720,25 +1720,32 @@ function wait_for_all_machines_ready() {
 
   local duration=${1:-20m} # Default is 20 minutes
 
+  TITLE "Status of all Machines:"
+  ${OC} get Machine -n openshift-machine-api -o wide || machines_status=DOWN
+
+  echo -e "\n# Wait up to $duration for all Machines in openshift-machine-api to have an instance:"
+  local cmd="${OC} wait --timeout=$duration Machine --all -n openshift-machine-api --for=condition=InstanceExists"
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
+
+  TITLE "Status of Machine Config Daemon and Pool:"
   echo -e "\n# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   local cmd="${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon"
-  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
 
+  ${OC} get machineconfigpool -o wide || machines_status=DOWN
+  
   echo -e "\n# Wait up to $duration for all Machines Config Pool to be updated:"
   cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
-  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
 
-  echo -e "\n# Status of Machine Config Pool:"
-  ${OC} get machineconfigpool -o wide || machines_status=DOWN
-
-  echo -e "\n# Status of Machine Config Operators:"
+  TITLE "Status of Machine Config Operators:"
   ${OC} get all -n openshift-machine-config-operator -o wide || machines_status=DOWN
 
-  echo -e "\n# Status of Daemon-Sets:"
+  TITLE "Status of Daemon-Sets:"
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
   if [[ "$machines_status" == DOWN ]] ; then
-    FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
+    FAILURE "Timeout exceeded while waiting for all Machine Configuration to be ready"
   fi
 
 }

@@ -1106,6 +1106,12 @@ cat "$SYS_LOG"
 
     ### Running High-level (System) tests of Submariner ###
 
+    ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_A}"
+
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_B}"
+
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_C}"
+
     # Testing the Submariner gateway disaster recovery just on the Broker cluster (using $KUBECONF_HUB)
 
     ${JUNIT_CMD} test_public_ip_on_gateway_node

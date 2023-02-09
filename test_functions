@@ -1071,6 +1071,24 @@ function test_cluster_status() {
 
 # ------------------------------------------
 
+function test_cluster_machines() {
+  # Verify that OCP cluster is up and healthy
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  PROMPT "Verify all Machine configurations in cluster $cluster_name"
+ 
+  wait_for_all_machines_ready
+  
+}
+
+# ------------------------------------------
+
 function add_elevated_user() {
   # Add new elevated user to OCP cluster
   # Refs: 
