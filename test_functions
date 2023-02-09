@@ -3000,6 +3000,9 @@ function add_acm_registry_mirror_to_ocp_node() {
     * ${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
           - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
           - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
+
+    * ${STAGING_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
+          - ${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
     "
   fi
 
@@ -3099,6 +3102,17 @@ function add_acm_registry_mirror_to_ocp_node() {
 
     [[registry.mirror]]
       location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+      insecure = false
+  
+  [[registry]]
+    prefix = ""
+    location = "${STAGING_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${VPN_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
       insecure = false
 EOF
 

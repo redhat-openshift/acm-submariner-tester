@@ -633,7 +633,7 @@ function create_acm_multiclusterhub() {
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
 
   echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
-  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded || :
 
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
 
@@ -656,7 +656,7 @@ function create_acm_multiclusterhub() {
 EOF
 
   echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
-  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded || :
   
   BUG "${ACM_OPERATOR} deployment error: Found more than one catalogSource with expected channel" \
   "Annotate MultiClusterHub to point to MCE catalog-source" \
