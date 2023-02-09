@@ -663,7 +663,7 @@ EOF
   "https://issues.redhat.com/browse/ACM-2347"
   # Workaround:
   local mce_annotation="{\"source\": \"${existing_mce_catalog}\", \"sourceNamespace\": \"${MCE_NAMESPACE}\"}"
-  ${OC} annotate MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
+  ${OC} annotate --overwrite MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
   installer.open-cluster-management.io/mce-subscription-spec="${mce_annotation}" || :
 
 
