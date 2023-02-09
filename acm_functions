@@ -178,13 +178,12 @@ function clean_acm_namespace_and_resources() {
 
   ${OC} delete operator "${ACM_OPERATOR}.${ACM_NAMESPACE}" || :
 
-  ${OC} project "$ACM_NAMESPACE"
+  ${OC} project "${ACM_NAMESPACE}"
 
   ${OC} delete managedcluster --all --timeout=3m || :
 
   ${OC} delete DiscoveryConfig --all --all-namespaces --timeout=3m || :
   ${OC} delete MultiClusterObservability --all --timeout=3m || :
-  ${OC} delete MultiClusterHub --all --timeout=3m || :
 
   # Show ACM resources
   ${OC} get MultiClusterHub -o yaml || :
@@ -204,7 +203,7 @@ function clean_acm_namespace_and_resources() {
   multiclusterengines.multicluster.openshift.io-v1-edit \
   multiclusterengines.multicluster.openshift.io-v1-view --timeout=3m || :
 
-  ${OC} delete configmap -n $ACM_NAMESPACE \
+  ${OC} delete configmap -n "${ACM_NAMESPACE}" \
   cert-manager-controller \
   cert-manager-cainjector-leader-election \
   cert-manager-cainjector-leader-election-core --timeout=3m || :
@@ -242,7 +241,6 @@ function clean_acm_namespace_and_resources() {
   multicluster-observability-operator \
   multiclusterengines.multicluster.openshift.io --timeout=3m || :
 
-
   TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM in cluster ${cluster_name}"
 
   delete_crds_by_name "open-cluster-management" || :
@@ -257,7 +255,6 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete subs --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete catalogsource --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete is --all -n "${ACM_NAMESPACE}" --timeout=30s || :
-  ${OC} delete "${ACM_INSTANCE}" --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete csv --all -n "${MCE_NAMESPACE}" --timeout=30s || :
   ${OC} delete csv --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete cm --all -n "${ACM_NAMESPACE}" --timeout=30s || :
@@ -271,6 +268,9 @@ function clean_acm_namespace_and_resources() {
   # # Workaround:
   # force_delete_namespace "${ACM_HUB_NS}" 1m || :
   # force_delete_namespace "${ACM_GS_NS}" 1m || :
+
+  ${OC} delete MultiClusterHub --all --timeout=3m || \
+  ${OC} patch -n "${ACM_NAMESPACE}" MultiClusterHub "${ACM_INSTANCE}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
 
   force_delete_namespace "${ACM_NAMESPACE}" 1m || :
 

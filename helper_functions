@@ -1315,16 +1315,21 @@ function force_delete_namespace() {
 
   for ns_obj in $obj_list ; do
     echo -e "\n# Deleting the namespaced resource: $ns_obj"
-    ${OC} delete -n "$ns_name" --timeout="$delete_timeout" "$ns_obj" || \
+    ${OC} delete -n "$ns_name" --timeout=30s "$ns_obj" || \
     ${OC} patch -n "$ns_name" "$ns_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
   done
 
   TITLE "Deleting all other resources associated with namespace '${ns_name}' from cluster $cluster_name"
 
   ${OC} api-resources --verbs=list --namespaced -o name | grep -v "packagemanifest" | xargs -i -n 1 sh -c \
-  "echo -e \"\n### {} ###\n\" ;\
-  ${OC} get {} -o name --show-kind --ignore-not-found -n $ns_name \
-  | xargs -r ${OC} delete -n $ns_name --timeout=30s" || :
+  'rs_type="{}" ;\
+  OC='"${OC}"' ;\
+  echo -e "\n### $rs_type ###\n" ;\
+  rs_list=$(${OC} get $rs_type -o name --show-kind --ignore-not-found -n '"${ns_name}"') ;\
+  for ns_obj in $rs_list ; do
+    ${OC} delete -n $ns_name --timeout=5s --ignore-not-found $ns_obj || \
+    ${OC} patch -n $ns_name $ns_obj -p "{\"metadata\":{\"finalizers\":[]}}" --type=merge ;\
+  done' || :
 
   TITLE "Deleting whole namespace ${ns_name} from cluster $cluster_name"
 
