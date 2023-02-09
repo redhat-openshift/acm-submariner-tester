@@ -1506,7 +1506,7 @@ if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
   cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}.bak" || :
   cp -f "${CLUSTER_C_DIR}/metadata.json" "${OUTPUT_DIR}/metadata_${CLUSTER_C_NAME}.json" || :
 
   find "${CLUSTER_C_DIR}" -type f -iname "*.log" -exec \
