@@ -3533,7 +3533,7 @@ function export_variable_name_of_active_gateway_pod() {
   cat "$gateways_output"
 
   local gw_id
-  gw_id="$(grep "$active_gateway_node" "$gateways_output" | cut -d ' ' -f 1)"
+  gw_id="$(grep -m 1 "$active_gateway_node" "$gateways_output" | cut -d ' ' -f 1)"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
   highlight "${gw_id}" "$gateways_output"
