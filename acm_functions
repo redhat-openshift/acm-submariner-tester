@@ -18,6 +18,8 @@ function remove_multicluster_engine() {
 
   PROMPT "Removing Multi Cluster Engine from cluster: $cluster_name"
 
+  ${OC} delete operator "${MCE_OPERATOR}.${MCE_NAMESPACE}" || :
+
   TITLE "Deleting Discovery CRDs"
 
   ${OC} delete crd discoveredclusters.discovery.open-cluster-management.io --ignore-not-found || :
@@ -174,12 +176,14 @@ function clean_acm_namespace_and_resources() {
   # "https://github.com/open-cluster-management/deploy/issues/218"
   # # Workaround:
 
-  ${OC} project "$ACM_NAMESPACE"
+  ${OC} delete operator "${ACM_OPERATOR}.${ACM_NAMESPACE}" || :
+
+  ${OC} project "${ACM_NAMESPACE}"
+
   ${OC} delete managedcluster --all --timeout=3m || :
 
   ${OC} delete DiscoveryConfig --all --all-namespaces --timeout=3m || :
   ${OC} delete MultiClusterObservability --all --timeout=3m || :
-  ${OC} delete MultiClusterHub --all --timeout=3m || :
 
   # Show ACM resources
   ${OC} get MultiClusterHub -o yaml || :
@@ -199,7 +203,7 @@ function clean_acm_namespace_and_resources() {
   multiclusterengines.multicluster.openshift.io-v1-edit \
   multiclusterengines.multicluster.openshift.io-v1-view --timeout=3m || :
 
-  ${OC} delete configmap -n $ACM_NAMESPACE \
+  ${OC} delete configmap -n "${ACM_NAMESPACE}" \
   cert-manager-controller \
   cert-manager-cainjector-leader-election \
   cert-manager-cainjector-leader-election-core --timeout=3m || :
@@ -237,7 +241,6 @@ function clean_acm_namespace_and_resources() {
   multicluster-observability-operator \
   multiclusterengines.multicluster.openshift.io --timeout=3m || :
 
-
   TITLE "Delete global CRDs, Managed Clusters, and Validation Webhooks of ACM in cluster ${cluster_name}"
 
   delete_crds_by_name "open-cluster-management" || :
@@ -252,7 +255,6 @@ function clean_acm_namespace_and_resources() {
   ${OC} delete subs --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete catalogsource --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete is --all -n "${ACM_NAMESPACE}" --timeout=30s || :
-  ${OC} delete "${ACM_INSTANCE}" --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete csv --all -n "${MCE_NAMESPACE}" --timeout=30s || :
   ${OC} delete csv --all -n "${ACM_NAMESPACE}" --timeout=30s || :
   ${OC} delete cm --all -n "${ACM_NAMESPACE}" --timeout=30s || :
@@ -267,6 +269,9 @@ function clean_acm_namespace_and_resources() {
   # force_delete_namespace "${ACM_HUB_NS}" 1m || :
   # force_delete_namespace "${ACM_GS_NS}" 1m || :
 
+  ${OC} delete MultiClusterHub --all --timeout=3m || \
+  ${OC} patch -n "${ACM_NAMESPACE}" MultiClusterHub "${ACM_INSTANCE}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+
   force_delete_namespace "${ACM_NAMESPACE}" 1m || :
 
 }
@@ -274,7 +279,7 @@ function clean_acm_namespace_and_resources() {
 # ------------------------------------------
 
 function check_if_mce_is_required() {
-  ### Return 1 if MCE is NOT required to be installed before ACM 2.5 (MCE is not required if upgrading from ACM 2.4) ###
+  ### Return 1 if MCE is NOT required to be installed : Before ACM 2.5 or after ACM 2.7 ###
 
   TITLE "Check if MCE $MCE_VER_TAG is required to be installed before ACM $ACM_VER_TAG"
 
@@ -284,14 +289,20 @@ function check_if_mce_is_required() {
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
   if [[ -z "$acm_current_version" ]] ; then
-    echo -e "\n# ACM is not installed - If ACM requested version $ACM_VER_TAG < 2.5: return 1"
-    check_version_greater_or_equal "$ACM_VER_TAG" "2.5" || return 1
+    echo -e "\n# ACM is not installed"
   else
-    echo -e "\n# ACM is installed - If ACM current version $acm_current_version < 2.5: return 1"
-    check_version_greater_or_equal "$acm_current_version" "2.5" || return 1
+    echo -e "\n# ACM version $acm_current_version is currently installed"
   fi
 
-  echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
+  echo -e "\n# Check if ACM requested version '$ACM_VER_TAG' < 2.5, OR '$ACM_VER_TAG' > 2.7:"
+
+  if check_version_greater_or_equal "$ACM_VER_TAG" "2.5" && \
+  ! check_version_greater_or_equal "$ACM_VER_TAG" "2.7" ; then
+    echo -e "\n# MCE $MCE_VER_TAG should be installed prior to ACM $ACM_VER_TAG"
+  else
+    echo -e "\n# MCE $MCE_VER_TAG should NOT be pre-installed before ACM $ACM_VER_TAG"
+    return 1
+  fi
 
 }
 
@@ -340,9 +351,10 @@ function install_mce_operator_on_hub() {
     "
 
     # Deploy MCE operator as an OCP bundle
-    mce_version="v${mce_version}" # e.g. v2.2.0-231
+    mce_version="v${mce_version}" # e.g. v2.2.0-263
 
-    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${MCE_NAMESPACE}"
+    deploy_ocp_bundle "${MCE_BUNDLE}" "${mce_version}" "${MCE_OPERATOR}" "${MCE_NAMESPACE}" "${mce_catalog}" "${mce_channel}"
+    
     echo -e "\n# MCE $mce_version installation completed"
 
   else
@@ -396,7 +408,8 @@ function install_acm_operator_on_hub() {
     Channel: ${acm_channel}
     "
 
-    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${ACM_NAMESPACE}"
+    deploy_ocp_bundle "${ACM_BUNDLE}" "${acm_version}" "${ACM_OPERATOR}" "${ACM_NAMESPACE}" "${acm_catalog}" "${acm_channel}"
+
     echo -e "\n# ACM $acm_version installation completed"
 
   else
@@ -409,6 +422,7 @@ function install_acm_operator_on_hub() {
 
 function find_acm_component_version_in_downstream() {
   ### Get full image number for an ACM image found in https://github.com/stolostron/deploy ###
+  # The build number will be saved into $component_version_file. For example into mce.ver: 2.2.0-263
   trap_to_debug_commands;
 
   # Input args:
@@ -419,42 +433,30 @@ function find_acm_component_version_in_downstream() {
   # Optional args:
   local stolostron_commit_date="$4" # downstream date to filter by (otherwise using the latest date found)
 
-  local stolostron_commit_title
-  local stolostron_commit_hash
   local stolostron_downstream_file
-
-  TITLE "Get the latest commit for the requested ACM version '$acm_version', with an optional date [$stolostron_commit_date]"
   
-  # Filter all href links which includes the required version (escaping dots) and commit date. For example:
-  # /stolostron/deploy/commit/78ee917f1303cb32dddc430db49a1bd0199ec6da Added 2.7.0 downstream mirror mapping for 2022-12-05-13-38-35
+  TITLE "Find build number of '${acm_component}' in the latest commit of ACM version '$acm_version'
+  ACM builds information: https://github.com/stolostron/deploy/commits/master/mirror
+  ACM build date (optional): $stolostron_commit_date
+  "
   
-  stolostron_commit_title="$(curl "https://github.com/stolostron/deploy/commits/master/mirror" \
-  | grep -E "href=\".* ${acm_version//./\\.}.*${stolostron_commit_date}" | awk -F '"|=|>|<' '{print $7 " " $9}' | sort -k2,8 | tail -1)" || :
+  download_github_file_or_dir "stolostron" "deploy" "master" "mirror"
 
-  stolostron_commit_date="${stolostron_commit_title##* }" || : # e.g. 2022-12-05-13-38-35
+  # The latest file for the requested ACM version, e.g. ./mirror/2.7.0-DOWNSTREAM-2023-01-26-20-15-10.txt
+  find ./mirror -wholename "./mirror/${acm_version}*${stolostron_commit_date}*" > "${component_version_file}"
+  cat "${component_version_file}"
+  stolostron_downstream_file="$(cat "${component_version_file}" | sort -k 2,1 | tail -1)"
 
-  stolostron_commit_hash="$(basename "${stolostron_commit_title%% *}")" || : # e.g. 78ee917f1303cb32dddc430db49a1bd0199ec6da
-  
-  # Update ACM version tag
-  ACM_VER_TAG="$(echo "$stolostron_commit_title" | awk '{print $3}')"
+  # Get and export ACM version (global variable)
+  ACM_VER_TAG="$(echo "$stolostron_downstream_file" | awk -F '/|-' '{print $3}')"
   export ACM_VER_TAG
 
-  stolostron_downstream_file="mirror/${ACM_VER_TAG}-DOWNSTREAM-${stolostron_commit_date}.txt" 
-
-  TITLE "Download downstream file from https://github.com/stolostron, of the latest commit for ACM version '$ACM_VER_TAG':
-  Stolostron commit title: \n${stolostron_commit_title}
-  Stolostron commit hash: \n${stolostron_commit_hash}
-  Stolostron commit date: \n${stolostron_commit_date}
-  Stolostron downstream file: \n${stolostron_downstream_file}
-  "
-
-  download_github_file_or_dir "stolostron" "deploy" "${stolostron_commit_hash}" "${stolostron_downstream_file}"
-
-  TITLE "Find and save the full version number for ACM component '$acm_component'"
+  TITLE "Find the full version number for ACM '${ACM_VER_TAG}' component '${acm_component}' in file:
+  ${stolostron_downstream_file}"
 
   grep -Po "${acm_component}:v\K.*" "${stolostron_downstream_file}" > "$component_version_file"
 
-  echo -e "\n# $acm_component version stored in ${component_version_file}: $(< "${component_version_file}")"
+  echo -e "\n# ${acm_component} version stored in ${component_version_file}: $(< "${component_version_file}")"
 
 }
 
@@ -466,20 +468,20 @@ function create_mce_subscription() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local mce_version="${1:-$MCE_VER_TAG}" # e.g. v2.2.0
+  local mce_version="${1:-$MCE_VER_TAG}" # e.g. 2.2.0
 
   # Get MCE version from ACM downstream, if MCE version not specified
   if [[ -z "$mce_version" ]] ; then
     find_acm_component_version_in_downstream "${MCE_BUNDLE_IMAGE}" "${ACM_VER_TAG}" "${MCE_VERSION_FILE}" "${ACM_BUILD_DATE}"
-    mce_version="$(< "${MCE_VERSION_FILE}")"
+    mce_version="$(< "${MCE_VERSION_FILE}")" # e.g. 2.2.0-263
   fi
   
-  mce_version="v${mce_version}" # e.g. v2.2.0
+  mce_version="v${mce_version}" # e.g. v2.2.0-263
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  PROMPT "Create Automatic Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
+  PROMPT "Create new Subscription for ${MCE_OPERATOR} in cluster ${cluster_name}"
 
   local mce_channel
   mce_channel="$(generate_channel_name "${MCE_CHANNEL_PREFIX}" "$mce_version")"
@@ -490,7 +492,7 @@ function create_mce_subscription() {
   # Create Automatic Subscription (channel without a specific version) for MCE operator
   create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "" "${MCE_NAMESPACE}"
 
-  # # Create Manual Subscription with a specific version for MCE operator
+  # Do not create Manual Subscription with a specific version for MCE operator
   # create_subscription "${MCE_OPERATOR}" "${mce_channel}" "${mce_catalog}" "${mce_version}" "${MCE_NAMESPACE}"
 
   echo -e "\n# MCE Subscription for ${MCE_OPERATOR} is ready"
@@ -505,7 +507,7 @@ function create_acm_subscription() {
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
-  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.5.0
+  local acm_version="v${1:-$ACM_VER_TAG}" # e.g. v2.7.0
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
@@ -521,21 +523,22 @@ function create_acm_subscription() {
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}' 2>/dev/null)" || :
 
-  # Create Automatic Subscription (for new install), or Manual subscription (if upgrading)
+  # Create Subscription (with Automatic or Manual install plan)
   if [[ "$acm_version" != "$acm_current_version" ]] ; then
 
     if [[ -z "$acm_current_version" ]] ; then
-      TITLE "ACM is not installed on current cluster ${cluster_name} - Creating Automatic Subscription for ACM $acm_version"
-
-      # Create Automatic Subscription (channel without a specific version) for ACM operator
-      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "" "${ACM_NAMESPACE}"
+      TITLE "ACM is not installed on current cluster ${cluster_name}" # Skip Creating Automatic Subscription for ACM $acm_version"
+      # # Create Automatic Subscription (channel without a specific version) for ACM operator
+      # create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "" "${ACM_NAMESPACE}"
 
     else
-      TITLE "ACM $acm_current_version is already installed on current cluster ${cluster_name} - Changing to Manual Subscription for ACM $acm_version"
-
-      # Create Manual Subscription with a specific version for ACM operator
-      create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
+      TITLE "ACM $acm_current_version is already installed on current cluster ${cluster_name}" # Changing to Manual Subscription for ACM $acm_version"
+      # # Create Manual Subscription with a specific version for ACM operator
+      # create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
     fi
+
+    # Create Manual Subscription with a specific version for ACM operator
+    create_subscription "${ACM_OPERATOR}" "${acm_channel}" "${acm_catalog}" "${acm_version}" "${ACM_NAMESPACE}"
 
     echo -e "\n# ACM Subscription for ${ACM_OPERATOR} is ready"
 
@@ -551,6 +554,8 @@ function create_multicluster_engine() {
   ### Create MCE instance ###
   trap_to_debug_commands;
 
+  local mce_version="${1:-$MCE_VER_TAG}" # e.g. 2.2.0
+
   export KUBECONFIG="${KUBECONF_HUB}"
 
   local cluster_name
@@ -561,7 +566,7 @@ function create_multicluster_engine() {
   echo -e "\n# Verify that the MultiClusterEngine CRD exists in cluster ${cluster_name}"
 
   cmd="${OC} get crd multiclusterengines.multicluster.openshift.io"
-  watch_and_retry "$cmd" 5m || FATAL "MultiClusterEngine CRD does not exist in cluster ${cluster_name}"
+  watch_and_retry "$cmd" 3m || : # FATAL "MultiClusterEngine CRD does not exist in cluster ${cluster_name}"
 
   TITLE "Create the MultiClusterEngine in namespace ${MCE_NAMESPACE} on cluster ${cluster_name}"
 
@@ -582,6 +587,14 @@ EOF
   TITLE "All MultiClusterEngine resources status:"
   ${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status' || :
 
+  [[ -n "$mce_version" ]] || mce_version="$(< "${MCE_VERSION_FILE}")"
+  mce_version="${mce_version%%-*}" # Remove version build number after "-"
+
+  TITLE "Verify requested MCE version '${mce_version}' appears in MultiClusterEngine" 
+
+  cmd="${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status.currentVersion'"
+  watch_and_retry "$cmd" "$duration" "$mce_version" || acm_status=FAILED
+
   if [[ "$mce_status" == FAILED ]] ; then
     TITLE "Check Operator deployment logs of '${MCE_OPERATOR}' in cluster ${cluster_name}"
 
@@ -589,13 +602,13 @@ EOF
     --all-containers --tail=100 --timestamps \
     |& (! highlight '^E0|"error"|level=error|Error') || :
 
-    FATAL "MultiClusterEngine is not ready after $duration"
+    FATAL "MultiClusterEngine version '${mce_version}' is not ready after $duration"
   fi
 
   local mce_current_version
-  mce_current_version="$(${OC} get MultiClusterEngine -n "${MCE_NAMESPACE}" "${MCE_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
+  mce_current_version="$(${OC} get MultiClusterEngine -A -o json | jq -r '.items[].status.currentVersion')" || :
 
-  TITLE "MultiClusterEngine version [${acm_current_version}] is installed" 
+  echo -e "\n# MultiClusterEngine version [${acm_current_version}] is installed" 
 
 }
 
@@ -604,6 +617,8 @@ EOF
 function create_acm_multiclusterhub() {
   ### Create ACM MultiClusterHub instance ###
   trap_to_debug_commands;
+
+  local acm_version="${1:-$ACM_VER_TAG}" # e.g. 2.7.0
 
   export KUBECONFIG="${KUBECONF_HUB}"
 
@@ -617,10 +632,16 @@ function create_acm_multiclusterhub() {
   cmd="${OC} get crd multiclusterhubs.operator.open-cluster-management.io"
   watch_and_retry "$cmd" 5m || FATAL "MultiClusterHub CRD does not exist in cluster ${cluster_name}"
 
+  echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded || :
+
   TITLE "Create the MultiClusterHub in namespace ${ACM_NAMESPACE} on cluster ${cluster_name}"
 
   local existing_mce_catalog
-  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | awk -F '/' 'NR==1 {print $2}')" || :
+  existing_mce_catalog="$(${OC} get catalogsource -n "${MCE_NAMESPACE}" -o name | grep "${MCE_OPERATOR}" | awk -F '/' 'NR==1 {print $2}')" || :
+  
+  local existing_acm_secret
+  existing_acm_secret="$(${OC} get secrets -n "${ACM_NAMESPACE}" -o name | grep brew | awk -F '/' 'NR==1 {print $2}')"
 
   cat <<EOF | ${OC} apply -f - || acm_status=FAILED
   apiVersion: operator.open-cluster-management.io/v1
@@ -631,14 +652,18 @@ function create_acm_multiclusterhub() {
     annotations: {}
   spec:
     disableHubSelfManagement: true
+    imagePullSecret: ${existing_acm_secret}
 EOF
 
+  echo -e "\n# Verify that all '${ACM_NAMESPACE}' operator pods are running, before creating MultiClusterHub"
+  ${OC} wait --timeout=3m --for=condition=ready pod --all -n "${ACM_NAMESPACE}" --field-selector=status.phase!=Succeeded || :
+  
   BUG "${ACM_OPERATOR} deployment error: Found more than one catalogSource with expected channel" \
   "Annotate MultiClusterHub to point to MCE catalog-source" \
   "https://issues.redhat.com/browse/ACM-2347"
   # Workaround:
   local mce_annotation="{\"source\": \"${existing_mce_catalog}\", \"sourceNamespace\": \"${MCE_NAMESPACE}\"}"
-  ${OC} annotate MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
+  ${OC} annotate --overwrite MultiClusterHub "${ACM_INSTANCE}" -n "${ACM_NAMESPACE}" \
   installer.open-cluster-management.io/mce-subscription-spec="${mce_annotation}" || :
 
 
@@ -668,6 +693,14 @@ EOF
 
   ${OC} get MultiClusterHub -A -o json | jq -r '.items[].status' || :
 
+  [[ -n "$acm_version" ]] || acm_version="$(< "${ACM_VERSION_FILE}")"
+  acm_version="${acm_version%%-*}" # Remove version build number after "-"
+
+  TITLE "Verify requested ACM version '${acm_version}' appears in MultiClusterHub" 
+
+  cmd="${OC} get MultiClusterHub -n '${ACM_NAMESPACE}' '${ACM_INSTANCE}' -o jsonpath='{.status.currentVersion}'"
+  watch_and_retry "$cmd" "$duration" "$acm_version" || acm_status=FAILED
+
   if [[ "$acm_status" == FAILED ]] ; then
     TITLE "Check Operator deployment logs of '${ACM_OPERATOR}' in cluster ${cluster_name}"
 
@@ -681,7 +714,7 @@ EOF
   local acm_current_version
   acm_current_version="$(${OC} get MultiClusterHub -n "${ACM_NAMESPACE}" "${ACM_INSTANCE}" -o jsonpath='{.status.currentVersion}')" || :
 
-  TITLE "ACM version [${acm_current_version}] hub installed" 
+  echo -e "\n# ACM version [${acm_current_version}] hub installed" 
   # console url: $(${OC} get routes -n "${ACM_NAMESPACE}" multicloud-console --no-headers -o custom-columns='URL:spec.host')"
 
 }
@@ -1005,20 +1038,8 @@ function install_submariner_operator_on_cluster() {
   ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")"
 
   # Deploy Submariner operator as an OCP bundle
-  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${subscription_channel}" "${submariner_catalog}" "${SUBM_NAMESPACE}"
+  deploy_ocp_bundle "${SUBM_BUNDLE}" "${submariner_version}" "${SUBM_OPERATOR}" "${SUBM_NAMESPACE}" "${submariner_catalog}" "${subscription_channel}"
   # Note: No need to create Subscription for Submariner bundle, as it is done later within: create_submariner_config_in_acm_managed_cluster()
-
-  TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}"
-  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}"
-
-  # TODO: Wait for acm agent installation on the managed clusters
-  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
-  watch_and_retry "$cmd" 5m || BUG "WARNING: Submariner users may not be scc privileged"
-
-  ${OC} get clusterrolebindings
 
 }
 
@@ -1047,6 +1068,18 @@ function configure_submariner_addon_for_acm_managed_cluster() {
   ocp_infra_id="$(${OC} get -o jsonpath='{.status.infrastructureName}{"\n"}' infrastructure cluster)"
 
   PROMPT "Configure Submariner $SUBM_VER_TAG Addon for ACM managed cluster: $cluster_id"
+
+  TITLE "Apply the 'scc' policy for Submariner Gateway, Router-agent, Globalnet and Lighthouse on cluster $cluster_name"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GATEWAY}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_ROUTE_AGENT}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_GLOBALNET}"
+  ${OC} adm policy add-scc-to-user privileged "system:serviceaccount:${SUBM_NAMESPACE}:${SUBM_LH_COREDNS}"
+
+  # TODO: Wait for acm agent installation on the managed clusters
+  local cmd="${OC} get clusterrolebindings --no-headers -o custom-columns='USER:subjects[].*' | grep '${SUBM_LH_COREDNS}'"
+  watch_and_retry "$cmd" 5m || BUG "WARNING: Submariner users may not be scc privileged"
+
+  ${OC} get clusterrolebindings
 
   # Following steps should be run on ACM MultiClusterHub to configure Submariner addon with $KUBECONF_HUB (NOT with the managed cluster kubeconfig)
   export KUBECONFIG="${KUBECONF_HUB}"

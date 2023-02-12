@@ -807,10 +807,10 @@ function prepare_ocp_install() {
     echo -e "\n# Release Openstack Floating IPs required for new OCP installation"
     local osp_floating_ip
 
-    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    osp_floating_ip="$(grep -Po "apiFloatingIP:\s*\K.*" "$installer_yaml_new" || :)"
     [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
 
-    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$ocp_install_yaml" || :)"
+    osp_floating_ip="$(grep -Po "ingressFloatingIP:\s*\K.*" "$installer_yaml_new" || :)"
     [[ -z "${osp_floating_ip}" ]] || openstack floating ip unset --port "${osp_floating_ip}"
 
   fi
@@ -1066,6 +1066,24 @@ function test_cluster_status() {
     # NAME                 TYPE           CLUSTER-IP   EXTERNAL-IP                            PORT(S)   AGE
     # service/kubernetes   clusterIP      172.30.0.1   <none>                                 443/TCP   39m
     # service/openshift    ExternalName   <none>       kubernetes.default.svc.cluster.local   <none>    32m
+  
+}
+
+# ------------------------------------------
+
+function test_cluster_machines() {
+  # Verify that OCP cluster is up and healthy
+  trap_to_debug_commands;
+
+  local kubeconfig_file="$1"
+  export KUBECONFIG="$kubeconfig_file"
+
+  local cluster_name
+  cluster_name="${2:-$(print_current_cluster_name || :)}"
+
+  PROMPT "Verify all Machine configurations in cluster $cluster_name"
+ 
+  wait_for_all_machines_ready
   
 }
 
@@ -2998,8 +3016,11 @@ function add_acm_registry_mirror_to_ocp_node() {
           - ${OFFICIAL_REGISTRY}/${CATALOG_IMAGE_PREFIX}/${CATALOG_IMAGE_IMPORT_PATH}
 
     * ${OFFICIAL_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
-          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
           - ${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
+
+    * ${STAGING_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX} -->
+          - ${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}
     "
   fi
 
@@ -3094,11 +3115,22 @@ function add_acm_registry_mirror_to_ocp_node() {
     blocked = false
 
     [[registry.mirror]]
-      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+      location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
       insecure = false
 
     [[registry.mirror]]
-      location = "${QUAY_REGISTRY}/${QUAY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
+      insecure = false
+  
+  [[registry]]
+    prefix = ""
+    location = "${STAGING_REGISTRY}/${QUAY_IMAGE_MCE_PREFIX}"
+    mirror-by-digest-only = false
+    insecure = false
+    blocked = false
+
+    [[registry.mirror]]
+      location = "${BREW_REGISTRY}/${REGISTRY_IMAGE_IMPORT_PATH}/${QUAY_IMAGE_MCE_PREFIX}"
       insecure = false
 EOF
 
@@ -3501,7 +3533,7 @@ function export_variable_name_of_active_gateway_pod() {
   cat "$gateways_output"
 
   local gw_id
-  gw_id="$(grep "$active_gateway_node" "$gateways_output" | cut -d ' ' -f 1)"
+  gw_id="$(grep -m 1 "$active_gateway_node" "$gateways_output" | cut -d ' ' -f 1)"
 
   [[ "$silent" =~ ^(y|yes)$ ]] || \
   highlight "${gw_id}" "$gateways_output"

@@ -594,9 +594,7 @@ cat "$SYS_LOG"
   ${JUNIT_CMD} show_test_plan
 
   ### OCP Clusters preparations (unless requested to --skip-ocp-setup) ###
-
-  # if [[ ! "$SKIP_OCP_SETUP" =~ ^(y|yes)$ ]]; then
-   
+  
   ### Cluster A Setup (mandatory cluster)
 
   # Running destroy or create or both (reset) for cluster A
@@ -829,7 +827,7 @@ cat "$SYS_LOG"
 
       # Cluster A configurations
 
-      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$JOIN_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$CLUSTER_A_YAML" ]] && [[ "$CLEAN_CLUSTER_A" =~ ^(y|yes)$ || "$CREATE_CLUSTER_A" =~ ^(y|yes)$ ]] ; then
        
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_HUB}"
 
@@ -845,7 +843,7 @@ cat "$SYS_LOG"
 
       # Cluster B configurations (plus custom configurations for OpenStack)
       
-      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$JOIN_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_B" ]] && [[ "$CLEAN_CLUSTER_B" =~ ^(y|yes)$ || "$CREATE_CLUSTER_B" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_B}"
 
@@ -870,7 +868,7 @@ cat "$SYS_LOG"
 
       # Cluster C configurations
 
-      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$JOIN_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
+      if [[ -s "$KUBECONF_CLUSTER_C" ]] && [[ "$CLEAN_CLUSTER_C" =~ ^(y|yes)$ || "$CREATE_CLUSTER_C" =~ ^(y|yes)$ ]] ; then
 
         ${JUNIT_CMD} add_elevated_user "${KUBECONF_CLUSTER_C}"
 
@@ -968,21 +966,22 @@ cat "$SYS_LOG"
       export INSTALL_MCE=YES
     fi
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} install_mce_operator_on_hub "$MCE_VER_TAG"
+    ${JUNIT_CMD} install_mce_operator_on_hub "$MCE_VER_TAG"
 
     ${JUNIT_CMD} install_acm_operator_on_hub "$ACM_VER_TAG"
 
     ${JUNIT_CMD} check_olm_in_current_cluster "${KUBECONF_HUB}"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_mce_subscription "$MCE_VER_TAG"
+    ${JUNIT_CMD} create_mce_subscription "$MCE_VER_TAG"
 
     ${JUNIT_CMD} create_acm_subscription "$ACM_VER_TAG"
 
-    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine
+    # Skip MCE creation, as ACM should take care of it
+    [[ "$INSTALL_MCE" != "YES" ]] || ${JUNIT_CMD} create_multicluster_engine "$MCE_VER_TAG"
 
     # Create ACM Hub instance
 
-    ${JUNIT_CMD} create_acm_multiclusterhub
+    ${JUNIT_CMD} create_acm_multiclusterhub "$ACM_VER_TAG"
 
   fi
   ### END of ACM Install ###
@@ -1106,6 +1105,12 @@ cat "$SYS_LOG"
   if [[ ! "$SKIP_TESTS" =~ ((sys|all)(,|$))+ ]]; then
 
     ### Running High-level (System) tests of Submariner ###
+
+    ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_A}"
+
+    [[ ! -s "$KUBECONF_CLUSTER_B" ]] || ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_B}"
+
+    [[ ! -s "$KUBECONF_CLUSTER_C" ]] || ${JUNIT_CMD} test_cluster_machines "${KUBECONF_CLUSTER_C}"
 
     # Testing the Submariner gateway disaster recovery just on the Broker cluster (using $KUBECONF_HUB)
 
@@ -1507,7 +1512,7 @@ if [[ -s "${CLUSTER_C_YAML}" ]] ; then
   echo -e "\n# Saving kubeconfig and OCP installer log of Cluster C"
 
   cp -f "${KUBECONF_CLUSTER_C}" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
-  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}" || :
+  cp -f "${KUBECONF_CLUSTER_C}.bak" "${OUTPUT_DIR}/kubconf_${CLUSTER_C_NAME}.bak" || :
   cp -f "${CLUSTER_C_DIR}/metadata.json" "${OUTPUT_DIR}/metadata_${CLUSTER_C_NAME}.json" || :
 
   find "${CLUSTER_C_DIR}" -type f -iname "*.log" -exec \
