@@ -9,25 +9,16 @@
 ### Workspace vars ###
 
 export WORKDIR=submariner-install
-# export GOROOT="/usr/local/go"
-# export PATH="${GOROOT}/bin:${PATH}"
-# export GOBIN="${WORKDIR}/GOBIN" # or "${GOROOT}/bin" if using system's default golang
-# export OC="${GOBIN}/oc"
 export OC="oc"
-export OCPUP_DIR="ocpup"
 
 ### Env and test vars ###
 
+export TEST_NS="${TEST_NS:-test-submariner}"
 export CLUSTER_SET_ID="${CLUSTER_SET_ID}" # To identify the cluster-set of all clusters (will be appended to each cluster name)
 
 export CLUSTER_A_NAME="${CLUSTER_A_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
 export CLUSTER_A_YAML="${CLUSTER_A_YAML}" # e.g. install-config-cluster-a.yaml
 export NETSHOOT_CLUSTER_A="netshoot-cl-a"
-
-export SUBM_NAMESPACE="submariner-operator"
-export BROKER_INFO="broker-info.subm"
-# export BROKER_NAMESPACE="submariner-k8s-broker"
-export BROKER_NAMESPACE="submariner-broker"
 
 export CLUSTER_B_NAME="${CLUSTER_B_NAME}" # Recommended cluster name: No more than 9 characters (platform and ID will be added later)
 export CLUSTER_B_YAML="${CLUSTER_B_YAML}" # e.g. install-config-cluster-b.yaml
@@ -45,12 +36,12 @@ export IPSEC_NATT_PORT=${IPSEC_NATT_PORT:-4500}
 export IPSEC_IKE_PORT=${IPSEC_IKE_PORT:-500}
 export GW_INSTANCE_TYPE=${GW_INSTANCE_TYPE:-m4.xlarge}
 
-export TEST_NS="${TEST_NS:-test-submariner}"
 export MULTI_CLUSTER_DOMAIN="clusterset.local"
 export REPORT_NAME="${REPORT_NAME:-Submariner Tests}"
 export OUTPUT_DIR="${TEST_NS:-output}"
 
-### AWS vars ###
+
+### AWS cloud vars ###
 
 export AWS_KEY='user-aws-access-key'
 export AWS_SECRET='user-aws-secret-access-key'
@@ -61,22 +52,30 @@ export AWS_ZONE_NAME=""
 export AWS_ZONE_ID=""
 
 
-### OpenStack vars ###
+### OpenStack cloud vars ###
 
 export OSP_CRED_YAML="${OSP_CRED_YAML:-osp-clouds.yaml}" # OSP clouds.yaml file path
-export OS_AUTH_URL="https://openstack-auth-url:13000/v3"
+export OS_AUTH_URL="https://openstack-auth-url:13000"
 export OS_USERNAME='openstack-user'
 export OS_PASSWORD='openstack-pass'
 export OS_USER_DOMAIN_NAME="openstack.domain"
 export OS_PROJECT_NAME="openstack-project"
-export OS_PROJECT_DOMAIN_ID="openstack-project-id"
+export OS_PROJECT_ID="openstack-project-id"
 export OS_REGION_NAME="openstack-region"
 export OS_VOLUME_API_VERSION=3
 
-### Google vars ###
+
+### Google cloud vars ###
 
 export GCP_CRED_JSON="${GCP_CRED_JSON:-gcp-cred.json}" # GCP cred.json file path
 export GCP_REGION=""
+
+
+### Azure cloud vars ###
+
+# Use AZURE_SUBSCRIPTION and Service Principal Account with an access Role
+export AZURE_SUBSCRIPTION="azure-subscription"
+export AZURE_CRED_JSON="${AZURE_CRED_JSON:-azure-cred.json}" # Azure cred.json file path
 
 
 ### OpenShift Registry vars ###
@@ -135,12 +134,14 @@ export SUBM_GLOBALNET="submariner-globalnet"
 export SUBM_LH_COREDNS="submariner-lighthouse-coredns"
 
 export SUBM_IMG_SUBCTL="${SUBM_IMG_SUBCTL:-subctl-rhel8}"
+export SUBM_IMG_NETTEST="${SUBM_IMG_NETTEST:-nettest-rhel8}"
 export SUBM_IMG_GATEWAY="${SUBM_IMG_GATEWAY:-submariner-gateway-rhel8}"
 export SUBM_IMG_ROUTE="${SUBM_IMG_ROUTE:-submariner-route-agent-rhel8}"
 export SUBM_IMG_NETWORK="${SUBM_IMG_NETWORK:-submariner-networkplugin-syncer-rhel8}"
 export SUBM_IMG_LIGHTHOUSE="${SUBM_IMG_LIGHTHOUSE:-lighthouse-agent-rhel8}"
 export SUBM_IMG_COREDNS="${SUBM_IMG_COREDNS:-lighthouse-coredns-rhel8}"
 export SUBM_IMG_GLOBALNET="${SUBM_IMG_GLOBALNET:-submariner-globalnet-rhel8}"
+export SUBM_IMG_METRICS="${SUBM_IMG_METRICS:-submariner-metrics-proxy-rhel8}"
 export SUBM_IMG_OPERATOR="${SUBM_IMG_OPERATOR:-submariner-rhel8-operator}"
 export SUBM_IMG_BUNDLE="${SUBM_IMG_BUNDLE:-submariner-operator-bundle}"
 
@@ -148,21 +149,31 @@ export SUBM_VER_TAG=${SUBM_VER_TAG}
 export SUBM_CHANNEL_PREFIX_TECH_PREVIEW="alpha-"
 export SUBM_CHANNEL_PREFIX="stable-"
 
+export SUBM_NAMESPACE="submariner-operator"
+export SUBM_BROKER_INFO="broker-info.subm"
+
+export SUBM_ADDON="submariner" # Submariner Addon name. Using different name (e.g. "my-addon") is not supported. 
+export SUBM_CONFIG="submariner" # Submariner Config name. Using different name (e.g. "my-config") is not supported.
+
 
 ### ACM resources vars ###
 
 export OPERATORS_NAMESPACE="openshift-operators"
 export MARKETPLACE_NAMESPACE="openshift-marketplace"
 export CVP_COMPONENT="cvp-teamredhatadvancedclustermanagement"
-export CVP_ISSUER=${CVP_ISSUER:-"contra/pipeline"} # For CVE (security errata releases) use "freshmaker"
+export CVP_ISSUER=${CVP_ISSUER:-"exd-cpaas-bot-prod"} # For CVE (security errata releases) use "freshmaker"
 
 export ACM_NAMESPACE="ocm" # instead of "open-cluster-management"
 export ACM_OPERATOR="advanced-cluster-management"
 export ACM_BUNDLE="acm-operator-bundle"
+export ACM_BUNDLE_IMAGE="acm-operator-bundle"
 export ACM_INSTANCE="multiclusterhub"
+export ACM_HUB_NS="open-cluster-management-hub"
+export ACM_GS_NS="open-cluster-management-global-set"
 
 export ACM_VER_TAG=${ACM_VER_TAG}
 export ACM_CHANNEL_PREFIX="release-"
+export ACM_BUILD_DATE=${ACM_BUILD_DATE} # e.g. "2022-12-05", according to https://github.com/stolostron/deploy/commits/master/mirror 
 
 
 ### MCE resources vars ###
@@ -170,7 +181,8 @@ export ACM_CHANNEL_PREFIX="release-"
 export MCE_NAMESPACE="mce" # instead of "multicluster-engine"
 export MCE_OPERATOR="multicluster-engine"
 export MCE_BUNDLE="multicluster-engine-operator-bundle"
+export MCE_BUNDLE_IMAGE="mce-operator-bundle"
 export MCE_INSTANCE="multiclusterengine"
 
-export MCE_VER_TAG=${MCE_VER_TAG:-2.0.0}
+export MCE_VER_TAG=${MCE_VER_TAG}
 export MCE_CHANNEL_PREFIX="stable-"

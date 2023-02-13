@@ -427,8 +427,7 @@ function record_junit() {
 function install_anaconda() {
   # trap_to_debug_commands
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   miniconda_bin_dir="${conda_install_dir}/bin"
@@ -480,8 +479,7 @@ function install_anaconda() {
 function verify_anaconda() {
   trap_to_debug_commands
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   miniconda_bin_dir="${conda_install_dir}/bin"
@@ -499,13 +497,13 @@ function install_conda_package() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_name="$2"
   local pkg_version="$3"
-  local pkg_label="$4"
+  local pkg_channel="${4:-conda-forge}"
+  local pkg_label="$5"
 
   echo -e "\n# Installing a local tool [${pkg_name}${pkg_version:+=$pkg_version}] with Anaconda, in \"$(whoami)\" home directory."
 
@@ -520,36 +518,42 @@ function install_conda_package() {
   local conda_pkg_install
   verify_anaconda "${conda_install_dir}"
 
-  # ${CONDA_CMD} config --add channels defaults
-  ${CONDA_CMD} config --add channels conda-forge
-  ${CONDA_CMD} deactivate
-
-  conda_pkg_install="${CONDA_CMD} install -y -c conda-forge${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
-
-  ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps || conda_pkg_status=FAILED
-
   source activate "$conda_env" || :
+
+  # ${CONDA_CMD} config --add channels defaults
+  ${CONDA_CMD} config --add channels "${pkg_channel}"
+
+  ${CONDA_CMD} uninstall -y "${pkg_name}" || :
+
+  conda_pkg_install="${CONDA_CMD} install -y -c ${pkg_channel}${pkg_label:+/label/$pkg_label} ${pkg_name}${pkg_version:+=$pkg_version}"
+
+  ${conda_pkg_install} -n "${conda_env}" || conda_pkg_status=FAILED
+
   ${CONDA_CMD} list || :
 
   if [[ "$conda_pkg_status" == FAILED ]] ; then
-    return 1
+    ${CONDA_CMD} deactivate
+    ${conda_pkg_install} -n "${conda_env}" || ${conda_pkg_install} --update-deps
+    source activate "$conda_env"
   fi
 }
 
 # ------------------------------------------
 
-# Function to install local Golang with Anaconda (https://github.com/conda-forge/go-nocgo_linux-64)
+# Function to install local Golang with Anaconda (https://anaconda.org/anaconda/go)
 function install_local_golang() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
 
-  install_conda_package "${conda_install_dir}" "go-nocgo_linux-64" "${pkg_version}"
+  # install_conda_package "${conda_install_dir}" "go" "${pkg_version}" 
+  # Using anaconda channel (instead of conda-forge):
+  install_conda_package "${conda_install_dir}" "go" "${pkg_version}" "anaconda"
+  install_conda_package "${conda_install_dir}" "gcc_linux-64" "" "anaconda"
 }
 
 # ------------------------------------------
@@ -590,8 +594,7 @@ function install_local_terraform() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -612,8 +615,7 @@ function install_local_docker() {
   # # curl -fsSL https://get.docker.com/rootless | sh -s -- --iptables=false
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -628,8 +630,7 @@ function install_local_podman() {
   trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -644,8 +645,7 @@ function install_local_jq() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -661,8 +661,7 @@ function install_local_gcloud() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
+
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   local pkg_version="$2"
@@ -687,6 +686,60 @@ function install_local_gcloud() {
   # ${CONDA_CMD} install -y -c conda-forge/label/cf202003 google-cloud-sdk
 
   gcloud --version
+
+}
+
+# ------------------------------------------
+
+# Function to install Azure cli with Anaconda (https://anaconda.org/bioconda/azure-cli)
+function install_local_azure_cli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
+
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  install_conda_package "${conda_install_dir}" "azure-cli" "${pkg_version}" || CONDA_PKG=FAILED
+  # install_conda_package "${conda_install_dir}" "bioconda" "${pkg_version}" || CONDA_PKG=FAILED
+  # install_conda_package "${conda_install_dir}" "azure-cli" "${pkg_version}" || CONDA_PKG=FAILED
+
+  if [[ "$CONDA_PKG" == FAILED ]] ; then
+    TITLE "Installing Azure-CLI with Anaconda failed - trying to download and install from Microsoft"
+    # https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-yum?view=azure-cli-latest
+    pip install azure-cli
+    # curl -L https://aka.ms/InstallAzureCli > azure-cli-install.sh
+    # bash azure-cli-install.sh
+  fi
+
+  az --version
+
+}
+
+# ------------------------------------------
+
+# Function to install Openstack cli with Anaconda (https://anaconda.org/conda-forge/python-openstackclient)
+function install_local_openstack_cli() {
+  # trap_to_debug_commands
+
+  work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  conda_install_dir="$(dirname "$work_dir")/miniconda"
+
+  local pkg_version="$2"
+
+  local conda_env="${CONDA_ENV_NAME}${WORKDIR:+-${WORKDIR##*/}}"
+
+  # export CLOUDSDK_PYTHON=/usr/bin/python2
+
+  install_conda_package "${conda_install_dir}" "python-openstackclient" "${pkg_version}" 
+
+  openstack --version
 
 }
 
@@ -870,14 +923,15 @@ function change_yaml_key_value() {
 # Function to install gcloud CLI, and configure GCP (Google Cloud Platform) access:
 function configure_gcp_access() {
   local gcp_cred_json="$1"
+  local work_dir="$2"
 
   if ! jq . "$gcp_cred_json" 1>/dev/null ; then
     FAILURE "JQ is not installed, or file '${gcp_cred_json}' is not in JSON format"
   fi
 
-  work_dir="$(echo "${2:-$PWD}" | tr -s /)" # Remove redundant slashes
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
 
-  if [[ ! -x "$(command -v aws)" ]] ; then
+  if [[ ! -x "$(command -v gcloud)" ]] ; then
     install_local_gcloud "$work_dir"
   fi
 
@@ -894,6 +948,90 @@ function configure_gcp_access() {
   # gcloud config set compute/zone us-east1
 
   gcloud auth list --filter=status:ACTIVE --format="value(account)"
+
+}
+
+# ------------------------------------------
+
+# Function to install Azure CLI, and configure Azure access:
+function configure_azure_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_subscription="$1"
+  local azure_cred_json="$2"
+  local work_dir="$3"
+
+  if ! jq . "$azure_cred_json" 1>/dev/null ; then
+    FAILURE "JQ is not installed, or file '${azure_cred_json}' is not in JSON format"
+  fi
+
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  if [[ ! -x "$(command -v az)" ]] ; then
+    install_local_azure_cli "$work_dir"
+  fi
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local azure_app_id
+  azure_app_id=$(jq -r '.clientId' "$azure_cred_json")
+
+  local azure_pwd
+  azure_pwd=$(jq -r '.clientSecret' "$azure_cred_json")
+
+  local azure_tenant_id
+  azure_tenant_id=$(jq -r '.tenantId' "$azure_cred_json")
+
+  az login --service-principal -u "${azure_app_id}" -p "${azure_pwd}" --tenant "${azure_tenant_id}"
+
+  az account set -s "${azure_subscription}"
+
+  cp "$azure_cred_json" ~/.azure/osServicePrincipal.json
+
+}
+
+# ------------------------------------------
+
+# Function to install Openstack CLI, and configure Openstack access:
+function configure_openstack_access() {
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  local osp_cloud_yaml="$1"
+  local work_dir="$2"
+
+  [[ ! -s "$osp_cloud_yaml" ]] && echo "Missing file or data of OSP cloud.yaml" && return 1
+  
+  work_dir="$(echo "${work_dir:-$PWD}" | tr -s /)" # Remove redundant slashes
+
+  if [[ ! -x "$(command -v openstack)" ]] ; then
+    install_local_openstack_cli "$work_dir"
+  fi
+
+  trap '' DEBUG # DONT trap_to_debug_commands
+
+  TITLE "Configure Openstack clouds.yaml access with Application ID"
+
+  # curl "${OS_AUTH_URL}" | jq -r '.versions.values[] | .id'
+
+  unset "OS_USERNAME"
+  unset "OS_PASSWORD"
+  unset "OS_AUTH_URL"
+  unset "OS_PROJECT_ID"
+  unset "OS_PROJECT_NAME"
+  unset "OS_USER_DOMAIN_NAME"
+  export OS_CLOUD=openstack
+
+  local osp_config_dir="$HOME/.config/openstack"
+  echo -e "\n# Create Openstack config directory: ${osp_config_dir}"
+
+  mkdir -p "${osp_config_dir}"
+  cp -f "$osp_cloud_yaml" "${osp_config_dir}/clouds.yaml"
+
+  openstack --os-cloud openstack token issue
+
+  openstack catalog list -c Endpoints || :
+
+  openstack server list || :
 
 }
 
@@ -936,8 +1074,6 @@ function install_awscli() {
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
   aws_bin_dir="${2:-$(dirname "$work_dir")/miniconda}"
 
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   if [[ ! -x "$(command -v aws)" ]] ; then
@@ -1059,7 +1195,6 @@ function ocp_login() {
   ocp_usr="${1:-$(${OC} whoami | tr -d ':')}"
 
   local ocp_pwd # stored later in ${2}
-  local crt_file # stored later in ${3}
 
   local ocp_server
   ocp_server="${4:-$(${OC} config view -o jsonpath='{.clusters[].cluster.server}')}"
@@ -1074,29 +1209,34 @@ function ocp_login() {
     FAILURE "User '${ocp_usr}' or Server '${ocp_server}' is missing"
   fi
 
-  TITLE "Login with user ${ocp_usr} to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
+  TITLE "Login with user '${ocp_usr}' and Certificate to OCP server '${cluster_name}' on ${ocp_cloud} cloud:
   ${ocp_server}"
+
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
 
   ( # subshell to hide commands
     ocp_pwd="${2:-$(${OC} whoami -t)}"
-    crt_file="${3}"   
-    [[ -s "$crt_file" ]] || crt_file=''
+    crt_file="${KUBECONFIG}.crt"
 
-    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify ${crt_file:+ --certificate-authority="$crt_file"}"
+    cmd="${OC} login ${ocp_server} -u ${ocp_usr} -p '${ocp_pwd}' --insecure-skip-tls-verify"
     
-    # Attempt to login up to 10 minutes
-    watch_and_retry "$cmd" 10m
+    # Attempt to login up to 10 minutes, with or w/o a certificate
+    watch_and_retry "$cmd || $cmd --certificate-authority=${crt_file}" 10m
+
   )
+
+  ${OC} rollout status deployment oauth-openshift -n openshift-authentication --timeout 1m || :
+
 }
 
 # ------------------------------------------
 
-# Function to delete all CRDs wich includes the input text on the current cluster
+# Function to delete all CRDs by regex name, in the current cluster
 function delete_crds_by_name() {
   trap_to_debug_commands;
 
   # Input $1 : All CRDs to delete, by searching for *crd_regex*
-  local crd_regex=$1
+  local crd_regex="$1"
 
   local delete_crds=FALSE
 
@@ -1104,16 +1244,23 @@ function delete_crds_by_name() {
   if ${OC} get crds |& highlight "${crd_regex}" ; then delete_crds=TRUE ; fi
 
   # If there are existing CRDs on the cluster - remove them all:
-  # if [[ $? == 0 ]]; then
   if [[ "$delete_crds" == TRUE ]]; then
-    echo -e "\n# Deleting ${crd_regex} CRDs in the cluster"
+    TITLE "Deleting ${crd_regex} CRDs in current cluster"
     crd_list=$(${OC} get crds -o name | grep -Po "\/\K.*${crd_regex}.*")
     # # Ignoring hanged CRDs on delete, due to K8s bug: https://github.com/kubernetes/kubernetes/issues/60538
     # ${OC} delete --timeout=1m crds $crd_list --ignore-not-found || : # || : to ignore none-zero exit code
 
     for crd_name in $crd_list ; do
-      echo -e "\n# Deleting CRD $crd_name"
-      ${OC} delete --timeout=1m crd "$crd_name" --ignore-not-found || \
+
+      obj_list=$(${OC} get "${crd_name}" -o name)
+      for cr_obj in $obj_list ; do
+        echo -e "\n# Deleting the custom resource (cr): $cr_obj"
+        ${OC} delete --timeout=10s "$cr_obj" || \
+        ${OC} patch "$cr_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+      done
+
+      echo -e "\n# Deleting custom resource definition (crd): $crd_name"
+      ${OC} delete --timeout=10s crd "$crd_name" --ignore-not-found || \
       ${OC} patch "crd/${crd_name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
     done
 
@@ -1123,6 +1270,20 @@ function delete_crds_by_name() {
 
 }
 
+# ------------------------------------------
+
+# Function to delete all Cluster Roles and Role Bindings by regex name, in the current cluster
+function delete_roles_by_name() {
+  trap_to_debug_commands;
+
+  # Input $1 : Search by *role_regex*
+  local role_regex="$1"
+
+  TITLE "Deleting all '${role_regex}' Cluster Roles and Role Bindings in current cluster"
+  ${OC} get clusterroles,clusterrolebindings -o name \
+  | grep -E "${role_regex}" | xargs -r ${OC:+ $OC} delete --timeout=30s || :
+
+}
 
 # ------------------------------------------
 
@@ -1135,16 +1296,42 @@ function force_delete_namespace() {
   # Input $2 (Optional) : Timeout to wait before forcing namespace deletion
   local delete_timeout="${2:-30s}"
 
-  if [[ ${ns_name} == "default" ]] ; then
-    echo -e "\n# Skipping namespace deletion, since it's the \"default\" namespace."
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  if [[ ! $(${OC} get ns "$1") || ${ns_name} == "default" ]] ; then
+    echo -e "\n# Skipping namespace '${ns_name}' deletion, since it does't exist on cluster $cluster_name"
     return
   fi
 
-  echo -e "\n# Show all resources (and OLMs) in namespace ${ns_name} to be deleted:"
+  echo -e "\n# Show all resources (and OLMs) in namespace '${ns_name}' to be deleted:"
   # ${OC} get all,olm --all-namespaces | grep --color "${crd_name}" || delete_namespace=FALSE
   ${OC} get all,olm -n "${ns_name}" |& highlight "No resources found" || :
 
-  TITLE "Deleting whole namespace ${ns_name} from the cluster"
+  TITLE "Deleting all common resources in namespace '${ns_name}' from cluster $cluster_name"
+
+  local obj_list
+  obj_list=$($OC get all,olm -n "${ns_name}" -o name)
+
+  for ns_obj in $obj_list ; do
+    echo -e "\n# Deleting the namespaced resource: $ns_obj"
+    ${OC} delete -n "$ns_name" --timeout=30s "$ns_obj" || \
+    ${OC} patch -n "$ns_name" "$ns_obj" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+  done
+
+  TITLE "Deleting all other resources associated with namespace '${ns_name}' from cluster $cluster_name"
+
+  ${OC} api-resources --verbs=list --namespaced -o name | grep -v "packagemanifest" | xargs -i -n 1 sh -c \
+  'rs_type="{}" ;\
+  OC='"${OC}"' ;\
+  echo -e "\n### $rs_type ###\n" ;\
+  rs_list=$(${OC} get $rs_type -o name --show-kind --ignore-not-found -n '"${ns_name}"') ;\
+  for ns_obj in $rs_list ; do
+    ${OC} delete -n $ns_name --timeout=5s --ignore-not-found $ns_obj || \
+    ${OC} patch -n $ns_name $ns_obj -p "{\"metadata\":{\"finalizers\":[]}}" --type=merge ;\
+  done' || :
+
+  TITLE "Deleting whole namespace ${ns_name} from cluster $cluster_name"
 
   ${OC} delete --timeout="$delete_timeout" namespace "${ns_name}" --ignore-not-found || force_ns_delete=TRUE
 
@@ -1168,10 +1355,16 @@ function force_delete_namespace() {
 function delete_all_evicted_pods_in_current_cluster() {
   trap_to_debug_commands;
 
-  echo -e "\n# Delete all regular pods from all namespaces"
+  echo -e "\n# Delete all regular pods which are not running or completed, from all namespaces:"
 
-  ${OC} get pod -A --no-headers | grep -Ev '([0-9]+)/\1' | grep -Ev 'Completed|Running' | awk '{system("oc delete pod "$2" -n "$1)}' || :
- 
+  ${OC} get pod -A --no-headers | grep -Ev 'Completed|Running' \
+  | awk '{system("oc delete pod "$2" -n "$1" --timeout=30s")}' || :
+
+  echo -e "\n# Delete OLM pods that are in an 'Error' state:"
+
+  ${OC} get pods -n openshift-operator-lifecycle-manager --field-selector=status.phase==Failed -o name \
+  | xargs -r ${OC:+ $OC} delete -n openshift-operator-lifecycle-manager || :
+
   # echo -e "\n# Generate list of PDBs (Pod Disruption Budget) to be deleted"
 
   # local pdb_list
@@ -1241,7 +1434,10 @@ function create_docker_registry_secret() {
   # Replace anything but letters and numbers with "-"
   local secret_name="${secret_name//[^a-zA-Z0-9]/-}"
 
-  TITLE "Creating new docker-registry in '$namespace' namespace
+  local cluster_name
+  cluster_name="$(print_current_cluster_name || :)"
+
+  TITLE "Creating new docker-registry in '$namespace' namespace on cluster $cluster_name
   Server: ${registry_server}
   Secret name: ${secret_name}"
 
@@ -1303,17 +1499,31 @@ function install_nginx_service() {
 
 # ------------------------------------------
 
-# Function to create a namespace, if it does not exist
+# Function to create/modify a namespace via API, with optional security policy
 function create_namespace() {
   trap_to_debug_commands;
 
-  local ns=$1
+  # Input params:
+  local ns="$1" # Name of namespace
+
+  # Optional: use "privileged" to allow privileged security for namespaces pods
+  # Namespace security is restricted since K8s v1.24
+  local security_policy="$2" 
+
   # Create the namespace with the API directly
-  echo -e "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ${ns}" | ${OC} apply -f -
 
-  # TODO: Consider 'oc new-project' command:
-  # ${OC} new-project "${SUBM_OPERATOR}" 2>/dev/null || ${OC} project "${SUBM_OPERATOR}" -q
+  cat <<EOF | ${OC} apply -f -
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: ${ns}
+    labels:
+      ${security_policy:+pod-security.kubernetes.io/audit: ${security_policy}}
+      ${security_policy:+pod-security.kubernetes.io/enforce: ${security_policy}}
+      ${security_policy:+pod-security.kubernetes.io/warn: ${security_policy}}
+EOF
 
+  # Might need also: ${security_policy:+security.openshift.io/scc.podSecurityLabelSync: false}
 }
 
 # ------------------------------------------
@@ -1365,16 +1575,18 @@ function print_current_cluster_cloud() {
 
   export KUBECONFIG="$KUBECONFIG"
 
-  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster )" || :
+  cluster_platform="$(${OC} get -o jsonpath='{.status.platform}{"\n"}' infrastructure cluster || echo 'Unknown')" 
 
   if [[ "$cluster_platform" == "AWS" ]] ; then
     echo "Amazon"
   elif [[ "$cluster_platform" == "GCP" ]] ; then
     echo "Google"
+  elif [[ "$cluster_platform" == "Azure" ]] ; then
+    echo "Azure"
   elif [[ "$cluster_platform" == "OpenStack" ]] ;
     then echo "Openstack"
   else
-    echo "Unknown"
+    echo "$cluster_platform"
   fi
 
 }
@@ -1513,25 +1725,32 @@ function wait_for_all_machines_ready() {
 
   local duration=${1:-20m} # Default is 20 minutes
 
+  TITLE "Status of all Machines:"
+  ${OC} get Machine -n openshift-machine-api -o wide || machines_status=DOWN
+
+  echo -e "\n# Wait up to $duration for all Machines in openshift-machine-api to have an instance:"
+  local cmd="${OC} wait --timeout=$duration Machine --all -n openshift-machine-api --for=condition=InstanceExists"
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
+
+  TITLE "Status of Machine Config Daemon and Pool:"
   echo -e "\n# Wait up to $duration for Machine Config Daemon to be rolled out by openshift-machine-config-operator:"
   local cmd="${OC} rollout status --timeout=$duration ds -n openshift-machine-config-operator machine-config-daemon"
-  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
 
+  ${OC} get machineconfigpool -o wide || machines_status=DOWN
+  
   echo -e "\n# Wait up to $duration for all Machines Config Pool to be updated:"
   cmd="${OC} wait --timeout=$duration --for condition=updated machineconfigpool --all"
-  watch_and_retry "$cmd" "$duration" || machines_status=DOWN
+  watch_and_retry "$cmd" "$duration" || { machines_status=DOWN && duration=1m ; }
 
-  echo -e "\n# Status of Machine Config Pool:"
-  ${OC} get machineconfigpool -o wide || machines_status=DOWN
-
-  echo -e "\n# Status of Machine Config Operators:"
+  TITLE "Status of Machine Config Operators:"
   ${OC} get all -n openshift-machine-config-operator -o wide || machines_status=DOWN
 
-  echo -e "\n# Status of Daemon-Sets:"
+  TITLE "Status of Daemon-Sets:"
   ${OC} get daemonsets -A -o wide || machines_status=DOWN
 
   if [[ "$machines_status" == DOWN ]] ; then
-    FAILURE "Timeout (${duration}) exceeded while waiting for all Machine Configuration to be ready"
+    FAILURE "Timeout exceeded while waiting for all Machine Configuration to be ready"
   fi
 
 }
@@ -1609,10 +1828,10 @@ function print_pod_logs_in_namespace() {
     ${OC} -n "$namespace" get pod "$pod" -o yaml || :
 
     if [[ "$(${OC} get pods -n "$namespace" "$pod" -o jsonpath='{.status.containerStatuses[*].ready}')" == true ]] ; then
-      echo -e "\n### Active pod $pod logs ###\n"
+      TITLE "Active pod $pod logs in cluster: $cluster_name, namespace: $namespace"
       ${OC} -n "$namespace" logs "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     else
-      echo -e "\n### Terminated (previous) pod $pod logs ###\n"
+      TITLE "Terminated (previous) pod $pod logs in cluster: $cluster_name, namespace: $namespace"
       ${OC} -n "$namespace" logs -p "$pod" --timestamps --tail=500 --all-containers --ignore-errors || :
     fi
   done
@@ -1708,7 +1927,7 @@ function get_latest_repository_version_by_tag() {
 
   local regex="tags/\K.*${tag_to_search}.*"
   local branch_tag
-  branch_tag="$(git ls-remote --tags "$repo_url" | sort -Vr -k2 | grep -Po -m 1 "$regex" || :)"
+  branch_tag="$(git ls-remote --tags "$repo_url" | sort -V -k2 | grep -Po -m 1 "$regex" || :)"
 
   [[ -n "$branch_tag" ]] || FAILURE "Git repository [${repo_url}] does not include any tag with \"tag_to_search\""
 
@@ -2151,8 +2370,6 @@ function install_aha() {
   # trap_to_debug_commands
 
   work_dir="$(echo "${1:-$PWD}" | tr -s /)" # Remove redundant slashes
-  # TODO: Move $conda_install_dir to a common folder outside $work_dir
-  # conda_install_dir="${work_dir}/miniconda"
   conda_install_dir="$(dirname "$work_dir")/miniconda"
 
   if [[ ! -x "$(command -v aha)" ]] ; then

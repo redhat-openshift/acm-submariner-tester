@@ -5,14 +5,17 @@
 
 # ------------------------------------------
 
-### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat
-function export_LATEST_IIB() {
+### Function to export $LATEST_IIB - The latest index-image for a bundle in datagrepper.engineering.redhat (UMB)
+function export_LATEST_IIB_NVR() {
   trap_to_debug_commands;
 
+  # Input args:
   local bundle_name="${1}"
   local operator_version="${2}"
-  local cvp_component="${3}"
-  local cvp_issuer="${4}"
+
+  # Optional input args:
+  local cvp_component="${3:-$CVP_COMPONENT}"
+  local cvp_issuer="${4:-$CVP_ISSUER}" # e.g. "exd-cpaas-bot-prod" (default) or "freshmaker" (CVE)
 
   TITLE "Set and export the variable \$LATEST_IIB according to Bundle, version and component:
   Bundle Name: ${bundle_name}
@@ -20,41 +23,168 @@ function export_LATEST_IIB() {
   CVP Component: ${cvp_component}
   "
 
-  local umb_output="latest_iib.txt"
-
-  fetch_datagrapper "${bundle_name}" "${operator_version}" "30" "${umb_output}"
-
-  # local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-
-  # if [[ "${bundle_name}" == "acm-operator-bundle" ]] ; then
-  #   BUG "'acm-operator-bundle' has unstable CVP tests" \
-  #   "Retrieve images in non-completed pipelines for 'acm-operator-bundle'"
-
-  #   # Workaround:
-  #   iib_query='[.raw_messages[].msg | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-  # fi
+  local contra_output="contra_iib.txt" # External file to store IIB (Index Image Bundle) data for "contra"
+  local freshmaker_output="freshmaker_iib.txt" # External file to store IIB (Index Image Bundle) data for "freshmaker"
+  local contra_nvr
+  local freshmaker_nvr
+  local index_images
 
   if [[ "${bundle_name}" == "submariner-operator-bundle" ]] ; then
-    
     if [[ "$operator_version" =~ 0\.11 ]] ; then
       BUG "For Submariner 0.11.* the CVP component should be 'cvp-teamsubmariner'"
       # Workaround:
       cvp_component="cvp-teamsubmariner"
-
-    elif [[ "$operator_version" =~ 0\.12\.1 ]] ; then
-      BUG "For Submariner 0.12.1 the CVP issuer should be 'freshmaker' (CVE release)"
-      # Workaround:
-      cvp_issuer="freshmaker"
-
     fi
   fi
 
-  local iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
-    and .artifact.component=="'$cvp_component'" and .artifact.issuer=="'$cvp_issuer'")
-    | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+  # cvp_issuer="exd-cpaas-bot-prod"
+  fetch_datagrepper "${contra_output}" "${bundle_name}" "${operator_version}" "30" "${cvp_component}" # "exd-cpaas-bot-prod"
+  contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
 
+  # cvp_issuer="freshmaker"
+  fetch_datagrepper "${freshmaker_output}" "${bundle_name}" "${operator_version}" "30" "${cvp_component}" "freshmaker"
+  freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
+
+  if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
+    
+    # No image was found - increase the delta to 100 days
+
+    BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
+    
+    # cvp_issuer="exd-cpaas-bot-prod"
+    fetch_datagrepper "${contra_output}" "${bundle_name}" "${operator_version}" "100" "${cvp_component}" # "exd-cpaas-bot-prod"
+    contra_nvr="$(jq -r '.nvr' "${contra_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
+
+    # cvp_issuer="freshmaker"
+    fetch_datagrepper "${freshmaker_output}" "${bundle_name}" "${operator_version}" "100" "${cvp_component}" "freshmaker"
+    freshmaker_nvr="$(jq -r '.nvr' "${freshmaker_output}" | grep -Po "${bundle_name}-container-\K.*")" || :
+
+  fi
+
+  if [[ -z "$contra_nvr" && -z "$freshmaker_nvr" ]]; then
+    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': ${index_images}"
+  fi
+
+  TITLE "Check if ${bundle_name} NVR for cvp issuer of 'freshmaker' (CVE release) has a newer version to use"
+
+  if check_version_greater_or_equal "$freshmaker_nvr" "$contra_nvr" ; then
+    export "LATEST_NVR=${freshmaker_nvr}"
+    index_images="$(< "${freshmaker_output}")"
+  else
+    export "LATEST_NVR=${contra_nvr}"
+    index_images="$(< "${contra_output}")"
+  fi
+
+  TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
+  ${index_images}"
+
+  local ocp_version_x_y
+  ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
+
+  TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
+
+  LATEST_IIB=$(echo "${index_images}" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
+
+  if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
+
+    # Find the latest version, after sorting by product versions (not by real numbers).
+    # For example: v4.10 is higher than v4.9
+
+    local latest_ocp_version_x_y
+    latest_ocp_version_x_y="$(echo "${index_images}" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
+
+    if [[ -n "$latest_ocp_version_x_y" ]] ; then
+      TITLE "Getting latest supported '${bundle_name}' for OCP version '${latest_ocp_version_x_y}'"
+      LATEST_IIB=$(echo "${index_images}" | jq -r '.index_image.'"${latest_ocp_version_x_y}" ) || :
+    fi
+  fi
+
+  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
+
+  if [[ "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
+    local iib_number
+    iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')" || :
+    curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
+
+    # IIB information example:
+    #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+    #                                  Dload  Upload   Total   Spent    Left  Speed
+    # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
+    # "2022-05-17T03:52:40.797378Z"
+    # {
+    #   "advanced-cluster-management": [
+    #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
+    #   ]
+    # }
+  else
+    BUG "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from Datagrepper"
+  fi
+
+  export "LATEST_IIB=$(echo "${LATEST_IIB}" | cut -d'/' -f2-)" || :
+
+}
+
+# ------------------------------------------
+
+### Helper function to fetch datagrepper (UMB) for component images by version and days, into a file
+function fetch_datagrepper() {
+  # trap_to_debug_commands;
+
+  local umb_output_file="${1}"
+  local bundle_name="${2}"
+  local version="${3}"
+  local num_of_days="${4}"
+  local cvp_component="${5}"
+  local cvp_issuer="${6}"
+
+  # Datagrepper keeps build info at most eight months into the past (i.e. 240 days)
+  (( num_of_days < 240 )) || num_of_days=240
+
+  TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat)
+  Output file: ${umb_output_file}
+  Bundle: ${bundle_name}
+  Version: ${version}
+  Delta by Days: ${num_of_days}
+  CVP Component: ${cvp_component}
+  CVP Issuer: ${cvp_issuer}
+  "
+
+  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+  local num_of_latest_builds=5
+  local rows=$((num_of_latest_builds * 5))
+  local delta=$((num_of_days * 86400)) # For example: 30 days * 86400 seconds = 2592000
+  umb_url="${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}"
+  
+  local curl_cmd
+  curl_cmd="curl --retry 30 --retry-delay 5 -o ${umb_output_file} -Ls '${umb_url}'"
+
+  echo -e "\n# Querying Datagrepper: ${curl_cmd}"
+  watch_and_retry "$curl_cmd" 3m
+
+  local iib_query
   local index_images
-  index_images="$(jq -r "${iib_query}" $umb_output)" || :
+
+  iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete" 
+  and .artifact.component=="'$cvp_component'"'${cvp_issuer:+ and .artifact.issuer==\"$cvp_issuer\"}')
+  | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+
+  echo -e "\n# Filtering IIB: jq -r '${iib_query}' ${umb_output_file}"
+  index_images="$(jq -r "${iib_query}" "${umb_output_file}")" || :
+
+  # If still no image found - search within NON-completed pipelines too
+  if [[ -z "${index_images}" || "${index_images}" == null ]]; then
+    BUG "Failed to retrieve images with status 'complete'. Searching images within non-completed pipelines:"
+
+    iib_query='[.raw_messages[].msg | select(.artifact.component=="'$cvp_component'"
+    and .artifact.issuer=="'$cvp_issuer'") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
+
+    echo -e "\n# Filtering IIB: jq -r '${iib_query}' ${umb_output_file}"
+    index_images="$(jq -r "${iib_query}" "${umb_output_file}")" || :
+  fi
+
+  echo "${index_images}" > "${umb_output_file}"
+  cat "${umb_output_file}"
 
   # index-images example:
   # {
@@ -65,106 +195,6 @@ function export_LATEST_IIB() {
   #   "v4.8": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105104",
   #   "v4.9": "registry-proxy.engineering.redhat.com/rh-osbs/iib:105105"
   # }
-
-  # If no image was found - increase the delta to 100 days
-  if [[ -z "$index_images" || "$index_images" == null ]]; then
-    BUG "Failed to retrieve images during the last 30 days - Searching images during the last 100 days"
-    
-    fetch_datagrapper "${bundle_name}" "${operator_version}" "100" "${umb_output}"
-
-    index_images="$(jq -r "${iib_query}" $umb_output)" || :
-
-    # If still no image found - increase the delta to 500 days (but filter completed pipelines only)
-    if [[ -z "$index_images" || "$index_images" == null ]]; then
-      BUG "Failed to retrieve images during the last 100 days - Searching images during the last 500 days (in completed pipelines only)"
-
-      fetch_datagrapper "${bundle_name}" "${operator_version}" "500" "${umb_output}"
-
-      iib_query='[.raw_messages[].msg | select(.pipeline.status=="complete") | {nvr: .artifact.nvr, index_image: .pipeline.index_image}] | .[0]'
-
-      index_images="$(jq -r "${iib_query}" $umb_output)" || :
-    fi
-  fi
-
-  if [[ -z "$index_images" || "$index_images" == null ]]; then
-    FATAL "Failed to retrieve UMB index-image for bundle '${bundle_name}' version '${operator_version}': $index_images"
-  else
-    TITLE "UMB index-image for bundle '${bundle_name}' version '${operator_version}' includes:
-    $index_images"
-  fi
-
-  local ocp_version_x_y
-  ocp_version_x_y=$(${OC} version | awk '/Server Version/ { print $3 }' | cut -d '.' -f 1,2 || :)
-
-  TITLE "Getting index-image for bundle '${bundle_name}' according to OCP version '${ocp_version_x_y}'"
-
-  LATEST_IIB=$(echo "$index_images" | jq -r '.index_image."v'"${ocp_version_x_y}"'"' ) || :
-
-  if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-    BUG "No index-image bundle '${bundle_name}' for OCP version '${ocp_version_x_y}'"
-
-    # Find the latest version, after sorting by product versions (not by real numbers), so for example: v4.10 is higher than v4.9
-
-    ocp_version_x_y="$(echo "$index_images" | jq '.index_image | keys | .[]' | sort -V | tail -1)" || :
-
-    TITLE "Getting index-image for bundle '${bundle_name}', for the latest supported OCP version: '${ocp_version_x_y}'"
-
-    LATEST_IIB=$(echo "$index_images" | jq -r '.index_image.'"${ocp_version_x_y}" ) || :
-
-    if [[ ! "$LATEST_IIB" =~ iib:[0-9]+ ]]; then
-      FATAL "Failed to retrieve index-image for bundle '${bundle_name}' version '${ocp_version_x_y}' from datagrepper.engineering.redhat"
-    fi
-  fi
-
-  TITLE "Display index-image build date, and export \$LATEST_IIB=$LATEST_IIB"
-
-  local iib_number
-  iib_number="$(echo "$LATEST_IIB" | grep -Po 'iib:\K.*')"
-  curl "https://iib.engineering.redhat.com/api/v1/builds/${iib_number}" | jq -e ". | .updated, .bundle_mapping" || :
-
-  # IIB information example:
-  #   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-  #                                  Dload  Upload   Total   Spent    Left  Speed
-  # 100  2354  100  2354    0     0  10714      0 --:--:-- --:--:-- --:--:-- 11103
-  # "2022-05-17T03:52:40.797378Z"
-  # {
-  #   "advanced-cluster-management": [
-  #     "registry-proxy.engineering.redhat.com/rh-osbs/rhacm2-acm-operator-bundle:v2.5.0-300"
-  #   ]
-  # }
-
-  export LATEST_IIB
-
-}
-
-# ------------------------------------------
-
-### Helper function to fetch datagrapper (UMB) for component images by version and days, into a file
-function fetch_datagrapper() {
-  # trap_to_debug_commands;
-
-  local bundle_name="${1}"
-  local version="${2}"
-  local num_of_days="${3}"
-  local umb_output_file="${4}"
-
-  TITLE "Retrieving index-image from UMB (datagrepper.engineering.redhat)
-  Bundle: ${bundle_name}
-  Version: ${version}
-  Delta by Days: ${num_of_days}
-  Output file: ${umb_output_file}
-  "
-
-  local umb_url="https://datagrepper.engineering.redhat.com/raw?topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
-  local num_of_latest_builds=5
-  local rows=$((num_of_latest_builds * 5))
-  local delta=$((num_of_days * 86400)) # For example: 30 days * 86400 seconds = 2592000
-
-  local curl_cmd
-  curl_cmd=(curl --retry 30 --retry-delay 5 -o "${umb_output_file}" -Ls "${umb_url}&rows_per_page=${rows}&delta=${delta}&contains=${bundle_name}-container-${version}")
-  
-  echo -e "\n# Running: ${curl_cmd[*]}"
-  "${curl_cmd[@]}"
 
 }
 
@@ -179,60 +209,54 @@ function deploy_ocp_bundle() {
   local bundle_name="$1"
   local operator_version="$2"
   local operator_name="$3"
-  local operator_channel="$4"
+  local bundle_namespace="$4"
 
-  # Optional args:
-  local catalog_source="${5:-${operator_name}-${operator_channel}-catalog}"
-  local bundle_namespace="${6:-$MARKETPLACE_NAMESPACE}"
-  local cvp_component="${7:-$CVP_COMPONENT}"
-  local cvp_issuer="${8:-$CVP_ISSUER}" # e.g. "contra/pipeline" or "freshmaker"
+  # Optional input args:
+  local catalog_source="$5" # "{6:-${operator_name}-${operator_channel}-catalog}"
+  local operator_channel="$6"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
+  # If no bundle namespece was specified, used the global marketplace
+  bundle_namespace="${bundle_namespace:-$MARKETPLACE_NAMESPACE}"
+
   # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
-  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}" || :
 
   TITLE "Import image and create catalog-source for OCP operator bundle '${bundle_name}' in cluster ${cluster_name}
   Bundle Name: ${bundle_name}
   Operator Version: ${operator_version}
   Operator Name: ${operator_name}
-  Channel: ${operator_channel}
-  Catalog Source: ${catalog_source}
   Bundle Namespace: ${bundle_namespace}
-  CVP Component: ${cvp_component}
-  CVP Component: ${cvp_issuer}
+  Catalog Source: ${catalog_source}
+  Channel: ${operator_channel}
   "
 
-  if [[ -z "${bundle_name}" ]] ||
-     [[ -z "${operator_version}" ]] ||
-     [[ -z "${operator_name}" ]] ||
-     [[ -z "${operator_channel}" ]] ||
-     [[ -z "${catalog_source}" ]] ; then
-       FATAL "Required parameters for the Bundle installation are missing:
-       Bundle Name: ${bundle_name}
-       Operator Version: ${operator_version}
-       Operator Name: ${operator_name}
-       Channel: ${operator_channel}
-       Catalog Source: ${catalog_source}"
-  fi
-
-  # login to current kubeconfig cluster
-  ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
+  # login to current kubeconfig cluster should've already be called before
+  # ocp_login "${OCP_USR}" "$(< "${WORKDIR}/${OCP_USR}.sec")" "${WORKDIR}/${OCP_USR}.crt"
 
   ocp_registry_url=$(${OC} registry info --internal)
 
-  echo -e "\n# Create/switch project"
-  ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  echo -e "\n# Create/switch to the bundle namespace"
+  # ${OC} new-project "${bundle_namespace}" || ${OC} project "${bundle_namespace}" -q
+  create_namespace "${bundle_namespace}"
 
-  echo -e "\n# Disable the default remote OperatorHub sources for OLM"
-  ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
+  # echo -e "\n# Disable the default remote OperatorHub sources for OLM"
+  # ${OC} patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 
   echo -e "\n# Set and export the variable \$LATEST_IIB"
-  export_LATEST_IIB "${bundle_name}" "${operator_version}" "${cvp_component}" "${cvp_issuer}"
+  export_LATEST_IIB_NVR "${bundle_name}" "${operator_version}" # "${cvp_component}" "${cvp_issuer}"
+
+  if [[ -z "$LATEST_IIB" || "$LATEST_IIB" == "null" ]] ; then
+    FATAL "No Image was found for Bundle '${bundle_name}' version '${operator_version}'"
+  fi
+
+  echo -e "\n# Trim extra build number (after '-') from operator version: $operator_version"
+  operator_version="${operator_version%%-*}" # e.g. v2.2.0-230 --> v2.2.0
 
   local source_image_path
-  source_image_path="${BREW_REGISTRY}/$(echo "${LATEST_IIB}" | cut -d'/' -f2-)"
+  source_image_path="${BREW_REGISTRY}/${LATEST_IIB}"
 
   local bundle_image_name="${bundle_name}-index"
 
@@ -254,14 +278,17 @@ function deploy_ocp_bundle() {
 
   watch_and_retry "$cmd" 3m "Image Name:\s+${bundle_image_name}"
 
-  TITLE "Delete previous catalogSource and its pod (if exist)"
-  ${OC} delete catalogsource "${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
+  if [[ -n "${catalog_source}" ]] ; then
+    
+    TITLE "Delete previous catalogSource and its pod (if exist)"
+    
+    ${OC} delete catalogsource --all -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  ${OC} delete pod -l "olm.catalogSource=${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
+    ${OC} delete pod -l "olm.catalogSource=${catalog_source}" -n "${bundle_namespace}" --wait --ignore-not-found || :
 
-  TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
+    TITLE "Create the CatalogSource '${catalog_source}' in cluster ${cluster_name} for image: ${source_image_path}"
 
-  local catalog_display_name="${bundle_name}-${operator_channel} Catalog Source"
+    local catalog_display_name="${bundle_name} Catalog Source" # Without ${operator_channel} in name
 
     cat <<EOF | ${OC} apply -n "${bundle_namespace}" -f -
     apiVersion: operators.coreos.com/v1alpha1
@@ -279,33 +306,35 @@ function deploy_ocp_bundle() {
           interval: 5m
 EOF
 
-  echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
+    echo -e "\n# Wait for CatalogSource '${catalog_source}' to be created:"
 
-  cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
-  watch_and_retry "$cmd" 15m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
+    cmd="${OC} get catalogsource -n ${bundle_namespace} ${catalog_source} -o jsonpath='{.status.connectionState.lastObservedState}'"
+    watch_and_retry "$cmd" 15m "READY" || FATAL "${bundle_namespace} CatalogSource '${catalog_source}' was not created"
 
-  ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
+    ${OC} -n "${bundle_namespace}" get catalogsource -o yaml --ignore-not-found
 
-  TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}' in cluster ${cluster_name}:
-  Catalog: ${catalog_display_name}
-  Operator: ${operator_name}
-  Channel: ${operator_channel}
-  Version ${operator_version}
-  "
+    TITLE "Verify the Package Manifest before installing Bundle '${bundle_name}' in cluster ${cluster_name}:
+    Catalog: ${catalog_display_name}
+    Operator: ${operator_name}
+    Channel: ${operator_channel}
+    Version: ${operator_version}
+    "
 
-  local packagemanifests_status
+    local packagemanifests_status
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace}"
-  regex="${catalog_display_name}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace}"
+    regex="${catalog_display_name}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
-  regex="${operator_channel}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].name)'"
+    regex="${operator_channel}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
 
-  cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
-  regex="${operator_version//[a-zA-Z]}"
-  watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+    cmd="${OC} get packagemanifests -n ${bundle_namespace} ${operator_name} -o json | jq -r '(.status.channels[].currentCSVDesc.version)'"
+    regex="${operator_version//[a-zA-Z]}"
+    watch_and_retry "$cmd" 3m "$regex" || packagemanifests_status=FAILED
+
+  fi
 
   TITLE "Verify all pods are running/completed in the Bundle namespace '${bundle_namespace}' in cluster ${cluster_name}"
 
@@ -376,71 +405,83 @@ function create_subscription() {
 
   # Catalog source name
   local catalog_source="${3:-${operator_name}-${operator_channel}-catalog}"
-  # To set a specific version of an Operator CSV with a Manual subscription (prevent automatic updates for newer versions in the channel):
+  
+  # To set a specific version of an Operator CSV with a Manual subscription 
+  # (It will prevent automatic updates for newer versions in the channel).
   local operator_version="$4"
+
   # To deploy in a specified namespace, and not as a global operator (within "openshift-operators" and "openshift-marketplace" namespaces)
   local operator_namespace="$5"
 
   local cluster_name
   cluster_name="$(print_current_cluster_name || :)"
 
-  # Replace anything but letters and numbers with "-" (required for the catalog source metadata.name)
-  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
+  # Set the OperatorGroup and it's subscription namespace
+  local operator_group_name
+  local subscription_namespace 
+  local subscription_display_name
 
-  local subscription_namespace
-
-  # Create the OperatorGroup
   if [[ -n "${operator_namespace}" ]]; then
-    local operator_group_name="my-${operator_namespace}-operators-group"
+    # Create the OperatorGroup only if using unique namespace
+
+    operator_group_name="my-${operator_namespace}-operators-group"
     subscription_namespace="${operator_namespace}"
 
-    TITLE "Create one OperatorGroup '${operator_group_name}' in the specified namespace '${operator_namespace}' of cluster ${cluster_name}"
+    TITLE "Set unique Subscription namespace for the Operator '${operator_name}', and delete previous OperatorGroups, Subs and CSVs"
 
-    ${OC} delete operatorgroup --all -n "${operator_namespace}" --wait || :
+    create_namespace "${subscription_namespace}"
+
+    ${OC} delete operatorgroup --all -n "${subscription_namespace}" --wait || :
+
+    BUG "Upgrading ACM major version can fail if InstallPlan not generated by Subscription" \
+    "Delete previous ACM Subscription and CSV, before creating new Subscription" \
+    "https://bugzilla.redhat.com/show_bug.cgi?id=2078543"
+    # Workaround:
+    ${OC} delete subs --all -n "${subscription_namespace}" --wait --ignore-not-found || :
+    ${OC} delete csv --all -n "${subscription_namespace}" --wait --ignore-not-found || :
+
+    TITLE "Create unique OperatorGroup '${operator_group_name}' in '${subscription_namespace}' of cluster ${cluster_name}"
 
     cat <<EOF | ${OC} apply -f -
     apiVersion: operators.coreos.com/v1
     kind: OperatorGroup
     metadata:
       name: ${operator_group_name}
-      namespace: ${operator_namespace}
+      namespace: ${subscription_namespace}
     spec:
       targetNamespaces:
-      - ${operator_namespace}
+      - ${subscription_namespace}
 EOF
 
     echo -e "\n# Display all Operator Groups in '${operator_namespace}' namespace"
     ${OC} get operatorgroup -n "${operator_namespace}" --ignore-not-found
 
   else
-    TITLE "Deploying as a global Operator in the Openshift marketplace of cluster ${cluster_name}"
+    TITLE "Set Subscription as a global Operator in the Openshift marketplace of cluster ${cluster_name}"
+
     operator_namespace="${OPERATORS_NAMESPACE}"
     subscription_namespace="${MARKETPLACE_NAMESPACE}"
 
   fi
 
-  # Create the Subscription
-  local subscription_display_name="${operator_name}-${operator_channel}-subscription"
+  # Set catalog source name (replace non letters or numbers with "-", which is required for its metadata.name)
+  catalog_source="${catalog_source//[^a-zA-Z0-9]/-}"
+
+  # Set subscription display name
+  subscription_display_name="${operator_name}-subscription" # without ${operator_channel}
+
   TITLE "Create Subscription '${subscription_display_name}' to Catalog Source '${catalog_source}' in namespace '${subscription_namespace}'"
-
-  BUG "Upgrading ACM major version can fail if InstallPlan not generated by Subscription" \
-  "Delete previous ACM Subscription and CSV, before creating new Subscription" \
-  "https://bugzilla.redhat.com/show_bug.cgi?id=2078543"
-  # Workaround:
-
-  echo -e "\n# Delete previous Subscription '${subscription_display_name}' if exists"
-  # ${OC} delete sub/${subscription_display_name} -n "${subscription_namespace}" --wait --ignore-not-found || :
-  ${OC} delete subs --all -n "${subscription_namespace}" --wait --ignore-not-found || :
-  ${OC} delete csv --all -n "${subscription_namespace}" --wait --ignore-not-found || :
 
   echo -e "\n# Create new Subscription '${subscription_display_name}' for Operator '${operator_name}' with the required Install Plan Approval"
   local install_plan_approval
   local starting_csv
 
   if [[ -n "${operator_version}" ]] ; then
+    # starting_csv="${operator_name}.${operator_version}"
+    starting_csv="$(get_csv_for_operator "$operator_name" "$operator_version" "$subscription_namespace")"
+
     echo -e "\n# Specific ${operator_name} version was requested - Apply Manual installPlanApproval and startingCSV: ${starting_csv}"
     install_plan_approval="Manual"
-    starting_csv="${operator_name}.${operator_version}"
 
     # BUG "There might be a bug in OCP - if not defining CSV (but just the channel), it pulls base CSV version, and not latest" \
     # "Use Automatic installPlanApproval (instead of Manual)"
@@ -504,6 +545,8 @@ EOF
 
   ${OC} wait installplan --all -n "${subscription_namespace}" --for condition=Installed --timeout="$duration" || subscription_status=FAILED
 
+  ${OC} get installplan -n "${subscription_namespace}" -o wide
+
   local cmd="${OC} get installplan -n ${subscription_namespace} -o json | jq -r 'del(.items[].status.plan[].resource.manifest)'"
 
   watch_and_retry "$cmd" "$duration" || subscription_status=FAILED
@@ -522,7 +565,33 @@ EOF
 
 # ------------------------------------------
 
-function get_channel_name() {
+function get_csv_for_operator() {
+  ### Print (return) the current CSV by operator name, version and subscription namespace ###
+  trap '' DEBUG # DONT trap_to_debug_commands
+  
+  # Input args:
+  local operator_name="$1"
+  local operator_version="$2"
+
+  # Optional args:
+  local subscription_namespace="${3:-default}"
+
+  local regex_to_major_minor='[0-9]+\.[0-9]+'
+
+  # Trim version into major.minor (X.Y.Z ==> X.Y)
+  operator_version="$(echo "$operator_version" | grep -Po "$regex_to_major_minor")"
+
+  local current_csv
+  current_csv="$(${OC} get packagemanifests -n "${subscription_namespace}" "${operator_name}" -o json \
+  | jq -r '(.status.channels[].currentCSV)' | awk -v version="${operator_version}" '$0 ~ version { print $1 }')"
+
+  echo "${current_csv}"
+    
+}
+
+# ------------------------------------------
+
+function generate_channel_name() {
   ### Generate and print Subscription Channel from a defined perfix and version number ###
 
   local prefix="$1"
@@ -540,7 +609,7 @@ function get_channel_name() {
 
 # ------------------------------------------
 
-function get_catalog_name() {
+function generate_catalog_name() {
   ### Generate and print Catalog Source name from Operator and Channel ###
 
   local operator_name="$1"
